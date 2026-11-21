@@ -2048,21 +2048,34 @@ export function BattleRadarView({
       />
 
       {/* Collapsible Tactical Legend (closed by default, persisted in localStorage) */}
-      <div className="absolute top-1.5 right-1.5 z-30 flex flex-col items-end">
+      <div
+        data-testid="radar-legend-wrapper"
+        className={`absolute top-1.5 right-1.5 flex flex-col items-end ${
+          layoutMode === 'phone-portrait' ? 'z-20' : 'z-30'
+        }`}
+      >
         <button
           type="button"
           data-testid="radar-legend-toggle"
           aria-expanded={legendOpen}
           aria-controls="radar-legend-panel"
+          aria-label={t('radar.legendToggle')}
+          title={t('radar.legendToggle')}
           onClick={toggleLegend}
-          className="min-h-[44px] min-w-[44px] px-2.5 rounded-lg border border-slate-700/90 bg-[#08101c]/92 hover:bg-slate-800/95 text-slate-200 text-[12px] font-semibold inline-flex items-center justify-center gap-1.5 shadow-md cursor-pointer"
+          className={
+            layoutMode === 'phone-portrait'
+              ? 'z-20 h-8 w-8 min-h-[32px] min-w-[32px] p-0 rounded-lg border border-slate-700/90 bg-[#08101c]/92 hover:bg-slate-800/95 text-slate-200 inline-flex items-center justify-center shadow-md cursor-pointer'
+              : 'min-h-[44px] min-w-[44px] px-2.5 rounded-lg border border-slate-700/90 bg-[#08101c]/92 hover:bg-slate-800/95 text-slate-200 text-[12px] font-semibold inline-flex items-center justify-center gap-1.5 shadow-md cursor-pointer'
+          }
         >
           {legendOpen ? (
             <X className="w-4 h-4 text-slate-300 shrink-0" />
           ) : (
             <HelpCircle className="w-4 h-4 text-sky-400 shrink-0" />
           )}
-          <span className="whitespace-nowrap">{t('radar.legendToggle')}</span>
+          {layoutMode !== 'phone-portrait' && (
+            <span className="whitespace-nowrap">{t('radar.legendToggle')}</span>
+          )}
         </button>
 
         {legendOpen && (

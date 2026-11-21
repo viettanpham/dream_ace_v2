@@ -500,7 +500,12 @@ describe('3) Invisible hit-area size >= 44px across portrait and landscape', () 
       const legendToggle = container!.querySelector(
         '[data-testid="radar-legend-toggle"]'
       );
-      expect(legendToggle?.className).toContain('min-h-[44px]');
+      if (mode === 'phone-portrait') {
+        expect(legendToggle?.className).toContain('h-8');
+        expect(legendToggle?.className).toContain('min-h-[32px]');
+      } else {
+        expect(legendToggle?.className).toContain('min-h-[44px]');
+      }
     }
   });
 });

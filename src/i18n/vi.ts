@@ -1251,6 +1251,8 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'battle.selectedUnitTitle': 'Đơn vị đang chọn',
   'battle.noUnitSelected': 'Chọn một đơn vị trên chiến trường để xem chỉ số và hiệu ứng.',
   'battle.viewSwitchTooltip': 'Chuyển giữa chế độ Radar và Thẻ',
+  'battle.switchToCard': 'Chuyển sang chế độ Thẻ',
+  'battle.switchToRadar': 'Chuyển sang chế độ Radar',
   'battle.menuTitle': 'Menu trận chiến',
   'battle.detailsShow': 'Chi tiết',
   'battle.detailsHide': 'Ẩn chi tiết',

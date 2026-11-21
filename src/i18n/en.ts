@@ -1249,6 +1249,8 @@ export const EN_TRANSLATIONS = {
   'battle.selectedUnitTitle': 'Selected Unit',
   'battle.noUnitSelected': 'Select any unit on the field to inspect stats and statuses.',
   'battle.viewSwitchTooltip': 'Switch between Radar and Card view',
+  'battle.switchToCard': 'Switch to Card view',
+  'battle.switchToRadar': 'Switch to Radar view',
   'battle.menuTitle': 'Battle Menu',
   'battle.detailsShow': 'Details',
   'battle.detailsHide': 'Hide details',

@@ -86,6 +86,49 @@ export const RADAR_STATUS_MAX_VISIBLE = 3;
 export const QUEUE_VISIBLE_ROWS = 5;
 export const TURN_QUEUE_UPCOMING_MAX = QUEUE_VISIBLE_ROWS;
 export const TURN_QUEUE_ACTING_NAME_MIN_PX = 56;
+export const PHONE_RADAR_LOG_GAP_PX = 24;
+
+export const PHONE_CONTROL_ROW_LAYOUT = {
+  minViewportWidthPx: 360,
+  horizontalPaddingPx: 12,
+  gapPx: 4,
+  buttonCount: 5,
+  buttonHeightPx: 40,
+  buttonMinWidthPx: 44,
+  autoMaxWidthPx: 88,
+  speedMinWidthPx: 44,
+  viewSwitchWidthPx: 44,
+  loopChipMaxWidthPx: 76,
+  moreBtnWidthPx: 44,
+} as const;
+
+export function computePhoneControlRowBudgetPx(): {
+  totalGapsPx: number;
+  totalButtonsWorstCasePx: number;
+  totalRowWidthPx: number;
+  remainingAt360Px: number;
+} {
+  const totalGapsPx =
+    PHONE_CONTROL_ROW_LAYOUT.gapPx *
+    (PHONE_CONTROL_ROW_LAYOUT.buttonCount - 1);
+  const totalButtonsWorstCasePx =
+    PHONE_CONTROL_ROW_LAYOUT.autoMaxWidthPx +
+    PHONE_CONTROL_ROW_LAYOUT.speedMinWidthPx +
+    PHONE_CONTROL_ROW_LAYOUT.viewSwitchWidthPx +
+    PHONE_CONTROL_ROW_LAYOUT.loopChipMaxWidthPx +
+    PHONE_CONTROL_ROW_LAYOUT.moreBtnWidthPx;
+  const totalRowWidthPx =
+    PHONE_CONTROL_ROW_LAYOUT.horizontalPaddingPx +
+    totalGapsPx +
+    totalButtonsWorstCasePx;
+  return {
+    totalGapsPx,
+    totalButtonsWorstCasePx,
+    totalRowWidthPx,
+    remainingAt360Px:
+      PHONE_CONTROL_ROW_LAYOUT.minViewportWidthPx - totalRowWidthPx,
+  };
+}
 
 export const TURN_QUEUE_SIDEBAR_HEIGHTS = {
   borderPx: 2,

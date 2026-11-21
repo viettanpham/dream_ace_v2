@@ -72,6 +72,7 @@ import {
   computeRowExposure,
   evaluateRadarTargetValidity,
   formatShortUnitName,
+  PHONE_RADAR_LOG_GAP_PX,
   readSpeechBubblesEnabled,
   SIDEBAR_UNIT_PANEL_HEIGHTS,
   SIDEBAR_UNIT_PANEL_TOTAL_HEIGHT_PX,
@@ -797,22 +798,31 @@ export function BattleScreen() {
           onClick={() => stopAutoRepeat('manual_stop')}
           title={t('battle.loopStopTooltip')}
           aria-label={`${t('battle.loopRunningTag')} · ${t('battle.loopStopTooltip')} (${progressText})`}
-          className={`rounded-lg border border-emerald-400/70 bg-emerald-500/20 hover:bg-red-500/20 hover:border-red-400/70 text-emerald-100 font-mono-nums font-bold inline-flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 transition-colors ${
+          className={`rounded-lg border border-emerald-400/70 bg-emerald-500/20 hover:bg-red-500/20 hover:border-red-400/70 text-emerald-100 font-mono-nums font-bold inline-flex items-center justify-center cursor-pointer whitespace-nowrap shrink-0 transition-colors ${
             phoneCompact
-              ? 'min-h-[44px] px-2 text-[12px]'
-              : 'h-[34px] min-h-[34px] px-2 text-[12px]'
+              ? 'h-10 min-w-[44px] max-w-[76px] px-1 gap-0.5 text-[11px]'
+              : 'h-[34px] min-h-[34px] px-2 gap-1.5 text-[12px]'
           }`}
         >
           <span
             data-testid="battle-loop-running-dot"
-            className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0"
+            className={`${
+              phoneCompact ? 'w-1.5 h-1.5' : 'w-2 h-2'
+            } rounded-full bg-emerald-400 animate-pulse shrink-0`}
             aria-hidden="true"
           />
-          <Repeat className="w-3.5 h-3.5 text-emerald-300 shrink-0" aria-hidden="true" />
+          <Repeat
+            className={`${
+              phoneCompact ? 'w-3 h-3' : 'w-3.5 h-3.5'
+            } text-emerald-300 shrink-0`}
+            aria-hidden="true"
+          />
           <span data-testid="battle-loop-progress">{progressText}</span>
           <span
             data-testid="battle-loop-stop"
-            className="inline-flex items-center justify-center w-5 h-5 rounded bg-red-500/25 border border-red-400/60 text-red-300 shrink-0"
+            className={`inline-flex items-center justify-center ${
+              phoneCompact ? 'w-4 h-4' : 'w-5 h-5'
+            } rounded bg-red-500/25 border border-red-400/60 text-red-300 shrink-0`}
           >
             <Square className="w-2.5 h-2.5 fill-current" aria-hidden="true" />
           </span>
@@ -945,7 +955,7 @@ export function BattleScreen() {
               : 'border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200'
           } ${
             phoneCompact
-              ? 'min-h-[44px] min-w-[44px] px-2 text-[12px] font-mono-nums font-bold'
+              ? 'h-10 min-w-[44px] px-2 text-[12px] font-mono-nums font-bold'
               : 'h-[34px] min-h-[34px] px-2 text-[12px] font-semibold'
           }`}
         >
@@ -1542,16 +1552,42 @@ export function BattleScreen() {
       : 'bg-emerald-500';
 
     if (compactOneRow) {
+      if (isDestroyed) {
+        return (
+          <div
+            data-testid="battle-player-status-bar"
+            data-collapsed="true"
+            data-destroyed="true"
+            className="shrink-0 mx-1.5 mt-1 h-[28px] max-h-[28px] min-w-0 rounded border border-slate-700 bg-slate-900/85 px-2 flex items-center gap-1.5 text-[11px] font-mono-nums text-slate-400 grayscale overflow-hidden"
+          >
+            <span
+              data-testid="battle-player-team-tag"
+              className="px-1.5 py-0.2 rounded bg-slate-800 border border-slate-600 text-slate-300 text-[10px] font-bold shrink-0"
+            >
+              {getTeamTagLabel(lang, 'me')}
+            </span>
+            <span
+              className="font-semibold truncate text-slate-400 line-through min-w-0"
+              title={t('battle.playerShipLabel')}
+            >
+              {ownUnit.name}
+            </span>
+            <span
+              data-testid="battle-player-destroyed-badge"
+              className="px-1.5 py-0.2 rounded bg-slate-800 border border-slate-600 text-slate-200 text-[10px] font-bold shrink-0"
+            >
+              {t('battle.playerDestroyed')}
+            </span>
+          </div>
+        );
+      }
+
       return (
         <div
           data-testid="battle-player-status-bar"
           data-collapsed="true"
-          data-destroyed={isDestroyed ? 'true' : 'false'}
-          className={`shrink-0 mx-1.5 mt-1 rounded border px-2 py-1 space-y-1 text-[11px] font-mono-nums ${
-            isDestroyed
-              ? 'border-slate-700 bg-slate-900/85 text-slate-400 grayscale'
-              : 'border-emerald-500/35 bg-[#09121D] text-slate-100'
-          }`}
+          data-destroyed="false"
+          className="shrink-0 mx-1.5 mt-1 rounded border px-2 py-1 space-y-1 text-[11px] font-mono-nums border-emerald-500/35 bg-[#09121D] text-slate-100"
         >
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 min-w-0 shrink">
@@ -1814,17 +1850,18 @@ export function BattleScreen() {
             }}
           />
 
-          {/* 3) Sticky compact control row (max 48px): Auto, Speed Cycle, View Switch, Loop (icon+num), "..." More */}
+          {/* 3) Sticky compact control row (max 48px): Auto, Speed Cycle, View Switch (icon-only), Loop (icon+num / running chip), "..." More */}
           <div
             data-testid="battle-phone-controls"
-            className="sticky top-0 z-30 h-12 max-h-[48px] shrink-0 border-b border-slate-800/80 bg-[#080D16]/95 backdrop-blur-sm px-1.5 flex items-center justify-between gap-1.5"
+            className="sticky top-0 z-30 h-12 max-h-[48px] shrink-0 border-b border-slate-800/80 bg-[#080D16]/95 backdrop-blur-sm px-1.5 flex items-center justify-between gap-1 flex-nowrap overflow-x-hidden"
           >
             <button
               type="button"
               data-testid="battle-auto-toggle"
               onClick={toggleAutoBattle}
               aria-pressed={autoBattleEnabled}
-              className={`min-h-[44px] flex-1 min-w-0 px-2 rounded-lg border text-[12px] font-bold inline-flex items-center justify-center gap-1 transition-colors cursor-pointer whitespace-nowrap ${
+              title={t('auto.hotkeyHint')}
+              className={`h-10 min-w-[44px] max-w-[88px] shrink-0 px-2 rounded-lg border text-[12px] font-bold inline-flex items-center justify-center gap-1 transition-colors cursor-pointer whitespace-nowrap ${
                 autoBattleEnabled
                   ? 'border-emerald-400 bg-emerald-500 text-slate-950'
                   : 'border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800'
@@ -1842,7 +1879,7 @@ export function BattleScreen() {
               onClick={cyclePhoneSpeed}
               title={t('battle.speedCycleTooltip')}
               aria-label={t('battle.speedCycleTooltip')}
-              className="min-h-[44px] min-w-[44px] px-2 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-sky-300 font-mono-nums text-[12px] font-bold inline-flex items-center justify-center cursor-pointer whitespace-nowrap shrink-0"
+              className="h-10 min-w-[44px] px-2 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-sky-300 font-mono-nums text-[12px] font-bold inline-flex items-center justify-center cursor-pointer whitespace-nowrap shrink-0"
             >
               {battleSpeed}x
             </button>
@@ -1855,24 +1892,26 @@ export function BattleScreen() {
                   effectiveViewMode === 'radar' ? 'card' : 'radar'
                 )
               }
-              title={t('battle.viewSwitchTooltip')}
-              aria-label={t('battle.viewSwitchTooltip')}
-              className="min-h-[44px] px-2 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200 text-[12px] font-semibold inline-flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap shrink-0"
+              title={
+                effectiveViewMode === 'radar'
+                  ? t('battle.switchToCard')
+                  : t('battle.switchToRadar')
+              }
+              aria-label={
+                effectiveViewMode === 'radar'
+                  ? t('battle.switchToCard')
+                  : t('battle.switchToRadar')
+              }
+              className="h-10 w-11 min-w-[44px] p-0 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200 inline-flex items-center justify-center cursor-pointer shrink-0"
             >
               {effectiveViewMode === 'radar' ? (
-                <>
-                  <LayoutGrid className="w-4 h-4 text-sky-400 shrink-0" />
-                  <span>{t('battle.viewCard')}</span>
-                </>
+                <LayoutGrid className="w-4 h-4 text-sky-400 shrink-0" aria-hidden="true" />
               ) : (
-                <>
-                  <Radar className="w-4 h-4 text-sky-400 shrink-0" />
-                  <span>{t('battle.viewRadar')}</span>
-                </>
+                <Radar className="w-4 h-4 text-sky-400 shrink-0" aria-hidden="true" />
               )}
             </button>
 
-            {/* Loop Button / Active Progress Chip (phone: icon + number only) */}
+            {/* Loop Button / Active Progress Chip (phone: icon + number or N/M + stop) */}
             {renderLoopControl(true)}
 
             <button
@@ -1881,7 +1920,7 @@ export function BattleScreen() {
               onClick={() => setMoreActionsOpen(true)}
               aria-label={t('battle.moreActions')}
               title={t('battle.moreActions')}
-              className="min-h-[44px] min-w-[44px] rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200 inline-flex items-center justify-center cursor-pointer shrink-0"
+              className="h-10 min-w-[44px] rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200 inline-flex items-center justify-center cursor-pointer shrink-0"
             >
               <MoreHorizontal className="w-5 h-5" />
             </button>
@@ -1930,9 +1969,16 @@ export function BattleScreen() {
           )}
 
           {/* 4) Battlefield — natural page flow, zero inner scroll & zero clipping */}
-          <div className="flex flex-col p-2">
+          <div className="flex flex-col px-2 pt-2">
             {renderFieldContent()}
           </div>
+
+          <div
+            data-testid="battle-phone-radar-log-gap"
+            aria-hidden="true"
+            style={{ height: `${PHONE_RADAR_LOG_GAP_PX}px` }}
+            className="shrink-0"
+          />
 
           {/* 5) Combat log: flows inside page scroll with zero nested scroll box; Dòng = 1 line, Mở rộng = full flow, Cửa sổ = bottom sheet */}
           <div className="shrink-0 px-2 pb-1">
