@@ -165,7 +165,6 @@ export function BattleScreen() {
   const isPhonePortrait = layoutMode === 'phone-portrait';
   const {
     settings: statusSettings,
-    activeUnitRows,
     activePlayerRows,
   } = useStatusDisplaySettings(adminConfig.statusDisplayDefaults);
 
@@ -1313,22 +1312,20 @@ export function BattleScreen() {
             </div>
           )}
 
-          {sidebarUnit.statuses.length > 0 && (
-            <FixedStatusArea
-              statuses={sidebarUnit.statuses}
-              rows={Math.min(2, Math.max(1, activeUnitRows))}
-              autoHeight
-              unit={sidebarUnit}
-              unitTitle={sidebarUnit.name}
-              badgeLayout={statusSettings.badgeLayout}
-              iconMods={adminConfig.iconCatalogMods}
-              showLabels={fxSettings.showStatusLabels}
-              fallbackWidthPx={290}
-              rootTestId="sidebar-status-area"
-              chipTestIdPrefix="sidebar-status-chip"
-              overflowTestId="sidebar-status-overflow"
-            />
-          )}
+          <FixedStatusArea
+            statuses={sidebarUnit.statuses}
+            rows={2}
+            scrollOverflow
+            unit={sidebarUnit}
+            unitTitle={sidebarUnit.name}
+            badgeLayout={statusSettings.badgeLayout}
+            iconMods={adminConfig.iconCatalogMods}
+            showLabels={fxSettings.showStatusLabels}
+            fallbackWidthPx={290}
+            rootTestId="sidebar-status-area"
+            chipTestIdPrefix="sidebar-status-chip"
+            emptyTestId="sidebar-status-empty"
+          />
         </div>
 
         {showLockTargetBtn && (

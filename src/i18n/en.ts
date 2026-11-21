@@ -1509,6 +1509,7 @@ export const EN_TRANSLATIONS = {
   'statusUi.openIconCatalogBtn': 'Icon Table',
   'statusUi.popoverTitle': 'Active Effects',
   'statusUi.popoverEmpty': 'No active effects.',
+  'statusUi.areaEmpty': 'No active effects',
   'statusUi.valueLabel': 'Value',
   'statusUi.stacksLabel': 'Stacks',
   'statusUi.turnsLabel': '{turns} turns left',

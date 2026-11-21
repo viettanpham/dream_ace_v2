@@ -1512,6 +1512,7 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'statusUi.openIconCatalogBtn': 'Bảng icon',
   'statusUi.popoverTitle': 'Hiệu ứng đang hoạt động',
   'statusUi.popoverEmpty': 'Không có hiệu ứng nào.',
+  'statusUi.areaEmpty': 'Không có hiệu ứng',
   'statusUi.valueLabel': 'Giá trị',
   'statusUi.stacksLabel': 'Cộng dồn',
   'statusUi.turnsLabel': 'Còn {turns} lượt',

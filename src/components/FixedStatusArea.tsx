@@ -51,8 +51,9 @@ interface FixedStatusAreaProps {
   chipTestIdPrefix?: string;
   labelTestIdPrefix?: string;
   overflowTestId?: string;
-  /** When true, shrinks container height to packed row count (1..rows) instead of reserving unused rows */
-  autoHeight?: boolean;
+  emptyTestId?: string;
+  /** When true, keeps fixed row height, renders all chips with internal vertical scroll, no "+N" badge, and shows muted centered empty state */
+  scrollOverflow?: boolean;
   className?: string;
 }
 
@@ -160,7 +161,8 @@ export function FixedStatusArea({
   chipTestIdPrefix,
   labelTestIdPrefix,
   overflowTestId,
-  autoHeight = false,
+  emptyTestId,
+  scrollOverflow = false,
   className = '',
 }: FixedStatusAreaProps) {
   const { lang, t } = useI18n();
@@ -217,11 +219,10 @@ export function FixedStatusArea({
     return packStatusChips(measured, widthToUse, rows);
   }, [sorted, lang, unit, showLabels, compact, measuredWidth, fallbackWidthPx, rows]);
 
-  const effectiveRows = autoHeight
-    ? Math.max(0, Math.min(rows, packed.usedRows))
-    : rows;
-  const heightPx =
-    effectiveRows === 0 ? 0 : getFixedStatusAreaHeightPx(effectiveRows, compact);
+  const effectiveRows = Math.max(1, Math.min(5, Math.round(rows)));
+  const heightPx = getFixedStatusAreaHeightPx(effectiveRows, compact);
+  const visibleStatuses = scrollOverflow ? sorted : packed.visible;
+  const overflowCount = scrollOverflow ? 0 : packed.overflowCount;
 
   const openDetails = (e: React.SyntheticEvent) => {
     e.stopPropagation();
@@ -332,30 +333,49 @@ export function FixedStatusArea({
           paddingLeft: `${STATUS_AREA_PAD_X_PX}px`,
           paddingRight: `${STATUS_AREA_PAD_X_PX}px`,
           paddingTop: `${STATUS_AREA_PAD_TOP_PX}px`,
-          paddingBottom: 0,
+          paddingBottom: scrollOverflow
+            ? `${sorted.length > 0 ? STATUS_CHIP_COL_GAP_PX : STATUS_AREA_PAD_TOP_PX}px`
+            : 0,
         }}
-        className={`w-full min-w-0 flex flex-wrap content-start items-start overflow-hidden rounded cursor-pointer hover:bg-slate-800/30 transition-colors ${className}`}
+        className={`w-full min-w-0 flex flex-wrap ${
+          scrollOverflow && sorted.length === 0
+            ? 'items-center justify-center'
+            : 'content-start items-start'
+        } ${
+          scrollOverflow
+            ? 'overflow-y-auto overflow-x-hidden tactical-scroll tactical-scroll-thin'
+            : 'overflow-hidden'
+        } rounded cursor-pointer hover:bg-slate-800/30 transition-colors ${className}`}
       >
-        {packed.visible.map((st, idx) => (
-          <StatusChip
-            key={`${st.type}-${idx}`}
-            status={st}
-            lang={lang}
-            unit={unit}
-            badgeLayout={badgeLayout}
-            iconMods={iconMods}
-            size={compact ? 'bar' : 'sm'}
-            showLabel={showLabels}
-            allowStack={false}
-            stacks={1}
-            testId={chipTestIdPrefix ? `${chipTestIdPrefix}-${idx}` : undefined}
-            labelTestId={
-              labelTestIdPrefix ? `${labelTestIdPrefix}-${idx}` : undefined
-            }
-          />
-        ))}
+        {scrollOverflow && sorted.length === 0 ? (
+          <div
+            data-testid={emptyTestId}
+            className="w-full h-full flex items-center justify-center text-center text-[12px] text-slate-400 select-none"
+          >
+            {t('statusUi.areaEmpty')}
+          </div>
+        ) : (
+          visibleStatuses.map((st, idx) => (
+            <StatusChip
+              key={`${st.type}-${idx}`}
+              status={st}
+              lang={lang}
+              unit={unit}
+              badgeLayout={badgeLayout}
+              iconMods={iconMods}
+              size={compact ? 'bar' : 'sm'}
+              showLabel={showLabels}
+              allowStack={false}
+              stacks={1}
+              testId={chipTestIdPrefix ? `${chipTestIdPrefix}-${idx}` : undefined}
+              labelTestId={
+                labelTestIdPrefix ? `${labelTestIdPrefix}-${idx}` : undefined
+              }
+            />
+          ))
+        )}
 
-        {packed.overflowCount > 0 && (
+        {overflowCount > 0 && (
           <span
             data-testid={overflowTestId}
             style={{
@@ -364,7 +384,7 @@ export function FixedStatusArea({
             }}
             className="inline-flex items-center justify-center px-1.5 rounded border border-slate-600/80 bg-slate-900 font-mono-nums font-bold text-slate-200 shrink-0"
           >
-            +{packed.overflowCount}
+            +{overflowCount}
           </span>
         )}
       </div>

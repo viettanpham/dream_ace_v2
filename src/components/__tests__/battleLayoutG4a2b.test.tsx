@@ -302,10 +302,10 @@ describe('TASK G4a-2b — Right sidebar heights, [Dòng | Mở rộng] log modes
     expect(localPersist).not.toContain('sidebarLogMode');
   });
 
-  it('2) Selected-unit panel uses content height: 0 status rows & no empty space when none, max 2 rows + "+N" when overflowing', () => {
+  it('2) Selected-unit panel status area uses fixed 2-row height (muted empty line when 0 statuses, internal scroll without "+N" when >2 rows)', () => {
     setViewport(1440, 900);
 
-    // 0 statuses -> 0 status rows, no sidebar-status-area, no fixed h-[244px], no opacity-0 spacer
+    // 0 statuses -> fixed 2-row status area with muted centered "Không có hiệu ứng" and no h-[244px]
     const noStatusBattle = makeBattle();
     useGameStore.setState({ battle: noStatusBattle });
 
@@ -318,12 +318,22 @@ describe('TASK G4a-2b — Right sidebar heights, [Dòng | Mở rộng] log modes
     ) as HTMLElement;
     expect(panelNoStatus).not.toBeNull();
     expect(panelNoStatus.className).not.toContain('h-[244px]');
-    expect(
-      panelNoStatus.querySelector('[data-testid="sidebar-status-area"]')
-    ).toBeNull();
     expect(panelNoStatus.querySelector('.opacity-0')).toBeNull();
 
-    // Many statuses -> max 2 rows + "+N", clicking "+N" opens full status popover
+    const emptyStatusArea = panelNoStatus.querySelector(
+      '[data-testid="sidebar-status-area"]'
+    ) as HTMLElement;
+    expect(emptyStatusArea).not.toBeNull();
+    expect(emptyStatusArea.getAttribute('data-status-area-rows')).toBe('2');
+    expect(emptyStatusArea.className).toContain('overflow-y-auto');
+    expect(emptyStatusArea.textContent).toContain(
+      VI_TRANSLATIONS['statusUi.areaEmpty']
+    );
+    expect(
+      panelNoStatus.querySelector('[data-testid="sidebar-status-overflow"]')
+    ).toBeNull();
+
+    // Many statuses -> same 2-row height, internal scroll (overflow-y-auto), NO "+N", tapping a chip opens popover
     const manyStatuses: ActiveStatusEffect[] = [
       { type: 'slow', turnsRemaining: 2, isDebuff: true, magnitude: 0.3 },
       { type: 'burn', turnsRemaining: 2, isDebuff: true, magnitude: 50 },
@@ -350,17 +360,22 @@ describe('TASK G4a-2b — Right sidebar heights, [Dòng | Mở rộng] log modes
       '[data-testid="sidebar-status-area"]'
     ) as HTMLElement;
     expect(statusArea).not.toBeNull();
+    expect(statusArea.getAttribute('data-status-area-rows')).toBe('2');
+    expect(statusArea.style.height).toBe(emptyStatusArea.style.height);
+    expect(statusArea.className).toContain('overflow-y-auto');
     expect(
-      Number(statusArea.getAttribute('data-status-area-rows'))
-    ).toBeLessThanOrEqual(2);
-    const overflowBadge = container!.querySelector(
-      '[data-testid="sidebar-status-overflow"]'
-    ) as HTMLElement;
-    expect(overflowBadge).not.toBeNull();
-    expect(overflowBadge.textContent).toMatch(/^\+\d+$/);
+      container!.querySelector('[data-testid="sidebar-status-overflow"]')
+    ).toBeNull();
+    expect(
+      statusArea.querySelectorAll('[data-testid^="sidebar-status-chip-"]').length
+    ).toBe(manyStatuses.length);
 
+    const firstChip = statusArea.querySelector(
+      '[data-testid="sidebar-status-chip-0"]'
+    ) as HTMLElement;
+    expect(firstChip).not.toBeNull();
     act(() => {
-      overflowBadge.click();
+      firstChip.click();
     });
     expect(
       container!.querySelector('[data-testid="status-area-popover"]')
