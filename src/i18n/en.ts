@@ -776,6 +776,7 @@ export const EN_TRANSLATIONS = {
   'battle.balanceAllies': 'Allied Fleet',
   'battle.balanceHostiles': 'Hostile Fleet',
   'battle.frontRowBlocked': 'Front row blocks basic attack',
+  'battle.frontRowNotBlocked': 'Not blocked by front row',
   'battle.longRangeReady': 'Long-range targets Back row',
   'battle.actionSkills': 'Skills',
   'battle.actionItem': 'Supplies',
@@ -792,6 +793,7 @@ export const EN_TRANSLATIONS = {
   'battle.lockTargetBtn': 'Lock Enemy Target',
   'battle.lockAllyBtn': 'Lock Ally Target',
   'battle.targetLockedBtn': 'Target Locked',
+  'battle.lockTargetUnavailable': 'Target lock unavailable right now',
   'battle.structureTag': 'STRUCTURE',
 
   // Wingman Radio Chatter

@@ -778,6 +778,7 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'battle.balanceAllies': 'Phe Ta',
   'battle.balanceHostiles': 'Hạm đội Địch',
   'battle.frontRowBlocked': 'Tiền tuyến chắn đòn bắn thường',
+  'battle.frontRowNotBlocked': 'Không bị tiền tuyến chắn đòn bắn thường',
   'battle.longRangeReady': 'Tầm xa bắn được Hậu tuyến',
   'battle.actionSkills': 'Kỹ năng',
   'battle.actionItem': 'Vật phẩm',
@@ -794,6 +795,7 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'battle.lockTargetBtn': 'Khóa mục tiêu Địch',
   'battle.lockAllyBtn': 'Chọn mục tiêu Đồng minh',
   'battle.targetLockedBtn': 'Đã khóa mục tiêu',
+  'battle.lockTargetUnavailable': 'Khóa mục tiêu không khả dụng lúc này',
   'battle.structureTag': 'CÔNG TRÌNH',
 
   // Wingman Radio Chatter

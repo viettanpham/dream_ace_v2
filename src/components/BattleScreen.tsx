@@ -73,6 +73,8 @@ import {
   evaluateRadarTargetValidity,
   formatShortUnitName,
   readSpeechBubblesEnabled,
+  SIDEBAR_UNIT_PANEL_HEIGHTS,
+  SIDEBAR_UNIT_PANEL_TOTAL_HEIGHT_PX,
   SP_COLOR_TOKENS,
   SPEECH_BUBBLE_DURATION_MS,
   useBattleLayoutMode,
@@ -1259,11 +1261,19 @@ export function BattleScreen() {
   };
 
   const renderSidebarSelectedUnit = () => {
+    const panelFixedStyle = {
+      height: `${SIDEBAR_UNIT_PANEL_TOTAL_HEIGHT_PX}px`,
+      minHeight: `${SIDEBAR_UNIT_PANEL_TOTAL_HEIGHT_PX}px`,
+      maxHeight: `${SIDEBAR_UNIT_PANEL_TOTAL_HEIGHT_PX}px`,
+    };
+
     if (!sidebarUnit) {
       return (
         <div
           data-testid="battle-selected-unit-panel"
-          className="rounded-lg border border-slate-800 bg-[#0A101B] p-2.5 text-[13px] text-slate-400 text-center shrink-0"
+          data-panel-height-px={SIDEBAR_UNIT_PANEL_TOTAL_HEIGHT_PX}
+          style={panelFixedStyle}
+          className="rounded-lg border border-slate-800 bg-[#0A101B] px-2.5 py-1.5 flex items-center justify-center text-[13px] text-slate-400 text-center shrink-0 h-[240px] min-h-[240px] max-h-[240px] overflow-hidden"
         >
           {t('battle.noUnitSelected')}
         </div>
@@ -1293,148 +1303,213 @@ export function BattleScreen() {
       (!isEnemy &&
         hasSingleAllySkill &&
         battle.selectedAllyTargetId === sidebarUnit.id);
-    const showLockTargetBtn =
+    const canLockTarget =
       sidebarUnit.alive && isEnemy && !isStealthed && canPlayerManualAct;
+    const lockBtnDisabled = !canLockTarget || isLocked;
+    const blockedLabel = isBlocked
+      ? t('battle.frontRowBlocked')
+      : t('battle.frontRowNotBlocked');
+    const lockBtnLabel = !canLockTarget
+      ? t('battle.lockTargetUnavailable')
+      : isLocked
+      ? t('battle.targetLockedBtn')
+      : t('battle.lockTargetBtn');
 
     return (
       <div
         data-testid="battle-selected-unit-panel"
-        className="rounded-lg border border-slate-800 bg-[#0A101B] p-2.5 flex flex-col gap-1.5 shrink-0"
+        data-panel-height-px={SIDEBAR_UNIT_PANEL_TOTAL_HEIGHT_PX}
+        style={panelFixedStyle}
+        className="rounded-lg border border-slate-800 bg-[#0A101B] px-2.5 py-1.5 flex flex-col gap-1 shrink-0 h-[240px] min-h-[240px] max-h-[240px] overflow-hidden"
       >
-        <div className="space-y-1.5 min-w-0">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1.5 min-w-0">
-              <span
-                className="text-[12px] font-mono-nums font-bold px-1.5 py-0.5 rounded border shrink-0"
-                style={{ color: teamAccent, borderColor: teamAccent }}
-              >
-                {getTeamTagLabel(lang, teamRole)}
-              </span>
-              <span
-                className="font-display text-[15px] font-bold truncate"
-                style={{ color: sidebarUnit.alive ? teamAccent : '#94a3b8' }}
-                title={sidebarUnit.name}
-              >
-                {sidebarUnit.name}
-              </span>
-            </div>
-            <span className="text-[12px] font-mono-nums text-slate-300 shrink-0">
+        <div
+          data-testid="sidebar-unit-header"
+          style={{
+            height: `${SIDEBAR_UNIT_PANEL_HEIGHTS.headerPx}px`,
+            minHeight: `${SIDEBAR_UNIT_PANEL_HEIGHTS.headerPx}px`,
+          }}
+          className="flex items-center justify-between gap-1.5 flex-nowrap h-[32px] min-h-[32px] max-h-[32px] shrink-0 min-w-0"
+        >
+          <div className="flex items-center gap-1 flex-1 min-w-0 overflow-hidden">
+            <span
+              data-testid="sidebar-unit-side-tag"
+              className="text-[11px] font-mono-nums font-bold px-1.5 py-0.5 rounded border shrink-0 whitespace-nowrap"
+              style={{ color: teamAccent, borderColor: teamAccent }}
+            >
+              {getTeamTagLabel(lang, teamRole)}
+            </span>
+            <span
+              data-testid="sidebar-unit-name"
+              className="font-display text-[14px] font-bold truncate min-w-0 flex-1"
+              style={{ color: sidebarUnit.alive ? teamAccent : '#94a3b8' }}
+              title={sidebarUnit.name}
+            >
+              {sidebarUnit.name}
+            </span>
+            <span
+              data-testid="sidebar-unit-lane"
+              className="text-[11px] font-mono-nums text-slate-300 truncate min-w-0 max-w-[48%] shrink"
+              title={`${getRowTitle(sidebarUnit.row)} · ${getExposureLabel(
+                exposure
+              )}`}
+            >
               {getRowTitle(sidebarUnit.row)} · {getExposureLabel(exposure)}
             </span>
           </div>
 
-          <div className="space-y-1">
+          <div
+            data-testid="sidebar-unit-header-actions"
+            className="flex items-center gap-1 shrink-0"
+          >
+            <span
+              data-testid="sidebar-blocked-slot"
+              data-blocked={isBlocked ? 'true' : 'false'}
+              aria-disabled={!isBlocked ? 'true' : undefined}
+              title={blockedLabel}
+              aria-label={blockedLabel}
+              style={{
+                width: `${SIDEBAR_UNIT_PANEL_HEIGHTS.blockedSlotPx}px`,
+                height: `${SIDEBAR_UNIT_PANEL_HEIGHTS.blockedSlotPx}px`,
+              }}
+              className={`w-6 h-6 shrink-0 rounded border inline-flex items-center justify-center transition-colors ${
+                isBlocked
+                  ? 'border-amber-500/60 bg-amber-500/15 text-amber-400'
+                  : 'border-slate-800 bg-slate-900/60 text-slate-500 opacity-40'
+              }`}
+            >
+              <ShieldAlert className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+            </span>
+
+            <button
+              type="button"
+              data-testid="sidebar-lock-target-btn"
+              data-applicable={canLockTarget ? 'true' : 'false'}
+              data-locked={isLocked ? 'true' : 'false'}
+              disabled={lockBtnDisabled}
+              aria-disabled={lockBtnDisabled ? 'true' : undefined}
+              aria-pressed={canLockTarget && isLocked ? true : undefined}
+              onClick={
+                canLockTarget && !isLocked
+                  ? () => selectTarget(sidebarUnit.id)
+                  : undefined
+              }
+              title={lockBtnLabel}
+              aria-label={lockBtnLabel}
+              style={{
+                width: `${SIDEBAR_UNIT_PANEL_HEIGHTS.lockButtonSlotPx}px`,
+                height: `${SIDEBAR_UNIT_PANEL_HEIGHTS.lockButtonSlotPx}px`,
+              }}
+              className={`w-8 h-8 shrink-0 rounded-lg inline-flex items-center justify-center transition-colors ${
+                !canLockTarget
+                  ? 'border border-slate-800 bg-slate-900/60 text-slate-500 opacity-40 cursor-default'
+                  : isLocked
+                  ? 'border border-red-500/55 bg-red-500/20 text-red-300 cursor-default'
+                  : 'bg-red-500 hover:bg-red-400 text-slate-950 cursor-pointer'
+              }`}
+            >
+              <Crosshair className="w-4 h-4 shrink-0" aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+
+        <div
+          style={{
+            height: `${SIDEBAR_UNIT_PANEL_HEIGHTS.barsPx}px`,
+            minHeight: `${SIDEBAR_UNIT_PANEL_HEIGHTS.barsPx}px`,
+          }}
+          className="h-[52px] min-h-[52px] max-h-[52px] flex flex-col justify-between shrink-0 overflow-hidden"
+        >
+          <StatBar
+            label="HP"
+            value={sidebarUnit.hp}
+            max={sidebarUnit.derived.maxHp}
+            fillClassName={hpColor}
+            heightClassName="h-2"
+            instant={bypassFx}
+            compactHeader
+          />
+          <div className="grid grid-cols-2 gap-2">
             <StatBar
-              label="HP"
-              value={sidebarUnit.hp}
-              max={sidebarUnit.derived.maxHp}
-              fillClassName={hpColor}
-              heightClassName="h-2"
+              label="SHD"
+              labelClassName="text-sky-400"
+              valueClassName="text-sky-200"
+              value={sidebarUnit.shield}
+              max={Math.max(1, sidebarUnit.derived.maxShield)}
+              valueText={`${sidebarUnit.shield}/${sidebarUnit.derived.maxShield}`}
+              fillClassName="bg-sky-400"
+              heightClassName="h-1.5"
               instant={bypassFx}
               compactHeader
             />
-            <div className="grid grid-cols-2 gap-2">
-              <StatBar
-                label="SHD"
-                labelClassName="text-sky-400"
-                valueClassName="text-sky-200"
-                value={sidebarUnit.shield}
-                max={Math.max(1, sidebarUnit.derived.maxShield)}
-                valueText={`${sidebarUnit.shield}/${sidebarUnit.derived.maxShield}`}
-                fillClassName="bg-sky-400"
-                heightClassName="h-1.5"
-                instant={bypassFx}
-                compactHeader
-              />
-              <StatBar
-                label="SP"
-                labelClassName={SP_COLOR_TOKENS.textClass}
-                valueClassName={SP_COLOR_TOKENS.textClass}
-                value={sidebarUnit.sp}
-                max={Math.max(1, sidebarUnit.derived.maxSp)}
-                valueText={`${sidebarUnit.sp}/${sidebarUnit.derived.maxSp}`}
-                fillClassName={SP_COLOR_TOKENS.barFillClass}
-                heightClassName="h-1.5"
-                instant={bypassFx}
-                compactHeader
-              />
-            </div>
+            <StatBar
+              label="SP"
+              labelClassName={SP_COLOR_TOKENS.textClass}
+              valueClassName={SP_COLOR_TOKENS.textClass}
+              value={sidebarUnit.sp}
+              max={Math.max(1, sidebarUnit.derived.maxSp)}
+              valueText={`${sidebarUnit.sp}/${sidebarUnit.derived.maxSp}`}
+              fillClassName={SP_COLOR_TOKENS.barFillClass}
+              heightClassName="h-1.5"
+              instant={bypassFx}
+              compactHeader
+            />
           </div>
-
-          {/* Fixed-width tabular telemetry */}
-          <div className="grid grid-cols-5 gap-1 text-center font-mono-nums text-[11px]">
-            <div className="rounded bg-slate-900/90 border border-slate-800 py-0.5">
-              <div className="text-slate-400">ATK</div>
-              <div className="font-bold text-slate-100">
-                {sidebarUnit.derived.attackPower}
-              </div>
-            </div>
-            <div className="rounded bg-slate-900/90 border border-slate-800 py-0.5">
-              <div className="text-slate-400">DEF</div>
-              <div className="font-bold text-slate-100">
-                {sidebarUnit.derived.defenseRating}
-              </div>
-            </div>
-            <div className="rounded bg-slate-900/90 border border-slate-800 py-0.5">
-              <div className="text-slate-400">SPD</div>
-              <div className="font-bold text-sky-300">
-                {getEffectiveUnitSpeed(sidebarUnit)}
-              </div>
-            </div>
-            <div className="rounded bg-slate-900/90 border border-slate-800 py-0.5">
-              <div className="text-slate-400">EVA</div>
-              <div className="font-bold text-emerald-300">
-                {sidebarUnit.derived.dodgeChance}%
-              </div>
-            </div>
-            <div className="rounded bg-slate-900/90 border border-slate-800 py-0.5">
-              <div className="text-slate-400">CRT</div>
-              <div className="font-bold text-amber-300">
-                {sidebarUnit.derived.critChance}%
-              </div>
-            </div>
-          </div>
-
-          {isBlocked && (
-            <div className="rounded border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-200 flex items-center gap-1.5">
-              <ShieldAlert className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-              <span className="truncate">{t('battle.frontRowBlocked')}</span>
-            </div>
-          )}
-
-          <FixedStatusArea
-            statuses={sidebarUnit.statuses}
-            rows={2}
-            scrollOverflow
-            unit={sidebarUnit}
-            unitTitle={sidebarUnit.name}
-            badgeLayout={statusSettings.badgeLayout}
-            iconMods={adminConfig.iconCatalogMods}
-            showLabels={fxSettings.showStatusLabels}
-            fallbackWidthPx={290}
-            rootTestId="sidebar-status-area"
-            chipTestIdPrefix="sidebar-status-chip"
-            emptyTestId="sidebar-status-empty"
-          />
         </div>
 
-        {showLockTargetBtn && (
-          <button
-            type="button"
-            disabled={isLocked}
-            onClick={() => selectTarget(sidebarUnit.id)}
-            className={`w-full min-h-[34px] px-3 rounded-lg text-[12px] font-semibold inline-flex items-center justify-center gap-1.5 transition-colors shrink-0 ${
-              isLocked
-                ? 'border border-red-500/45 bg-red-500/15 text-red-200 cursor-default'
-                : 'bg-red-500 hover:bg-red-400 text-slate-950 cursor-pointer'
-            }`}
-          >
-            <Crosshair className="w-4 h-4 shrink-0" />
-            <span>
-              {isLocked ? t('battle.targetLockedBtn') : t('battle.lockTargetBtn')}
-            </span>
-          </button>
-        )}
+        {/* Fixed-width tabular telemetry */}
+        <div
+          style={{
+            height: `${SIDEBAR_UNIT_PANEL_HEIGHTS.telemetryPx}px`,
+            minHeight: `${SIDEBAR_UNIT_PANEL_HEIGHTS.telemetryPx}px`,
+          }}
+          className="grid grid-cols-5 gap-1 text-center font-mono-nums text-[11px] leading-[16px] h-[38px] min-h-[38px] max-h-[38px] shrink-0 overflow-hidden"
+        >
+          <div className="rounded bg-slate-900/90 border border-slate-800 py-0.5 flex flex-col justify-center">
+            <div className="text-slate-400">ATK</div>
+            <div className="font-bold text-slate-100">
+              {sidebarUnit.derived.attackPower}
+            </div>
+          </div>
+          <div className="rounded bg-slate-900/90 border border-slate-800 py-0.5 flex flex-col justify-center">
+            <div className="text-slate-400">DEF</div>
+            <div className="font-bold text-slate-100">
+              {sidebarUnit.derived.defenseRating}
+            </div>
+          </div>
+          <div className="rounded bg-slate-900/90 border border-slate-800 py-0.5 flex flex-col justify-center">
+            <div className="text-slate-400">SPD</div>
+            <div className="font-bold text-sky-300">
+              {getEffectiveUnitSpeed(sidebarUnit)}
+            </div>
+          </div>
+          <div className="rounded bg-slate-900/90 border border-slate-800 py-0.5 flex flex-col justify-center">
+            <div className="text-slate-400">EVA</div>
+            <div className="font-bold text-emerald-300">
+              {sidebarUnit.derived.dodgeChance}%
+            </div>
+          </div>
+          <div className="rounded bg-slate-900/90 border border-slate-800 py-0.5 flex flex-col justify-center">
+            <div className="text-slate-400">CRT</div>
+            <div className="font-bold text-amber-300">
+              {sidebarUnit.derived.critChance}%
+            </div>
+          </div>
+        </div>
+
+        <FixedStatusArea
+          statuses={sidebarUnit.statuses}
+          rows={2}
+          scrollOverflow
+          unit={sidebarUnit}
+          unitTitle={sidebarUnit.name}
+          badgeLayout={statusSettings.badgeLayout}
+          iconMods={adminConfig.iconCatalogMods}
+          showLabels={fxSettings.showStatusLabels}
+          fallbackWidthPx={290}
+          rootTestId="sidebar-status-area"
+          chipTestIdPrefix="sidebar-status-chip"
+          emptyTestId="sidebar-status-empty"
+        />
       </div>
     );
   };
