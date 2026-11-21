@@ -746,6 +746,8 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'queue.actingBanner': 'Đang lượt: {tag} {name}',
   'queue.nextRoundDivider': 'Vòng {round}',
   'queue.overflowMore': '+{count} nữa',
+  'queue.battleEnded': 'Trận đấu đã kết thúc',
+  'queue.noActiveActor': 'Chờ lượt tiếp theo',
 
   // Admin CP
   'admin.title': 'Bảng Điều Khiển Admin (Admin CP)',

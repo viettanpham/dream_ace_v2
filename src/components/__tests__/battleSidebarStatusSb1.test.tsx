@@ -336,7 +336,7 @@ describe('TASK SB1 — Selected-unit status area fixed 2 rows (desktop/tablet si
     expect(emptyEl.textContent).toBe('No active effects');
   });
 
-  it('4) Right column invariants preserved: queue header + actor + 4 rows, combat log flex-1 & min-h-[220px], CURRENT_SAVE_VERSION stays 9', () => {
+  it('4) Right column invariants preserved: queue header + actor + 5 fixed rows, combat log flex-1 & min-h-[220px], CURRENT_SAVE_VERSION stays 9', () => {
     setViewport(1440, 900);
     act(() => {
       useGameStore.setState({ battle: makeBattle([]) });
@@ -351,9 +351,13 @@ describe('TASK SB1 — Selected-unit status area fixed 2 rows (desktop/tablet si
     expect(
       container!.querySelector('[data-testid="turn-queue-acting-chip"]')
     ).not.toBeNull();
+    const upcomingList = container!.querySelector(
+      '[data-testid="turn-queue-upcoming-list"]'
+    ) as HTMLElement;
+    expect(upcomingList.getAttribute('data-fixed-rows')).toBe('5');
     expect(
-      container!.querySelectorAll('[data-testid="turn-queue-sidebar-chip"]')
-    ).toHaveLength(4);
+      container!.querySelectorAll('[data-testid="turn-queue-sidebar-chip"]').length
+    ).toBeGreaterThanOrEqual(5);
 
     const desktopLog = container!.querySelector(
       '[data-testid="battle-desktop-docked-log"]'

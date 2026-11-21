@@ -611,22 +611,26 @@ describe('G3b Components — Radar rings, zero "!" badges, TurnQueueBar & Loop b
     );
     expect(upcomingList).not.toBeNull();
     expect(upcomingList!.className).toContain('flex-col');
+    expect(upcomingList!.className).toContain('overflow-y-auto');
+    expect(upcomingList!.getAttribute('data-fixed-rows')).toBe('5');
 
     const rows = Array.from(
       container!.querySelectorAll('[data-testid="turn-queue-sidebar-chip"]')
     );
-    expect(rows).toHaveLength(4);
+    expect(rows.length).toBeGreaterThanOrEqual(5);
     expect(
-      rows.map(
-        (r) => r.querySelector('[data-testid="turn-queue-order-num"]')?.textContent
-      )
-    ).toEqual(['1', '2', '3', '4']);
+      rows
+        .slice(0, 5)
+        .map(
+          (r) => r.querySelector('[data-testid="turn-queue-order-num"]')?.textContent
+        )
+    ).toEqual(['1', '2', '3', '4', '5']);
     for (const row of rows) {
       expect(row.querySelector('[data-team-shape]')).not.toBeNull();
     }
     expect(
       container!.querySelector('[data-testid="turn-queue-overflow"]')?.textContent
-    ).toContain('+');
+    ).toContain('+8');
 
     // 2) Phone narrow-width strip variant
     act(() => {

@@ -2472,8 +2472,6 @@ export function BattleScreen() {
               enrageBonusPct={enrageBonusPct}
               variant="sidebar"
               targetName={actingTargetName}
-              maxUpcoming={sidebarLogMode === 'line' ? 10 : 4}
-              fillHeight={sidebarLogMode === 'line'}
               onSelectUnit={(id) => setInspectedUnitId(id)}
             />
 

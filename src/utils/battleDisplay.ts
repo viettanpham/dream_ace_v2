@@ -83,7 +83,55 @@ export const RADAR_RING_MIN_MARKER_RADIUS = 17;
 export const RADAR_RING_DEFAULT_STROKE_WIDTH = 3;
 export const RADAR_LOW_HP_THRESHOLD = 0.25;
 export const RADAR_STATUS_MAX_VISIBLE = 3;
-export const TURN_QUEUE_UPCOMING_MAX = 5;
+export const QUEUE_VISIBLE_ROWS = 5;
+export const TURN_QUEUE_UPCOMING_MAX = QUEUE_VISIBLE_ROWS;
+export const TURN_QUEUE_ACTING_NAME_MIN_PX = 56;
+
+export const TURN_QUEUE_SIDEBAR_HEIGHTS = {
+  borderPx: 2,
+  padYPx: 12,
+  headerPx: 32,
+  actingRowPx: 36,
+  outerGapPx: 4,
+  nextLabelPx: 20,
+  nextGapPx: 4,
+  rowPx: 26,
+  rowGapPx: 4,
+} as const;
+
+export function getTurnQueueSidebarRowCount(unitsAtStart: number): number {
+  const safeUnits = Math.max(0, Math.floor(unitsAtStart));
+  if (safeUnits <= 1) return 0;
+  return Math.min(QUEUE_VISIBLE_ROWS, safeUnits - 1);
+}
+
+export function getTurnQueueSidebarListHeightPx(rowCount: number): number {
+  const safeRows = Math.max(0, Math.floor(rowCount));
+  if (safeRows === 0) return 0;
+  return (
+    safeRows * TURN_QUEUE_SIDEBAR_HEIGHTS.rowPx +
+    Math.max(0, safeRows - 1) * TURN_QUEUE_SIDEBAR_HEIGHTS.rowGapPx
+  );
+}
+
+export function getTurnQueueSidebarTotalHeightPx(rowCount: number): number {
+  const listPx = getTurnQueueSidebarListHeightPx(rowCount);
+  const nextSectionOverheadPx =
+    rowCount > 0
+      ? TURN_QUEUE_SIDEBAR_HEIGHTS.outerGapPx +
+        TURN_QUEUE_SIDEBAR_HEIGHTS.nextLabelPx +
+        TURN_QUEUE_SIDEBAR_HEIGHTS.nextGapPx
+      : 0;
+  return (
+    TURN_QUEUE_SIDEBAR_HEIGHTS.borderPx +
+    TURN_QUEUE_SIDEBAR_HEIGHTS.padYPx +
+    TURN_QUEUE_SIDEBAR_HEIGHTS.headerPx +
+    TURN_QUEUE_SIDEBAR_HEIGHTS.outerGapPx +
+    TURN_QUEUE_SIDEBAR_HEIGHTS.actingRowPx +
+    nextSectionOverheadPx +
+    listPx
+  );
+}
 
 export const SIDEBAR_UNIT_PANEL_HEIGHTS = {
   borderPx: 2,

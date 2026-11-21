@@ -20,6 +20,11 @@ import type {
 import {
   buildUpcomingTurnList,
   formatShortUnitName,
+  getTurnQueueSidebarListHeightPx,
+  getTurnQueueSidebarRowCount,
+  getTurnQueueSidebarTotalHeightPx,
+  TURN_QUEUE_ACTING_NAME_MIN_PX,
+  TURN_QUEUE_SIDEBAR_HEIGHTS,
   TURN_QUEUE_UPCOMING_MAX,
 } from '../utils/battleDisplay';
 import { BottomSheet } from './BottomSheet';
@@ -332,6 +337,53 @@ export function TurnQueueBar({
   const [inspectedEntry, setInspectedEntry] = useState<TurnQueueEntry | null>(
     null
   );
+  const [unitsAtStart, setUnitsAtStart] = useState<number>(
+    () => battle.units.length
+  );
+  const battleInitMetaRef = useRef<{
+    sectorId: string;
+    deployedGearId: MechClassId;
+    squadSize: number;
+    unitsCount: number;
+  }>({
+    sectorId: battle.sectorId,
+    deployedGearId: battle.deployedGearId,
+    squadSize: battle.squadSize,
+    unitsCount: battle.units.length,
+  });
+
+  const isFreshBattleStart =
+    battle.round === 1 &&
+    battle.turnCounter <= 1 &&
+    !battle.summary &&
+    battle.units.every((u) => u.alive);
+  const switchedBattleStart =
+    battleInitMetaRef.current.sectorId !== battle.sectorId ||
+    battleInitMetaRef.current.deployedGearId !== battle.deployedGearId ||
+    battleInitMetaRef.current.squadSize !== battle.squadSize ||
+    (isFreshBattleStart &&
+      battleInitMetaRef.current.unitsCount !== battle.units.length);
+  const effectiveUnitsAtStart = switchedBattleStart
+    ? battle.units.length
+    : unitsAtStart;
+
+  useEffect(() => {
+    if (switchedBattleStart) {
+      battleInitMetaRef.current = {
+        sectorId: battle.sectorId,
+        deployedGearId: battle.deployedGearId,
+        squadSize: battle.squadSize,
+        unitsCount: battle.units.length,
+      };
+      setUnitsAtStart(battle.units.length);
+    }
+  }, [
+    switchedBattleStart,
+    battle.sectorId,
+    battle.deployedGearId,
+    battle.squadSize,
+    battle.units.length,
+  ]);
 
   const animateShift = battleSpeed <= 2 && !skipAnimations;
 
@@ -688,34 +740,40 @@ export function TurnQueueBar({
     );
   }
 
-  // SIDEBAR VARIANT (Tablet / PC right column: 32px header + acting unit + next 4 (or up to 10 in Line log mode) 26px rows + "+N")
+  // SIDEBAR VARIANT (Tablet / PC right column: constant 32px header + 36px acting row + fixed 5x26px scrollable list)
   if (variant === 'sidebar') {
     const actingEntry = upcomingData.actingEntry;
-    const sidebarLimit = Math.max(1, Math.floor(maxUpcoming));
     const allUpcoming = upcomingData.upcoming;
-    const visibleUpcoming = allUpcoming.slice(0, sidebarLimit);
-    const sidebarHiddenCount = Math.max(
-      0,
-      allUpcoming.length - visibleUpcoming.length
-    );
-
-    const actingShort = actingEntry
-      ? formatShortUnitName(actingEntry.name, 10)
-      : '';
-    const actingLabel =
-      actingEntry && targetName
-        ? `${actingShort} > ${formatShortUnitName(targetName, 10)}`
-        : actingShort;
+    const fixedRowCount = getTurnQueueSidebarRowCount(effectiveUnitsAtStart);
+    const listHeightPx = getTurnQueueSidebarListHeightPx(fixedRowCount);
+    const totalHeightPx = getTurnQueueSidebarTotalHeightPx(fixedRowCount);
+    const sidebarHiddenCount = Math.max(0, allUpcoming.length - fixedRowCount);
+    const actingChipTitle = actingEntry
+      ? `${getTeamTagLabel(lang, actingEntry.teamRole)} ${actingEntry.name}${
+          targetName ? ` > ${targetName}` : ''
+        } (${getClassName(lang, actingEntry.classId)}) · ${t(
+          'queue.speedLabel'
+        )} ${actingEntry.effectiveSpeed}`
+      : undefined;
 
     return (
       <div
         data-testid="turn-queue-sidebar"
-        className={`rounded-lg border border-slate-800 bg-[#0A101B] p-2 flex flex-col gap-1.5 ${
-          fillHeight ? 'flex-1 min-h-0' : 'shrink-0'
-        }`}
+        data-queue-rows={fixedRowCount}
+        data-queue-height-px={totalHeightPx}
+        style={{
+          height: `${totalHeightPx}px`,
+          minHeight: `${totalHeightPx}px`,
+          maxHeight: `${totalHeightPx}px`,
+        }}
+        className="rounded-lg border border-slate-800 bg-[#0A101B] px-2 py-1.5 flex flex-col gap-1 shrink-0 overflow-hidden"
       >
         <div
           data-testid="turn-queue-sidebar-header"
+          style={{
+            height: `${TURN_QUEUE_SIDEBAR_HEIGHTS.headerPx}px`,
+            minHeight: `${TURN_QUEUE_SIDEBAR_HEIGHTS.headerPx}px`,
+          }}
           className="h-[32px] min-h-[32px] max-h-[32px] shrink-0 flex items-center justify-between gap-2"
         >
           <div className="flex items-center gap-1.5 min-w-0">
@@ -761,8 +819,8 @@ export function TurnQueueBar({
           </span>
         </div>
 
-        {/* Acting Unit Highlight (no reserved blank box when battle finished) */}
-        {actingEntry && (
+        {/* Acting Unit Highlight (always 36px even when no actor or battle finished) */}
+        {actingEntry ? (
           <button
             type="button"
             data-testid="turn-queue-acting-chip"
@@ -770,15 +828,15 @@ export function TurnQueueBar({
             data-full-name={actingEntry.name}
             data-acting="true"
             onClick={() => handleChipClick(actingEntry)}
-            title={`${getTeamTagLabel(lang, actingEntry.teamRole)} ${
-              actingEntry.name
-            } (${getClassName(lang, actingEntry.classId)}) · ${t(
-              'queue.speedLabel'
-            )} ${actingEntry.effectiveSpeed}`}
+            title={actingChipTitle}
+            style={{
+              borderColor: 'var(--turn-active)',
+              height: `${TURN_QUEUE_SIDEBAR_HEIGHTS.actingRowPx}px`,
+              minHeight: `${TURN_QUEUE_SIDEBAR_HEIGHTS.actingRowPx}px`,
+            }}
             className="w-full h-[36px] min-h-[36px] max-h-[36px] shrink-0 px-2.5 rounded-lg border bg-amber-400/15 hover:bg-amber-400/20 flex items-center justify-between gap-2 text-left cursor-pointer transition-colors"
-            style={{ borderColor: 'var(--turn-active)' }}
           >
-            <div className="flex items-center gap-2 min-w-0">
+            <div className="flex items-center gap-1.5 flex-1 min-w-0">
               <TeamShapeIcon role={actingEntry.teamRole} />
               <span
                 className="px-1.5 py-0.5 rounded text-[11px] font-mono-nums font-bold shrink-0"
@@ -790,27 +848,75 @@ export function TurnQueueBar({
               >
                 {getTeamTagLabel(lang, actingEntry.teamRole)}
               </span>
-              <span
+              <div
                 data-testid="turn-queue-acting-name"
-                className="text-[13px] font-bold text-amber-100 whitespace-nowrap truncate"
+                className="flex items-center flex-1 min-w-0 text-[13px] font-bold text-amber-100"
               >
-                {actingLabel}
-              </span>
+                <span
+                  data-testid="turn-queue-acting-attacker"
+                  title={actingEntry.name}
+                  style={
+                    targetName && actingEntry.name.length > 7
+                      ? { minWidth: `min(${TURN_QUEUE_ACTING_NAME_MIN_PX}px, 42%)` }
+                      : undefined
+                  }
+                  className="min-w-0 truncate"
+                >
+                  {actingEntry.name}
+                </span>
+                {targetName && (
+                  <>
+                    <span
+                      className="shrink-0 px-1 text-amber-200/80"
+                      aria-hidden="true"
+                    >
+                      &gt;
+                    </span>
+                    <span
+                      data-testid="turn-queue-acting-target"
+                      title={targetName}
+                      style={
+                        targetName.length > 7
+                          ? { minWidth: `min(${TURN_QUEUE_ACTING_NAME_MIN_PX}px, 42%)` }
+                          : undefined
+                      }
+                      className="min-w-0 truncate"
+                    >
+                      {targetName}
+                    </span>
+                  </>
+                )}
+              </div>
             </div>
             <span className="font-mono-nums text-[12px] font-bold text-amber-200 shrink-0">
               SPD {actingEntry.effectiveSpeed}
             </span>
           </button>
+        ) : (
+          <div
+            data-testid="turn-queue-acting-empty"
+            style={{
+              height: `${TURN_QUEUE_SIDEBAR_HEIGHTS.actingRowPx}px`,
+              minHeight: `${TURN_QUEUE_SIDEBAR_HEIGHTS.actingRowPx}px`,
+            }}
+            className="w-full h-[36px] min-h-[36px] max-h-[36px] shrink-0 px-2.5 rounded-lg border border-slate-800/70 bg-slate-900/35 flex items-center text-[12px] text-slate-500"
+          >
+            <span className="min-w-0 truncate">
+              {battle.summary ? t('queue.battleEnded') : t('queue.noActiveActor')}
+            </span>
+          </div>
         )}
 
-        {/* Upcoming List: next 4 rows of 26px in Expanded mode, up to 10 in Line mode, "+N" popover trigger */}
-        {visibleUpcoming.length > 0 && (
-          <div
-            className={`space-y-1 ${
-              fillHeight ? 'flex-1 min-h-0 flex flex-col' : 'shrink-0'
-            }`}
-          >
-            <div className="px-1 flex items-center justify-between gap-2 shrink-0 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+        {/* Upcoming List: fixed rows (up to 5) x 26px + gaps, independent of log mode, internal scroll */}
+        {fixedRowCount > 0 && (
+          <div className="flex flex-col gap-1 shrink-0 min-h-0">
+            <div
+              style={{
+                height: `${TURN_QUEUE_SIDEBAR_HEIGHTS.nextLabelPx}px`,
+                minHeight: `${TURN_QUEUE_SIDEBAR_HEIGHTS.nextLabelPx}px`,
+              }}
+              className="h-[20px] min-h-[20px] max-h-[20px] px-1 flex items-center justify-between gap-2 shrink-0 text-[11px] font-semibold uppercase tracking-wider text-slate-400"
+            >
               <span data-testid="turn-queue-next-label">
                 {t('queue.nextSectionLabel')}
               </span>
@@ -839,11 +945,15 @@ export function TurnQueueBar({
             </div>
             <div
               data-testid="turn-queue-upcoming-list"
-              className={`flex flex-col gap-1 ${
-                fillHeight ? 'flex-1 min-h-0 overflow-y-auto tactical-scroll' : ''
-              }`}
+              data-fixed-rows={fixedRowCount}
+              style={{
+                height: `${listHeightPx}px`,
+                minHeight: `${listHeightPx}px`,
+                maxHeight: `${listHeightPx}px`,
+              }}
+              className="flex flex-col gap-1 overflow-y-auto overflow-x-hidden tactical-scroll tactical-scroll-thin min-h-0"
             >
-              {visibleUpcoming.map((item) => {
+              {allUpcoming.map((item) => {
                 const entry = item.entry;
                 const tip = `${item.order}. ${getTeamTagLabel(
                   lang,
@@ -871,7 +981,7 @@ export function TurnQueueBar({
                       entry.phase === 'next_round' ? 'opacity-75' : ''
                     }`}
                   >
-                    <div className="flex items-center gap-2 min-w-0">
+                    <div className="flex items-center gap-1.5 flex-1 min-w-0">
                       <span
                         data-testid="turn-queue-order-num"
                         className="w-4 text-center font-mono-nums text-[11px] font-bold text-slate-400 shrink-0"
@@ -881,9 +991,10 @@ export function TurnQueueBar({
                       <TeamShapeIcon role={entry.teamRole} />
                       <span
                         data-testid="turn-queue-chip-name"
-                        className="font-medium text-slate-100 whitespace-nowrap truncate"
+                        title={entry.name}
+                        className="flex-1 min-w-0 font-medium text-slate-100 truncate"
                       >
-                        {item.shortName}
+                        {entry.name}
                       </span>
                     </div>
                     <span

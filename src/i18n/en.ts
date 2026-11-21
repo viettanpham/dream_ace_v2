@@ -744,6 +744,8 @@ export const EN_TRANSLATIONS = {
   'queue.actingBanner': 'Acting: {tag} {name}',
   'queue.nextRoundDivider': 'Round {round}',
   'queue.overflowMore': '+{count} more',
+  'queue.battleEnded': 'Battle ended',
+  'queue.noActiveActor': 'Awaiting next turn',
 
   // Admin CP
   'admin.title': 'Admin Control Panel',

@@ -382,7 +382,7 @@ describe('TASK G4a-2b — Right sidebar heights, [Dòng | Mở rộng] log modes
     ).not.toBeNull();
   });
 
-  it('3) Turn queue shows 32px header, current actor, max 4 next 26px rows in Mở rộng and up to 10 in Dòng (+N popover)', () => {
+  it('3) Turn queue shows 32px header, current actor, fixed 5-row 26px list (260px total) identical in Mở rộng & Dòng (+N popover)', () => {
     setViewport(1440, 900);
     const battle = makeBattle();
     useGameStore.setState({ battle });
@@ -399,10 +399,23 @@ describe('TASK G4a-2b — Right sidebar heights, [Dòng | Mở rộng] log modes
       container!.querySelector('[data-testid="turn-queue-acting-chip"]')
     ).not.toBeNull();
 
+    const sidebarQueue = container!.querySelector(
+      '[data-testid="turn-queue-sidebar"]'
+    ) as HTMLElement;
+    const expandedQueueHeight = sidebarQueue.getAttribute('data-queue-height-px');
+    expect(expandedQueueHeight).toBe('260');
+    expect(sidebarQueue.getAttribute('data-queue-rows')).toBe('5');
+
+    const upcomingListExpanded = container!.querySelector(
+      '[data-testid="turn-queue-upcoming-list"]'
+    ) as HTMLElement;
+    expect(upcomingListExpanded.className).toContain('overflow-y-auto');
+    expect(upcomingListExpanded.style.height).toBe('146px');
+
     const chipsExpanded = Array.from(
       container!.querySelectorAll('[data-testid="turn-queue-sidebar-chip"]')
     ) as HTMLElement[];
-    expect(chipsExpanded).toHaveLength(4);
+    expect(chipsExpanded).toHaveLength(15);
     for (const chip of chipsExpanded) {
       expect(chip.className).toContain('h-[26px]');
     }
@@ -410,7 +423,7 @@ describe('TASK G4a-2b — Right sidebar heights, [Dòng | Mở rộng] log modes
       '[data-testid="turn-queue-overflow"]'
     ) as HTMLButtonElement;
     expect(overflowExpanded).not.toBeNull();
-    expect(overflowExpanded.textContent).toContain('+11');
+    expect(overflowExpanded.textContent).toContain('+10');
 
     // Clicking "+N" opens full queue popover
     act(() => {
@@ -420,7 +433,7 @@ describe('TASK G4a-2b — Right sidebar heights, [Dòng | Mở rộng] log modes
       container!.querySelector('[data-testid="turn-queue-popover"]')
     ).not.toBeNull();
 
-    // Switch to Dòng -> log shrinks & queue expands up to 10 upcoming rows
+    // Switch to Dòng -> queue keeps the exact same fixed 5-row height and +10 overflow
     act(() => {
       (
         container!.querySelector(
@@ -432,21 +445,21 @@ describe('TASK G4a-2b — Right sidebar heights, [Dòng | Mở rộng] log modes
     const chipsLine = Array.from(
       container!.querySelectorAll('[data-testid="turn-queue-sidebar-chip"]')
     ) as HTMLElement[];
-    expect(chipsLine).toHaveLength(10);
+    expect(chipsLine).toHaveLength(15);
     for (const chip of chipsLine) {
       expect(chip.className).toContain('h-[26px]');
     }
     expect(
       container!.querySelector('[data-testid="turn-queue-overflow"]')?.textContent
-    ).toContain('+5');
+    ).toContain('+10');
 
-    const sidebarQueue = container!.querySelector(
-      '[data-testid="turn-queue-sidebar"]'
-    ) as HTMLElement;
+    expect(sidebarQueue.getAttribute('data-queue-height-px')).toBe(
+      expandedQueueHeight
+    );
+    expect(sidebarQueue.className).toContain('shrink-0');
     const desktopLog = container!.querySelector(
       '[data-testid="battle-desktop-docked-log"]'
     ) as HTMLElement;
-    expect(sidebarQueue.className).toContain('flex-1');
     expect(desktopLog.className).toContain('shrink-0');
     expect(desktopLog.className).not.toContain('min-h-[220px]');
   });
