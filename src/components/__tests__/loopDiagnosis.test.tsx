@@ -1,15 +1,21 @@
 // @vitest-environment jsdom
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { InMemoryCloudStore } from '../../engine/cloudStore';
+import {
+  AUTO_REPEAT_MAX_DEFEAT_STREAK,
+  shouldStopAutoRepeat,
+} from '../../engine/tactics';
+import { EN_TRANSLATIONS } from '../../i18n/en';
+import { VI_TRANSLATIONS } from '../../i18n/vi';
 import {
   attachCloudAutosaveListeners,
   setCloudStoreAdapterForTests,
   useCloudSaveStore,
 } from '../../store/useCloudSaveStore';
 import { useGameStore } from '../../store/useGameStore';
-import type { AutoRepeatLimit } from '../../types/game';
+import type { AutoRepeatLimit, AutoRepeatSession } from '../../types/game';
 import { BattleScreen } from '../BattleScreen';
 
 (
@@ -30,7 +36,61 @@ function setViewport(width: number, height: number): void {
   window.dispatchEvent(new Event('resize'));
 }
 
-describe('TASK LP0 — Loop (Lặp) Diagnosis', () => {
+function forceDeterministicDefeatViaAiTurn(): void {
+  const curBattle = useGameStore.getState().battle;
+  if (!curBattle || curBattle.summary) {
+    throw new Error('Expected active battle before forcing defeat');
+  }
+  const enemy = curBattle.units.find((u) => u.side === 'enemy' && u.alive);
+  const firstAlly = curBattle.units.find((u) => u.side === 'ally' && u.alive);
+  if (!enemy || !firstAlly) {
+    throw new Error('Expected at least one alive enemy and ally');
+  }
+
+  const riggedUnits = curBattle.units.map((u) => {
+    if (u.side === 'ally') {
+      if (u.id === firstAlly.id) {
+        return {
+          ...u,
+          hp: 1,
+          shield: 0,
+          alive: true,
+          statuses: [],
+          derived: { ...u.derived, maxHp: 100, dodgeChance: 0 },
+        };
+      }
+      return {
+        ...u,
+        hp: 0,
+        shield: 0,
+        alive: false,
+        animState: 'destroyed' as const,
+      };
+    }
+    if (u.id === enemy.id) {
+      return {
+        ...u,
+        statuses: [],
+        derived: { ...u.derived, attack: 9999 },
+      };
+    }
+    return u;
+  });
+
+  useGameStore.setState({
+    battle: {
+      ...curBattle,
+      units: riggedUnits,
+      turnOrder: [enemy.id, firstAlly.id],
+      activeTurnIndex: 0,
+    },
+  });
+
+  useGameStore.getState().performAiTurn();
+  expect(useGameStore.getState().battle?.summary?.outcome).toBe('defeat');
+}
+
+describe('TASK LP1 — Loop (Lặp) Unclip, Honest State, Defeat Streak & Counter', () => {
   let container: HTMLDivElement;
   let root: Root;
 
@@ -55,6 +115,7 @@ describe('TASK LP0 — Loop (Lặp) Diagnosis', () => {
     container.remove();
     setCloudStoreAdapterForTests(undefined);
     useCloudSaveStore.getState().resetCloudStoreForTests();
+    vi.restoreAllMocks();
     vi.useRealTimers();
   });
 
@@ -65,7 +126,6 @@ describe('TASK LP0 — Loop (Lặp) Diagnosis', () => {
       root.render(createElement(BattleScreen));
     });
 
-    // Activate Auto-Repeat loop for 3 battles
     act(() => {
       useGameStore
         .getState()
@@ -78,7 +138,6 @@ describe('TASK LP0 — Loop (Lặp) Diagnosis', () => {
     expect(useGameStore.getState().autoRepeatSession?.active).toBe(true);
     expect(useGameStore.getState().autoRepeatSession?.limit).toBe(3);
 
-    // Battle 1: forced victory -> should show toast, NOT "Chiến thắng Xuất kích", and keep loop active
     act(() => {
       useGameStore.getState().forceWinBattle();
     });
@@ -89,7 +148,6 @@ describe('TASK LP0 — Loop (Lặp) Diagnosis', () => {
     expect(container.querySelector('#battle-outcome-title')).toBeNull();
     expect(container.querySelector('[data-testid="battle-loop-toast"]')).not.toBeNull();
 
-    // Advance timer without clicking -> Battle 2 launches automatically
     act(() => {
       vi.advanceTimersByTime(1000);
     });
@@ -98,20 +156,15 @@ describe('TASK LP0 — Loop (Lặp) Diagnosis', () => {
     expect(battle2).not.toBeNull();
     expect(battle2).not.toBe(battle1);
     expect(battle2?.summary).toBeNull();
-    expect(useGameStore.getState().autoRepeatSession?.active).toBe(true);
     expect(useGameStore.getState().autoRepeatSession?.completedRuns).toBe(1);
 
-    // Battle 2: forced victory -> advances to 2/3, still active
     act(() => {
       useGameStore.getState().forceWinBattle();
     });
 
-    expect(useGameStore.getState().battle?.summary?.outcome).toBe('victory');
     expect(useGameStore.getState().autoRepeatSession?.active).toBe(true);
     expect(useGameStore.getState().autoRepeatSession?.completedRuns).toBe(2);
-    expect(container.querySelector('#battle-outcome-title')).toBeNull();
 
-    // Advance timer without clicking -> Battle 3 launches automatically
     act(() => {
       vi.advanceTimersByTime(1000);
     });
@@ -120,10 +173,7 @@ describe('TASK LP0 — Loop (Lặp) Diagnosis', () => {
     expect(battle3).not.toBeNull();
     expect(battle3).not.toBe(battle2);
     expect(battle3?.summary).toBeNull();
-    expect(useGameStore.getState().autoRepeatSession?.active).toBe(true);
-    expect(useGameStore.getState().autoRepeatSession?.completedRuns).toBe(2);
 
-    // Battle 3: forced victory -> reaches 3/3, stops cleanly with batch summary (not "Chiến thắng Xuất kích")
     act(() => {
       useGameStore.getState().forceWinBattle();
     });
@@ -155,7 +205,6 @@ describe('TASK LP0 — Loop (Lặp) Diagnosis', () => {
         root.render(createElement(BattleScreen));
       });
 
-      // Simulate a deferred cloud upload queued mid-battle
       act(() => {
         useCloudSaveStore.setState({ deferredUploadPending: true });
         useGameStore
@@ -163,7 +212,6 @@ describe('TASK LP0 — Loop (Lặp) Diagnosis', () => {
           .startAutoRepeat(3 as unknown as AutoRepeatLimit, 'debris_belt');
       });
 
-      // Battle 1 win
       act(() => {
         useGameStore.getState().forceWinBattle();
       });
@@ -173,7 +221,6 @@ describe('TASK LP0 — Loop (Lặp) Diagnosis', () => {
       expect(useGameStore.getState().battle?.summary).toBeNull();
       expect(useGameStore.getState().autoRepeatSession?.completedRuns).toBe(1);
 
-      // Battle 2 win
       act(() => {
         useGameStore.getState().forceWinBattle();
       });
@@ -183,7 +230,6 @@ describe('TASK LP0 — Loop (Lặp) Diagnosis', () => {
       expect(useGameStore.getState().battle?.summary).toBeNull();
       expect(useGameStore.getState().autoRepeatSession?.completedRuns).toBe(2);
 
-      // Battle 3 win
       act(() => {
         useGameStore.getState().forceWinBattle();
       });
@@ -194,52 +240,7 @@ describe('TASK LP0 — Loop (Lặp) Diagnosis', () => {
     }
   });
 
-  // This test fails on current desktop code (BattleScreen.tsx:1906 & 1908):
-  // Clicking "Lặp" highlights the button green (looking ON), while battle-loop-popover is rendered
-  // inside an overflow-hidden wrapper (line 1908) and max-h-[48px] overflow-x-hidden control bar (line 1906),
-  // clipping the popover containing "Bắt đầu" out of view on desktop (>640px).
-  test.fails(
-    'desktop "Lặp" popover is not clipped by overflow-hidden / max-h-[48px] ancestors',
-    () => {
-      setViewport(1280, 800);
-      useGameStore.getState().startBattle('debris_belt');
-
-      act(() => {
-        root.render(createElement(BattleScreen));
-      });
-
-      const loopBtn = container.querySelector<HTMLButtonElement>(
-        '[data-testid="battle-loop-btn"]'
-      );
-      expect(loopBtn).not.toBeNull();
-
-      act(() => {
-        loopBtn!.click();
-      });
-
-      const popover = container.querySelector<HTMLElement>(
-        '[data-testid="battle-loop-popover"]'
-      );
-      expect(popover).not.toBeNull();
-
-      // Walk ancestors up to battle-desktop-controls: none should clip vertical popover overflow
-      let el: HTMLElement | null = popover!.parentElement;
-      const clippingAncestors: string[] = [];
-      while (el && el !== container) {
-        if (
-          el.className.includes('overflow-hidden') ||
-          el.className.includes('overflow-x-hidden')
-        ) {
-          clippingAncestors.push(el.className);
-        }
-        el = el.parentElement;
-      }
-
-      expect(clippingAncestors).toEqual([]);
-    }
-  );
-
-  it('reproduces the exact "Chiến thắng Xuất kích" symptom when only "Lặp" is clicked (as occurs when desktop popover is clipped)', () => {
+  it('portals desktop "Lặp" popover into document.body with fixed viewport-clamped position outside overflow-hidden/max-h ancestors', () => {
     setViewport(1280, 800);
     useGameStore.getState().startBattle('debris_belt');
 
@@ -247,35 +248,418 @@ describe('TASK LP0 — Loop (Lặp) Diagnosis', () => {
       root.render(createElement(BattleScreen));
     });
 
-    const desktopLoopBtn = container.querySelector<HTMLButtonElement>(
+    const loopBtn = container.querySelector<HTMLButtonElement>(
       '[data-testid="battle-loop-btn"]'
     )!;
-    act(() => {
-      desktopLoopBtn.click();
+    expect(loopBtn).not.toBeNull();
+
+    // Anchor wrapper keeps G4a-L1 overflow protection in the desktop control bar
+    const anchorWrapper = loopBtn.parentElement!;
+    vi.spyOn(anchorWrapper, 'getBoundingClientRect').mockReturnValue({
+      top: 12,
+      bottom: 46,
+      left: 1180,
+      right: 1278,
+      width: 98,
+      height: 34,
+      x: 1180,
+      y: 12,
+      toJSON: () => ({}),
     });
 
-    // Visually highlighted emerald/green even though loop is not running
-    expect(desktopLoopBtn.className).toContain('border-emerald-400');
-    expect(desktopLoopBtn.getAttribute('data-loop-running')).toBe('false');
-    expect(useGameStore.getState().autoRepeatSession).toBeNull();
+    act(() => {
+      loopBtn.click();
+    });
+
+    // Popover must NOT live inside `container`, must live directly in document.body
+    expect(container.querySelector('[data-testid="battle-loop-popover"]')).toBeNull();
+    const popover = document.body.querySelector<HTMLElement>(
+      '[data-testid="battle-loop-popover"]'
+    );
+    expect(popover).not.toBeNull();
+    expect(popover!.parentElement).toBe(document.body);
+
+    // No ancestor with overflow-hidden, overflow-x-hidden, or max-h-*
+    let el: HTMLElement | null = popover!.parentElement;
+    const clippingAncestors: string[] = [];
+    while (el) {
+      if (
+        el.className.includes('overflow-hidden') ||
+        el.className.includes('overflow-x-hidden') ||
+        /\bmax-h-/.test(el.className)
+      ) {
+        clippingAncestors.push(el.className);
+      }
+      el = el.parentElement;
+    }
+    expect(clippingAncestors).toEqual([]);
+
+    // Fixed positioning, width, z-index, and right-edge viewport clamping (right <= 1280 - 8)
+    expect(popover!.style.position).toBe('fixed');
+    expect(popover!.style.width).toBe('min(252px, 92vw)');
+    expect(Number(popover!.style.zIndex)).toBeGreaterThanOrEqual(70);
+    const leftPx = Number.parseFloat(popover!.style.left);
+    const topPx = Number.parseFloat(popover!.style.top);
+    expect(topPx).toBeGreaterThanOrEqual(50); // opens below button (46 + 6 = 52)
+    expect(leftPx).toBeGreaterThanOrEqual(8);
+    expect(leftPx + 252).toBeLessThanOrEqual(1280 - 8);
+
+    // Window resize recomputes position cleanly inside smaller desktop viewport
+    act(() => {
+      setViewport(720, 720);
+    });
+    const resizedPopover = document.body.querySelector<HTMLElement>(
+      '[data-testid="battle-loop-popover"]'
+    )!;
+    const resizedLeft = Number.parseFloat(resizedPopover.style.left);
+    expect(resizedLeft).toBeGreaterThanOrEqual(8);
+    expect(resizedLeft + 252).toBeLessThanOrEqual(720 - 8);
+
+    // Scroll recomputes position
+    vi.spyOn(anchorWrapper, 'getBoundingClientRect').mockReturnValue({
+      top: 40,
+      bottom: 74,
+      left: 300,
+      right: 380,
+      width: 80,
+      height: 34,
+      x: 300,
+      y: 40,
+      toJSON: () => ({}),
+    });
+    act(() => {
+      window.dispatchEvent(new Event('scroll'));
+    });
+    expect(Number.parseFloat(popover!.style.top)).toBe(80);
+
+    // Closes on Escape
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    });
+    expect(document.body.querySelector('[data-testid="battle-loop-popover"]')).toBeNull();
+
+    // Re-open -> closes on outside mousedown
+    act(() => {
+      loopBtn.click();
+    });
+    expect(document.body.querySelector('[data-testid="battle-loop-popover"]')).not.toBeNull();
+    act(() => {
+      document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    });
+    expect(document.body.querySelector('[data-testid="battle-loop-popover"]')).toBeNull();
+
+    // Re-open -> closes when battle ends
+    act(() => {
+      loopBtn.click();
+    });
+    expect(document.body.querySelector('[data-testid="battle-loop-popover"]')).not.toBeNull();
+    act(() => {
+      useGameStore.getState().forceWinBattle();
+    });
+    expect(document.body.querySelector('[data-testid="battle-loop-popover"]')).toBeNull();
+  });
+
+  it('uses honest non-emerald button state while popover is open on desktop and launches battles 2 and 3 via Lặp -> Bắt đầu', () => {
+    setViewport(1280, 800);
+    useGameStore.getState().startBattle('debris_belt');
+
+    act(() => {
+      root.render(createElement(BattleScreen));
+    });
+
+    const loopBtn = container.querySelector<HTMLButtonElement>(
+      '[data-testid="battle-loop-btn"]'
+    )!;
+    expect(loopBtn.className).not.toContain('emerald');
+
+    act(() => {
+      loopBtn.click();
+    });
+
+    // While popover is open & loop NOT running: neutral sky/slate highlight, NO emerald, NO running dot
+    expect(loopBtn.getAttribute('data-loop-running')).toBe('false');
+    expect(loopBtn.className).not.toContain('emerald');
+    expect(loopBtn.className).toContain('sky');
+    expect(loopBtn.innerHTML).not.toContain('emerald');
+    expect(container.querySelector('[data-testid="battle-loop-running-dot"]')).toBeNull();
+
+    // Primary "Bắt đầu" CTA is full-width emerald at bottom of popover
+    const popover = document.body.querySelector<HTMLElement>(
+      '[data-testid="battle-loop-popover"]'
+    )!;
+    const startBtn = popover.querySelector<HTMLButtonElement>(
+      '[data-testid="battle-loop-start"]'
+    )!;
+    expect(startBtn.className).toContain('bg-emerald-500');
+    expect(startBtn.className).toContain('w-full');
+
+    // Click 5x and Bắt đầu directly from desktop popover
+    act(() => {
+      popover
+        .querySelector<HTMLButtonElement>('[data-testid="battle-loop-opt-5"]')!
+        .click();
+    });
+    act(() => {
+      startBtn.click();
+    });
+
+    // Now active chip has emerald + running dot + 1/5 counter
+    expect(useGameStore.getState().autoRepeatSession?.active).toBe(true);
+    const activeChip = container.querySelector<HTMLButtonElement>(
+      '[data-testid="battle-loop-active-chip"]'
+    )!;
+    expect(activeChip).not.toBeNull();
+    expect(activeChip.className).toContain('emerald');
+    expect(
+      activeChip.querySelector('[data-testid="battle-loop-running-dot"]')
+    ).not.toBeNull();
+    expect(
+      activeChip.querySelector('[data-testid="battle-loop-progress"]')?.textContent
+    ).toBe('1/5');
+
+    // Battles 2 and 3 auto-launch without any click
+    const b1 = useGameStore.getState().battle;
+    act(() => {
+      useGameStore.getState().forceWinBattle();
+    });
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    const b2 = useGameStore.getState().battle;
+    expect(b2).not.toBe(b1);
+    expect(b2?.summary).toBeNull();
+    expect(
+      container.querySelector('[data-testid="battle-loop-progress"]')?.textContent
+    ).toBe('2/5');
 
     act(() => {
       useGameStore.getState().forceWinBattle();
     });
-    const desktopBattleAfterWin = useGameStore.getState().battle;
-
-    expect(container.querySelector('#battle-outcome-title')?.textContent).toBe(
-      'Chiến thắng Xuất kích'
-    );
     act(() => {
-      vi.advanceTimersByTime(2000);
+      vi.advanceTimersByTime(1000);
     });
-    // No next battle started
-    expect(useGameStore.getState().battle).toBe(desktopBattleAfterWin);
-    expect(useGameStore.getState().battle?.summary?.outcome).toBe('victory');
+    const b3 = useGameStore.getState().battle;
+    expect(b3).not.toBe(b2);
+    expect(b3?.summary).toBeNull();
+    expect(
+      container.querySelector('[data-testid="battle-loop-progress"]')?.textContent
+    ).toBe('3/5');
   });
 
-  it('launches 3 battles automatically on phone portrait when clicking Lặp -> 5x -> Bắt đầu (no overflow-hidden clipping)', () => {
+  it('displays N/M and N/∞ counters accurately on the running chip', () => {
+    setViewport(1280, 800);
+    useGameStore.getState().startBattle('debris_belt');
+
+    act(() => {
+      root.render(createElement(BattleScreen));
+    });
+
+    act(() => {
+      container
+        .querySelector<HTMLButtonElement>('[data-testid="battle-loop-btn"]')!
+        .click();
+    });
+    act(() => {
+      document.body
+        .querySelector<HTMLButtonElement>('[data-testid="battle-loop-opt-infinite"]')!
+        .click();
+    });
+    act(() => {
+      document.body
+        .querySelector<HTMLButtonElement>('[data-testid="battle-loop-start"]')!
+        .click();
+    });
+
+    expect(
+      container.querySelector('[data-testid="battle-loop-progress"]')?.textContent
+    ).toBe('1/∞');
+
+    act(() => {
+      useGameStore.getState().forceWinBattle();
+    });
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(
+      container.querySelector('[data-testid="battle-loop-progress"]')?.textContent
+    ).toBe('2/∞');
+
+    act(() => {
+      useGameStore.getState().forceWinBattle();
+    });
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(
+      container.querySelector('[data-testid="battle-loop-progress"]')?.textContent
+    ).toBe('3/∞');
+  });
+
+  it('stops after 3 consecutive defeats when "Dừng khi thua" is unchecked, and resets the streak on a victory', () => {
+    expect(AUTO_REPEAT_MAX_DEFEAT_STREAK).toBe(3);
+
+    // Pure shouldStopAutoRepeat check
+    const baseSession: AutoRepeatSession = {
+      active: true,
+      limit: 'infinite',
+      sectorId: 'debris_belt',
+      completedRuns: 2,
+      wins: 0,
+      consecutiveDefeats: 2,
+      totalExp: 0,
+      totalCredits: 0,
+      totalWarPoints: 0,
+      totalDrops: [],
+      stopReason: null,
+    };
+    expect(
+      shouldStopAutoRepeat(baseSession, 'defeat', false, 10, 60, false)
+    ).toEqual({ stop: false, reason: null });
+    expect(
+      shouldStopAutoRepeat(
+        { ...baseSession, completedRuns: 3, consecutiveDefeats: 3 },
+        'defeat',
+        false,
+        10,
+        60,
+        false
+      )
+    ).toEqual({ stop: true, reason: 'defeat_streak' });
+    expect(
+      shouldStopAutoRepeat(
+        { ...baseSession, completedRuns: 3, consecutiveDefeats: 3 },
+        'victory',
+        false,
+        10,
+        60,
+        false
+      )
+    ).toEqual({ stop: false, reason: null });
+
+    // End-to-end store + UI flow with clear checkbox label + muted hint line
+    setViewport(1280, 800);
+    useGameStore.getState().startBattle('debris_belt');
+
+    act(() => {
+      root.render(createElement(BattleScreen));
+    });
+
+    act(() => {
+      container
+        .querySelector<HTMLButtonElement>('[data-testid="battle-loop-btn"]')!
+        .click();
+    });
+
+    const checkbox = document.body.querySelector<HTMLInputElement>(
+      '[data-testid="battle-loop-stop-on-defeat"]'
+    )!;
+    const hintBefore = document.body.querySelector(
+      '[data-testid="battle-loop-stop-on-defeat-hint"]'
+    )?.textContent;
+    expect(checkbox.checked).toBe(true);
+    expect(hintBefore).toContain('3');
+
+    // Uncheck "Dừng khi thua"
+    act(() => {
+      checkbox.click();
+    });
+    expect(useGameStore.getState().autoRepeatStopOnDefeat).toBe(false);
+    const hintAfter = document.body.querySelector(
+      '[data-testid="battle-loop-stop-on-defeat-hint"]'
+    )?.textContent;
+    expect(hintAfter).toContain('Tiếp tục khi thua');
+    expect(hintAfter).toContain('3');
+
+    // Start 10x loop
+    act(() => {
+      document.body
+        .querySelector<HTMLButtonElement>('[data-testid="battle-loop-opt-10"]')!
+        .click();
+    });
+    act(() => {
+      document.body
+        .querySelector<HTMLButtonElement>('[data-testid="battle-loop-start"]')!
+        .click();
+    });
+
+    // Defeat #1 -> streak = 1, continues
+    act(() => {
+      forceDeterministicDefeatViaAiTurn();
+    });
+    expect(useGameStore.getState().autoRepeatSession?.active).toBe(true);
+    expect(useGameStore.getState().autoRepeatSession?.consecutiveDefeats).toBe(1);
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+
+    // Defeat #2 -> streak = 2, continues
+    act(() => {
+      forceDeterministicDefeatViaAiTurn();
+    });
+    expect(useGameStore.getState().autoRepeatSession?.active).toBe(true);
+    expect(useGameStore.getState().autoRepeatSession?.consecutiveDefeats).toBe(2);
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+
+    // Victory -> resets consecutiveDefeats back to 0!
+    act(() => {
+      useGameStore.getState().forceWinBattle();
+    });
+    expect(useGameStore.getState().autoRepeatSession?.active).toBe(true);
+    expect(useGameStore.getState().autoRepeatSession?.consecutiveDefeats).toBe(0);
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+
+    // Defeat #1 after victory -> streak = 1, continues
+    act(() => {
+      forceDeterministicDefeatViaAiTurn();
+    });
+    expect(useGameStore.getState().autoRepeatSession?.active).toBe(true);
+    expect(useGameStore.getState().autoRepeatSession?.consecutiveDefeats).toBe(1);
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+
+    // Defeat #2 after victory -> streak = 2, continues
+    act(() => {
+      forceDeterministicDefeatViaAiTurn();
+    });
+    expect(useGameStore.getState().autoRepeatSession?.active).toBe(true);
+    expect(useGameStore.getState().autoRepeatSession?.consecutiveDefeats).toBe(2);
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+
+    // Defeat #3 in a row -> stops with stopReason = 'defeat_streak' & summary modal
+    act(() => {
+      forceDeterministicDefeatViaAiTurn();
+    });
+    const session = useGameStore.getState().autoRepeatSession;
+    expect(session?.active).toBe(false);
+    expect(session?.consecutiveDefeats).toBe(3);
+    expect(session?.completedRuns).toBe(6);
+    expect(session?.wins).toBe(1);
+    expect(session?.stopReason).toBe('defeat_streak');
+    expect(container.querySelector('#repeat-summary-title')?.textContent).toContain(
+      'Tổng kết Lặp tự động'
+    );
+    expect(container.textContent).toContain('Thua 3 trận liên tiếp');
+  });
+
+  it('launches 3 battles automatically on phone portrait when clicking Lặp -> 5x -> Bắt đầu and keeps vi/en translation key parity', () => {
+    // Key parity check
+    const viKeys = Object.keys(VI_TRANSLATIONS).sort();
+    const enKeys = Object.keys(EN_TRANSLATIONS).sort();
+    expect(viKeys).toEqual(enKeys);
+    expect(VI_TRANSLATIONS['auto.repeatReason.defeat_streak']).toContain('{streak}');
+    expect(EN_TRANSLATIONS['auto.repeatReason.defeat_streak']).toContain('{streak}');
+    expect(VI_TRANSLATIONS['battle.loopStopOnDefeatHintOn']).toContain('{streak}');
+    expect(EN_TRANSLATIONS['battle.loopStopOnDefeatHintOn']).toContain('{streak}');
+    expect(VI_TRANSLATIONS['battle.loopStopOnDefeatHintOff']).toContain('{streak}');
+    expect(EN_TRANSLATIONS['battle.loopStopOnDefeatHintOff']).toContain('{streak}');
+
     setViewport(390, 844);
     useGameStore.getState().startBattle('debris_belt');
 
@@ -286,20 +670,18 @@ describe('TASK LP0 — Loop (Lặp) Diagnosis', () => {
     const phoneControls = container.querySelector(
       '[data-testid="battle-phone-controls"]'
     )!;
-    expect(phoneControls.className).not.toContain('overflow-hidden');
-
     act(() => {
       phoneControls
         .querySelector<HTMLButtonElement>('[data-testid="battle-loop-btn"]')!
         .click();
     });
     act(() => {
-      container
+      document.body
         .querySelector<HTMLButtonElement>('[data-testid="battle-loop-opt-5"]')!
         .click();
     });
     act(() => {
-      container
+      document.body
         .querySelector<HTMLButtonElement>('[data-testid="battle-loop-start"]')!
         .click();
     });

@@ -1124,6 +1124,8 @@ export function evaluateAutoSafety(
   return { shouldStopAuto: false, shouldRetreat: false, reason: null };
 }
 
+export const AUTO_REPEAT_MAX_DEFEAT_STREAK = 3;
+
 /**
  * Pure check for whether an Auto-Repeat batch should stop after a battle concludes.
  * Inventory full ALWAYS stops the loop regardless of `stopOnDefeat`.
@@ -1142,6 +1144,13 @@ export function shouldStopAutoRepeat(
   }
   if (outcome === 'defeat' && stopOnDefeat) {
     return { stop: true, reason: 'defeat' };
+  }
+  if (
+    outcome === 'defeat' &&
+    !stopOnDefeat &&
+    (session.consecutiveDefeats ?? 0) >= AUTO_REPEAT_MAX_DEFEAT_STREAK
+  ) {
+    return { stop: true, reason: 'defeat_streak' };
   }
   if (session.limit !== 'infinite' && session.completedRuns >= session.limit) {
     return { stop: true, reason: 'completed' };

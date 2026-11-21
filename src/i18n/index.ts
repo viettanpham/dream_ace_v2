@@ -28,6 +28,7 @@ import type {
   TeamColorRole,
 } from '../types/game';
 import { BALANCE_CONFIG } from '../data/balance';
+import { AUTO_REPEAT_MAX_DEFEAT_STREAK } from '../engine/tactics';
 import { EN_TRANSLATIONS, type TranslationKey } from './en';
 import { VI_TRANSLATIONS } from './vi';
 
@@ -421,6 +422,7 @@ export function getAutoStopReasonLabel(
 ): string {
   return translate(lang, `auto.repeatReason.${reason}` as TranslationKey, {
     max: BALANCE_CONFIG.maxInventorySize,
+    streak: AUTO_REPEAT_MAX_DEFEAT_STREAK,
   });
 }
 

@@ -108,7 +108,7 @@ describe('Task F2a+: Selling Protections, Battle Loop Toast/Stop-on-Defeat & Log
       act(() => {
         loopBtn!.click();
       });
-      const stopOnDefeatCheckbox = container.querySelector<HTMLInputElement>(
+      const stopOnDefeatCheckbox = document.body.querySelector<HTMLInputElement>(
         '[data-testid="battle-loop-stop-on-defeat"]'
       );
       expect(stopOnDefeatCheckbox).not.toBeNull();

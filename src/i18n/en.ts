@@ -698,6 +698,7 @@ export const EN_TRANSLATIONS = {
   'auto.repeatSummaryRuns': '{wins} / {runs} Wins',
   'auto.repeatReason.completed': 'Completed target runs',
   'auto.repeatReason.defeat': 'Stopped on defeat',
+  'auto.repeatReason.defeat_streak': 'Stopped: {streak} defeats in a row',
   'auto.repeatReason.retreat': 'Stopped on retreat',
   'auto.repeatReason.low_hp': 'Stopped: Low HP safety triggered',
   'auto.repeatReason.elite_ready': 'Stopped: Elite skill ready',
@@ -1386,6 +1387,10 @@ export const EN_TRANSLATIONS = {
   'inv.bulkAllSkippedFeedback': 'No items sold — {skipped} selected items are equipped or locked.',
   'qs.soldWithSkippedNotice': 'Quick-sold {count} items (+{credits} CR). Skipped {skipped} equipped/locked.',
   'battle.loopStopOnDefeat': 'Stop on defeat',
+  'battle.loopStopOnDefeatHintOn':
+    'Uncheck to continue on defeat (max {streak} in a row).',
+  'battle.loopStopOnDefeatHintOff':
+    'Continuing on defeat (stops after {streak} defeats in a row).',
   'battle.loopToastRun': 'Run #{run}: {outcome} · +{exp} EXP · +{credits} CR · +{wp} WP · {loot} loot',
   'battle.loopToastVictory': 'Victory',
   'battle.loopToastDefeat': 'Defeat',

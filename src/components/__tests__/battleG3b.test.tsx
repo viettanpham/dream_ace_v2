@@ -455,7 +455,7 @@ describe('G3b Components — Radar rings, zero "!" badges, TurnQueueBar & Loop b
       loopBtn.click();
     });
 
-    const popover = container!.querySelector('[data-testid="battle-loop-popover"]');
+    const popover = document.body.querySelector('[data-testid="battle-loop-popover"]');
     expect(popover).not.toBeNull();
     expect(popover!.querySelector('[data-testid="battle-loop-opt-1"]')).not.toBeNull();
     expect(popover!.querySelector('[data-testid="battle-loop-opt-5"]')).not.toBeNull();

@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   AlertTriangle,
   Award,
@@ -44,6 +45,7 @@ import {
 } from '../engine/combat';
 import { getEffectiveItemStats } from '../engine/equipment';
 import { canUnitUseSkill } from '../engine/skills';
+import { AUTO_REPEAT_MAX_DEFEAT_STREAK } from '../engine/tactics';
 import {
   getAutoStopReasonLabel,
   getBattleSkillReason,
@@ -180,6 +182,11 @@ export function BattleScreen() {
   const [selectedLoopCount, setSelectedLoopCount] =
     useState<AutoRepeatLimit>(autoRepeatLimit);
   const loopAnchorRef = useRef<HTMLDivElement | null>(null);
+  const loopPopoverRef = useRef<HTMLDivElement | null>(null);
+  const [loopPopoverPos, setLoopPopoverPos] = useState<{
+    top: number;
+    left: number;
+  }>({ top: 56, left: 8 });
   const [statsModalOpen, setStatsModalOpen] = useState(false);
   const [speechBubblesEnabled, setSpeechBubblesEnabled] = useState<boolean>(
     () => readSpeechBubblesEnabled()
@@ -210,26 +217,68 @@ export function BattleScreen() {
     return () => window.clearTimeout(timer);
   }, [autoRepeatToast, clearAutoRepeatToast]);
 
+  const computeLoopPopoverPosition = useCallback(() => {
+    const MARGIN = 8;
+    const vw = typeof window !== 'undefined' ? window.innerWidth || 1280 : 1280;
+    const vh = typeof window !== 'undefined' ? window.innerHeight || 800 : 800;
+    const popoverWidth = Math.max(
+      0,
+      Math.min(252, Math.floor(vw * 0.92), vw - MARGIN * 2)
+    );
+    const rect = loopAnchorRef.current?.getBoundingClientRect();
+    const rawLeft = rect
+      ? rect.right > 0
+        ? rect.right - popoverWidth
+        : rect.left
+      : MARGIN;
+    const maxLeft = Math.max(MARGIN, vw - popoverWidth - MARGIN);
+    const left = Math.max(MARGIN, Math.min(rawLeft, maxLeft));
+    const rawTop = rect ? rect.bottom + 6 : MARGIN;
+    const maxTop = Math.max(MARGIN, vh - 80);
+    const top = Math.max(MARGIN, Math.min(rawTop, maxTop));
+    return { top, left };
+  }, []);
+
+  useEffect(() => {
+    if (battle?.summary) {
+      setLoopPopoverOpen(false);
+    }
+  }, [battle?.summary]);
+
   useEffect(() => {
     if (!loopPopoverOpen) return;
+    const updatePosition = () => {
+      setLoopPopoverPos(computeLoopPopoverPosition());
+    };
+    updatePosition();
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setLoopPopoverOpen(false);
     };
     const onMouseDown = (e: MouseEvent) => {
-      if (
-        loopAnchorRef.current &&
-        !loopAnchorRef.current.contains(e.target as Node)
-      ) {
+      const target = e.target as Node | null;
+      const inAnchor = Boolean(
+        loopAnchorRef.current && target && loopAnchorRef.current.contains(target)
+      );
+      const inPopover = Boolean(
+        loopPopoverRef.current &&
+          target &&
+          loopPopoverRef.current.contains(target)
+      );
+      if (!inAnchor && !inPopover) {
         setLoopPopoverOpen(false);
       }
     };
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('mousedown', onMouseDown);
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
     return () => {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('mousedown', onMouseDown);
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
     };
-  }, [loopPopoverOpen]);
+  }, [loopPopoverOpen, computeLoopPopoverPosition, layoutMode]);
 
   useEffect(() => {
     if (!logSheetOpen) return;
@@ -769,6 +818,105 @@ export function BattleScreen() {
       );
     }
 
+    const loopPopoverNode =
+      loopPopoverOpen && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              ref={loopPopoverRef}
+              role="dialog"
+              data-testid="battle-loop-popover"
+              aria-label={t('battle.loopTitle')}
+              style={{
+                position: 'fixed',
+                top: `${loopPopoverPos.top}px`,
+                left: `${loopPopoverPos.left}px`,
+                width: 'min(252px, 92vw)',
+                zIndex: 70,
+              }}
+              className="z-[70] rounded-lg border border-slate-700 bg-[#0B111D] p-3 shadow-2xl space-y-2.5"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[13px] font-bold text-slate-100">
+                  {t('battle.loopTitle')}
+                </span>
+                <span className="text-[11px] font-mono-nums text-slate-400">
+                  {t('battle.loopCountLabel')}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-5 gap-1">
+                {REPEAT_OPTIONS.map((opt) => {
+                  const isSelected = selectedLoopCount === opt;
+                  return (
+                    <button
+                      key={String(opt)}
+                      type="button"
+                      data-testid={`battle-loop-opt-${opt}`}
+                      aria-pressed={isSelected}
+                      title={repeatLabelFor(opt)}
+                      onClick={() => {
+                        setSelectedLoopCount(opt);
+                        setAutoRepeatLimit(opt);
+                      }}
+                      className={`min-h-[38px] rounded-md border font-mono-nums text-[12px] font-bold cursor-pointer transition-colors ${
+                        isSelected
+                          ? 'border-emerald-400 bg-emerald-500 text-slate-950'
+                          : 'border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200'
+                      }`}
+                    >
+                      {repeatShortCount(opt)}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <label
+                data-testid="battle-loop-stop-on-defeat-label"
+                className="flex items-start justify-between gap-2 rounded-md border border-slate-800 bg-slate-900/70 px-2.5 py-2 text-[12px] text-slate-200 cursor-pointer select-none"
+              >
+                <span className="flex flex-col gap-0.5 min-w-0">
+                  <span className="font-medium leading-tight">
+                    {t('battle.loopStopOnDefeat')}
+                  </span>
+                  <span
+                    data-testid="battle-loop-stop-on-defeat-hint"
+                    className="text-[11px] leading-snug text-slate-400"
+                  >
+                    {autoRepeatStopOnDefeat
+                      ? t('battle.loopStopOnDefeatHintOn', {
+                          streak: AUTO_REPEAT_MAX_DEFEAT_STREAK,
+                        })
+                      : t('battle.loopStopOnDefeatHintOff', {
+                          streak: AUTO_REPEAT_MAX_DEFEAT_STREAK,
+                        })}
+                  </span>
+                </span>
+                <input
+                  type="checkbox"
+                  data-testid="battle-loop-stop-on-defeat"
+                  checked={autoRepeatStopOnDefeat}
+                  onChange={(e) => setAutoRepeatStopOnDefeat(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 accent-emerald-400 cursor-pointer shrink-0"
+                />
+              </label>
+
+              <button
+                type="button"
+                data-testid="battle-loop-start"
+                onClick={() => {
+                  startAutoRepeat(selectedLoopCount, battle.sectorId);
+                  setLoopPopoverOpen(false);
+                }}
+                className="w-full min-h-[40px] px-3 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-[13px] inline-flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+              >
+                <Repeat className="w-4 h-4 shrink-0" />
+                <span>{t('battle.loopStartBtn')}</span>
+              </button>
+            </div>,
+            document.body
+          )
+        : null;
+
     return (
       <div ref={loopAnchorRef} className="relative shrink-0">
         <button
@@ -781,11 +929,17 @@ export function BattleScreen() {
           title={t('battle.loopTitle')}
           onClick={() => {
             setSelectedLoopCount(autoRepeatLimit);
-            setLoopPopoverOpen((v) => !v);
+            setLoopPopoverOpen((v) => {
+              const next = !v;
+              if (next) {
+                setLoopPopoverPos(computeLoopPopoverPosition());
+              }
+              return next;
+            });
           }}
           className={`rounded-lg border transition-colors inline-flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap ${
             loopPopoverOpen
-              ? 'border-emerald-400 bg-emerald-500/20 text-emerald-100'
+              ? 'border-sky-400/80 bg-slate-800 text-slate-100 ring-1 ring-sky-400/30'
               : 'border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200'
           } ${
             phoneCompact
@@ -793,7 +947,12 @@ export function BattleScreen() {
               : 'h-[34px] min-h-[34px] px-2 text-[12px] font-semibold'
           }`}
         >
-          <Repeat className="w-4 h-4 text-emerald-400 shrink-0" aria-hidden="true" />
+          <Repeat
+            className={`w-4 h-4 shrink-0 ${
+              loopPopoverOpen ? 'text-sky-400' : 'text-slate-300'
+            }`}
+            aria-hidden="true"
+          />
           {phoneCompact ? (
             <span data-testid="battle-loop-phone-count">
               {repeatShortCount(autoRepeatLimit)}
@@ -803,76 +962,7 @@ export function BattleScreen() {
           )}
         </button>
 
-        {loopPopoverOpen && (
-          <div
-            role="dialog"
-            data-testid="battle-loop-popover"
-            aria-label={t('battle.loopTitle')}
-            className="absolute right-0 top-full mt-1.5 z-50 w-[252px] rounded-lg border border-slate-700 bg-[#0B111D] p-3 shadow-2xl space-y-2.5"
-          >
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[13px] font-bold text-slate-100">
-                {t('battle.loopTitle')}
-              </span>
-              <span className="text-[11px] font-mono-nums text-slate-400">
-                {t('battle.loopCountLabel')}
-              </span>
-            </div>
-
-            <div className="grid grid-cols-5 gap-1">
-              {REPEAT_OPTIONS.map((opt) => {
-                const isSelected = selectedLoopCount === opt;
-                return (
-                  <button
-                    key={String(opt)}
-                    type="button"
-                    data-testid={`battle-loop-opt-${opt}`}
-                    aria-pressed={isSelected}
-                    title={repeatLabelFor(opt)}
-                    onClick={() => {
-                      setSelectedLoopCount(opt);
-                      setAutoRepeatLimit(opt);
-                    }}
-                    className={`min-h-[38px] rounded-md border font-mono-nums text-[12px] font-bold cursor-pointer transition-colors ${
-                      isSelected
-                        ? 'border-emerald-400 bg-emerald-500 text-slate-950'
-                        : 'border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200'
-                    }`}
-                  >
-                    {repeatShortCount(opt)}
-                  </button>
-                );
-              })}
-            </div>
-
-            <label
-              data-testid="battle-loop-stop-on-defeat-label"
-              className="flex items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-900/70 px-2.5 py-2 text-[12px] text-slate-200 cursor-pointer select-none"
-            >
-              <span>{t('battle.loopStopOnDefeat')}</span>
-              <input
-                type="checkbox"
-                data-testid="battle-loop-stop-on-defeat"
-                checked={autoRepeatStopOnDefeat}
-                onChange={(e) => setAutoRepeatStopOnDefeat(e.target.checked)}
-                className="h-4 w-4 accent-emerald-400 cursor-pointer"
-              />
-            </label>
-
-            <button
-              type="button"
-              data-testid="battle-loop-start"
-              onClick={() => {
-                startAutoRepeat(selectedLoopCount, battle.sectorId);
-                setLoopPopoverOpen(false);
-              }}
-              className="w-full min-h-[40px] px-3 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-[13px] inline-flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
-            >
-              <Repeat className="w-4 h-4 shrink-0" />
-              <span>{t('battle.loopStartBtn')}</span>
-            </button>
-          </div>
-        )}
+        {loopPopoverNode}
       </div>
     );
   };
