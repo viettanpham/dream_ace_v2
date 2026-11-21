@@ -14,6 +14,8 @@ import type {
 } from '../types/game';
 
 import {
+  STATUS_ARROW_BORDER_COLOR,
+  STATUS_ARROW_BORDER_PX,
   STATUS_ICON_SIZE_SPECS,
   STATUS_TURNS_BADGE_BG,
   STATUS_TURNS_BADGE_BORDER_COLOR,
@@ -258,14 +260,29 @@ export function CatalogIcon({
             width: `${spec.arrowBoxPx}px`,
             height: `${spec.arrowBoxPx}px`,
             backgroundColor: kind === 'buff' ? BUFF_GREEN : DEBUFF_RED,
+            borderWidth: `${STATUS_ARROW_BORDER_PX}px`,
+            borderStyle: 'solid',
+            borderColor: isMini ? '#070B12' : STATUS_ARROW_BORDER_COLOR,
             ...arrowPositionStyle,
           }}
-          className={`pointer-events-none absolute ${arrowCornerClass} z-10 rounded-full flex items-center justify-center border border-[#070B12] shadow-xs`}
+          className={`pointer-events-none absolute ${arrowCornerClass} z-10 rounded-full flex items-center justify-center ${
+            isMini ? 'border-[#070B12]' : 'border-[#0B1220]'
+          } shadow-xs`}
           aria-hidden="true"
         >
           <span
-            className="material-symbols-outlined text-white leading-none select-none"
-            style={{ fontSize: `${spec.arrowFontPx}px` }}
+            className={`material-symbols-outlined text-white leading-none select-none ${
+              isMini ? '' : 'font-bold'
+            }`}
+            style={{
+              fontSize: `${spec.arrowFontPx}px`,
+              ...(isMini
+                ? {}
+                : {
+                    fontWeight: 700,
+                    fontVariationSettings: "'wght' 700",
+                  }),
+            }}
           >
             {kind === 'buff' ? 'arrow_upward' : 'arrow_downward'}
           </span>

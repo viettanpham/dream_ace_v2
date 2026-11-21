@@ -36,6 +36,14 @@ export const STATUS_TURNS_BADGE_OUTSET_PX = 4;
 export const STATUS_TURNS_BADGE_HEIGHT_PX = 14;
 export const STATUS_TURNS_BADGE_EST_WIDTH_PX = 24;
 
+export const STATUS_ARROW_BADGE_PX = 14;
+export const STATUS_ARROW_GLYPH_PX = 12;
+export const STATUS_ARROW_BORDER_PX = 1;
+export const STATUS_ARROW_BORDER_COLOR = '#0B1220';
+
+/** Minimum safe margin (px) around chips: outset 4 + outline 1 + 1 spare */
+export const STATUS_BADGE_SAFE_PX = 6;
+
 export const STATUS_STACK_BADGE_HEIGHT_PX = 13;
 export const STATUS_STACK_BADGE_EST_WIDTH_PX = 18;
 
@@ -72,8 +80,8 @@ export const STATUS_ICON_SIZE_SPECS: Record<
     boxPx: STATUS_CHIP_BAR_FRAME_PX,
     iconFontPx: STATUS_CHIP_GLYPH_PX,
     lucideSizePx: STATUS_CHIP_GLYPH_PX,
-    arrowBoxPx: 11,
-    arrowFontPx: 8,
+    arrowBoxPx: STATUS_ARROW_BADGE_PX,
+    arrowFontPx: STATUS_ARROW_GLYPH_PX,
     turnsFontPx: STATUS_TURNS_BADGE_FONT_PX,
     turnsClockPx: STATUS_TURNS_BADGE_CLOCK_PX,
     turnsOutsetPx: STATUS_TURNS_BADGE_OUTSET_PX,
@@ -84,8 +92,8 @@ export const STATUS_ICON_SIZE_SPECS: Record<
     boxPx: STATUS_CHIP_FRAME_PX,
     iconFontPx: STATUS_CHIP_GLYPH_PX,
     lucideSizePx: STATUS_CHIP_GLYPH_PX,
-    arrowBoxPx: 12,
-    arrowFontPx: 9,
+    arrowBoxPx: STATUS_ARROW_BADGE_PX,
+    arrowFontPx: STATUS_ARROW_GLYPH_PX,
     turnsFontPx: STATUS_TURNS_BADGE_FONT_PX,
     turnsClockPx: STATUS_TURNS_BADGE_CLOCK_PX,
     turnsOutsetPx: STATUS_TURNS_BADGE_OUTSET_PX,
@@ -96,8 +104,8 @@ export const STATUS_ICON_SIZE_SPECS: Record<
     boxPx: STATUS_CHIP_FRAME_PX,
     iconFontPx: STATUS_CHIP_GLYPH_PX,
     lucideSizePx: STATUS_CHIP_GLYPH_PX,
-    arrowBoxPx: 12,
-    arrowFontPx: 9,
+    arrowBoxPx: STATUS_ARROW_BADGE_PX,
+    arrowFontPx: STATUS_ARROW_GLYPH_PX,
     turnsFontPx: STATUS_TURNS_BADGE_FONT_PX,
     turnsClockPx: STATUS_TURNS_BADGE_CLOCK_PX,
     turnsOutsetPx: STATUS_TURNS_BADGE_OUTSET_PX,
@@ -108,8 +116,8 @@ export const STATUS_ICON_SIZE_SPECS: Record<
     boxPx: STATUS_CHIP_FRAME_PX,
     iconFontPx: STATUS_CHIP_GLYPH_PX,
     lucideSizePx: STATUS_CHIP_GLYPH_PX,
-    arrowBoxPx: 12,
-    arrowFontPx: 9,
+    arrowBoxPx: STATUS_ARROW_BADGE_PX,
+    arrowFontPx: STATUS_ARROW_GLYPH_PX,
     turnsFontPx: STATUS_TURNS_BADGE_FONT_PX,
     turnsClockPx: STATUS_TURNS_BADGE_CLOCK_PX,
     turnsOutsetPx: STATUS_TURNS_BADGE_OUTSET_PX,

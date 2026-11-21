@@ -1606,8 +1606,8 @@ export function BattleScreen() {
         data-testid="battle-player-status-bar"
         data-collapsed="false"
         data-destroyed="false"
-        className={`shrink-0 min-w-0 rounded-lg border border-emerald-500/35 bg-[#09121D] text-slate-100 px-2 py-0.5 space-y-0.5 overflow-hidden ${
-          activePlayerRows <= 1 ? 'max-h-[64px]' : ''
+        className={`shrink-0 min-w-0 rounded-lg border border-emerald-500/35 bg-[#09121D] text-slate-100 px-2 py-0.5 space-y-0.5 ${
+          activePlayerRows <= 1 ? 'max-h-[72px]' : ''
         }`}
       >
         <div className="h-[22px] flex items-center gap-2 min-w-0 text-[11px]">

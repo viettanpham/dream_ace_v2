@@ -17,6 +17,8 @@ import type {
 import {
   STATUS_AREA_PAD_TOP_PX,
   STATUS_AREA_PAD_X_PX,
+  STATUS_ARROW_BADGE_PX,
+  STATUS_BADGE_SAFE_PX,
   STATUS_CHIP_BAR_FRAME_PX,
   STATUS_CHIP_CHAR_WIDTH_PX,
   STATUS_CHIP_COL_GAP_PX,
@@ -28,6 +30,7 @@ import {
   STATUS_CHIP_VALUE_GAP_PX,
   STATUS_ICON_SIZE_SPECS,
   STATUS_ROW_GAP_PX,
+  STATUS_TURNS_BADGE_OUTSET_PX,
   useIsPhoneWidth,
 } from '../utils/statusDisplayPrefs';
 import { BottomSheet } from './BottomSheet';
@@ -254,7 +257,7 @@ export function FixedStatusArea({
             <div
               key={`${st.type}-${idx}`}
               data-testid={`status-detail-item-${st.type}`}
-              className={`rounded-lg border px-2.5 py-2 flex items-start gap-2.5 ${
+              className={`rounded-lg border pl-4 pr-3 py-2.5 flex items-start gap-2.5 ${
                 visualKind === 'debuff'
                   ? 'border-red-500/40 bg-red-950/20'
                   : visualKind === 'buff'
@@ -330,11 +333,34 @@ export function FixedStatusArea({
           maxHeight: `${heightPx}px`,
           rowGap: `${STATUS_ROW_GAP_PX}px`,
           columnGap: `${STATUS_CHIP_COL_GAP_PX}px`,
-          paddingLeft: `${STATUS_AREA_PAD_X_PX}px`,
-          paddingRight: `${STATUS_AREA_PAD_X_PX}px`,
-          paddingTop: `${STATUS_AREA_PAD_TOP_PX}px`,
+          paddingLeft: `${
+            scrollOverflow
+              ? STATUS_AREA_PAD_X_PX + STATUS_BADGE_SAFE_PX
+              : STATUS_AREA_PAD_X_PX
+          }px`,
+          paddingRight: `${
+            scrollOverflow
+              ? STATUS_AREA_PAD_X_PX + STATUS_BADGE_SAFE_PX
+              : STATUS_AREA_PAD_X_PX
+          }px`,
+          paddingTop: `${
+            scrollOverflow
+              ? sorted.length > 0
+                ? STATUS_AREA_PAD_TOP_PX + STATUS_BADGE_SAFE_PX
+                : STATUS_BADGE_SAFE_PX
+              : STATUS_AREA_PAD_TOP_PX
+          }px`,
           paddingBottom: scrollOverflow
-            ? `${sorted.length > 0 ? STATUS_CHIP_COL_GAP_PX : STATUS_AREA_PAD_TOP_PX}px`
+            ? `${
+                sorted.length > 0
+                  ? Math.max(
+                      STATUS_BADGE_SAFE_PX,
+                      STATUS_TURNS_BADGE_OUTSET_PX +
+                        Math.ceil(STATUS_ARROW_BADGE_PX / 2) +
+                        1
+                    )
+                  : STATUS_BADGE_SAFE_PX
+              }px`
             : 0,
         }}
         className={`w-full min-w-0 flex flex-wrap ${
@@ -344,7 +370,7 @@ export function FixedStatusArea({
         } ${
           scrollOverflow
             ? 'overflow-y-auto overflow-x-hidden tactical-scroll tactical-scroll-thin'
-            : 'overflow-hidden'
+            : 'overflow-visible'
         } rounded cursor-pointer hover:bg-slate-800/30 transition-colors ${className}`}
       >
         {scrollOverflow && sorted.length === 0 ? (
