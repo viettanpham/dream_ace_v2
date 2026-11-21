@@ -629,6 +629,7 @@ export type AutoRepeatLimit = 1 | 5 | 10 | 20 | 'infinite';
 export type AutoStopReason =
   | 'completed'
   | 'defeat'
+  | 'defeat_streak'
   | 'retreat'
   | 'low_hp'
   | 'elite_ready'
@@ -643,6 +644,7 @@ export interface AutoRepeatSession {
   sectorId: string;
   completedRuns: number;
   wins: number;
+  consecutiveDefeats?: number;
   totalExp: number;
   totalCredits: number;
   totalWarPoints: number;

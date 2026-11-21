@@ -700,6 +700,7 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'auto.repeatSummaryRuns': 'Thắng {wins} / {runs} trận',
   'auto.repeatReason.completed': 'Hoàn thành số trận đã chọn',
   'auto.repeatReason.defeat': 'Dừng do thất bại',
+  'auto.repeatReason.defeat_streak': 'Dừng: Thua {streak} trận liên tiếp',
   'auto.repeatReason.retreat': 'Dừng do rút lui',
   'auto.repeatReason.low_hp': 'Dừng: Kích hoạt an toàn HP thấp',
   'auto.repeatReason.elite_ready': 'Dừng: Kỹ năng Tinh anh đã sẵn sàng',
@@ -745,6 +746,8 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'queue.actingBanner': 'Đang lượt: {tag} {name}',
   'queue.nextRoundDivider': 'Vòng {round}',
   'queue.overflowMore': '+{count} nữa',
+  'queue.battleEnded': 'Trận đấu đã kết thúc',
+  'queue.noActiveActor': 'Chờ lượt tiếp theo',
 
   // Admin CP
   'admin.title': 'Bảng Điều Khiển Admin (Admin CP)',
@@ -777,6 +780,7 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'battle.balanceAllies': 'Phe Ta',
   'battle.balanceHostiles': 'Hạm đội Địch',
   'battle.frontRowBlocked': 'Tiền tuyến chắn đòn bắn thường',
+  'battle.frontRowNotBlocked': 'Không bị tiền tuyến chắn đòn bắn thường',
   'battle.longRangeReady': 'Tầm xa bắn được Hậu tuyến',
   'battle.actionSkills': 'Kỹ năng',
   'battle.actionItem': 'Vật phẩm',
@@ -793,6 +797,7 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'battle.lockTargetBtn': 'Khóa mục tiêu Địch',
   'battle.lockAllyBtn': 'Chọn mục tiêu Đồng minh',
   'battle.targetLockedBtn': 'Đã khóa mục tiêu',
+  'battle.lockTargetUnavailable': 'Khóa mục tiêu không khả dụng lúc này',
   'battle.structureTag': 'CÔNG TRÌNH',
 
   // Wingman Radio Chatter
@@ -1388,6 +1393,10 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'inv.bulkAllSkippedFeedback': 'Chưa bán món nào — {skipped} món đã chọn đang lắp hoặc khóa.',
   'qs.soldWithSkippedNotice': 'Đã bán nhanh {count} linh kiện (+{credits} CR). Bỏ qua {skipped} món đang lắp/khóa.',
   'battle.loopStopOnDefeat': 'Dừng khi thua',
+  'battle.loopStopOnDefeatHintOn':
+    'Bỏ chọn để tiếp tục khi thua (tối đa {streak} thua liên tiếp).',
+  'battle.loopStopOnDefeatHintOff':
+    'Tiếp tục khi thua (tự dừng sau {streak} thua liên tiếp).',
   'battle.loopToastRun': 'Trận #{run}: {outcome} · +{exp} EXP · +{credits} CR · +{wp} WP · {loot} vật phẩm',
   'battle.loopToastVictory': 'Thắng',
   'battle.loopToastDefeat': 'Thua',
@@ -1512,6 +1521,7 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'statusUi.openIconCatalogBtn': 'Bảng icon',
   'statusUi.popoverTitle': 'Hiệu ứng đang hoạt động',
   'statusUi.popoverEmpty': 'Không có hiệu ứng nào.',
+  'statusUi.areaEmpty': 'Không có hiệu ứng',
   'statusUi.valueLabel': 'Giá trị',
   'statusUi.stacksLabel': 'Cộng dồn',
   'statusUi.turnsLabel': 'Còn {turns} lượt',

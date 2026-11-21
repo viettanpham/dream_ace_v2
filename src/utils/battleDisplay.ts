@@ -18,6 +18,10 @@ import type {
   StatusEffectType,
   TurnQueueEntry,
 } from '../types/game';
+import {
+  STATUS_CHIP_FRAME_PX,
+  STATUS_ROW_GAP_PX,
+} from './statusDisplayPrefs';
 
 export const SP_COLOR_HEX = '#EF9F27' as const;
 
@@ -79,7 +83,79 @@ export const RADAR_RING_MIN_MARKER_RADIUS = 17;
 export const RADAR_RING_DEFAULT_STROKE_WIDTH = 3;
 export const RADAR_LOW_HP_THRESHOLD = 0.25;
 export const RADAR_STATUS_MAX_VISIBLE = 3;
-export const TURN_QUEUE_UPCOMING_MAX = 5;
+export const QUEUE_VISIBLE_ROWS = 5;
+export const TURN_QUEUE_UPCOMING_MAX = QUEUE_VISIBLE_ROWS;
+export const TURN_QUEUE_ACTING_NAME_MIN_PX = 56;
+
+export const TURN_QUEUE_SIDEBAR_HEIGHTS = {
+  borderPx: 2,
+  padYPx: 12,
+  headerPx: 32,
+  actingRowPx: 36,
+  outerGapPx: 4,
+  nextLabelPx: 20,
+  nextGapPx: 4,
+  rowPx: 26,
+  rowGapPx: 4,
+} as const;
+
+export function getTurnQueueSidebarRowCount(unitsAtStart: number): number {
+  const safeUnits = Math.max(0, Math.floor(unitsAtStart));
+  if (safeUnits <= 1) return 0;
+  return Math.min(QUEUE_VISIBLE_ROWS, safeUnits - 1);
+}
+
+export function getTurnQueueSidebarListHeightPx(rowCount: number): number {
+  const safeRows = Math.max(0, Math.floor(rowCount));
+  if (safeRows === 0) return 0;
+  return (
+    safeRows * TURN_QUEUE_SIDEBAR_HEIGHTS.rowPx +
+    Math.max(0, safeRows - 1) * TURN_QUEUE_SIDEBAR_HEIGHTS.rowGapPx
+  );
+}
+
+export function getTurnQueueSidebarTotalHeightPx(rowCount: number): number {
+  const listPx = getTurnQueueSidebarListHeightPx(rowCount);
+  const nextSectionOverheadPx =
+    rowCount > 0
+      ? TURN_QUEUE_SIDEBAR_HEIGHTS.outerGapPx +
+        TURN_QUEUE_SIDEBAR_HEIGHTS.nextLabelPx +
+        TURN_QUEUE_SIDEBAR_HEIGHTS.nextGapPx
+      : 0;
+  return (
+    TURN_QUEUE_SIDEBAR_HEIGHTS.borderPx +
+    TURN_QUEUE_SIDEBAR_HEIGHTS.padYPx +
+    TURN_QUEUE_SIDEBAR_HEIGHTS.headerPx +
+    TURN_QUEUE_SIDEBAR_HEIGHTS.outerGapPx +
+    TURN_QUEUE_SIDEBAR_HEIGHTS.actingRowPx +
+    nextSectionOverheadPx +
+    listPx
+  );
+}
+
+export const SIDEBAR_UNIT_PANEL_HEIGHTS = {
+  borderPx: 2,
+  padYPx: 12,
+  padXPx: 20,
+  gapPx: 4,
+  gapCount: 3,
+  headerPx: 32,
+  blockedSlotPx: 24,
+  lockButtonSlotPx: 32,
+  barsPx: 52,
+  telemetryPx: 38,
+  statusAreaPx: 2 * (STATUS_CHIP_FRAME_PX + STATUS_ROW_GAP_PX),
+  sidebarMinWidthPx: 260,
+} as const;
+
+export const SIDEBAR_UNIT_PANEL_TOTAL_HEIGHT_PX =
+  SIDEBAR_UNIT_PANEL_HEIGHTS.borderPx +
+  SIDEBAR_UNIT_PANEL_HEIGHTS.padYPx +
+  SIDEBAR_UNIT_PANEL_HEIGHTS.headerPx +
+  SIDEBAR_UNIT_PANEL_HEIGHTS.barsPx +
+  SIDEBAR_UNIT_PANEL_HEIGHTS.telemetryPx +
+  SIDEBAR_UNIT_PANEL_HEIGHTS.statusAreaPx +
+  SIDEBAR_UNIT_PANEL_HEIGHTS.gapPx * SIDEBAR_UNIT_PANEL_HEIGHTS.gapCount;
 
 /**
  * Pure responsive layout classifier for the Battle Screen.

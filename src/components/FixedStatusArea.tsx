@@ -14,10 +14,30 @@ import type {
   IconCatalogModRow,
   StatusBadgeLayout,
 } from '../types/game';
-import { useIsPhoneWidth } from '../utils/statusDisplayPrefs';
+import {
+  STATUS_AREA_PAD_TOP_PX,
+  STATUS_AREA_PAD_X_PX,
+  STATUS_ARROW_BADGE_PX,
+  STATUS_BADGE_SAFE_PX,
+  STATUS_CHIP_BAR_FRAME_PX,
+  STATUS_CHIP_CHAR_WIDTH_PX,
+  STATUS_CHIP_COL_GAP_PX,
+  STATUS_CHIP_FRAME_PX,
+  STATUS_CHIP_OVERFLOW_WIDTH_PX,
+  STATUS_CHIP_PAD_LEFT_PX,
+  STATUS_CHIP_PAD_RIGHT_PX,
+  STATUS_CHIP_VALUE_FONT_PX,
+  STATUS_CHIP_VALUE_GAP_PX,
+  STATUS_ICON_SIZE_SPECS,
+  STATUS_ROW_GAP_PX,
+  STATUS_TURNS_BADGE_OUTSET_PX,
+  useIsPhoneWidth,
+} from '../utils/statusDisplayPrefs';
 import { BottomSheet } from './BottomSheet';
 import { CatalogIcon } from './CatalogIcon';
 import { StatusChip } from './StatusChip';
+
+export { STATUS_ROW_GAP_PX };
 
 interface FixedStatusAreaProps {
   statuses: readonly ActiveStatusEffect[];
@@ -34,24 +54,19 @@ interface FixedStatusAreaProps {
   chipTestIdPrefix?: string;
   labelTestIdPrefix?: string;
   overflowTestId?: string;
-  /** When true, shrinks container height to packed row count (1..rows) instead of reserving unused rows */
-  autoHeight?: boolean;
+  emptyTestId?: string;
+  /** When true, keeps fixed row height, renders all chips with internal vertical scroll, no "+N" badge, and shows muted centered empty state */
+  scrollOverflow?: boolean;
   className?: string;
 }
-
-export const STATUS_ROW_GAP_PX = 14;
-const ROW_LINE_HEIGHT_PX = 26;
-const AREA_PAD_Y_PX = 6;
-const CHIP_COL_GAP_PX = 6;
 
 export function getFixedStatusAreaHeightPx(
   rows: number,
   compact = false
 ): number {
   const safeRows = Math.max(1, Math.min(5, Math.round(rows)));
-  const rowH = compact ? 24 : ROW_LINE_HEIGHT_PX;
-  const pad = compact ? 4 : AREA_PAD_Y_PX;
-  return safeRows * rowH + Math.max(0, safeRows - 1) * STATUS_ROW_GAP_PX + pad;
+  const chipPx = compact ? STATUS_CHIP_BAR_FRAME_PX : STATUS_CHIP_FRAME_PX;
+  return safeRows * (chipPx + STATUS_ROW_GAP_PX);
 }
 
 function estimateChipWidthPx(
@@ -59,9 +74,16 @@ function estimateChipWidthPx(
   showLabels: boolean,
   compact: boolean
 ): number {
-  const iconBox = compact ? 20 : 24;
-  if (!showLabels) return iconBox + 10;
-  return iconBox + 14 + Math.max(24, Math.round(shortText.length * 6.3));
+  const iconBox = compact
+    ? STATUS_ICON_SIZE_SPECS.bar.boxPx
+    : STATUS_ICON_SIZE_SPECS.sm.boxPx;
+  const basePad = STATUS_CHIP_PAD_LEFT_PX + STATUS_CHIP_PAD_RIGHT_PX + 2;
+  if (!showLabels) return iconBox + basePad;
+  const textW = Math.max(
+    STATUS_CHIP_FRAME_PX,
+    Math.round(shortText.length * STATUS_CHIP_CHAR_WIDTH_PX)
+  );
+  return iconBox + basePad + STATUS_CHIP_VALUE_GAP_PX + textW;
 }
 
 function packStatusChips(
@@ -71,9 +93,9 @@ function packStatusChips(
 ): { visible: ActiveStatusEffect[]; overflowCount: number; usedRows: number } {
   if (items.length === 0) return { visible: [], overflowCount: 0, usedRows: 0 };
 
-  const usableW = Math.max(84, containerWidthPx - 12);
+  const usableW = Math.max(84, containerWidthPx - STATUS_AREA_PAD_X_PX * 2);
   const safeRows = Math.max(1, Math.min(5, maxRows));
-  const overflowChipW = 34;
+  const overflowChipW = STATUS_CHIP_OVERFLOW_WIDTH_PX;
 
   const measureFit = (count: number, withOverflow: boolean): number | null => {
     let row = 1;
@@ -81,7 +103,7 @@ function packStatusChips(
 
     const placeWidth = (w: number): boolean => {
       const clampedW = Math.min(usableW, w);
-      const needed = curW === 0 ? clampedW : CHIP_COL_GAP_PX + clampedW;
+      const needed = curW === 0 ? clampedW : STATUS_CHIP_COL_GAP_PX + clampedW;
       if (curW + needed <= usableW) {
         curW += needed;
         return true;
@@ -142,7 +164,8 @@ export function FixedStatusArea({
   chipTestIdPrefix,
   labelTestIdPrefix,
   overflowTestId,
-  autoHeight = false,
+  emptyTestId,
+  scrollOverflow = false,
   className = '',
 }: FixedStatusAreaProps) {
   const { lang, t } = useI18n();
@@ -199,11 +222,10 @@ export function FixedStatusArea({
     return packStatusChips(measured, widthToUse, rows);
   }, [sorted, lang, unit, showLabels, compact, measuredWidth, fallbackWidthPx, rows]);
 
-  const effectiveRows = autoHeight
-    ? Math.max(0, Math.min(rows, packed.usedRows))
-    : rows;
-  const heightPx =
-    effectiveRows === 0 ? 0 : getFixedStatusAreaHeightPx(effectiveRows, compact);
+  const effectiveRows = Math.max(1, Math.min(5, Math.round(rows)));
+  const heightPx = getFixedStatusAreaHeightPx(effectiveRows, compact);
+  const visibleStatuses = scrollOverflow ? sorted : packed.visible;
+  const overflowCount = scrollOverflow ? 0 : packed.overflowCount;
 
   const openDetails = (e: React.SyntheticEvent) => {
     e.stopPropagation();
@@ -235,7 +257,7 @@ export function FixedStatusArea({
             <div
               key={`${st.type}-${idx}`}
               data-testid={`status-detail-item-${st.type}`}
-              className={`rounded-lg border px-2.5 py-2 flex items-start gap-2.5 ${
+              className={`rounded-lg border pl-4 pr-3 py-2.5 flex items-start gap-2.5 ${
                 visualKind === 'debuff'
                   ? 'border-red-500/40 bg-red-950/20'
                   : visualKind === 'buff'
@@ -310,35 +332,85 @@ export function FixedStatusArea({
           minHeight: `${heightPx}px`,
           maxHeight: `${heightPx}px`,
           rowGap: `${STATUS_ROW_GAP_PX}px`,
-          columnGap: `${CHIP_COL_GAP_PX}px`,
+          columnGap: `${STATUS_CHIP_COL_GAP_PX}px`,
+          paddingLeft: `${
+            scrollOverflow
+              ? STATUS_AREA_PAD_X_PX + STATUS_BADGE_SAFE_PX
+              : STATUS_AREA_PAD_X_PX
+          }px`,
+          paddingRight: `${
+            scrollOverflow
+              ? STATUS_AREA_PAD_X_PX + STATUS_BADGE_SAFE_PX
+              : STATUS_AREA_PAD_X_PX
+          }px`,
+          paddingTop: `${
+            scrollOverflow
+              ? sorted.length > 0
+                ? STATUS_AREA_PAD_TOP_PX + STATUS_BADGE_SAFE_PX
+                : STATUS_BADGE_SAFE_PX
+              : STATUS_AREA_PAD_TOP_PX
+          }px`,
+          paddingBottom: scrollOverflow
+            ? `${
+                sorted.length > 0
+                  ? Math.max(
+                      STATUS_BADGE_SAFE_PX,
+                      STATUS_TURNS_BADGE_OUTSET_PX +
+                        Math.ceil(STATUS_ARROW_BADGE_PX / 2) +
+                        1
+                    )
+                  : STATUS_BADGE_SAFE_PX
+              }px`
+            : 0,
         }}
-        className={`w-full min-w-0 flex flex-wrap content-start items-start overflow-hidden py-[3px] px-0.5 rounded cursor-pointer hover:bg-slate-800/30 transition-colors ${className}`}
+        className={`w-full min-w-0 flex flex-wrap ${
+          scrollOverflow && sorted.length === 0
+            ? 'items-center justify-center'
+            : 'content-start items-start'
+        } ${
+          scrollOverflow
+            ? 'overflow-y-auto overflow-x-hidden tactical-scroll tactical-scroll-thin'
+            : 'overflow-visible'
+        } rounded cursor-pointer hover:bg-slate-800/30 transition-colors ${className}`}
       >
-        {packed.visible.map((st, idx) => (
-          <StatusChip
-            key={`${st.type}-${idx}`}
-            status={st}
-            lang={lang}
-            unit={unit}
-            badgeLayout={badgeLayout}
-            iconMods={iconMods}
-            size={compact ? 'xs' : 'sm'}
-            showLabel={showLabels}
-            allowStack={false}
-            stacks={1}
-            testId={chipTestIdPrefix ? `${chipTestIdPrefix}-${idx}` : undefined}
-            labelTestId={
-              labelTestIdPrefix ? `${labelTestIdPrefix}-${idx}` : undefined
-            }
-          />
-        ))}
+        {scrollOverflow && sorted.length === 0 ? (
+          <div
+            data-testid={emptyTestId}
+            className="w-full h-full flex items-center justify-center text-center text-[12px] text-slate-400 select-none"
+          >
+            {t('statusUi.areaEmpty')}
+          </div>
+        ) : (
+          visibleStatuses.map((st, idx) => (
+            <StatusChip
+              key={`${st.type}-${idx}`}
+              status={st}
+              lang={lang}
+              unit={unit}
+              badgeLayout={badgeLayout}
+              iconMods={iconMods}
+              size={compact ? 'bar' : 'sm'}
+              showLabel={showLabels}
+              allowStack={false}
+              stacks={1}
+              testId={chipTestIdPrefix ? `${chipTestIdPrefix}-${idx}` : undefined}
+              labelTestId={
+                labelTestIdPrefix ? `${labelTestIdPrefix}-${idx}` : undefined
+              }
+            />
+          ))
+        )}
 
-        {packed.overflowCount > 0 && (
+        {overflowCount > 0 && (
           <span
             data-testid={overflowTestId}
-            className="inline-flex items-center justify-center h-[22px] px-1.5 rounded border border-slate-600/80 bg-slate-900 text-[10px] font-mono-nums font-bold text-slate-200 shrink-0"
+            style={{
+              height: `${compact ? STATUS_CHIP_BAR_FRAME_PX : STATUS_CHIP_FRAME_PX}px`,
+              fontSize: `${STATUS_CHIP_VALUE_FONT_PX}px`,
+            }}
+            className="inline-flex items-center justify-center px-1.5 rounded border border-slate-600/80 bg-slate-900 font-mono-nums font-bold text-slate-200 shrink-0"
           >
-            +{packed.overflowCount}
+            +{overflowCount}
           </span>
         )}
       </div>

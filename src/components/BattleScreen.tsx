@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   AlertTriangle,
   Award,
@@ -44,6 +45,7 @@ import {
 } from '../engine/combat';
 import { getEffectiveItemStats } from '../engine/equipment';
 import { canUnitUseSkill } from '../engine/skills';
+import { AUTO_REPEAT_MAX_DEFEAT_STREAK } from '../engine/tactics';
 import {
   getAutoStopReasonLabel,
   getBattleSkillReason,
@@ -71,6 +73,8 @@ import {
   evaluateRadarTargetValidity,
   formatShortUnitName,
   readSpeechBubblesEnabled,
+  SIDEBAR_UNIT_PANEL_HEIGHTS,
+  SIDEBAR_UNIT_PANEL_TOTAL_HEIGHT_PX,
   SP_COLOR_TOKENS,
   SPEECH_BUBBLE_DURATION_MS,
   useBattleLayoutMode,
@@ -165,7 +169,6 @@ export function BattleScreen() {
   const isPhonePortrait = layoutMode === 'phone-portrait';
   const {
     settings: statusSettings,
-    activeUnitRows,
     activePlayerRows,
   } = useStatusDisplaySettings(adminConfig.statusDisplayDefaults);
 
@@ -181,6 +184,11 @@ export function BattleScreen() {
   const [selectedLoopCount, setSelectedLoopCount] =
     useState<AutoRepeatLimit>(autoRepeatLimit);
   const loopAnchorRef = useRef<HTMLDivElement | null>(null);
+  const loopPopoverRef = useRef<HTMLDivElement | null>(null);
+  const [loopPopoverPos, setLoopPopoverPos] = useState<{
+    top: number;
+    left: number;
+  }>({ top: 56, left: 8 });
   const [statsModalOpen, setStatsModalOpen] = useState(false);
   const [speechBubblesEnabled, setSpeechBubblesEnabled] = useState<boolean>(
     () => readSpeechBubblesEnabled()
@@ -211,26 +219,68 @@ export function BattleScreen() {
     return () => window.clearTimeout(timer);
   }, [autoRepeatToast, clearAutoRepeatToast]);
 
+  const computeLoopPopoverPosition = useCallback(() => {
+    const MARGIN = 8;
+    const vw = typeof window !== 'undefined' ? window.innerWidth || 1280 : 1280;
+    const vh = typeof window !== 'undefined' ? window.innerHeight || 800 : 800;
+    const popoverWidth = Math.max(
+      0,
+      Math.min(252, Math.floor(vw * 0.92), vw - MARGIN * 2)
+    );
+    const rect = loopAnchorRef.current?.getBoundingClientRect();
+    const rawLeft = rect
+      ? rect.right > 0
+        ? rect.right - popoverWidth
+        : rect.left
+      : MARGIN;
+    const maxLeft = Math.max(MARGIN, vw - popoverWidth - MARGIN);
+    const left = Math.max(MARGIN, Math.min(rawLeft, maxLeft));
+    const rawTop = rect ? rect.bottom + 6 : MARGIN;
+    const maxTop = Math.max(MARGIN, vh - 80);
+    const top = Math.max(MARGIN, Math.min(rawTop, maxTop));
+    return { top, left };
+  }, []);
+
+  useEffect(() => {
+    if (battle?.summary) {
+      setLoopPopoverOpen(false);
+    }
+  }, [battle?.summary]);
+
   useEffect(() => {
     if (!loopPopoverOpen) return;
+    const updatePosition = () => {
+      setLoopPopoverPos(computeLoopPopoverPosition());
+    };
+    updatePosition();
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setLoopPopoverOpen(false);
     };
     const onMouseDown = (e: MouseEvent) => {
-      if (
-        loopAnchorRef.current &&
-        !loopAnchorRef.current.contains(e.target as Node)
-      ) {
+      const target = e.target as Node | null;
+      const inAnchor = Boolean(
+        loopAnchorRef.current && target && loopAnchorRef.current.contains(target)
+      );
+      const inPopover = Boolean(
+        loopPopoverRef.current &&
+          target &&
+          loopPopoverRef.current.contains(target)
+      );
+      if (!inAnchor && !inPopover) {
         setLoopPopoverOpen(false);
       }
     };
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('mousedown', onMouseDown);
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
     return () => {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('mousedown', onMouseDown);
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
     };
-  }, [loopPopoverOpen]);
+  }, [loopPopoverOpen, computeLoopPopoverPosition, layoutMode]);
 
   useEffect(() => {
     if (!logSheetOpen) return;
@@ -770,6 +820,105 @@ export function BattleScreen() {
       );
     }
 
+    const loopPopoverNode =
+      loopPopoverOpen && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              ref={loopPopoverRef}
+              role="dialog"
+              data-testid="battle-loop-popover"
+              aria-label={t('battle.loopTitle')}
+              style={{
+                position: 'fixed',
+                top: `${loopPopoverPos.top}px`,
+                left: `${loopPopoverPos.left}px`,
+                width: 'min(252px, 92vw)',
+                zIndex: 70,
+              }}
+              className="z-[70] rounded-lg border border-slate-700 bg-[#0B111D] p-3 shadow-2xl space-y-2.5"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[13px] font-bold text-slate-100">
+                  {t('battle.loopTitle')}
+                </span>
+                <span className="text-[11px] font-mono-nums text-slate-400">
+                  {t('battle.loopCountLabel')}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-5 gap-1">
+                {REPEAT_OPTIONS.map((opt) => {
+                  const isSelected = selectedLoopCount === opt;
+                  return (
+                    <button
+                      key={String(opt)}
+                      type="button"
+                      data-testid={`battle-loop-opt-${opt}`}
+                      aria-pressed={isSelected}
+                      title={repeatLabelFor(opt)}
+                      onClick={() => {
+                        setSelectedLoopCount(opt);
+                        setAutoRepeatLimit(opt);
+                      }}
+                      className={`min-h-[38px] rounded-md border font-mono-nums text-[12px] font-bold cursor-pointer transition-colors ${
+                        isSelected
+                          ? 'border-emerald-400 bg-emerald-500 text-slate-950'
+                          : 'border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200'
+                      }`}
+                    >
+                      {repeatShortCount(opt)}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <label
+                data-testid="battle-loop-stop-on-defeat-label"
+                className="flex items-start justify-between gap-2 rounded-md border border-slate-800 bg-slate-900/70 px-2.5 py-2 text-[12px] text-slate-200 cursor-pointer select-none"
+              >
+                <span className="flex flex-col gap-0.5 min-w-0">
+                  <span className="font-medium leading-tight">
+                    {t('battle.loopStopOnDefeat')}
+                  </span>
+                  <span
+                    data-testid="battle-loop-stop-on-defeat-hint"
+                    className="text-[11px] leading-snug text-slate-400"
+                  >
+                    {autoRepeatStopOnDefeat
+                      ? t('battle.loopStopOnDefeatHintOn', {
+                          streak: AUTO_REPEAT_MAX_DEFEAT_STREAK,
+                        })
+                      : t('battle.loopStopOnDefeatHintOff', {
+                          streak: AUTO_REPEAT_MAX_DEFEAT_STREAK,
+                        })}
+                  </span>
+                </span>
+                <input
+                  type="checkbox"
+                  data-testid="battle-loop-stop-on-defeat"
+                  checked={autoRepeatStopOnDefeat}
+                  onChange={(e) => setAutoRepeatStopOnDefeat(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 accent-emerald-400 cursor-pointer shrink-0"
+                />
+              </label>
+
+              <button
+                type="button"
+                data-testid="battle-loop-start"
+                onClick={() => {
+                  startAutoRepeat(selectedLoopCount, battle.sectorId);
+                  setLoopPopoverOpen(false);
+                }}
+                className="w-full min-h-[40px] px-3 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-[13px] inline-flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+              >
+                <Repeat className="w-4 h-4 shrink-0" />
+                <span>{t('battle.loopStartBtn')}</span>
+              </button>
+            </div>,
+            document.body
+          )
+        : null;
+
     return (
       <div ref={loopAnchorRef} className="relative shrink-0">
         <button
@@ -782,11 +931,17 @@ export function BattleScreen() {
           title={t('battle.loopTitle')}
           onClick={() => {
             setSelectedLoopCount(autoRepeatLimit);
-            setLoopPopoverOpen((v) => !v);
+            setLoopPopoverOpen((v) => {
+              const next = !v;
+              if (next) {
+                setLoopPopoverPos(computeLoopPopoverPosition());
+              }
+              return next;
+            });
           }}
           className={`rounded-lg border transition-colors inline-flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap ${
             loopPopoverOpen
-              ? 'border-emerald-400 bg-emerald-500/20 text-emerald-100'
+              ? 'border-sky-400/80 bg-slate-800 text-slate-100 ring-1 ring-sky-400/30'
               : 'border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200'
           } ${
             phoneCompact
@@ -794,7 +949,12 @@ export function BattleScreen() {
               : 'h-[34px] min-h-[34px] px-2 text-[12px] font-semibold'
           }`}
         >
-          <Repeat className="w-4 h-4 text-emerald-400 shrink-0" aria-hidden="true" />
+          <Repeat
+            className={`w-4 h-4 shrink-0 ${
+              loopPopoverOpen ? 'text-sky-400' : 'text-slate-300'
+            }`}
+            aria-hidden="true"
+          />
           {phoneCompact ? (
             <span data-testid="battle-loop-phone-count">
               {repeatShortCount(autoRepeatLimit)}
@@ -804,76 +964,7 @@ export function BattleScreen() {
           )}
         </button>
 
-        {loopPopoverOpen && (
-          <div
-            role="dialog"
-            data-testid="battle-loop-popover"
-            aria-label={t('battle.loopTitle')}
-            className="absolute right-0 top-full mt-1.5 z-50 w-[252px] rounded-lg border border-slate-700 bg-[#0B111D] p-3 shadow-2xl space-y-2.5"
-          >
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[13px] font-bold text-slate-100">
-                {t('battle.loopTitle')}
-              </span>
-              <span className="text-[11px] font-mono-nums text-slate-400">
-                {t('battle.loopCountLabel')}
-              </span>
-            </div>
-
-            <div className="grid grid-cols-5 gap-1">
-              {REPEAT_OPTIONS.map((opt) => {
-                const isSelected = selectedLoopCount === opt;
-                return (
-                  <button
-                    key={String(opt)}
-                    type="button"
-                    data-testid={`battle-loop-opt-${opt}`}
-                    aria-pressed={isSelected}
-                    title={repeatLabelFor(opt)}
-                    onClick={() => {
-                      setSelectedLoopCount(opt);
-                      setAutoRepeatLimit(opt);
-                    }}
-                    className={`min-h-[38px] rounded-md border font-mono-nums text-[12px] font-bold cursor-pointer transition-colors ${
-                      isSelected
-                        ? 'border-emerald-400 bg-emerald-500 text-slate-950'
-                        : 'border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200'
-                    }`}
-                  >
-                    {repeatShortCount(opt)}
-                  </button>
-                );
-              })}
-            </div>
-
-            <label
-              data-testid="battle-loop-stop-on-defeat-label"
-              className="flex items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-900/70 px-2.5 py-2 text-[12px] text-slate-200 cursor-pointer select-none"
-            >
-              <span>{t('battle.loopStopOnDefeat')}</span>
-              <input
-                type="checkbox"
-                data-testid="battle-loop-stop-on-defeat"
-                checked={autoRepeatStopOnDefeat}
-                onChange={(e) => setAutoRepeatStopOnDefeat(e.target.checked)}
-                className="h-4 w-4 accent-emerald-400 cursor-pointer"
-              />
-            </label>
-
-            <button
-              type="button"
-              data-testid="battle-loop-start"
-              onClick={() => {
-                startAutoRepeat(selectedLoopCount, battle.sectorId);
-                setLoopPopoverOpen(false);
-              }}
-              className="w-full min-h-[40px] px-3 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-[13px] inline-flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
-            >
-              <Repeat className="w-4 h-4 shrink-0" />
-              <span>{t('battle.loopStartBtn')}</span>
-            </button>
-          </div>
-        )}
+        {loopPopoverNode}
       </div>
     );
   };
@@ -1170,11 +1261,19 @@ export function BattleScreen() {
   };
 
   const renderSidebarSelectedUnit = () => {
+    const panelFixedStyle = {
+      height: `${SIDEBAR_UNIT_PANEL_TOTAL_HEIGHT_PX}px`,
+      minHeight: `${SIDEBAR_UNIT_PANEL_TOTAL_HEIGHT_PX}px`,
+      maxHeight: `${SIDEBAR_UNIT_PANEL_TOTAL_HEIGHT_PX}px`,
+    };
+
     if (!sidebarUnit) {
       return (
         <div
           data-testid="battle-selected-unit-panel"
-          className="rounded-lg border border-slate-800 bg-[#0A101B] p-2.5 text-[13px] text-slate-400 text-center shrink-0"
+          data-panel-height-px={SIDEBAR_UNIT_PANEL_TOTAL_HEIGHT_PX}
+          style={panelFixedStyle}
+          className="rounded-lg border border-slate-800 bg-[#0A101B] px-2.5 py-1.5 flex items-center justify-center text-[13px] text-slate-400 text-center shrink-0 h-[240px] min-h-[240px] max-h-[240px] overflow-hidden"
         >
           {t('battle.noUnitSelected')}
         </div>
@@ -1204,150 +1303,213 @@ export function BattleScreen() {
       (!isEnemy &&
         hasSingleAllySkill &&
         battle.selectedAllyTargetId === sidebarUnit.id);
-    const showLockTargetBtn =
+    const canLockTarget =
       sidebarUnit.alive && isEnemy && !isStealthed && canPlayerManualAct;
+    const lockBtnDisabled = !canLockTarget || isLocked;
+    const blockedLabel = isBlocked
+      ? t('battle.frontRowBlocked')
+      : t('battle.frontRowNotBlocked');
+    const lockBtnLabel = !canLockTarget
+      ? t('battle.lockTargetUnavailable')
+      : isLocked
+      ? t('battle.targetLockedBtn')
+      : t('battle.lockTargetBtn');
 
     return (
       <div
         data-testid="battle-selected-unit-panel"
-        className="rounded-lg border border-slate-800 bg-[#0A101B] p-2.5 flex flex-col gap-1.5 shrink-0"
+        data-panel-height-px={SIDEBAR_UNIT_PANEL_TOTAL_HEIGHT_PX}
+        style={panelFixedStyle}
+        className="rounded-lg border border-slate-800 bg-[#0A101B] px-2.5 py-1.5 flex flex-col gap-1 shrink-0 h-[240px] min-h-[240px] max-h-[240px] overflow-hidden"
       >
-        <div className="space-y-1.5 min-w-0">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1.5 min-w-0">
-              <span
-                className="text-[12px] font-mono-nums font-bold px-1.5 py-0.5 rounded border shrink-0"
-                style={{ color: teamAccent, borderColor: teamAccent }}
-              >
-                {getTeamTagLabel(lang, teamRole)}
-              </span>
-              <span
-                className="font-display text-[15px] font-bold truncate"
-                style={{ color: sidebarUnit.alive ? teamAccent : '#94a3b8' }}
-                title={sidebarUnit.name}
-              >
-                {sidebarUnit.name}
-              </span>
-            </div>
-            <span className="text-[12px] font-mono-nums text-slate-300 shrink-0">
+        <div
+          data-testid="sidebar-unit-header"
+          style={{
+            height: `${SIDEBAR_UNIT_PANEL_HEIGHTS.headerPx}px`,
+            minHeight: `${SIDEBAR_UNIT_PANEL_HEIGHTS.headerPx}px`,
+          }}
+          className="flex items-center justify-between gap-1.5 flex-nowrap h-[32px] min-h-[32px] max-h-[32px] shrink-0 min-w-0"
+        >
+          <div className="flex items-center gap-1 flex-1 min-w-0 overflow-hidden">
+            <span
+              data-testid="sidebar-unit-side-tag"
+              className="text-[11px] font-mono-nums font-bold px-1.5 py-0.5 rounded border shrink-0 whitespace-nowrap"
+              style={{ color: teamAccent, borderColor: teamAccent }}
+            >
+              {getTeamTagLabel(lang, teamRole)}
+            </span>
+            <span
+              data-testid="sidebar-unit-name"
+              className="font-display text-[14px] font-bold truncate min-w-0 flex-1"
+              style={{ color: sidebarUnit.alive ? teamAccent : '#94a3b8' }}
+              title={sidebarUnit.name}
+            >
+              {sidebarUnit.name}
+            </span>
+            <span
+              data-testid="sidebar-unit-lane"
+              className="text-[11px] font-mono-nums text-slate-300 truncate min-w-0 max-w-[48%] shrink"
+              title={`${getRowTitle(sidebarUnit.row)} · ${getExposureLabel(
+                exposure
+              )}`}
+            >
               {getRowTitle(sidebarUnit.row)} · {getExposureLabel(exposure)}
             </span>
           </div>
 
-          <div className="space-y-1">
+          <div
+            data-testid="sidebar-unit-header-actions"
+            className="flex items-center gap-1 shrink-0"
+          >
+            <span
+              data-testid="sidebar-blocked-slot"
+              data-blocked={isBlocked ? 'true' : 'false'}
+              aria-disabled={!isBlocked ? 'true' : undefined}
+              title={blockedLabel}
+              aria-label={blockedLabel}
+              style={{
+                width: `${SIDEBAR_UNIT_PANEL_HEIGHTS.blockedSlotPx}px`,
+                height: `${SIDEBAR_UNIT_PANEL_HEIGHTS.blockedSlotPx}px`,
+              }}
+              className={`w-6 h-6 shrink-0 rounded border inline-flex items-center justify-center transition-colors ${
+                isBlocked
+                  ? 'border-amber-500/60 bg-amber-500/15 text-amber-400'
+                  : 'border-slate-800 bg-slate-900/60 text-slate-500 opacity-40'
+              }`}
+            >
+              <ShieldAlert className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+            </span>
+
+            <button
+              type="button"
+              data-testid="sidebar-lock-target-btn"
+              data-applicable={canLockTarget ? 'true' : 'false'}
+              data-locked={isLocked ? 'true' : 'false'}
+              disabled={lockBtnDisabled}
+              aria-disabled={lockBtnDisabled ? 'true' : undefined}
+              aria-pressed={canLockTarget && isLocked ? true : undefined}
+              onClick={
+                canLockTarget && !isLocked
+                  ? () => selectTarget(sidebarUnit.id)
+                  : undefined
+              }
+              title={lockBtnLabel}
+              aria-label={lockBtnLabel}
+              style={{
+                width: `${SIDEBAR_UNIT_PANEL_HEIGHTS.lockButtonSlotPx}px`,
+                height: `${SIDEBAR_UNIT_PANEL_HEIGHTS.lockButtonSlotPx}px`,
+              }}
+              className={`w-8 h-8 shrink-0 rounded-lg inline-flex items-center justify-center transition-colors ${
+                !canLockTarget
+                  ? 'border border-slate-800 bg-slate-900/60 text-slate-500 opacity-40 cursor-default'
+                  : isLocked
+                  ? 'border border-red-500/55 bg-red-500/20 text-red-300 cursor-default'
+                  : 'bg-red-500 hover:bg-red-400 text-slate-950 cursor-pointer'
+              }`}
+            >
+              <Crosshair className="w-4 h-4 shrink-0" aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+
+        <div
+          style={{
+            height: `${SIDEBAR_UNIT_PANEL_HEIGHTS.barsPx}px`,
+            minHeight: `${SIDEBAR_UNIT_PANEL_HEIGHTS.barsPx}px`,
+          }}
+          className="h-[52px] min-h-[52px] max-h-[52px] flex flex-col justify-between shrink-0 overflow-hidden"
+        >
+          <StatBar
+            label="HP"
+            value={sidebarUnit.hp}
+            max={sidebarUnit.derived.maxHp}
+            fillClassName={hpColor}
+            heightClassName="h-2"
+            instant={bypassFx}
+            compactHeader
+          />
+          <div className="grid grid-cols-2 gap-2">
             <StatBar
-              label="HP"
-              value={sidebarUnit.hp}
-              max={sidebarUnit.derived.maxHp}
-              fillClassName={hpColor}
-              heightClassName="h-2"
+              label="SHD"
+              labelClassName="text-sky-400"
+              valueClassName="text-sky-200"
+              value={sidebarUnit.shield}
+              max={Math.max(1, sidebarUnit.derived.maxShield)}
+              valueText={`${sidebarUnit.shield}/${sidebarUnit.derived.maxShield}`}
+              fillClassName="bg-sky-400"
+              heightClassName="h-1.5"
               instant={bypassFx}
               compactHeader
             />
-            <div className="grid grid-cols-2 gap-2">
-              <StatBar
-                label="SHD"
-                labelClassName="text-sky-400"
-                valueClassName="text-sky-200"
-                value={sidebarUnit.shield}
-                max={Math.max(1, sidebarUnit.derived.maxShield)}
-                valueText={`${sidebarUnit.shield}/${sidebarUnit.derived.maxShield}`}
-                fillClassName="bg-sky-400"
-                heightClassName="h-1.5"
-                instant={bypassFx}
-                compactHeader
-              />
-              <StatBar
-                label="SP"
-                labelClassName={SP_COLOR_TOKENS.textClass}
-                valueClassName={SP_COLOR_TOKENS.textClass}
-                value={sidebarUnit.sp}
-                max={Math.max(1, sidebarUnit.derived.maxSp)}
-                valueText={`${sidebarUnit.sp}/${sidebarUnit.derived.maxSp}`}
-                fillClassName={SP_COLOR_TOKENS.barFillClass}
-                heightClassName="h-1.5"
-                instant={bypassFx}
-                compactHeader
-              />
-            </div>
-          </div>
-
-          {/* Fixed-width tabular telemetry */}
-          <div className="grid grid-cols-5 gap-1 text-center font-mono-nums text-[11px]">
-            <div className="rounded bg-slate-900/90 border border-slate-800 py-0.5">
-              <div className="text-slate-400">ATK</div>
-              <div className="font-bold text-slate-100">
-                {sidebarUnit.derived.attackPower}
-              </div>
-            </div>
-            <div className="rounded bg-slate-900/90 border border-slate-800 py-0.5">
-              <div className="text-slate-400">DEF</div>
-              <div className="font-bold text-slate-100">
-                {sidebarUnit.derived.defenseRating}
-              </div>
-            </div>
-            <div className="rounded bg-slate-900/90 border border-slate-800 py-0.5">
-              <div className="text-slate-400">SPD</div>
-              <div className="font-bold text-sky-300">
-                {getEffectiveUnitSpeed(sidebarUnit)}
-              </div>
-            </div>
-            <div className="rounded bg-slate-900/90 border border-slate-800 py-0.5">
-              <div className="text-slate-400">EVA</div>
-              <div className="font-bold text-emerald-300">
-                {sidebarUnit.derived.dodgeChance}%
-              </div>
-            </div>
-            <div className="rounded bg-slate-900/90 border border-slate-800 py-0.5">
-              <div className="text-slate-400">CRT</div>
-              <div className="font-bold text-amber-300">
-                {sidebarUnit.derived.critChance}%
-              </div>
-            </div>
-          </div>
-
-          {isBlocked && (
-            <div className="rounded border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-200 flex items-center gap-1.5">
-              <ShieldAlert className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-              <span className="truncate">{t('battle.frontRowBlocked')}</span>
-            </div>
-          )}
-
-          {sidebarUnit.statuses.length > 0 && (
-            <FixedStatusArea
-              statuses={sidebarUnit.statuses}
-              rows={Math.min(2, Math.max(1, activeUnitRows))}
-              autoHeight
-              unit={sidebarUnit}
-              unitTitle={sidebarUnit.name}
-              badgeLayout={statusSettings.badgeLayout}
-              iconMods={adminConfig.iconCatalogMods}
-              showLabels={fxSettings.showStatusLabels}
-              fallbackWidthPx={290}
-              rootTestId="sidebar-status-area"
-              chipTestIdPrefix="sidebar-status-chip"
-              overflowTestId="sidebar-status-overflow"
+            <StatBar
+              label="SP"
+              labelClassName={SP_COLOR_TOKENS.textClass}
+              valueClassName={SP_COLOR_TOKENS.textClass}
+              value={sidebarUnit.sp}
+              max={Math.max(1, sidebarUnit.derived.maxSp)}
+              valueText={`${sidebarUnit.sp}/${sidebarUnit.derived.maxSp}`}
+              fillClassName={SP_COLOR_TOKENS.barFillClass}
+              heightClassName="h-1.5"
+              instant={bypassFx}
+              compactHeader
             />
-          )}
+          </div>
         </div>
 
-        {showLockTargetBtn && (
-          <button
-            type="button"
-            disabled={isLocked}
-            onClick={() => selectTarget(sidebarUnit.id)}
-            className={`w-full min-h-[34px] px-3 rounded-lg text-[12px] font-semibold inline-flex items-center justify-center gap-1.5 transition-colors shrink-0 ${
-              isLocked
-                ? 'border border-red-500/45 bg-red-500/15 text-red-200 cursor-default'
-                : 'bg-red-500 hover:bg-red-400 text-slate-950 cursor-pointer'
-            }`}
-          >
-            <Crosshair className="w-4 h-4 shrink-0" />
-            <span>
-              {isLocked ? t('battle.targetLockedBtn') : t('battle.lockTargetBtn')}
-            </span>
-          </button>
-        )}
+        {/* Fixed-width tabular telemetry */}
+        <div
+          style={{
+            height: `${SIDEBAR_UNIT_PANEL_HEIGHTS.telemetryPx}px`,
+            minHeight: `${SIDEBAR_UNIT_PANEL_HEIGHTS.telemetryPx}px`,
+          }}
+          className="grid grid-cols-5 gap-1 text-center font-mono-nums text-[11px] leading-[16px] h-[38px] min-h-[38px] max-h-[38px] shrink-0 overflow-hidden"
+        >
+          <div className="rounded bg-slate-900/90 border border-slate-800 py-0.5 flex flex-col justify-center">
+            <div className="text-slate-400">ATK</div>
+            <div className="font-bold text-slate-100">
+              {sidebarUnit.derived.attackPower}
+            </div>
+          </div>
+          <div className="rounded bg-slate-900/90 border border-slate-800 py-0.5 flex flex-col justify-center">
+            <div className="text-slate-400">DEF</div>
+            <div className="font-bold text-slate-100">
+              {sidebarUnit.derived.defenseRating}
+            </div>
+          </div>
+          <div className="rounded bg-slate-900/90 border border-slate-800 py-0.5 flex flex-col justify-center">
+            <div className="text-slate-400">SPD</div>
+            <div className="font-bold text-sky-300">
+              {getEffectiveUnitSpeed(sidebarUnit)}
+            </div>
+          </div>
+          <div className="rounded bg-slate-900/90 border border-slate-800 py-0.5 flex flex-col justify-center">
+            <div className="text-slate-400">EVA</div>
+            <div className="font-bold text-emerald-300">
+              {sidebarUnit.derived.dodgeChance}%
+            </div>
+          </div>
+          <div className="rounded bg-slate-900/90 border border-slate-800 py-0.5 flex flex-col justify-center">
+            <div className="text-slate-400">CRT</div>
+            <div className="font-bold text-amber-300">
+              {sidebarUnit.derived.critChance}%
+            </div>
+          </div>
+        </div>
+
+        <FixedStatusArea
+          statuses={sidebarUnit.statuses}
+          rows={2}
+          scrollOverflow
+          unit={sidebarUnit}
+          unitTitle={sidebarUnit.name}
+          badgeLayout={statusSettings.badgeLayout}
+          iconMods={adminConfig.iconCatalogMods}
+          showLabels={fxSettings.showStatusLabels}
+          fallbackWidthPx={290}
+          rootTestId="sidebar-status-area"
+          chipTestIdPrefix="sidebar-status-chip"
+          emptyTestId="sidebar-status-empty"
+        />
       </div>
     );
   };
@@ -1519,8 +1681,8 @@ export function BattleScreen() {
         data-testid="battle-player-status-bar"
         data-collapsed="false"
         data-destroyed="false"
-        className={`shrink-0 min-w-0 rounded-lg border border-emerald-500/35 bg-[#09121D] text-slate-100 px-2 py-0.5 space-y-0.5 overflow-hidden ${
-          activePlayerRows <= 1 ? 'max-h-[64px]' : ''
+        className={`shrink-0 min-w-0 rounded-lg border border-emerald-500/35 bg-[#09121D] text-slate-100 px-2 py-0.5 space-y-0.5 ${
+          activePlayerRows <= 1 ? 'max-h-[72px]' : ''
         }`}
       >
         <div className="h-[22px] flex items-center gap-2 min-w-0 text-[11px]">
@@ -2310,8 +2472,6 @@ export function BattleScreen() {
               enrageBonusPct={enrageBonusPct}
               variant="sidebar"
               targetName={actingTargetName}
-              maxUpcoming={sidebarLogMode === 'line' ? 10 : 4}
-              fillHeight={sidebarLogMode === 'line'}
               onSelectUnit={(id) => setInspectedUnitId(id)}
             />
 

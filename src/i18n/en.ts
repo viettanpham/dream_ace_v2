@@ -698,6 +698,7 @@ export const EN_TRANSLATIONS = {
   'auto.repeatSummaryRuns': '{wins} / {runs} Wins',
   'auto.repeatReason.completed': 'Completed target runs',
   'auto.repeatReason.defeat': 'Stopped on defeat',
+  'auto.repeatReason.defeat_streak': 'Stopped: {streak} defeats in a row',
   'auto.repeatReason.retreat': 'Stopped on retreat',
   'auto.repeatReason.low_hp': 'Stopped: Low HP safety triggered',
   'auto.repeatReason.elite_ready': 'Stopped: Elite skill ready',
@@ -743,6 +744,8 @@ export const EN_TRANSLATIONS = {
   'queue.actingBanner': 'Acting: {tag} {name}',
   'queue.nextRoundDivider': 'Round {round}',
   'queue.overflowMore': '+{count} more',
+  'queue.battleEnded': 'Battle ended',
+  'queue.noActiveActor': 'Awaiting next turn',
 
   // Admin CP
   'admin.title': 'Admin Control Panel',
@@ -775,6 +778,7 @@ export const EN_TRANSLATIONS = {
   'battle.balanceAllies': 'Allied Fleet',
   'battle.balanceHostiles': 'Hostile Fleet',
   'battle.frontRowBlocked': 'Front row blocks basic attack',
+  'battle.frontRowNotBlocked': 'Not blocked by front row',
   'battle.longRangeReady': 'Long-range targets Back row',
   'battle.actionSkills': 'Skills',
   'battle.actionItem': 'Supplies',
@@ -791,6 +795,7 @@ export const EN_TRANSLATIONS = {
   'battle.lockTargetBtn': 'Lock Enemy Target',
   'battle.lockAllyBtn': 'Lock Ally Target',
   'battle.targetLockedBtn': 'Target Locked',
+  'battle.lockTargetUnavailable': 'Target lock unavailable right now',
   'battle.structureTag': 'STRUCTURE',
 
   // Wingman Radio Chatter
@@ -1386,6 +1391,10 @@ export const EN_TRANSLATIONS = {
   'inv.bulkAllSkippedFeedback': 'No items sold — {skipped} selected items are equipped or locked.',
   'qs.soldWithSkippedNotice': 'Quick-sold {count} items (+{credits} CR). Skipped {skipped} equipped/locked.',
   'battle.loopStopOnDefeat': 'Stop on defeat',
+  'battle.loopStopOnDefeatHintOn':
+    'Uncheck to continue on defeat (max {streak} in a row).',
+  'battle.loopStopOnDefeatHintOff':
+    'Continuing on defeat (stops after {streak} defeats in a row).',
   'battle.loopToastRun': 'Run #{run}: {outcome} · +{exp} EXP · +{credits} CR · +{wp} WP · {loot} loot',
   'battle.loopToastVictory': 'Victory',
   'battle.loopToastDefeat': 'Defeat',
@@ -1509,6 +1518,7 @@ export const EN_TRANSLATIONS = {
   'statusUi.openIconCatalogBtn': 'Icon Table',
   'statusUi.popoverTitle': 'Active Effects',
   'statusUi.popoverEmpty': 'No active effects.',
+  'statusUi.areaEmpty': 'No active effects',
   'statusUi.valueLabel': 'Value',
   'statusUi.stacksLabel': 'Stacks',
   'statusUi.turnsLabel': '{turns} turns left',

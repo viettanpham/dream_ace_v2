@@ -302,10 +302,10 @@ describe('TASK G4a-2b — Right sidebar heights, [Dòng | Mở rộng] log modes
     expect(localPersist).not.toContain('sidebarLogMode');
   });
 
-  it('2) Selected-unit panel uses content height: 0 status rows & no empty space when none, max 2 rows + "+N" when overflowing', () => {
+  it('2) Selected-unit panel status area uses fixed 2-row height (muted empty line when 0 statuses, internal scroll without "+N" when >2 rows)', () => {
     setViewport(1440, 900);
 
-    // 0 statuses -> 0 status rows, no sidebar-status-area, no fixed h-[244px], no opacity-0 spacer
+    // 0 statuses -> fixed 2-row status area with muted centered "Không có hiệu ứng" and no h-[244px]
     const noStatusBattle = makeBattle();
     useGameStore.setState({ battle: noStatusBattle });
 
@@ -318,12 +318,22 @@ describe('TASK G4a-2b — Right sidebar heights, [Dòng | Mở rộng] log modes
     ) as HTMLElement;
     expect(panelNoStatus).not.toBeNull();
     expect(panelNoStatus.className).not.toContain('h-[244px]');
-    expect(
-      panelNoStatus.querySelector('[data-testid="sidebar-status-area"]')
-    ).toBeNull();
     expect(panelNoStatus.querySelector('.opacity-0')).toBeNull();
 
-    // Many statuses -> max 2 rows + "+N", clicking "+N" opens full status popover
+    const emptyStatusArea = panelNoStatus.querySelector(
+      '[data-testid="sidebar-status-area"]'
+    ) as HTMLElement;
+    expect(emptyStatusArea).not.toBeNull();
+    expect(emptyStatusArea.getAttribute('data-status-area-rows')).toBe('2');
+    expect(emptyStatusArea.className).toContain('overflow-y-auto');
+    expect(emptyStatusArea.textContent).toContain(
+      VI_TRANSLATIONS['statusUi.areaEmpty']
+    );
+    expect(
+      panelNoStatus.querySelector('[data-testid="sidebar-status-overflow"]')
+    ).toBeNull();
+
+    // Many statuses -> same 2-row height, internal scroll (overflow-y-auto), NO "+N", tapping a chip opens popover
     const manyStatuses: ActiveStatusEffect[] = [
       { type: 'slow', turnsRemaining: 2, isDebuff: true, magnitude: 0.3 },
       { type: 'burn', turnsRemaining: 2, isDebuff: true, magnitude: 50 },
@@ -350,24 +360,29 @@ describe('TASK G4a-2b — Right sidebar heights, [Dòng | Mở rộng] log modes
       '[data-testid="sidebar-status-area"]'
     ) as HTMLElement;
     expect(statusArea).not.toBeNull();
+    expect(statusArea.getAttribute('data-status-area-rows')).toBe('2');
+    expect(statusArea.style.height).toBe(emptyStatusArea.style.height);
+    expect(statusArea.className).toContain('overflow-y-auto');
     expect(
-      Number(statusArea.getAttribute('data-status-area-rows'))
-    ).toBeLessThanOrEqual(2);
-    const overflowBadge = container!.querySelector(
-      '[data-testid="sidebar-status-overflow"]'
-    ) as HTMLElement;
-    expect(overflowBadge).not.toBeNull();
-    expect(overflowBadge.textContent).toMatch(/^\+\d+$/);
+      container!.querySelector('[data-testid="sidebar-status-overflow"]')
+    ).toBeNull();
+    expect(
+      statusArea.querySelectorAll('[data-testid^="sidebar-status-chip-"]').length
+    ).toBe(manyStatuses.length);
 
+    const firstChip = statusArea.querySelector(
+      '[data-testid="sidebar-status-chip-0"]'
+    ) as HTMLElement;
+    expect(firstChip).not.toBeNull();
     act(() => {
-      overflowBadge.click();
+      firstChip.click();
     });
     expect(
       container!.querySelector('[data-testid="status-area-popover"]')
     ).not.toBeNull();
   });
 
-  it('3) Turn queue shows 32px header, current actor, max 4 next 26px rows in Mở rộng and up to 10 in Dòng (+N popover)', () => {
+  it('3) Turn queue shows 32px header, current actor, fixed 5-row 26px list (260px total) identical in Mở rộng & Dòng (+N popover)', () => {
     setViewport(1440, 900);
     const battle = makeBattle();
     useGameStore.setState({ battle });
@@ -384,10 +399,23 @@ describe('TASK G4a-2b — Right sidebar heights, [Dòng | Mở rộng] log modes
       container!.querySelector('[data-testid="turn-queue-acting-chip"]')
     ).not.toBeNull();
 
+    const sidebarQueue = container!.querySelector(
+      '[data-testid="turn-queue-sidebar"]'
+    ) as HTMLElement;
+    const expandedQueueHeight = sidebarQueue.getAttribute('data-queue-height-px');
+    expect(expandedQueueHeight).toBe('260');
+    expect(sidebarQueue.getAttribute('data-queue-rows')).toBe('5');
+
+    const upcomingListExpanded = container!.querySelector(
+      '[data-testid="turn-queue-upcoming-list"]'
+    ) as HTMLElement;
+    expect(upcomingListExpanded.className).toContain('overflow-y-auto');
+    expect(upcomingListExpanded.style.height).toBe('146px');
+
     const chipsExpanded = Array.from(
       container!.querySelectorAll('[data-testid="turn-queue-sidebar-chip"]')
     ) as HTMLElement[];
-    expect(chipsExpanded).toHaveLength(4);
+    expect(chipsExpanded).toHaveLength(15);
     for (const chip of chipsExpanded) {
       expect(chip.className).toContain('h-[26px]');
     }
@@ -395,7 +423,7 @@ describe('TASK G4a-2b — Right sidebar heights, [Dòng | Mở rộng] log modes
       '[data-testid="turn-queue-overflow"]'
     ) as HTMLButtonElement;
     expect(overflowExpanded).not.toBeNull();
-    expect(overflowExpanded.textContent).toContain('+11');
+    expect(overflowExpanded.textContent).toContain('+10');
 
     // Clicking "+N" opens full queue popover
     act(() => {
@@ -405,7 +433,7 @@ describe('TASK G4a-2b — Right sidebar heights, [Dòng | Mở rộng] log modes
       container!.querySelector('[data-testid="turn-queue-popover"]')
     ).not.toBeNull();
 
-    // Switch to Dòng -> log shrinks & queue expands up to 10 upcoming rows
+    // Switch to Dòng -> queue keeps the exact same fixed 5-row height and +10 overflow
     act(() => {
       (
         container!.querySelector(
@@ -417,21 +445,21 @@ describe('TASK G4a-2b — Right sidebar heights, [Dòng | Mở rộng] log modes
     const chipsLine = Array.from(
       container!.querySelectorAll('[data-testid="turn-queue-sidebar-chip"]')
     ) as HTMLElement[];
-    expect(chipsLine).toHaveLength(10);
+    expect(chipsLine).toHaveLength(15);
     for (const chip of chipsLine) {
       expect(chip.className).toContain('h-[26px]');
     }
     expect(
       container!.querySelector('[data-testid="turn-queue-overflow"]')?.textContent
-    ).toContain('+5');
+    ).toContain('+10');
 
-    const sidebarQueue = container!.querySelector(
-      '[data-testid="turn-queue-sidebar"]'
-    ) as HTMLElement;
+    expect(sidebarQueue.getAttribute('data-queue-height-px')).toBe(
+      expandedQueueHeight
+    );
+    expect(sidebarQueue.className).toContain('shrink-0');
     const desktopLog = container!.querySelector(
       '[data-testid="battle-desktop-docked-log"]'
     ) as HTMLElement;
-    expect(sidebarQueue.className).toContain('flex-1');
     expect(desktopLog.className).toContain('shrink-0');
     expect(desktopLog.className).not.toContain('min-h-[220px]');
   });

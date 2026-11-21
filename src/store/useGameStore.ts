@@ -695,10 +695,14 @@ function finalizeBattleOutcome(
     (state.autoRepeatSession.active ||
       state.autoRepeatSession.stopReason === 'manual_stop')
   ) {
+    const nextConsecutiveDefeats = won
+      ? 0
+      : (state.autoRepeatSession.consecutiveDefeats ?? 0) + 1;
     const updatedSession: AutoRepeatSession = {
       ...state.autoRepeatSession,
       completedRuns: state.autoRepeatSession.completedRuns + 1,
       wins: state.autoRepeatSession.wins + (won ? 1 : 0),
+      consecutiveDefeats: nextConsecutiveDefeats,
       totalExp: state.autoRepeatSession.totalExp + effectiveExpGained,
       totalCredits: state.autoRepeatSession.totalCredits + rewards.creditsGained,
       totalWarPoints:
@@ -1387,6 +1391,7 @@ export const useGameStore = create<GameStoreState>()(
               sectorId: chosenSector,
               completedRuns: 0,
               wins: 0,
+              consecutiveDefeats: 0,
               totalExp: 0,
               totalCredits: 0,
               totalWarPoints: 0,
@@ -1408,6 +1413,7 @@ export const useGameStore = create<GameStoreState>()(
             sectorId: chosenSector,
             completedRuns: 0,
             wins: 0,
+            consecutiveDefeats: 0,
             totalExp: 0,
             totalCredits: 0,
             totalWarPoints: 0,

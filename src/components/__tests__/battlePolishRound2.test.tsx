@@ -679,8 +679,8 @@ describe('5) Combat log auto-scroll pause & Jump to latest button', () => {
   });
 });
 
-describe('6) Turn queue short-name consistency & full-name tooltip/tap', () => {
-  it('uses max-10-char short names in sidebar turn queue chips and preserves full name on hover & tap', () => {
+describe('6) Turn queue full-name display & full-name tooltip/tap (Q1)', () => {
+  it('shows full names with min-w-0 truncate in sidebar turn queue chips and preserves full name on hover & tap', () => {
     const battle = makeBattle();
     const onSelectUnit = vi.fn();
 
@@ -704,6 +704,12 @@ describe('6) Turn queue short-name consistency & full-name tooltip/tap', () => {
     expect(actingChip).not.toBeNull();
     expect(actingChip.getAttribute('data-full-name')).toBe('Commander Zara');
     expect(actingChip.title).toContain('Commander Zara');
+    expect(
+      actingChip.querySelector('[data-testid="turn-queue-acting-attacker"]')?.textContent
+    ).toBe('Commander Zara');
+    expect(
+      actingChip.querySelector('[data-testid="turn-queue-acting-target"]')?.textContent
+    ).toBe('Dreadnought Flagship');
 
     const chips = Array.from(
       container!.querySelectorAll('[data-testid="turn-queue-sidebar-chip"]')
@@ -711,10 +717,16 @@ describe('6) Turn queue short-name consistency & full-name tooltip/tap', () => {
     expect(chips.length).toBeGreaterThan(0);
 
     for (const chip of chips) {
-      const nameNode = chip.querySelector('[data-testid="turn-queue-chip-name"]');
+      const nameNode = chip.querySelector(
+        '[data-testid="turn-queue-chip-name"]'
+      ) as HTMLElement;
       expect(nameNode).not.toBeNull();
-      expect((nameNode!.textContent ?? '').length).toBeLessThanOrEqual(10);
       const fullName = chip.getAttribute('data-full-name') ?? '';
+      expect(nameNode.textContent).toBe(fullName);
+      expect(nameNode.className).toContain('min-w-0');
+      expect(nameNode.className).toContain('truncate');
+      expect(nameNode.className).not.toMatch(/max-w-/);
+      expect(nameNode.title).toBe(fullName);
       expect(chip.title).toContain(fullName);
     }
 

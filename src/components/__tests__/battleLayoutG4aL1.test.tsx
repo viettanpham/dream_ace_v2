@@ -257,7 +257,7 @@ describe('G4a-L1: Battle main column layout fix & orange SP token', () => {
     expect(playerBar.querySelector('[data-testid="battle-player-status-effects"]')).toBeNull();
   });
 
-  it('3) Alive player block on desktop enforces max-h-[64px], default playerDesktopRows=1 (still overridden by player/Admin prefs), and header max-h-[150px]', () => {
+  it('3) Alive player block on desktop enforces max-h-[72px] without overflow-hidden, default playerDesktopRows=1 (still overridden by player/Admin prefs), and header max-h-[150px]', () => {
     expect(BUILTIN_STATUS_DISPLAY_DEFAULTS.playerDesktopRows).toBe(1);
     expect(
       resolveEffectiveStatusDisplaySettings({ playerDesktopRows: 2 }, null)
@@ -301,7 +301,8 @@ describe('G4a-L1: Battle main column layout fix & orange SP token', () => {
     expect(header.className).toContain('max-h-[150px]');
     expect(controls.className).toContain('max-h-[48px]');
     expect(forceBar.className).toContain('max-h-[22px]');
-    expect(playerBar.className).toContain('max-h-[64px]');
+    expect(playerBar.className).toContain('max-h-[72px]');
+    expect(playerBar.className).not.toContain('overflow-hidden');
     // Side-by-side thin HP / SHD / SP bars
     expect(playerBar.querySelector('[data-testid="battle-player-hp-shield-bar"]')).not.toBeNull();
     expect(playerBar.querySelector('[data-testid="battle-player-shield-bar"]')).not.toBeNull();

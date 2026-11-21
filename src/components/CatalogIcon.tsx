@@ -13,7 +13,19 @@ import type {
   StatusEffectType,
 } from '../types/game';
 
-export type CatalogIconSize = 'xs' | 'sm' | 'md' | 'lg';
+import {
+  STATUS_ARROW_BORDER_COLOR,
+  STATUS_ARROW_BORDER_PX,
+  STATUS_ICON_SIZE_SPECS,
+  STATUS_TURNS_BADGE_BG,
+  STATUS_TURNS_BADGE_BORDER_COLOR,
+  STATUS_TURNS_BADGE_BORDER_PX,
+  STATUS_TURNS_BADGE_COLOR,
+  STATUS_TURNS_BADGE_HEIGHT_PX,
+  type StatusChipSizeVariant,
+} from '../utils/statusDisplayPrefs';
+
+export type CatalogIconSize = StatusChipSizeVariant;
 
 interface CatalogIconProps {
   row: IconCatalogRow | null;
@@ -29,70 +41,18 @@ interface CatalogIconProps {
   className?: string;
 }
 
-const SIZE_SPEC: Record<
-  CatalogIconSize,
-  {
-    boxPx: number;
-    iconFontPx: number;
-    lucideCls: string;
-    arrowBoxPx: number;
-    arrowFontPx: number;
-    turnsFontPx: number;
-    turnsClockPx: number;
-    stackFontPx: number;
-  }
-> = {
-  xs: {
-    boxPx: 18,
-    iconFontPx: 12,
-    lucideCls: 'w-3 h-3',
-    arrowBoxPx: 9,
-    arrowFontPx: 7,
-    turnsFontPx: 8,
-    turnsClockPx: 7,
-    stackFontPx: 8,
-  },
-  sm: {
-    boxPx: 22,
-    iconFontPx: 14,
-    lucideCls: 'w-3.5 h-3.5',
-    arrowBoxPx: 10,
-    arrowFontPx: 8,
-    turnsFontPx: 9,
-    turnsClockPx: 8,
-    stackFontPx: 9,
-  },
-  md: {
-    boxPx: 28,
-    iconFontPx: 18,
-    lucideCls: 'w-4 h-4',
-    arrowBoxPx: 12,
-    arrowFontPx: 9,
-    turnsFontPx: 10,
-    turnsClockPx: 9,
-    stackFontPx: 10,
-  },
-  lg: {
-    boxPx: 34,
-    iconFontPx: 22,
-    lucideCls: 'w-5 h-5',
-    arrowBoxPx: 14,
-    arrowFontPx: 10,
-    turnsFontPx: 10,
-    turnsClockPx: 9,
-    stackFontPx: 10,
-  },
-};
-
 const BUFF_GREEN = '#1D9E75';
 const DEBUFF_RED = '#E24B4A';
 
 function renderFallbackLucide(
   type: StatusEffectType | undefined,
   color: string,
-  cls: string
+  sizePx: number
 ) {
-  const props = { className: cls, style: { color }, 'aria-hidden': true as const };
+  const props = {
+    style: { color, width: `${sizePx}px`, height: `${sizePx}px` },
+    'aria-hidden': true as const,
+  };
   switch (type) {
     case 'evade_all':
       return <Sparkles {...props} />;
@@ -122,7 +82,8 @@ export function CatalogIcon({
   showArrowBadge = true,
   className = '',
 }: CatalogIconProps) {
-  const spec = SIZE_SPEC[size];
+  const spec = STATUS_ICON_SIZE_SPECS[size];
+  const isMini = size === 'xs';
   const kind: IconCatalogKind = kindOverride ?? row?.kind ?? 'normal';
   const baseColor = row?.color ?? '#94A3B8';
   const iconColor = kind === 'buff' ? BUFF_GREEN : baseColor;
@@ -139,18 +100,58 @@ export function CatalogIcon({
     showBadges && allowStack && Number.isFinite(stacks) && stacks >= 2;
 
   const arrowCornerClass =
-    badgeLayout === 'A'
-      ? '-bottom-1 -right-1'
-      : '-bottom-1 -left-1';
+    badgeLayout === 'A' ? '-bottom-1 -right-1' : '-bottom-1 -left-1';
 
   const turnsCornerClass =
-    badgeLayout === 'A'
-      ? '-bottom-1.5 -left-1.5'
-      : '-bottom-1.5 -right-1.5';
+    badgeLayout === 'A' ? '-bottom-1.5 -left-1.5' : '-bottom-1.5 -right-1.5';
+
+  const outset = spec.turnsOutsetPx;
+
+  const arrowPositionStyle = isMini
+    ? undefined
+    : {
+        bottom: `-${outset}px`,
+        ...(badgeLayout === 'A'
+          ? {
+              right: `-${outset}px`,
+              left: 'auto',
+              transform: 'translate(50%, 50%)',
+            }
+          : {
+              left: `-${outset}px`,
+              right: 'auto',
+              transform: 'translate(-50%, 50%)',
+            }),
+      };
+
+  const turnsPositionStyle = isMini
+    ? undefined
+    : {
+        bottom: `-${outset}px`,
+        ...(badgeLayout === 'A'
+          ? {
+              left: `-${outset}px`,
+              right: 'auto',
+              transform: 'translate(-50%, 50%)',
+            }
+          : {
+              right: `-${outset}px`,
+              left: 'auto',
+              transform: 'translate(50%, 50%)',
+            }),
+      };
+
+  const stackPositionStyle = isMini
+    ? undefined
+    : {
+        top: `-${outset}px`,
+        right: `-${outset}px`,
+        transform: 'translate(50%, -50%)',
+      };
 
   const renderGlyph = () => {
     if (!row) {
-      return renderFallbackLucide(fallbackStatusType, iconColor, spec.lucideCls);
+      return renderFallbackLucide(fallbackStatusType, iconColor, spec.lucideSizePx);
     }
     if (Array.isArray(row.layers) && row.layers.length > 0) {
       return (
@@ -193,6 +194,9 @@ export function CatalogIcon({
     <span
       data-testid="catalog-icon-root"
       data-icon-kind={kind}
+      data-icon-size={size}
+      data-frame-px={spec.boxPx}
+      data-glyph-px={spec.iconFontPx}
       data-badge-layout={badgeLayout}
       data-catalog-id={row?.id ?? 'unmapped'}
       style={{
@@ -251,38 +255,83 @@ export function CatalogIcon({
         <span
           data-testid="status-arrow-badge"
           data-arrow-dir={kind === 'buff' ? 'up' : 'down'}
+          data-badge-corner={badgeLayout === 'A' ? 'bottom-right' : 'bottom-left'}
           style={{
             width: `${spec.arrowBoxPx}px`,
             height: `${spec.arrowBoxPx}px`,
             backgroundColor: kind === 'buff' ? BUFF_GREEN : DEBUFF_RED,
+            borderWidth: `${STATUS_ARROW_BORDER_PX}px`,
+            borderStyle: 'solid',
+            borderColor: isMini ? '#070B12' : STATUS_ARROW_BORDER_COLOR,
+            ...arrowPositionStyle,
           }}
-          className={`pointer-events-none absolute ${arrowCornerClass} z-10 rounded-full flex items-center justify-center border border-[#070B12] shadow-xs`}
+          className={`pointer-events-none absolute ${arrowCornerClass} z-10 rounded-full flex items-center justify-center ${
+            isMini ? 'border-[#070B12]' : 'border-[#0B1220]'
+          } shadow-xs`}
           aria-hidden="true"
         >
           <span
-            className="material-symbols-outlined text-white leading-none select-none"
-            style={{ fontSize: `${spec.arrowFontPx}px` }}
+            className={`material-symbols-outlined text-white leading-none select-none ${
+              isMini ? '' : 'font-bold'
+            }`}
+            style={{
+              fontSize: `${spec.arrowFontPx}px`,
+              ...(isMini
+                ? {}
+                : {
+                    fontWeight: 700,
+                    fontVariationSettings: "'wght' 700",
+                  }),
+            }}
           >
             {kind === 'buff' ? 'arrow_upward' : 'arrow_downward'}
           </span>
         </span>
       )}
 
-      {/* Turns Left Badge (outside bottom corner so it does not cover the icon) */}
+      {/* Turns Left Badge (clock + yellow #F5C542 bold 11px on #0B1220/85 pill centered on corner 4px outside) */}
       {hasValidTurns && (
         <span
           data-testid="status-turns-badge"
-          style={{ fontSize: `${spec.turnsFontPx}px` }}
-          className={`pointer-events-none absolute ${turnsCornerClass} z-20 inline-flex items-center gap-[1px] px-[3px] py-[0.5px] rounded-full bg-[#060A12] border border-slate-500/80 text-slate-100 font-mono-nums font-bold leading-none shadow-sm`}
+          data-badge-corner={badgeLayout === 'A' ? 'bottom-left' : 'bottom-right'}
+          style={{
+            fontSize: `${spec.turnsFontPx}px`,
+            ...(isMini
+              ? {}
+              : {
+                  height: `${STATUS_TURNS_BADGE_HEIGHT_PX}px`,
+                  backgroundColor: STATUS_TURNS_BADGE_BG,
+                  borderColor: STATUS_TURNS_BADGE_BORDER_COLOR,
+                  borderWidth: `${STATUS_TURNS_BADGE_BORDER_PX}px`,
+                  borderStyle: 'solid',
+                }),
+            ...turnsPositionStyle,
+          }}
+          className={`pointer-events-none absolute ${turnsCornerClass} z-20 inline-flex items-center gap-[1px] px-[3px] rounded-full font-mono-nums font-bold leading-none shadow-sm ${
+            isMini
+              ? 'py-[0.5px] bg-[#060A12] border border-slate-500/80 text-slate-100'
+              : 'bg-[#0B1220]/85 text-[#F5C542]'
+          }`}
         >
           <span
-            className="material-symbols-outlined text-slate-300 leading-none select-none"
-            style={{ fontSize: `${spec.turnsClockPx}px` }}
+            className={`material-symbols-outlined leading-none select-none ${
+              isMini ? 'text-slate-300' : 'text-[#F5C542]'
+            }`}
+            style={{
+              fontSize: `${spec.turnsClockPx}px`,
+              ...(isMini ? {} : { color: STATUS_TURNS_BADGE_COLOR }),
+            }}
             aria-hidden="true"
           >
             schedule
           </span>
-          <span>{turnsLeft}</span>
+          <span
+            data-testid="status-turns-number"
+            className={isMini ? undefined : 'text-[#F5C542] font-bold'}
+            style={isMini ? undefined : { color: STATUS_TURNS_BADGE_COLOR }}
+          >
+            {turnsLeft}
+          </span>
         </span>
       )}
 
@@ -290,7 +339,10 @@ export function CatalogIcon({
       {hasStackBadge && (
         <span
           data-testid="status-stack-badge"
-          style={{ fontSize: `${spec.stackFontPx}px` }}
+          style={{
+            fontSize: `${spec.stackFontPx}px`,
+            ...stackPositionStyle,
+          }}
           className="pointer-events-none absolute -top-1.5 -right-1.5 z-20 px-[3px] py-[0.5px] rounded-full bg-amber-400 border border-[#060A12] text-slate-950 font-mono-nums font-extrabold leading-none shadow-sm"
         >
           x{Math.floor(stacks)}

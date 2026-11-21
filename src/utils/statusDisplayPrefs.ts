@@ -9,6 +9,203 @@ export const STATUS_DISPLAY_STORAGE_KEY = 'dreamAce.status.v1';
 
 export const PHONE_MAX_WIDTH_PX = 640;
 
+export type StatusChipSizeVariant = 'xs' | 'bar' | 'sm' | 'md' | 'lg';
+
+export const STATUS_CHIP_FRAME_PX = 32;
+export const STATUS_CHIP_BAR_FRAME_PX = 28;
+export const STATUS_CHIP_GLYPH_PX = 20;
+export const STATUS_CHIP_VALUE_FONT_PX = 13;
+export const STATUS_ROW_GAP_PX = 14;
+export const STATUS_CHIP_COL_GAP_PX = 6;
+export const STATUS_AREA_PAD_X_PX = 8;
+export const STATUS_AREA_PAD_TOP_PX = 2;
+
+export const STATUS_CHIP_PAD_LEFT_PX = 6;
+export const STATUS_CHIP_PAD_RIGHT_PX = 8;
+export const STATUS_CHIP_VALUE_GAP_PX = 8;
+export const STATUS_CHIP_CHAR_WIDTH_PX = 7.8;
+export const STATUS_CHIP_OVERFLOW_WIDTH_PX = 38;
+
+export const STATUS_TURNS_BADGE_COLOR = '#F5C542';
+export const STATUS_TURNS_BADGE_BG = 'rgba(11, 18, 32, 0.85)';
+export const STATUS_TURNS_BADGE_BORDER_COLOR = 'rgba(148, 163, 184, 0.75)';
+export const STATUS_TURNS_BADGE_BORDER_PX = 1;
+export const STATUS_TURNS_BADGE_FONT_PX = 11;
+export const STATUS_TURNS_BADGE_CLOCK_PX = 10;
+export const STATUS_TURNS_BADGE_OUTSET_PX = 4;
+export const STATUS_TURNS_BADGE_HEIGHT_PX = 14;
+export const STATUS_TURNS_BADGE_EST_WIDTH_PX = 24;
+
+export const STATUS_ARROW_BADGE_PX = 14;
+export const STATUS_ARROW_GLYPH_PX = 12;
+export const STATUS_ARROW_BORDER_PX = 1;
+export const STATUS_ARROW_BORDER_COLOR = '#0B1220';
+
+/** Minimum safe margin (px) around chips: outset 4 + outline 1 + 1 spare */
+export const STATUS_BADGE_SAFE_PX = 6;
+
+export const STATUS_STACK_BADGE_HEIGHT_PX = 13;
+export const STATUS_STACK_BADGE_EST_WIDTH_PX = 18;
+
+export interface StatusIconSizeSpec {
+  boxPx: number;
+  iconFontPx: number;
+  lucideSizePx: number;
+  arrowBoxPx: number;
+  arrowFontPx: number;
+  turnsFontPx: number;
+  turnsClockPx: number;
+  turnsOutsetPx: number;
+  stackFontPx: number;
+}
+
+export const STATUS_ICON_SIZE_SPECS: Record<
+  StatusChipSizeVariant,
+  StatusIconSizeSpec
+> = {
+  // Mini size for radar markers — kept untouched (G4a-3 owns radar marker layout)
+  xs: {
+    boxPx: 18,
+    iconFontPx: 12,
+    lucideSizePx: 12,
+    arrowBoxPx: 9,
+    arrowFontPx: 7,
+    turnsFontPx: 8,
+    turnsClockPx: 7,
+    turnsOutsetPx: 0,
+    stackFontPx: 8,
+  },
+  // Player bar strip size (28px frame, 20px glyph)
+  bar: {
+    boxPx: STATUS_CHIP_BAR_FRAME_PX,
+    iconFontPx: STATUS_CHIP_GLYPH_PX,
+    lucideSizePx: STATUS_CHIP_GLYPH_PX,
+    arrowBoxPx: STATUS_ARROW_BADGE_PX,
+    arrowFontPx: STATUS_ARROW_GLYPH_PX,
+    turnsFontPx: STATUS_TURNS_BADGE_FONT_PX,
+    turnsClockPx: STATUS_TURNS_BADGE_CLOCK_PX,
+    turnsOutsetPx: STATUS_TURNS_BADGE_OUTSET_PX,
+    stackFontPx: 10,
+  },
+  // Standard card & sidebar & legend chip size (32px frame, 20px glyph)
+  sm: {
+    boxPx: STATUS_CHIP_FRAME_PX,
+    iconFontPx: STATUS_CHIP_GLYPH_PX,
+    lucideSizePx: STATUS_CHIP_GLYPH_PX,
+    arrowBoxPx: STATUS_ARROW_BADGE_PX,
+    arrowFontPx: STATUS_ARROW_GLYPH_PX,
+    turnsFontPx: STATUS_TURNS_BADGE_FONT_PX,
+    turnsClockPx: STATUS_TURNS_BADGE_CLOCK_PX,
+    turnsOutsetPx: STATUS_TURNS_BADGE_OUTSET_PX,
+    stackFontPx: 10,
+  },
+  // Popover & detail sheet size (32px frame, 20px glyph)
+  md: {
+    boxPx: STATUS_CHIP_FRAME_PX,
+    iconFontPx: STATUS_CHIP_GLYPH_PX,
+    lucideSizePx: STATUS_CHIP_GLYPH_PX,
+    arrowBoxPx: STATUS_ARROW_BADGE_PX,
+    arrowFontPx: STATUS_ARROW_GLYPH_PX,
+    turnsFontPx: STATUS_TURNS_BADGE_FONT_PX,
+    turnsClockPx: STATUS_TURNS_BADGE_CLOCK_PX,
+    turnsOutsetPx: STATUS_TURNS_BADGE_OUTSET_PX,
+    stackFontPx: 10,
+  },
+  // Icon catalog preview ("Bảng icon") size (32px frame, 20px glyph)
+  lg: {
+    boxPx: STATUS_CHIP_FRAME_PX,
+    iconFontPx: STATUS_CHIP_GLYPH_PX,
+    lucideSizePx: STATUS_CHIP_GLYPH_PX,
+    arrowBoxPx: STATUS_ARROW_BADGE_PX,
+    arrowFontPx: STATUS_ARROW_GLYPH_PX,
+    turnsFontPx: STATUS_TURNS_BADGE_FONT_PX,
+    turnsClockPx: STATUS_TURNS_BADGE_CLOCK_PX,
+    turnsOutsetPx: STATUS_TURNS_BADGE_OUTSET_PX,
+    stackFontPx: 10,
+  },
+};
+
+export interface StatusGeometryRect {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+export function rectsIntersect(
+  a: StatusGeometryRect,
+  b: StatusGeometryRect
+): boolean {
+  return !(
+    a.right <= b.left ||
+    a.left >= b.right ||
+    a.bottom <= b.top ||
+    a.top >= b.bottom
+  );
+}
+
+export function getStatusChipGeometry(
+  size: Exclude<StatusChipSizeVariant, 'xs'>,
+  badgeLayout: StatusBadgeLayout
+): {
+  framePx: number;
+  glyphBox: StatusGeometryRect;
+  turnsBadgeBox: StatusGeometryRect;
+  arrowBadgeBox: StatusGeometryRect;
+  stackBadgeBox: StatusGeometryRect;
+} {
+  const spec = STATUS_ICON_SIZE_SPECS[size];
+  const framePx = spec.boxPx;
+  const outset = spec.turnsOutsetPx;
+  const glyphMargin = (framePx - spec.iconFontPx) / 2;
+  const glyphBox: StatusGeometryRect = {
+    left: glyphMargin,
+    top: glyphMargin,
+    right: glyphMargin + spec.iconFontPx,
+    bottom: glyphMargin + spec.iconFontPx,
+  };
+
+  const makeCenteredRect = (
+    cx: number,
+    cy: number,
+    w: number,
+    h: number
+  ): StatusGeometryRect => ({
+    left: cx - w / 2,
+    top: cy - h / 2,
+    right: cx + w / 2,
+    bottom: cy + h / 2,
+  });
+
+  const turnsCx = badgeLayout === 'A' ? -outset : framePx + outset;
+  const turnsCy = framePx + outset;
+  const arrowCx = badgeLayout === 'A' ? framePx + outset : -outset;
+  const arrowCy = framePx + outset;
+
+  return {
+    framePx,
+    glyphBox,
+    turnsBadgeBox: makeCenteredRect(
+      turnsCx,
+      turnsCy,
+      STATUS_TURNS_BADGE_EST_WIDTH_PX,
+      STATUS_TURNS_BADGE_HEIGHT_PX
+    ),
+    arrowBadgeBox: makeCenteredRect(
+      arrowCx,
+      arrowCy,
+      spec.arrowBoxPx,
+      spec.arrowBoxPx
+    ),
+    stackBadgeBox: makeCenteredRect(
+      framePx + outset,
+      -outset,
+      STATUS_STACK_BADGE_EST_WIDTH_PX,
+      STATUS_STACK_BADGE_HEIGHT_PX
+    ),
+  };
+}
+
 export const BUILTIN_STATUS_DISPLAY_DEFAULTS: StatusDisplaySettings = {
   badgeLayout: 'B',
   phoneRows: 2,

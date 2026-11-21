@@ -1,0 +1,14 @@
+TASK G4a-C1 — Status chip polish (component only). Model: Hydrogen. If this prompt looks cut off, STOP and tell me the last words you can see.
+
+STEP A (first): save THIS WHOLE prompt verbatim to docs/tasks/G4a-C1.md and create docs/tasks/G4a-C1.progress.md with a checklist of items 1-4 (unticked); tick each item right after finishing it; at the end write docs/tasks/G4a-C1.report.md and print it. If interrupted or retried: read both files and continue from the first unticked item.
+
+RULES: change ONLY the status chip component and the constants it uses (StatusChip, FixedStatusArea sizing, src/utils/statusDisplayPrefs.ts if needed). Do NOT touch radar marker layout (G4a-3 does that: if the same component is used there with a mini size, keep that size and layout exactly as they are), unit card layout, sidebar, log, src/utils/battleVfx.ts, src/components/BattleVfxOverlay.tsx; CURRENT_SAVE_VERSION stays 9; keep the catalog frames (buff round green, debuff hexagon red), the stack xN badge as it is, the A/B badge layout and rows settings; new strings in vi.ts AND en.ts; no hard-coded sizes outside one constants file.
+
+STEP 0 (read-only, max 8 lines): current chip frame/glyph/text sizes, where the turns badge and the stack badge are positioned, where the status row height is computed (FixedStatusArea), which screens use the chip (cards, player bar, selected-unit panel, popovers/sheets, Bảng icon, legend) and which use a mini size.
+
+1. Sizes (one constants file): chip frame 32px (28px in the player bar strip), glyph 20px, value text 13px bold; row height = chip + gap, gap stays at least 14px; all status areas compute their height from these constants only.
+2. Turns badge: clock icon + number, number in YELLOW #F5C542 bold 11px on a dark pill (#0B1220 at 85%, 1px outline) so it stays readable on any frame; centered ON a frame corner (about 4px outside the frame), never overlapping the 20px glyph box; the A/B badge layout setting still chooses the corners.
+3. Check the screens from Step 0: the player block, the right-sidebar unit panel and the cards must not grow taller than about 8px per status row; if the player bar would exceed its current height by more than 8px, keep its default at 1 row. Bảng icon and legend show the new chip.
+4. Tests (vitest): chip frame constants (32 / 28) used by cards and bar; the turns number carries the yellow token; badge boxes computed from the constants do not intersect the glyph box; A/B layouts still swap corners; the status area height equals rows x (chip + gap); existing tests still pass.
+
+CHECKS: npx vitest run (report the baseline you started from), tsc --noEmit (lint_applet), production build. REPORT: Step 0 facts, files touched, test count, new heights of the player block, unit panel and one card with 2 status rows, what you could NOT verify in a real browser.
