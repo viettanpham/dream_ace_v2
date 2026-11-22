@@ -9,13 +9,20 @@ import type {
   IconCatalogModRow,
   StatusBadgeLayout,
 } from '../types/game';
+import {
+  STATUS_BADGE_SAFE_PX,
+  STATUS_CHIP_FRAME_PX,
+} from '../utils/statusDisplayPrefs';
 import { StatusChip } from './StatusChip';
 
 export const STATUS_BOARD_STORAGE_KEY = 'dreamAce.statusBoard.v1';
 export const STATUS_BOARD_HEADER_HEIGHT_PX = 28;
-export const STATUS_BOARD_ROW_HEIGHT_PX = 40;
+export const STATUS_BOARD_ROW_HEIGHT_PX =
+  STATUS_CHIP_FRAME_PX + 2 * STATUS_BADGE_SAFE_PX + 4;
 export const STATUS_BOARD_MAX_VISIBLE_ROWS = 4;
-export const STATUS_BOARD_DESKTOP_HEIGHT_PX = 190;
+export const STATUS_BOARD_DESKTOP_HEIGHT_PX =
+  STATUS_BOARD_HEADER_HEIGHT_PX +
+  STATUS_BOARD_MAX_VISIBLE_ROWS * STATUS_BOARD_ROW_HEIGHT_PX;
 export const STATUS_BOARD_DESKTOP_MAX_CHIPS = 6;
 export const STATUS_BOARD_PHONE_MAX_CHIPS = 4;
 
@@ -152,7 +159,7 @@ export function RadarStatusBoard({
           minHeight: `${STATUS_BOARD_ROW_HEIGHT_PX}px`,
           maxHeight: `${STATUS_BOARD_ROW_HEIGHT_PX}px`,
         }}
-        className={`w-full px-2 flex items-center gap-2 text-left transition-colors cursor-pointer min-w-0 overflow-hidden ${
+        className={`relative w-full px-2 flex items-center gap-2 text-left transition-colors cursor-pointer min-w-0 overflow-y-visible ${
           isSelected
             ? 'bg-sky-500/18 ring-1 ring-inset ring-sky-400/60'
             : 'hover:bg-slate-800/50'
@@ -171,7 +178,11 @@ export function RadarStatusBoard({
 
         <div
           data-testid={`status-board-chips-${unit.id}`}
-          className="flex items-center gap-2 min-w-0 flex-1 px-1"
+          style={{
+            paddingLeft: `${STATUS_BADGE_SAFE_PX}px`,
+            paddingRight: `${STATUS_BADGE_SAFE_PX}px`,
+          }}
+          className="flex items-center gap-2 min-w-0 flex-1 overflow-y-visible"
         >
           {visibleStatuses.map((st, idx) => (
             <StatusChip
@@ -221,7 +232,7 @@ export function RadarStatusBoard({
           ? ''
           : collapsed
           ? 'overflow-hidden'
-          : 'overflow-hidden h-[190px] min-h-[190px] max-h-[190px]'
+          : 'overflow-hidden h-[220px] min-h-[220px] max-h-[220px]'
       }`}
     >
       <button

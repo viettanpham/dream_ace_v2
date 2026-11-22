@@ -10,10 +10,15 @@ import { EN_TRANSLATIONS } from '../../i18n/en';
 import { VI_TRANSLATIONS } from '../../i18n/vi';
 import { useGameStore } from '../../store/useGameStore';
 import type { ActiveStatusEffect, BattleSize, BattleState, CombatUnit } from '../../types/game';
+import {
+  STATUS_BADGE_SAFE_PX,
+  STATUS_CHIP_FRAME_PX,
+} from '../../utils/statusDisplayPrefs';
 import { BattleScreen } from '../BattleScreen';
 import {
   STATUS_BOARD_DESKTOP_HEIGHT_PX,
   STATUS_BOARD_HEADER_HEIGHT_PX,
+  STATUS_BOARD_MAX_VISIBLE_ROWS,
   STATUS_BOARD_ROW_HEIGHT_PX,
   STATUS_BOARD_STORAGE_KEY,
 } from '../RadarStatusBoard';
@@ -158,13 +163,20 @@ describe('TASK G4a-3b — Radar Status Board (under radar)', () => {
     window.localStorage.clear();
   });
 
-  it('Item 1: Desktop/tablet board sits directly under radar with 28px header, Ta|Địch columns, 40px rows, max 6 32px chips + "+N", hides dead/empty units, constant 190px height for 0/1/8 rows, and collapses cleanly', () => {
+  it('Item 1: Desktop/tablet board sits directly under radar with 28px header, Ta|Địch columns, 48px rows (chip + 2*safe + 4), non-clipping chip area, max 6 32px chips + "+N", hides dead/empty units, constant 220px height for 0/1/8 rows, and collapses cleanly', () => {
     expect(CURRENT_SAVE_VERSION).toBe(9);
     expect(STATUS_BOARD_HEADER_HEIGHT_PX).toBe(28);
-    expect(STATUS_BOARD_ROW_HEIGHT_PX).toBe(40);
-    expect(STATUS_BOARD_DESKTOP_HEIGHT_PX).toBe(190);
+    expect(STATUS_BOARD_ROW_HEIGHT_PX).toBe(
+      STATUS_CHIP_FRAME_PX + 2 * STATUS_BADGE_SAFE_PX + 4
+    );
+    expect(STATUS_BOARD_ROW_HEIGHT_PX).toBe(48);
+    expect(STATUS_BOARD_DESKTOP_HEIGHT_PX).toBe(
+      STATUS_BOARD_HEADER_HEIGHT_PX +
+        STATUS_BOARD_MAX_VISIBLE_ROWS * STATUS_BOARD_ROW_HEIGHT_PX
+    );
+    expect(STATUS_BOARD_DESKTOP_HEIGHT_PX).toBe(220);
 
-    // Case A: 0 units with statuses (and dead / empty units present) -> muted empty line, constant 190px height
+    // Case A: 0 units with statuses (and dead / empty units present) -> muted empty line, constant 220px height
     const emptyUnits = [
       makeUnit('p1', 'Vance', 'ally', { isPlayer: true, statuses: [] }),
       makeUnit('a_dead', 'Fallen Wing', 'ally', {
@@ -192,8 +204,8 @@ describe('TASK G4a-3b — Radar Status Board (under radar)', () => {
           Node.DOCUMENT_POSITION_FOLLOWING
       )
     ).toBe(true);
-    expect(boardEmpty.style.height).toBe('190px');
-    expect(boardEmpty.className).toContain('h-[190px]');
+    expect(boardEmpty.style.height).toBe('220px');
+    expect(boardEmpty.className).toContain('h-[220px]');
     expect(
       boardEmpty.querySelector('[data-testid="status-board-header-title"]')?.textContent
     ).toBe('Trạng thái · Ta 0 · Địch 0');
@@ -213,7 +225,7 @@ describe('TASK G4a-3b — Radar Status Board (under radar)', () => {
     ) as HTMLElement;
     expect(mainHeader.className).toContain('max-h-[150px]');
 
-    // Case B: 1 unit with statuses (7 statuses -> max 6 32px chips + "+1"), hides dead & empty -> still constant 190px height
+    // Case B: 1 unit with statuses (7 statuses -> max 6 32px chips + "+1"), hides dead & empty -> still constant 220px height
     const sevenStatuses: ActiveStatusEffect[] = [
       makeStatus('burn', 2, true),
       makeStatus('slow', 3, true),
@@ -242,7 +254,7 @@ describe('TASK G4a-3b — Radar Status Board (under radar)', () => {
     const boardOne = container!.querySelector(
       '[data-testid="radar-status-board"]'
     ) as HTMLElement;
-    expect(boardOne.style.height).toBe('190px');
+    expect(boardOne.style.height).toBe('220px');
     expect(
       boardOne.querySelector('[data-testid="status-board-header-title"]')?.textContent
     ).toBe('Trạng thái · Ta 1 · Địch 0');
@@ -253,7 +265,21 @@ describe('TASK G4a-3b — Radar Status Board (under radar)', () => {
       '[data-testid="status-board-row-p1"]'
     ) as HTMLElement;
     expect(p1Row).not.toBeNull();
-    expect(p1Row.style.height).toBe('40px');
+    expect(p1Row.style.height).toBe('48px');
+    expect(p1Row.className).toContain('relative');
+    expect(p1Row.className).toContain('overflow-y-visible');
+    expect(p1Row.className).not.toContain('overflow-hidden');
+    const p1ChipsArea = p1Row.querySelector(
+      '[data-testid="status-board-chips-p1"]'
+    ) as HTMLElement;
+    expect(p1ChipsArea.className).toContain('overflow-y-visible');
+    expect(p1ChipsArea.className).not.toContain('overflow-hidden');
+    expect(parseFloat(p1ChipsArea.style.paddingLeft)).toBeGreaterThanOrEqual(
+      STATUS_BADGE_SAFE_PX
+    );
+    expect(parseFloat(p1ChipsArea.style.paddingRight)).toBeGreaterThanOrEqual(
+      STATUS_BADGE_SAFE_PX
+    );
     const p1Name = p1Row.querySelector(
       '[data-testid="status-board-name-p1"]'
     ) as HTMLElement;
@@ -267,7 +293,7 @@ describe('TASK G4a-3b — Radar Status Board (under radar)', () => {
       p1Row.querySelector('[data-testid="status-board-overflow-p1"]')?.textContent
     ).toBe('+1');
 
-    // Case C: 8 ally rows + 8 enemy rows -> inner scroll, still constant 190px height
+    // Case C: 8 ally rows + 8 enemy rows -> inner scroll, still constant 220px height
     const eightPerSide: CombatUnit[] = [];
     for (let i = 0; i < 8; i++) {
       eightPerSide.push(
@@ -294,7 +320,7 @@ describe('TASK G4a-3b — Radar Status Board (under radar)', () => {
     const boardEight = container!.querySelector(
       '[data-testid="radar-status-board"]'
     ) as HTMLElement;
-    expect(boardEight.style.height).toBe('190px');
+    expect(boardEight.style.height).toBe('220px');
     expect(
       boardEight.querySelector('[data-testid="status-board-header-title"]')?.textContent
     ).toBe('Trạng thái · Ta 8 · Địch 8');
@@ -407,10 +433,13 @@ describe('TASK G4a-3b — Radar Status Board (under radar)', () => {
       )
     ).toBe(true);
 
-    // Max 4 chips + "+2" on phone
+    // Max 4 chips + "+2" on phone and same 48px row height without clipping
     const p1Row = board.querySelector(
       '[data-testid="status-board-row-p1"]'
     ) as HTMLElement;
+    expect(p1Row.style.height).toBe('48px');
+    expect(p1Row.className).toContain('overflow-y-visible');
+    expect(p1Row.className).not.toContain('overflow-hidden');
     expect(
       p1Row.querySelectorAll('[data-testid^="status-board-chip-p1-"]').length
     ).toBe(4);

@@ -14,9 +14,7 @@ import {
   LayoutGrid,
   Maximize2,
   MessageSquare,
-  Minimize2,
   MoreHorizontal,
-  Package,
   Radar,
   Repeat,
   ScrollText,
@@ -31,7 +29,6 @@ import {
   ZapOff,
 } from 'lucide-react';
 import { BALANCE_CONFIG } from '../data/balance';
-import { RARITY_META } from '../data/items';
 import { getScaledSkillStats, getSkillById } from '../data/skills';
 import {
   getEffectiveUnitSpeed,
@@ -46,12 +43,10 @@ import {
   getAutoStopReasonLabel,
   getBattleSkillReason,
   getClassName,
-  getItemInstanceName,
   getSectorName,
   getSkillDesc,
   getSkillName,
   getSkillTargetLabel,
-  getSlotLabel,
   getTeamTagLabel,
   useI18n,
 } from '../i18n';
@@ -97,8 +92,13 @@ import {
   type SidebarCombatLogMode,
 } from '../utils/combatLogFormat';
 import { useStatusDisplaySettings } from '../utils/statusDisplayPrefs';
+import {
+  AutoRepeatBatchSummaryModal,
+  AutoRepeatToast,
+} from './AutoRepeatDialogs';
 import { BattleRadarView } from './BattleRadarView';
 import { BattleResultDialog } from './BattleResultDialog';
+import { CombatLogPopupSheet, PhoneUnitDetailSheet } from './BattleSheets';
 import { BattleStatsModal } from './BattleStatsModal';
 import { BattleUnitCard } from './BattleUnitCard';
 import { BottomSheet } from './BottomSheet';
@@ -114,7 +114,6 @@ import {
 import { SkillIcon } from './SkillIcon';
 import { StatBar } from './StatBar';
 import { TurnQueueBar } from './TurnQueueBar';
-import { UnitDetailSheet } from './UnitDetailSheet';
 
 const REPEAT_OPTIONS: AutoRepeatLimit[] = [1, 5, 10, 20, 'infinite'];
 const ROWS_ORDER: CombatRow[] = ['front', 'middle', 'back'];
@@ -3295,50 +3294,12 @@ export function BattleScreen() {
 
       {/* ==================== AUTO-REPEAT PER-BATTLE TOAST ==================== */}
       {autoRepeatToast && !showRepeatBatchSummary && (
-        <div
-          role="status"
-          aria-live="polite"
-          data-testid="battle-loop-toast"
-          className={`fixed top-14 left-1/2 -translate-x-1/2 z-50 w-[min(94vw,480px)] rounded-lg border px-3 py-2 shadow-2xl flex items-center justify-between gap-2 text-[12px] font-medium backdrop-blur-sm ${
-            autoRepeatToast.outcome === 'victory'
-              ? 'border-emerald-400/70 bg-[#0B1814]/95 text-emerald-100'
-              : 'border-amber-400/70 bg-[#1B130B]/95 text-amber-100'
-          }`}
-        >
-          <div className="flex items-center gap-2 min-w-0">
-            <Repeat
-              className={`w-4 h-4 shrink-0 ${
-                autoRepeatToast.outcome === 'victory'
-                  ? 'text-emerald-400'
-                  : 'text-amber-400'
-              }`}
-              aria-hidden="true"
-            />
-            <span className="truncate">
-              {t('battle.loopToastRun', {
-                run: autoRepeatToast.runNumber,
-                outcome: t(
-                  autoRepeatToast.outcome === 'victory'
-                    ? 'battle.loopToastVictory'
-                    : 'battle.loopToastDefeat'
-                ),
-                exp: autoRepeatToast.expGained.toLocaleString(),
-                credits: autoRepeatToast.creditsGained.toLocaleString(),
-                wp: autoRepeatToast.warPointsGained.toLocaleString(),
-                loot: autoRepeatToast.lootCount,
-              })}
-            </span>
-          </div>
-          <button
-            type="button"
-            data-testid="battle-loop-toast-close"
-            onClick={clearAutoRepeatToast}
-            aria-label={t('common.close')}
-            className="min-w-[28px] min-h-[28px] inline-flex items-center justify-center rounded hover:bg-white/10 text-slate-300 cursor-pointer shrink-0"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
-        </div>
+        <AutoRepeatToast
+          toast={autoRepeatToast}
+          lang={lang}
+          t={t}
+          onClearToast={clearAutoRepeatToast}
+        />
       )}
 
       {/* ==================== AUTO-REPEAT BATCH SUMMARY MODAL ==================== */}
@@ -3350,154 +3311,19 @@ export function BattleScreen() {
         onReloadBattle={() => startBattle(battle.sectorId)}
       >
         {showRepeatBatchSummary && autoRepeatSession && (
-          <div
-            className="fixed inset-0 z-40 bg-black/75 flex items-center justify-center p-4"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="repeat-summary-title"
-          >
-            <div className="w-full max-w-md rounded-lg border border-emerald-500/50 bg-[#0E1521] p-6 space-y-4 shadow-2xl max-h-[92vh] overflow-y-auto tactical-scroll">
-              <div className="space-y-1">
-                <div className="text-[12px] font-semibold tracking-widest uppercase text-emerald-400 flex items-center gap-1.5">
-                  <Repeat className="w-3.5 h-3.5" />
-                  <span>{getSectorName(lang, autoRepeatSession.sectorId)}</span>
-                </div>
-                <h2
-                  id="repeat-summary-title"
-                  className="font-display text-[20px] font-bold tracking-wide text-slate-50"
-                >
-                  {t('auto.repeatSummaryTitle')}
-                </h2>
-                {autoRepeatSession.stopReason && (
-                  <p
-                    data-testid="battle-loop-stop-reason"
-                    className="text-[13px] text-orange-300 font-medium"
-                  >
-                    {getAutoStopReasonLabel(
-                      lang,
-                      autoRepeatSession.stopReason,
-                      autoRepeatSession.defeatStreakLimit ??
-                        autoRepeatDefeatStreakLimit
-                    )}
-                  </p>
-                )}
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded border border-slate-800 bg-[#090D14] p-3">
-                  <div className="text-[12px] text-slate-400">
-                    {t('auto.repeatLabel')}
-                  </div>
-                  <div className="mt-0.5 font-mono-nums text-[20px] font-bold text-emerald-400">
-                    {t('auto.repeatSummaryRuns', {
-                      wins: autoRepeatSession.wins,
-                      runs: autoRepeatSession.completedRuns,
-                    })}
-                  </div>
-                </div>
-
-                <div className="rounded border border-slate-800 bg-[#090D14] p-3">
-                  <div className="text-[12px] text-slate-400">
-                    {t('summary.expEarned', {
-                      gear: getClassName(lang, battle.deployedGearId),
-                    })}
-                  </div>
-                  <div className="mt-0.5 font-mono-nums text-[20px] font-bold text-amber-400">
-                    +{autoRepeatSession.totalExp.toLocaleString()} EXP
-                  </div>
-                </div>
-
-                <div className="rounded border border-slate-800 bg-[#090D14] p-3">
-                  <div className="text-[12px] text-slate-400">
-                    {t('summary.creditsAwarded')}
-                  </div>
-                  <div className="mt-0.5 font-mono-nums text-[15px] font-bold text-slate-100">
-                    +{autoRepeatSession.totalCredits.toLocaleString()} CR
-                  </div>
-                </div>
-
-                <div className="rounded border border-purple-500/40 bg-purple-500/10 p-3">
-                  <div className="text-[12px] text-purple-200">
-                    {t('summary.warPointsAwarded')}
-                  </div>
-                  <div className="mt-0.5 font-mono-nums text-[15px] font-bold text-purple-300">
-                    +{autoRepeatSession.totalWarPoints.toLocaleString()} WP
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-[12px] text-slate-400">
-                  <span className="inline-flex items-center gap-1.5 font-semibold text-slate-200">
-                    <Package className="w-3.5 h-3.5 text-amber-400" />
-                    <span>{t('summary.dropsTitle')}</span>
-                  </span>
-                  <span className="font-mono-nums">
-                    {t('common.itemCount', {
-                      count: autoRepeatSession.totalDrops.length,
-                    })}
-                  </span>
-                </div>
-                {autoRepeatSession.totalDrops.length === 0 ? (
-                  <div className="rounded border border-slate-800/80 bg-[#090D14] px-3 py-2 text-[13px] text-slate-500">
-                    {t('summary.noDrops')}
-                  </div>
-                ) : (
-                  <div className="space-y-1.5 max-h-40 overflow-y-auto tactical-scroll">
-                    {autoRepeatSession.totalDrops.map((inst) => (
-                      <div
-                        key={inst.instanceId}
-                        className={`rounded border bg-[#090D14] px-3 py-1.5 flex items-center justify-between gap-2 ${
-                          RARITY_META[inst.rarity].borderClass
-                        }`}
-                      >
-                        <span
-                          className={`text-[13px] font-semibold truncate ${
-                            RARITY_META[inst.rarity].textClass
-                          }`}
-                        >
-                          {getItemInstanceName(lang, inst)}
-                        </span>
-                        <span className="text-[12px] font-mono-nums text-slate-400 shrink-0">
-                          {getSlotLabel(lang, inst.slot)} · T{inst.tier}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => setStatsModalOpen(true)}
-                  className="w-full min-h-[44px] px-4 rounded-lg border border-sky-500/50 bg-sky-500/12 hover:bg-sky-500/22 text-sky-200 font-semibold text-[13px] inline-flex items-center justify-center gap-2 transition-colors cursor-pointer"
-                >
-                  <BarChart3 className="w-4 h-4 text-sky-400" />
-                  <span>{t('stats.reportBtn')}</span>
-                </button>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={returnToHangar}
-                    className="flex-1 min-h-[44px] px-4 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold text-[13px] transition-colors cursor-pointer"
-                  >
-                    {t('nav.returnHangar')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      clearAutoRepeatSummary();
-                      startAutoRepeat(autoRepeatLimit, battle.sectorId);
-                    }}
-                    className="flex-1 min-h-[44px] px-4 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-100 font-medium text-[13px] transition-colors cursor-pointer"
-                  >
-                    {t('auto.repeatStart')}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
+          <AutoRepeatBatchSummaryModal
+            session={autoRepeatSession}
+            deployedGearId={battle.deployedGearId}
+            autoRepeatDefeatStreakLimit={autoRepeatDefeatStreakLimit}
+            autoRepeatLimit={autoRepeatLimit}
+            sectorId={battle.sectorId}
+            lang={lang}
+            t={t}
+            onOpenReport={() => setStatsModalOpen(true)}
+            onReturnHangar={returnToHangar}
+            onClearSummary={clearAutoRepeatSummary}
+            onStartAutoRepeat={startAutoRepeat}
+          />
         )}
       </ErrorBoundary>
 
@@ -3533,24 +3359,14 @@ export function BattleScreen() {
         onClose={() => setPhoneUnitSheetId(null)}
         onReloadBattle={() => startBattle(battle.sectorId)}
       >
-        <UnitDetailSheet
+        <PhoneUnitDetailSheet
           unit={phoneSheetUnit}
+          selectedTargetId={battle.selectedTargetId}
+          selectedAllyTargetId={battle.selectedAllyTargetId}
+          hasSingleAllySkill={hasSingleAllySkill}
+          canPlayerManualAct={canPlayerManualAct}
+          validBasicTargetIds={validBasicTargetIds}
           onClose={() => setPhoneUnitSheetId(null)}
-          isTargeted={Boolean(
-            phoneSheetUnit &&
-              ((phoneSheetUnit.side === 'enemy' &&
-                battle.selectedTargetId === phoneSheetUnit.id) ||
-                (phoneSheetUnit.side === 'ally' &&
-                  hasSingleAllySkill &&
-                  battle.selectedAllyTargetId === phoneSheetUnit.id))
-          )}
-          canLockEnemy={canPlayerManualAct}
-          canLockAlly={canPlayerManualAct && hasSingleAllySkill}
-          frontRowBlocked={Boolean(
-            phoneSheetUnit &&
-              phoneSheetUnit.side === 'enemy' &&
-              !validBasicTargetIds.has(phoneSheetUnit.id)
-          )}
           onLockEnemy={selectTarget}
           onLockAlly={selectAllyTarget}
         />
@@ -3565,71 +3381,18 @@ export function BattleScreen() {
         onReloadBattle={() => startBattle(battle.sectorId)}
       >
         {logSheetOpen && (
-          <div
-            data-testid="combat-log-popup"
-            className="fixed inset-0 z-[60] flex items-end md:items-center justify-center bg-slate-950/70 p-0 md:p-4"
-            role="dialog"
-            aria-modal="false"
-            aria-label={t('battle.combatLog')}
-            onClick={(e) => {
-              if (e.target === e.currentTarget) setLogSheetOpen(false);
-            }}
-          >
-            <div className="w-full md:max-w-2xl h-[82dvh] max-h-[88dvh] flex flex-col rounded-t-2xl md:rounded-xl border-t md:border border-slate-700/90 bg-[#0B111C] text-slate-100 shadow-2xl overflow-hidden pb-safe">
-              <div className="md:hidden pt-2.5 pb-1 flex justify-center shrink-0">
-                <span className="w-10 h-1 rounded-full bg-slate-700" />
-              </div>
-
-              <div className="px-4 py-2.5 border-b border-slate-800/90 flex items-center justify-between gap-2 shrink-0">
-                <div className="min-w-0 flex items-center gap-2">
-                  <ScrollText className="w-4 h-4 text-sky-400 shrink-0" />
-                  <div className="min-w-0">
-                    <div className="text-[15px] font-bold text-slate-100 truncate">
-                      {t('battle.combatLog')}
-                    </div>
-                    <div className="text-[11px] font-mono-nums text-slate-400">
-                      {t('battle.eventsCount', { count: battle.log.length })}
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
-                  {renderCombatLogExpandButtons(false)}
-                  <button
-                    type="button"
-                    data-testid="combat-log-popup-dock-btn"
-                    onClick={() => setLogSheetOpen(false)}
-                    className="min-h-[36px] px-2.5 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200 text-[12px] font-semibold inline-flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Minimize2 className="w-3.5 h-3.5 text-sky-400" />
-                    <span>{t('log.modeDocked')}</span>
-                  </button>
-                  <button
-                    type="button"
-                    data-testid="combat-log-popup-close"
-                    onClick={() => setLogSheetOpen(false)}
-                    aria-label={t('common.close')}
-                    className="min-w-[36px] min-h-[36px] flex items-center justify-center rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-slate-100 transition-colors cursor-pointer"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-                <CombatLogList
-                  entries={battle.log}
-                  units={battle.units}
-                  active={logSheetOpen}
-                  density="comfortable"
-                  mode="popup"
-                  channel={logChannel}
-                  onChannelChange={setLogChannel}
-                  expandAll={logExpandAll}
-                  expandNonce={logExpandNonce}
-                />
-              </div>
-            </div>
-          </div>
+          <CombatLogPopupSheet
+            open={logSheetOpen}
+            entries={battle.log}
+            units={battle.units}
+            channel={logChannel}
+            expandAll={logExpandAll}
+            expandNonce={logExpandNonce}
+            expandButtons={renderCombatLogExpandButtons(false)}
+            t={t}
+            onClose={() => setLogSheetOpen(false)}
+            onChannelChange={setLogChannel}
+          />
         )}
       </ErrorBoundary>
 

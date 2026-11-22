@@ -1,0 +1,6 @@
+# TASK SB3-RF1 Progress Checklist
+
+- [x] 1. ITEM 1: Fix `RadarStatusBoard.tsx` badge clipping (`rowHeight = chip(32) + 2*STATUS_BADGE_SAFE_PX + 4 = 48px`, `overflow-y: visible` on chip area, `>= STATUS_BADGE_SAFE_PX` side padding, desktop expanded height constant `220px` replacing `190px`/`h-[190px]`, empty state keeps `220px`, collapsed = header only, phone has same row height & no inner scroll, relative rows without z-index hacks). Update/add tests for RadarStatusBoard.
+- [x] 2. ITEM 2: Pure move of AUTO-REPEAT per-battle toast + AUTO-REPEAT BATCH SUMMARY MODAL (`BattleScreen.tsx` ~3296-3503) verbatim into `src/components/AutoRepeatDialogs.tsx` with same `ErrorBoundary` wrappers, render conditions, and testids.
+- [x] 3. ITEM 3: Pure move of PHONE UNIT DETAIL SHEET + COMBAT LOG POPUP SHEET (`BattleScreen.tsx` ~3528-3635) verbatim into `src/components/BattleSheets.tsx` with same `ErrorBoundary` wrappers, render conditions, and testids.
+- [x] 4. TESTS & CHECKS: Add render tests for `AutoRepeatDialogs` and `BattleSheets`; run `npx vitest run`, `tsc --noEmit` / `lint_applet`, production build; update `docs/CODEMAP.md` and `BattleScreen.tsx` line count; write and print `docs/tasks/SB3-RF1.report.md`.
