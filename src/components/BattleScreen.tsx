@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   AlertTriangle,
@@ -98,7 +98,11 @@ import { BattleUnitCard } from './BattleUnitCard';
 import { CombatLogList } from './CombatLogList';
 import { ErrorBoundary } from './ErrorBoundary';
 import { FieldSuppliesSheet } from './FieldSuppliesSheet';
-import { FixedStatusArea } from './FixedStatusArea';
+import {
+  CARD_STATUS_FALLBACK_WIDTH_PX,
+  FixedStatusArea,
+  countStatusChipRows,
+} from './FixedStatusArea';
 import { PhoneSkillsSheet } from './PhoneSkillsSheet';
 import {
   RadarStatusBoard,
@@ -557,6 +561,111 @@ export function BattleScreen() {
       activeUnit.alive &&
       !isPlayerCharging
   );
+
+  const currentBattleMeta = useMemo(() => {
+    if (!battle) return null;
+    return {
+      sectorId: battle.sectorId,
+      deployedGearId: battle.deployedGearId,
+      unitSig: battle.units.map((u) => u.id).join('|'),
+      turnCounter: battle.turnCounter,
+      round: battle.round,
+      hadSummary: Boolean(battle.summary),
+    };
+  }, [battle]);
+
+  const currentLaneStatusRows = useMemo((): Record<CombatRow, number> => {
+    const result: Record<CombatRow, number> = {
+      front: 0,
+      middle: 0,
+      back: 0,
+    };
+    if (!battle) return result;
+    for (const row of ROWS_ORDER) {
+      let maxRows = 0;
+      for (const unit of battle.units) {
+        if (!unit.alive || unit.row !== row) continue;
+        const needed = countStatusChipRows(unit.statuses, {
+          lang,
+          unit,
+          iconMods: adminConfig.iconCatalogMods,
+          showLabels: fxSettings.showStatusLabels,
+          compact: false,
+          containerWidthPx: CARD_STATUS_FALLBACK_WIDTH_PX,
+        });
+        if (needed > maxRows) maxRows = needed;
+      }
+      result[row] = Math.min(2, maxRows);
+    }
+    return result;
+  }, [
+    battle,
+    lang,
+    adminConfig.iconCatalogMods,
+    fxSettings.showStatusLabels,
+  ]);
+
+  const [laneStatusState, setLaneStatusState] = useState<{
+    meta: typeof currentBattleMeta;
+    rows: Record<CombatRow, number>;
+  }>(() => ({
+    meta: currentBattleMeta,
+    rows: currentLaneStatusRows,
+  }));
+
+  const isNewBattleForLaneRows = useMemo(() => {
+    const prev = laneStatusState.meta;
+    const curr = currentBattleMeta;
+    if (!curr || !prev) return true;
+    if (curr.sectorId !== prev.sectorId) return true;
+    if (curr.deployedGearId !== prev.deployedGearId) return true;
+    if (curr.unitSig !== prev.unitSig) return true;
+    if (curr.turnCounter < prev.turnCounter) return true;
+    if (curr.round < prev.round) return true;
+    if (prev.hadSummary && !curr.hadSummary) return true;
+    return false;
+  }, [laneStatusState.meta, currentBattleMeta]);
+
+  const laneStatusRows = useMemo((): Record<CombatRow, number> => {
+    if (isNewBattleForLaneRows) return currentLaneStatusRows;
+    return {
+      front: Math.max(laneStatusState.rows.front, currentLaneStatusRows.front),
+      middle: Math.max(laneStatusState.rows.middle, currentLaneStatusRows.middle),
+      back: Math.max(laneStatusState.rows.back, currentLaneStatusRows.back),
+    };
+  }, [isNewBattleForLaneRows, laneStatusState.rows, currentLaneStatusRows]);
+
+  useEffect(() => {
+    const prev = laneStatusState.meta;
+    const curr = currentBattleMeta;
+    const metaChanged =
+      (!prev && Boolean(curr)) ||
+      (Boolean(prev) && !curr) ||
+      (Boolean(prev) &&
+        Boolean(curr) &&
+        (prev!.sectorId !== curr!.sectorId ||
+          prev!.deployedGearId !== curr!.deployedGearId ||
+          prev!.unitSig !== curr!.unitSig ||
+          prev!.turnCounter !== curr!.turnCounter ||
+          prev!.round !== curr!.round ||
+          prev!.hadSummary !== curr!.hadSummary));
+    const rowsChanged =
+      laneStatusState.rows.front !== laneStatusRows.front ||
+      laneStatusState.rows.middle !== laneStatusRows.middle ||
+      laneStatusState.rows.back !== laneStatusRows.back;
+    if (isNewBattleForLaneRows || metaChanged || rowsChanged) {
+      setLaneStatusState({
+        meta: currentBattleMeta,
+        rows: laneStatusRows,
+      });
+    }
+  }, [
+    isNewBattleForLaneRows,
+    currentBattleMeta,
+    laneStatusRows,
+    laneStatusState.meta,
+    laneStatusState.rows,
+  ]);
 
   // Clean up all per-ID expiry timers on unmount
   useEffect(() => {
@@ -1354,7 +1463,11 @@ export function BattleScreen() {
     return t('radar.invalidFrontAlive');
   };
 
-  const renderCardUnit = (unit: CombatUnit, compact: boolean) => {
+  const renderCardUnit = (
+    unit: CombatUnit,
+    compact: boolean,
+    statusRows: number
+  ) => {
     const isEnemy = unit.side === 'enemy';
     const frontBlocked =
       isEnemy && unit.alive && !validBasicTargetIds.has(unit.id);
@@ -1366,6 +1479,7 @@ export function BattleScreen() {
         compact={compact}
         frontBlocked={frontBlocked}
         wingmanChatText={null}
+        statusRows={statusRows}
         isActiveTurn={activeUnitId === unit.id && !battle.summary}
         isTargeted={
           isEnemy
@@ -1405,94 +1519,96 @@ export function BattleScreen() {
     );
   };
 
-  const renderThreeRowCardSide = (
+  const renderCardSideHeader = (side: 'ally' | 'enemy', withTestId = true) => (
+    <div
+      data-testid={withTestId ? `card-side-${side}` : undefined}
+      className="flex items-center justify-between text-[13px] px-1 min-w-0"
+    >
+      <span
+        className="font-display text-[14px] font-bold tracking-wider uppercase truncate"
+        style={{
+          color: side === 'enemy' ? 'var(--team-enemy)' : 'var(--team-ally)',
+        }}
+      >
+        {side === 'enemy' ? t('battle.tabEnemies') : t('battle.tabAllies')}
+      </span>
+      <span className="font-mono-nums text-[12px] text-slate-400 shrink-0">
+        {side === 'enemy'
+          ? `${aliveEnemiesCount}/${enemies.length}`
+          : `${aliveAlliesCount}/${allies.length}`}
+      </span>
+    </div>
+  );
+
+  const renderEmptyBothLaneLine = (row: CombatRow, spanTwo: boolean) => (
+    <div
+      key={`empty-both-${row}`}
+      data-card-row-empty={row}
+      className={`${
+        spanTwo ? 'col-span-2' : ''
+      } min-w-0 h-[20px] min-h-[20px] max-h-[20px] overflow-hidden rounded border border-dashed border-slate-800/70 bg-slate-950/25 px-2 flex items-center text-[12px] leading-none font-mono-nums font-bold text-slate-500`}
+    >
+      <span className="truncate">{getRowTitle(row)}</span>
+    </div>
+  );
+
+  const renderCardLaneCell = (
     side: 'ally' | 'enemy',
+    row: CombatRow,
     units: CombatUnit[],
     compact: boolean
   ) => {
-    const exposureMap =
-      side === 'enemy' ? enemyExposure : allyExposure;
-    const orderedRows: CombatRow[] = ROWS_ORDER;
+    const exposureMap = side === 'enemy' ? enemyExposure : allyExposure;
+    const exposure = exposureMap?.[row] ?? 'empty';
+    const isExposed = exposure === 'exposed';
+    const isProtected = exposure === 'protected';
+    const rowUnits = units
+      .filter((u) => u.row === row)
+      .sort((a, b) => (a.formationCol ?? 0) - (b.formationCol ?? 0));
+
+    const borderClasses = isExposed
+      ? side === 'enemy'
+        ? 'border-red-500/45 bg-red-950/15'
+        : 'border-sky-500/45 bg-sky-950/15'
+      : isProtected
+      ? 'border-dashed border-slate-700/90 bg-slate-950/55'
+      : 'border-dashed border-slate-800/70 bg-slate-950/25';
+
+    if (rowUnits.length === 0) {
+      return (
+        <div
+          key={`${side}-${row}`}
+          data-card-row={`${side}-${row}`}
+          data-row-state={exposure}
+          className={`min-w-0 min-h-[20px] overflow-hidden rounded-lg border p-1.5 ${borderClasses}`}
+        />
+      );
+    }
 
     return (
-      <div className="space-y-1.5 min-w-0" data-testid={`card-side-${side}`}>
-        <div className="flex items-center justify-between text-[13px] px-1">
+      <div
+        key={`${side}-${row}`}
+        data-card-row={`${side}-${row}`}
+        data-row-state={exposure}
+        className={`min-w-0 overflow-hidden rounded-lg border p-1.5 flex flex-col gap-1 ${borderClasses}`}
+      >
+        <div className="flex items-center px-1 text-[12px] font-mono-nums font-bold min-w-0">
           <span
-            className="font-display text-[14px] font-bold tracking-wider uppercase truncate"
-            style={{
-              color:
-                side === 'enemy' ? 'var(--team-enemy)' : 'var(--team-ally)',
-            }}
+            className={
+              isExposed
+                ? side === 'enemy'
+                  ? 'text-red-300'
+                  : 'text-sky-300'
+                : 'text-slate-400'
+            }
           >
-            {side === 'enemy'
-              ? t('battle.tabEnemies')
-              : t('battle.tabAllies')}
-          </span>
-          <span className="font-mono-nums text-[12px] text-slate-400 shrink-0">
-            {side === 'enemy'
-              ? `${aliveEnemiesCount}/${enemies.length}`
-              : `${aliveAlliesCount}/${allies.length}`}
+            {getRowTitle(row)}
           </span>
         </div>
 
-        {orderedRows.map((row) => {
-          const rowUnits = units
-            .filter((u) => u.row === row)
-            .sort((a, b) => (a.formationCol ?? 0) - (b.formationCol ?? 0));
-          const exposure = exposureMap?.[row] ?? 'empty';
-          const isExposed = exposure === 'exposed';
-          const isProtected = exposure === 'protected';
-
-          return (
-            <div
-              key={`${side}-${row}`}
-              data-card-row={`${side}-${row}`}
-              data-row-state={exposure}
-              className={`min-w-0 overflow-hidden rounded-lg border p-1.5 space-y-1 ${
-                isExposed
-                  ? side === 'enemy'
-                    ? 'border-red-500/45 bg-red-950/15'
-                    : 'border-sky-500/45 bg-sky-950/15'
-                  : isProtected
-                  ? 'border-dashed border-slate-700/90 bg-slate-950/55'
-                  : 'border-dashed border-slate-800/70 bg-slate-950/25'
-              }`}
-            >
-              <div className="flex items-center justify-between gap-2 px-1 text-[12px] font-mono-nums font-bold min-w-0">
-                <span
-                  className={
-                    isExposed
-                      ? side === 'enemy'
-                        ? 'text-red-300'
-                        : 'text-sky-300'
-                      : 'text-slate-400'
-                  }
-                >
-                  {getRowTitle(row)}
-                </span>
-                <span
-                  className={`px-1.5 py-0.2 rounded text-[12px] shrink-0 ${
-                    isExposed
-                      ? side === 'enemy'
-                        ? 'bg-red-500/20 text-red-200'
-                        : 'bg-sky-500/20 text-sky-200'
-                      : isProtected
-                      ? 'bg-amber-500/15 text-amber-300'
-                      : 'text-slate-500'
-                  }`}
-                >
-                  {getExposureLabel(exposure)}
-                </span>
-              </div>
-
-              {rowUnits.length > 0 && (
-                <div className="space-y-1 min-w-0">
-                  {rowUnits.map((u) => renderCardUnit(u, compact))}
-                </div>
-              )}
-            </div>
-          );
-        })}
+        <div className="space-y-1 min-w-0">
+          {rowUnits.map((u) => renderCardUnit(u, compact, laneStatusRows[row]))}
+        </div>
       </div>
     );
   };
@@ -1558,8 +1674,27 @@ export function BattleScreen() {
           )}
 
           <div className="flex flex-col gap-2.5">
-            {renderThreeRowCardSide('ally', allies, true)}
-            {renderThreeRowCardSide('enemy', enemies, true)}
+            {(['ally', 'enemy'] as const).map((side) => {
+              const sideUnits = side === 'enemy' ? enemies : allies;
+              return (
+                <div
+                  key={side}
+                  className="space-y-1.5 min-w-0"
+                  data-testid={`card-side-${side}`}
+                >
+                  {renderCardSideHeader(side, false)}
+                  {ROWS_ORDER.map((row) => {
+                    const hasAnySide =
+                      allies.some((u) => u.row === row) ||
+                      enemies.some((u) => u.row === row);
+                    if (!hasAnySide) {
+                      return renderEmptyBothLaneLine(row, false);
+                    }
+                    return renderCardLaneCell(side, row, sideUnits, true);
+                  })}
+                </div>
+              );
+            })}
           </div>
         </div>
       );
@@ -1583,9 +1718,25 @@ export function BattleScreen() {
           style={{ touchAction: 'pan-y' }}
           className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden tactical-scroll touch-pan-y p-1"
         >
-          <div className="min-w-0 w-full grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2 items-start">
-            {renderThreeRowCardSide('ally', allies, false)}
-            {renderThreeRowCardSide('enemy', enemies, false)}
+          <div
+            data-testid="card-lane-grid"
+            className="min-w-0 w-full grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-x-2 gap-y-1.5 items-stretch"
+          >
+            {renderCardSideHeader('ally', true)}
+            {renderCardSideHeader('enemy', true)}
+            {ROWS_ORDER.map((row) => {
+              const hasAlly = allies.some((u) => u.row === row);
+              const hasEnemy = enemies.some((u) => u.row === row);
+              if (!hasAlly && !hasEnemy) {
+                return renderEmptyBothLaneLine(row, true);
+              }
+              return (
+                <Fragment key={`lane-row-${row}`}>
+                  {renderCardLaneCell('ally', row, allies, false)}
+                  {renderCardLaneCell('enemy', row, enemies, false)}
+                </Fragment>
+              );
+            })}
           </div>
         </div>
       </div>

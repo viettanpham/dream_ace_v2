@@ -235,7 +235,7 @@ describe('TASK C2 — Status chip unclipping + 14px bold arrow badge', () => {
       statuses: fiveStatuses,
     });
     const enemy = makeUnit('e1', 'Vanguard 1', 'enemy', {
-      statuses: fiveStatuses,
+      statuses: fiveStatuses.slice(0, 2),
     });
     const battle = makeBattle([player, enemy]);
     useGameStore.setState({ screen: 'BATTLE', battle, battleViewMode: 'card' });
@@ -267,9 +267,9 @@ describe('TASK C2 — Status chip unclipping + 14px bold arrow badge', () => {
     expect(padTop).toBeGreaterThanOrEqual(STATUS_BADGE_SAFE_PX);
     expect(padBottom).toBeGreaterThanOrEqual(STATUS_BADGE_SAFE_PX);
 
-    // Non-scroll FixedStatusArea inside BattleUnitCard is overflow-visible
+    // Non-scroll FixedStatusArea inside BattleUnitCard (e1 has 2 statuses fitting in lane's 2 rows) is overflow-visible
     const cardStatusArea = container!.querySelector(
-      '[data-testid="card-status-row-p1"]'
+      '[data-testid="card-status-row-e1"]'
     ) as HTMLElement;
     expect(cardStatusArea).not.toBeNull();
     expect(cardStatusArea.className).toContain('overflow-visible');

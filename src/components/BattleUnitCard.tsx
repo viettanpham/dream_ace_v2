@@ -21,7 +21,10 @@ import {
 } from '../utils/battleDisplay';
 import { resolveReducedMotion, useFxSettings } from '../utils/battleVfx';
 import { useStatusDisplaySettings } from '../utils/statusDisplayPrefs';
-import { FixedStatusArea } from './FixedStatusArea';
+import {
+  CARD_STATUS_FALLBACK_WIDTH_PX,
+  FixedStatusArea,
+} from './FixedStatusArea';
 
 interface BattleUnitCardProps {
   unit: CombatUnit;
@@ -36,6 +39,8 @@ interface BattleUnitCardProps {
   wingmanChatText?: string | null;
   popups: FloatingPopup[];
   showStatusLabels?: boolean;
+  /** Explicit per-lane status row budget (0 = omit status area, 1..2 = fixed rows). Undefined keeps standalone activeUnitRows fallback. */
+  statusRows?: number;
   onSelect?: () => void;
   onInspect?: () => void;
 }
@@ -206,6 +211,7 @@ export const BattleUnitCard = memo(function BattleUnitCard({
   frontBlocked = false,
   popups,
   showStatusLabels = true,
+  statusRows,
   onSelect,
   onInspect,
 }: BattleUnitCardProps) {
@@ -217,6 +223,10 @@ export const BattleUnitCard = memo(function BattleUnitCard({
   const iconMods = useGameStore((s) => s.adminConfig.iconCatalogMods);
   const { settings: statusSettings, activeUnitRows } =
     useStatusDisplaySettings(adminStatusDefaults);
+  const effectiveStatusRows =
+    statusRows !== undefined
+      ? Math.max(0, Math.min(2, Math.round(statusRows)))
+      : activeUnitRows;
   const osReducedMotion = usePrefersReducedMotion();
   const resolvedReducedMotion = resolveReducedMotion(
     fxSettings.reducedMotionMode,
@@ -360,7 +370,7 @@ export const BattleUnitCard = memo(function BattleUnitCard({
       onPointerCancel={cancelLongPress}
       onPointerLeave={cancelLongPress}
       style={rowStyle}
-      className={`relative w-full min-w-0 overflow-hidden min-h-[50px] rounded-lg border px-2 py-1 flex flex-col gap-1 transition-colors select-none ${rowClass} ${
+      className={`relative w-full min-w-0 overflow-hidden rounded-lg border px-2 py-1 flex flex-col gap-1 transition-colors select-none ${rowClass} ${
         isClickable ? 'cursor-pointer' : ''
       } ${isStealthed ? 'border-dashed opacity-75' : ''} ${
         frontBlocked ? 'opacity-65' : ''
@@ -540,22 +550,25 @@ export const BattleUnitCard = memo(function BattleUnitCard({
         </div>
       </div>
 
-      {/* Fixed-Height Status Area (always reserves N rows even when 0 effects) */}
-      <FixedStatusArea
-        statuses={unit.statuses}
-        rows={activeUnitRows}
-        unit={unit}
-        unitTitle={unit.name}
-        badgeLayout={statusSettings.badgeLayout}
-        iconMods={iconMods}
-        showLabels={showStatusLabels}
-        fallbackWidthPx={280}
-        rootTestId={`card-status-row-${unit.id}`}
-        chipTestIdPrefix={`card-status-chip-${unit.id}`}
-        labelTestIdPrefix={`card-status-label-${unit.id}`}
-        overflowTestId={`card-status-overflow-${unit.id}`}
-        className="pl-1"
-      />
+      {/* Dynamic Status Area (omitted when statusRows === 0) */}
+      {effectiveStatusRows > 0 && (
+        <FixedStatusArea
+          statuses={unit.statuses}
+          rows={effectiveStatusRows}
+          unit={unit}
+          unitTitle={unit.name}
+          badgeLayout={statusSettings.badgeLayout}
+          iconMods={iconMods}
+          showLabels={showStatusLabels}
+          fallbackWidthPx={CARD_STATUS_FALLBACK_WIDTH_PX}
+          scrollOnOverflow={statusRows !== undefined}
+          showOverflowMarkInScroll={statusRows !== undefined}
+          rootTestId={`card-status-row-${unit.id}`}
+          chipTestIdPrefix={`card-status-chip-${unit.id}`}
+          labelTestIdPrefix={`card-status-label-${unit.id}`}
+          overflowTestId={`card-status-overflow-${unit.id}`}
+        />
+      )}
     </div>
   );
 });
