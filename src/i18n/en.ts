@@ -1638,6 +1638,14 @@ export const EN_TRANSLATIONS = {
   'cloud.overwriteExportBtn': 'Export save (SV1a) first',
   'cloud.overwriteConfirmBtn': 'Overwrite',
   'cloud.overwriteExported': 'Exported backup file: {filename}',
+
+  // Radar Status Board (G4a-3b)
+  'statusBoard.header': 'Statuses · Ally {allies} · Enemy {enemies}',
+  'statusBoard.allyCol': 'Ally',
+  'statusBoard.enemyCol': 'Enemy',
+  'statusBoard.empty': 'No active effects',
+  'statusBoard.collapseLabel': 'Collapse status board',
+  'statusBoard.expandLabel': 'Expand status board',
 } as const;
 
 export type TranslationKey = keyof typeof EN_TRANSLATIONS;

@@ -110,6 +110,11 @@ import { CombatLogList } from './CombatLogList';
 import { EffectsSettingsPanel } from './EffectsSettingsPanel';
 import { ErrorBoundary } from './ErrorBoundary';
 import { FixedStatusArea } from './FixedStatusArea';
+import {
+  RadarStatusBoard,
+  readStatusBoardCollapsed,
+  writeStatusBoardCollapsed,
+} from './RadarStatusBoard';
 import { SkillIcon } from './SkillIcon';
 import { StatBar } from './StatBar';
 import { TurnQueueBar } from './TurnQueueBar';
@@ -230,6 +235,9 @@ export function BattleScreen() {
     readCombatLogExpandAll()
   );
   const [logExpandNonce, setLogExpandNonce] = useState<number>(0);
+  const [statusBoardCollapsed, setStatusBoardCollapsed] = useState<boolean>(() =>
+    readStatusBoardCollapsed()
+  );
   const [cardToast, setCardToast] = useState<string | null>(null);
   const popupCleanupTimersRef = useRef<Map<string, number>>(new Map());
   const fxCleanupTimersRef = useRef<Map<string, number>>(new Map());
@@ -446,6 +454,14 @@ export function BattleScreen() {
     setLogExpandAll(false);
     writeCombatLogExpandAll(false);
     setLogExpandNonce((n) => n + 1);
+  };
+
+  const handleToggleStatusBoard = () => {
+    setStatusBoardCollapsed((prev) => {
+      const next = !prev;
+      writeStatusBoardCollapsed(next);
+      return next;
+    });
   };
 
   const renderLogModeSegmented = () => (
@@ -1511,6 +1527,7 @@ export function BattleScreen() {
           showStatusLabels={fxSettings.showStatusLabels}
           playerWeaponId={playerWeaponId}
           layoutMode={layoutMode}
+          selectedUnitId={inspectedUnitId}
           onSelectEnemy={(id) => {
             selectTarget(id);
             setInspectedUnitId(id);
@@ -2311,6 +2328,30 @@ export function BattleScreen() {
             {renderFieldContent()}
           </div>
 
+          {effectiveViewMode === 'radar' && (
+            <div className="px-2 pt-2">
+              <RadarStatusBoard
+                units={battle.units}
+                variant="phone"
+                collapsed={statusBoardCollapsed}
+                onToggleCollapse={handleToggleStatusBoard}
+                selectedUnitId={inspectedUnitId}
+                onSelectUnit={(unit) => {
+                  setInspectedUnitId(unit.id);
+                  if (unit.side === 'enemy') {
+                    if (validBasicTargetIds.has(unit.id)) {
+                      selectTarget(unit.id);
+                    }
+                  } else {
+                    selectAllyTarget(unit.id);
+                  }
+                }}
+                badgeLayout={statusSettings.badgeLayout}
+                iconMods={adminConfig.iconCatalogMods}
+              />
+            </div>
+          )}
+
           <div
             data-testid="battle-phone-radar-log-gap"
             aria-hidden="true"
@@ -2675,6 +2716,28 @@ export function BattleScreen() {
             >
               {renderFieldContent()}
             </div>
+
+            {effectiveViewMode === 'radar' && (
+              <RadarStatusBoard
+                units={battle.units}
+                variant="desktop"
+                collapsed={statusBoardCollapsed}
+                onToggleCollapse={handleToggleStatusBoard}
+                selectedUnitId={inspectedUnitId}
+                onSelectUnit={(unit) => {
+                  setInspectedUnitId(unit.id);
+                  if (unit.side === 'enemy') {
+                    if (validBasicTargetIds.has(unit.id)) {
+                      selectTarget(unit.id);
+                    }
+                  } else {
+                    selectAllyTarget(unit.id);
+                  }
+                }}
+                badgeLayout={statusSettings.badgeLayout}
+                iconMods={adminConfig.iconCatalogMods}
+              />
+            )}
 
             {/* Pinned Action Bar Under the Field (hidden when Auto is ON to avoid duplicating the top Auto indicator) */}
             {!autoBattleEnabled && (

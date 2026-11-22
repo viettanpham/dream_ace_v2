@@ -99,6 +99,7 @@ interface BattleRadarViewProps {
   showStatusLabels?: boolean;
   playerWeaponId?: string | null;
   layoutMode?: BattleLayoutMode;
+  selectedUnitId?: string | null;
   onSelectEnemy: (unitId: string) => void;
   onSelectAlly: (unitId: string) => void;
   onInspectUnit: (unit: CombatUnit) => void;
@@ -628,6 +629,7 @@ interface RadarUnitMarkerProps {
   facingAngle: number;
   isActive: boolean;
   isTargeted: boolean;
+  isSelected: boolean;
   isBlockedByRow: boolean;
   autoBattleEnabled: boolean;
   animationsSkipped: boolean;
@@ -654,6 +656,7 @@ const RadarUnitMarker = memo(function RadarUnitMarker({
   facingAngle,
   isActive,
   isTargeted,
+  isSelected,
   isBlockedByRow,
   autoBattleEnabled,
   animationsSkipped,
@@ -720,6 +723,7 @@ const RadarUnitMarker = memo(function RadarUnitMarker({
       data-low-hp={ringResult.isLowHp ? 'true' : 'false'}
       data-acting={isActive ? 'true' : 'false'}
       data-targeted={isTargeted ? 'true' : 'false'}
+      data-selected={isSelected || isTargeted ? 'true' : 'false'}
       data-blocked-by-row={isBlockedByRow ? 'true' : 'false'}
       data-unit-down="false"
       transform={`translate(${x}, ${y})`}
@@ -774,6 +778,19 @@ const RadarUnitMarker = memo(function RadarUnitMarker({
               r={ringOuterRadius + 4.5}
               fill="rgba(254, 240, 138, 0.12)"
               stroke="#fef08a"
+              strokeWidth="2.2"
+            />
+          )}
+
+          {/* Selected Unit Ring (triggered by status board row selection or direct inspection) */}
+          {isSelected && unit.alive && (
+            <circle
+              data-testid={`radar-selected-ring-${unit.id}`}
+              cx="0"
+              cy="0"
+              r={ringOuterRadius + 6}
+              fill="rgba(56, 189, 248, 0.14)"
+              stroke="#38bdf8"
               strokeWidth="2.2"
             />
           )}
@@ -1164,6 +1181,7 @@ export function BattleRadarView({
   showStatusLabels: _showStatusLabelsProp,
   playerWeaponId = null,
   layoutMode: layoutModeProp,
+  selectedUnitId = null,
   onSelectEnemy,
   onSelectAlly,
   onInspectUnit,
@@ -2135,6 +2153,7 @@ export function BattleRadarView({
               facingAngle={facingAngle}
               isActive={isActive}
               isTargeted={isTargeted}
+              isSelected={selectedUnitId === unit.id}
               isBlockedByRow={isBlockedByRow}
               autoBattleEnabled={autoBattleEnabled}
               animationsSkipped={animationsSkipped}

@@ -1641,6 +1641,14 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'cloud.overwriteExportBtn': 'Xuất save (SV1a) trước',
   'cloud.overwriteConfirmBtn': 'Ghi đè',
   'cloud.overwriteExported': 'Đã xuất bản sao dự phòng: {filename}',
+
+  // Bảng trạng thái dưới radar (G4a-3b)
+  'statusBoard.header': 'Trạng thái · Ta {allies} · Địch {enemies}',
+  'statusBoard.allyCol': 'Ta',
+  'statusBoard.enemyCol': 'Địch',
+  'statusBoard.empty': 'Không có hiệu ứng',
+  'statusBoard.collapseLabel': 'Thu gọn bảng trạng thái',
+  'statusBoard.expandLabel': 'Mở rộng bảng trạng thái',
 };
 
 
