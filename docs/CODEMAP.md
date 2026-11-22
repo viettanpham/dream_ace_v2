@@ -1,0 +1,40 @@
+# CODEMAP — read this first, open only the files you need
+Rule: every task reads this file first, finds code with grep on symbols, opens only matching files (line ranges for files over 300 lines), and appends one line per new file it opens: "path — what it does (key functions)".
+
+## Largest files (lines) — avoid reading whole
+src/store/useGameStore.ts 3981; src/components/BattleScreen.tsx 3918; src/engine/combat.ts 3860; src/components/GearView.tsx 2829; src/components/BattleRadarView.tsx 2424; src/components/AdminPanel.tsx 2139; src/components/ShopScreen.tsx 1933; src/components/BattleStatsModal.tsx 1757; src/store/useCloudSaveStore.ts 1721; src/i18n/vi.ts 1654; src/i18n/en.ts 1653; src/engine/cloudSave.ts 1620; src/engine/tactics.ts 1500; src/components/BattleVfxOverlay.tsx 1496; src/components/MapView.tsx 1359; src/components/CloudSaveDialogs.tsx 1321; src/utils/battleDisplay.ts 1249; src/types/game.ts 1248; src/components/TurnQueueBar.tsx 1170; src/utils/combatLogFormat.ts 1129
+
+## Battle setup, formation, lanes
+- src/store/useGameStore.ts — persisted campaign store, battle launcher, and squad formation actions (`startBattle()`, `moveSquadUnitRow()`, `autoArrangeSquadFormation()`)
+- src/engine/combat.ts — battle initialization, NPC skill loadouts, enemy roster/targeting, row modifiers, and combat resolution (`createInitialBattleState()`, `archetypeRosterBySize` (4/6/8), `buildCombatUnit()`, `buildNpcSkillLoadout()`, `getValidEnemyTargets()`, `getValidAllyTargets()`, `isLongRangeAction()`, `getAdjacentUnits()`, `getEffectiveUnitDefense()`)
+- src/engine/formation.ts — formation sanitization, row moves/swaps, auto-placement, and default squad builder (`autoPlaceFormation()`, `pickRowForClass()`, `moveUnitToRow()`, `enforceFormationCapacities()`, `createDefaultSquadFormation()`)
+- src/data/formationConfig.ts — centralized 3-row capacities, row modifiers, and class placement preferences (`DEFAULT_FORMATION_CONFIG` front 3 / middle 3 / back 2 / max 8 per side, `CLASS_FORMATION_PREFERENCES` striker front>middle>back, interceptor front/middle>back, siege back>middle>front, support middle/back>front, `cloneFormationConfig()`)
+- src/data/pilots.ts — ally pilot name pool and enemy archetype stat/status templates (`ALLY_PILOT_POOL`, `ENEMY_ARCHETYPE_DEFS`, `ENEMY_PREFIXES`)
+- src/data/classes.ts — player GEAR class definitions, roles, base stats, and growth tables (`MECH_CLASSES`, `MECH_CLASS_LIST`, `STAT_META`)
+- src/data/skills.ts — 38-skill catalog, starter skills per class, and skill level scaling (`SKILLS_LIST`, `CLASS_STARTER_SKILLS`, `getScaledSkillStats()`, `getSkillById()`)
+- src/data/maps.ts — sector definitions, battle sizes, garrisons, and map lanes (`SECTORS_CATALOG`, `MAP_LANES`, `getSectorById()`)
+- src/components/FormationEditor.tsx (inside src/components/GarageView.tsx) — player formation UI (`FormationEditor`); src/components/AdminPanel.tsx edits capacities and row modifiers
+- Rules: rows `front`/`middle`/`back` = `TIỀN`/`TRUNG`/`HẬU TUYẾN`; `front` `+10% DEF`, `back` `-10% DEF` and `+10%` ranged DMG; `"Lộ diện"` = first row with an alive unit
+
+## Battle UI
+- src/components/BattleScreen.tsx — battle screen layout, control row, sidebar
+- src/components/BattleRadarView.tsx — tactical 3-row SVG radar markers, lanes, floating labels, and lane buff formatting (`BattleRadarView`, `formatRadarLaneBuffText()`, `computeLaneTokenRadius()`)
+- src/components/RadarStatusBoard.tsx — collapsible status board under the radar (`RadarStatusBoard`)
+- src/components/StatusChip.tsx — shared compact status icon chip (`StatusChip`)
+- src/components/TurnQueueBar.tsx — turn order conveyor strip and sidebar queue (`TurnQueueBar`)
+- src/components/BattleStatsModal.tsx — post-battle and live combat statistics modal (`BattleStatsModal`)
+- src/utils/combatLogFormat.ts — combat log formatting and sidebar log mode prefs (`LOG_MODE_STORAGE_KEY`)
+- src/utils/battleDisplay.ts — UI constants, row exposure states, and target validity helpers (`computeRowExposure()`, `evaluateRadarTargetValidity()`, `formatShortUnitName()`)
+- src/components/BattleVfxOverlay.tsx + src/utils/battleVfx.ts — combat FX overlay and VFX config (do not touch unless the task is FX)
+
+## Save and cloud
+- src/engine/migration.ts — save validation and version migration (`CURRENT_SAVE_VERSION = 9`)
+- src/engine/saveExport.ts — SV1a JSON export/import and checksum validation
+- src/engine/cloudSave.ts + src/store/useCloudSaveStore.ts + src/components/CloudSaveDialogs.tsx — Firebase Auth/Firestore cloud save sync
+
+## Other
+- src/components/GearView.tsx — gear loadout, equipment, and inventory management
+- src/components/ShopScreen.tsx — item, gear, and WP market shop
+- src/components/MapView.tsx — sector campaign map and base status view
+- src/i18n/vi.ts + src/i18n/en.ts — bilingual translations (every new string in both)
+- src/types/game.ts — shared domain and battle state types
