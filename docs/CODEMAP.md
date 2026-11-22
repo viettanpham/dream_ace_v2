@@ -14,6 +14,7 @@ src/store/useGameStore.ts 3981; src/components/BattleScreen.tsx 3918; src/engine
 - src/data/skills.ts — 38-skill catalog, starter skills per class, and skill level scaling (`SKILLS_LIST`, `CLASS_STARTER_SKILLS`, `getScaledSkillStats()`, `getSkillById()`)
 - src/data/maps.ts — sector definitions, battle sizes, garrisons, and map lanes (`SECTORS_CATALOG`, `MAP_LANES`, `getSectorById()`)
 - src/components/FormationEditor.tsx (inside src/components/GarageView.tsx) — player formation UI (`FormationEditor`); src/components/AdminPanel.tsx edits capacities and row modifiers
+- src/engine/__tests__/formation.test.ts + src/engine/__tests__/formationLanes.test.ts — 3-row formation, targeting, migration, and 500-seed lane-reservation regression tests
 - Rules: rows `front`/`middle`/`back` = `TIỀN`/`TRUNG`/`HẬU TUYẾN`; `front` `+10% DEF`, `back` `-10% DEF` and `+10%` ranged DMG; `"Lộ diện"` = first row with an alive unit
 
 ## Battle UI

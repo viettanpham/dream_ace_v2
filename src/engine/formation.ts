@@ -305,14 +305,29 @@ export function pickRowForClass(
   classId: MechClassId,
   counts: Record<CombatRow, number>,
   config: FormationConfig = DEFAULT_FORMATION_CONFIG,
-  options?: { rng?: () => number; randomVariation?: number }
+  options?: {
+    rng?: () => number;
+    randomVariation?: number;
+    reservedMidBackSlots?: number;
+  }
 ): CombatRow {
   const pref = CLASS_FORMATION_PREFERENCES[classId] ?? CLASS_FORMATION_PREFERENCES.striker;
   const caps = config.rowCapacities;
   const rng = options?.rng ?? Math.random;
   const variation = options?.randomVariation ?? 0;
+  const reservedMidBack = Math.max(0, options?.reservedMidBackSlots ?? 0);
 
   let candidateOrder: CombatRow[] = [...pref.preferred];
+
+  // If unplaced support/siege units still need middle/back capacity, keep front-preferring
+  // classes (striker, interceptor) out of middle/back while an unreserved row (front) has room.
+  const freeMidBack =
+    Math.max(0, caps.middle - counts.middle) +
+    Math.max(0, caps.back - counts.back);
+  const reserveBlocksMidBack =
+    reservedMidBack > 0 &&
+    pref.preferred[0] === 'front' &&
+    freeMidBack <= reservedMidBack;
 
   // For flex classes (Interceptor: front/middle, Support: middle/back), allow random variation on enemy squads;
   // deterministic auto-placement follows preferred priority order so front/middle/back fill cleanly without starving flex classes.
@@ -333,6 +348,16 @@ export function pickRowForClass(
     }
   }
 
+  for (const row of candidateOrder) {
+    if (counts[row] < caps[row]) {
+      if (reserveBlocksMidBack && (row === 'middle' || row === 'back')) {
+        continue;
+      }
+      return row;
+    }
+  }
+
+  // If every non-reserved row (e.g. front) is already full, fall back to any row with remaining capacity
   for (const row of candidateOrder) {
     if (counts[row] < caps[row]) {
       return row;
@@ -373,13 +398,21 @@ export function autoPlaceFormation<
   }));
   indexed.sort((a, b) => a.priority - b.priority || a.idx - b.idx);
 
+  // Track how many remaining unplaced units require middle/back rows (support & siege)
+  // so strict swaps or interceptor flex placements never starve supports into the front lane.
+  let remainingMidBackNeeders = indexed.filter(
+    (entry) =>
+      entry.unit.classId === 'support' || entry.unit.classId === 'siege'
+  ).length;
+
   for (const entry of indexed) {
-    const chosen = pickRowForClass(
-      entry.unit.classId,
-      counts,
-      config,
-      options
-    );
+    if (entry.unit.classId === 'support' || entry.unit.classId === 'siege') {
+      remainingMidBackNeeders -= 1;
+    }
+    const chosen = pickRowForClass(entry.unit.classId, counts, config, {
+      ...options,
+      reservedMidBackSlots: remainingMidBackNeeders,
+    });
     counts[chosen] += 1;
     assignedRows.set(entry.unit.id, chosen);
   }
