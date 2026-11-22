@@ -28,7 +28,10 @@ import type {
   TeamColorRole,
 } from '../types/game';
 import { BALANCE_CONFIG } from '../data/balance';
-import { AUTO_REPEAT_MAX_DEFEAT_STREAK } from '../engine/tactics';
+import {
+  clampDefeatStreakLimit,
+  DEFAULT_DEFEAT_STREAK_LIMIT,
+} from '../utils/battleDisplay';
 import { EN_TRANSLATIONS, type TranslationKey } from './en';
 import { VI_TRANSLATIONS } from './vi';
 
@@ -418,11 +421,12 @@ export function getTeamTagLabel(lang: Language, role: TeamColorRole): string {
 
 export function getAutoStopReasonLabel(
   lang: Language,
-  reason: AutoStopReason
+  reason: AutoStopReason,
+  streakLimit: number = DEFAULT_DEFEAT_STREAK_LIMIT
 ): string {
   return translate(lang, `auto.repeatReason.${reason}` as TranslationKey, {
     max: BALANCE_CONFIG.maxInventorySize,
-    streak: AUTO_REPEAT_MAX_DEFEAT_STREAK,
+    streak: clampDefeatStreakLimit(streakLimit),
   });
 }
 
@@ -884,6 +888,17 @@ function formatCombatLogBody(
       return translate(lang, 'log.invalidTarget', {
         target: String(p.target ?? ''),
         reason: translate(lang, reasonKey),
+      });
+    }
+
+    case 'log.autoRepeatStopped': {
+      const stopReason = String(p.reason ?? 'manual_stop') as AutoStopReason;
+      const streak =
+        typeof p.streak === 'number'
+          ? p.streak
+          : DEFAULT_DEFEAT_STREAK_LIMIT;
+      return translate(lang, 'log.autoRepeatStopped', {
+        reason: getAutoStopReasonLabel(lang, stopReason, streak),
       });
     }
 

@@ -215,7 +215,8 @@ export function isSystemOrKillLogEntry(entry: CombatLogEntry): boolean {
     entry.templateKey === 'log.destroyed' ||
     entry.templateKey === 'log.battleStart' ||
     entry.templateKey === 'log.retreat' ||
-    entry.templateKey === 'log.invalidTarget'
+    entry.templateKey === 'log.invalidTarget' ||
+    entry.templateKey === 'log.autoRepeatStopped'
   );
 }
 

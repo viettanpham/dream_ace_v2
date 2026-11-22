@@ -638,6 +638,11 @@ export type AutoStopReason =
   | 'inventory_full'
   | 'manual_stop';
 
+export type AutoRepeatDefeatRule =
+  | 'stop_immediately'
+  | 'stop_after_n'
+  | 'never_stop';
+
 export interface AutoRepeatSession {
   active: boolean;
   limit: AutoRepeatLimit;
@@ -645,6 +650,7 @@ export interface AutoRepeatSession {
   completedRuns: number;
   wins: number;
   consecutiveDefeats?: number;
+  defeatStreakLimit?: number;
   totalExp: number;
   totalCredits: number;
   totalWarPoints: number;
@@ -846,7 +852,8 @@ export type CombatLogTemplateKey =
   | 'log.silencedBlocked'
   | 'log.wingmanChat'
   | 'log.unitMovesRow'
-  | 'log.invalidTarget';
+  | 'log.invalidTarget'
+  | 'log.autoRepeatStopped';
 
 export interface CombatLogEntry {
   id: string;
@@ -1074,7 +1081,7 @@ export interface BattleState {
   summary: BattleSummary | null;
 }
 
-export type BattleSpeed = 1 | 2 | 3 | 5 | 10;
+export type BattleSpeed = 1 | 2 | 3 | 5 | 10 | 12 | 15 | 20 | 30;
 
 export interface AutoEquipClassWeights {
   attack: number;

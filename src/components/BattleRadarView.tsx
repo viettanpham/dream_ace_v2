@@ -49,6 +49,7 @@ import {
   layoutUnitStatusIcons,
   RADAR_STATUS_MAX_VISIBLE,
   readRadarLegendOpen,
+  shouldSkipRadarFloatingLabels,
   SPEECH_BUBBLE_DURATION_MS,
   SPEECH_BUBBLE_MAX_CHARS,
   useBattleLayoutMode,
@@ -1296,6 +1297,8 @@ export function BattleRadarView({
     [lang]
   );
 
+  const skipFloatingLabelsForSpeed = shouldSkipRadarFloatingLabels(battleSpeed);
+
   // Sync incoming popups & dead units into per-unit floating label queue
   useEffect(() => {
     if (battle.turnCounter < lastTurnForPopupsRef.current) {
@@ -1304,6 +1307,22 @@ export function BattleRadarView({
       floatingTimersRef.current.clear();
     }
     lastTurnForPopupsRef.current = battle.turnCounter;
+
+    // LP2 High speed safety: at >=15x, skip queueing floating labels so queue never lags behind battle
+    if (skipFloatingLabelsForSpeed) {
+      for (const pop of battle.popups) {
+        seenPopupIdsRef.current.add(pop.id);
+      }
+      floatingTimersRef.current.forEach((id) => window.clearTimeout(id));
+      floatingTimersRef.current.clear();
+      setFloatingQueue((prev) =>
+        Object.keys(prev.activeByUnit).length === 0 &&
+        Object.keys(prev.queuedByUnit).length === 0
+          ? prev
+          : createRadarFloatingLabelQueue()
+      );
+      return;
+    }
 
     const aliveIds = new Set(
       battle.units.filter((u) => u.alive).map((u) => u.id)
@@ -1323,11 +1342,11 @@ export function BattleRadarView({
       }
       return next;
     });
-  }, [battle.popups, battle.units, battle.turnCounter]);
+  }, [battle.popups, battle.units, battle.turnCounter, skipFloatingLabelsForSpeed]);
 
   // Schedule 600ms auto-advance per active floating label slot
   useEffect(() => {
-    if (!vfxConfig.showFloatingNumbers) {
+    if (!vfxConfig.showFloatingNumbers || skipFloatingLabelsForSpeed) {
       floatingTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
       floatingTimersRef.current.clear();
       return;
@@ -1355,7 +1374,7 @@ export function BattleRadarView({
         floatingTimersRef.current.delete(key);
       }
     });
-  }, [floatingQueue, vfxConfig.showFloatingNumbers]);
+  }, [floatingQueue, vfxConfig.showFloatingNumbers, skipFloatingLabelsForSpeed]);
 
   // Auto-hide speech bubble after 1.5s cleanly even when rendered standalone
   useEffect(() => {
@@ -1636,6 +1655,7 @@ export function BattleRadarView({
 
   // One active floating label per alive unit, fixed 18px slot strictly ABOVE the unit ring
   const activeFloatingLabels = useMemo(() => {
+    if (skipFloatingLabelsForSpeed) return [];
     const items: Array<{
       popup: FloatingPopup;
       leftPct: number;

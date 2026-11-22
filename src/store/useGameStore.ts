@@ -84,6 +84,18 @@ import {
 } from '../engine/skills';
 import { sanitizeStatusDisplayDefaults } from '../utils/statusDisplayPrefs';
 import {
+  ALLOWED_BATTLE_SPEEDS,
+  clampDefeatStreakLimit,
+  DEFAULT_DEFEAT_STREAK_LIMIT,
+  isValidBattleSpeed,
+  LOOP_PREFS_STORAGE_KEY,
+  migrateLegacyLoopPrefs,
+  readDeviceBattleSpeed,
+  readDeviceLoopPrefs,
+  writeDeviceBattleSpeed,
+  writeDeviceLoopPrefs,
+} from '../utils/battleDisplay';
+import {
   fillEmptyStarterSlotsForPilot,
   grantStarterSetToGear,
 } from '../engine/starter';
@@ -110,6 +122,7 @@ import type {
   AdminConfig,
   AutoEquipPlan,
   AutoEquipUndoSnapshot,
+  AutoRepeatDefeatRule,
   AutoRepeatLimit,
   AutoRepeatRunToast,
   AutoRepeatSession,
@@ -287,6 +300,8 @@ interface GameStoreState {
   autoBattleEnabled: boolean;
   tacticsModalOpen: boolean;
   autoRepeatLimit: AutoRepeatLimit;
+  autoRepeatDefeatRule: AutoRepeatDefeatRule;
+  autoRepeatDefeatStreakLimit: number;
   autoRepeatStopOnDefeat: boolean;
   autoRepeatSession: AutoRepeatSession | null;
   autoRepeatToast: AutoRepeatRunToast | null;
@@ -360,6 +375,8 @@ interface GameStoreState {
   reorderTacticsRules: (fromIndex: number, toIndex: number) => void;
   updateTacticsSafety: (patch: Partial<AutoSafetyConfig>) => void;
   setAutoRepeatLimit: (limit: AutoRepeatLimit) => void;
+  setAutoRepeatDefeatRule: (rule: AutoRepeatDefeatRule) => void;
+  setAutoRepeatDefeatStreakLimit: (limit: number) => void;
   setAutoRepeatStopOnDefeat: (stopOnDefeat: boolean) => void;
   startAutoRepeat: (limit?: AutoRepeatLimit, sectorId?: string) => void;
   stopAutoRepeat: (reason?: AutoStopReason) => void;
@@ -691,6 +708,7 @@ function finalizeBattleOutcome(
   // Update Auto-Repeat batch session if active (or stopped manually during current run)
   let nextAutoRepeat = state.autoRepeatSession;
   let nextAutoRepeatToast: AutoRepeatRunToast | null = null;
+  let finalLog = extraLog;
   if (
     state.autoRepeatSession &&
     (state.autoRepeatSession.active ||
@@ -699,11 +717,15 @@ function finalizeBattleOutcome(
     const nextConsecutiveDefeats = won
       ? 0
       : (state.autoRepeatSession.consecutiveDefeats ?? 0) + 1;
+    const streakLimit = clampDefeatStreakLimit(
+      state.autoRepeatDefeatStreakLimit
+    );
     const updatedSession: AutoRepeatSession = {
       ...state.autoRepeatSession,
       completedRuns: state.autoRepeatSession.completedRuns + 1,
       wins: state.autoRepeatSession.wins + (won ? 1 : 0),
       consecutiveDefeats: nextConsecutiveDefeats,
+      defeatStreakLimit: streakLimit,
       totalExp: state.autoRepeatSession.totalExp + effectiveExpGained,
       totalCredits: state.autoRepeatSession.totalCredits + rewards.creditsGained,
       totalWarPoints:
@@ -717,15 +739,33 @@ function finalizeBattleOutcome(
         retreated,
         nextPilot.inventory.length,
         BALANCE_CONFIG.maxInventorySize,
-        state.autoRepeatStopOnDefeat
+        state.autoRepeatDefeatRule,
+        streakLimit
       );
       if (stopCheck.stop) {
+        const finalReason = updatedSession.stopReason ?? stopCheck.reason;
         nextAutoRepeat = {
           ...updatedSession,
           active: false,
-          stopReason: updatedSession.stopReason ?? stopCheck.reason,
+          stopReason: finalReason,
         };
         nextAutoRepeatToast = null;
+        if (finalReason) {
+          finalLog = [
+            ...extraLog,
+            {
+              id: `log_repeat_stop_${Date.now()}_${extraTurnCounter}`,
+              round: battle.round,
+              actorName: 'SYSTEM',
+              tag: 'SYSTEM' as const,
+              templateKey: 'log.autoRepeatStopped' as const,
+              params: {
+                reason: finalReason,
+                streak: streakLimit,
+              },
+            },
+          ];
+        }
       } else {
         nextAutoRepeat = updatedSession;
         nextAutoRepeatToast = {
@@ -758,7 +798,7 @@ function finalizeBattleOutcome(
       ...battle,
       units: updatedUnits,
       turnCounter: extraTurnCounter,
-      log: extraLog,
+      log: finalLog,
       events: extraEvents,
       roundSnapshots: appendRoundSnapshot(
         battle.roundSnapshots,
@@ -795,6 +835,8 @@ function finalizeBattleOutcome(
 }
 
 const initialFresh = createFreshCampaignState('Vance', 'striker');
+const initialDeviceLoopPrefs = readDeviceLoopPrefs();
+const initialDeviceSpeed = readDeviceBattleSpeed();
 
 export function isBattleActive(
   state?: Pick<GameStoreState, 'screen' | 'battle'>
@@ -809,6 +851,7 @@ export const useGameStore = create<GameStoreState>()(
   persist(
     (set, get) => ({
       ...initialFresh,
+      battleSpeed: initialDeviceSpeed ?? initialFresh.battleSpeed,
       screen: 'TITLE',
       activeTab: 'gear',
       shopSubTab: 'buy',
@@ -818,7 +861,10 @@ export const useGameStore = create<GameStoreState>()(
       autoBattleEnabled: false,
       tacticsModalOpen: false,
       autoRepeatLimit: 1,
-      autoRepeatStopOnDefeat: true,
+      autoRepeatDefeatRule: initialDeviceLoopPrefs.defeatRule,
+      autoRepeatDefeatStreakLimit: initialDeviceLoopPrefs.defeatStreakLimit,
+      autoRepeatStopOnDefeat:
+        initialDeviceLoopPrefs.defeatRule === 'stop_immediately',
       autoRepeatSession: null,
       autoRepeatToast: null,
       quickSellUndo: null,
@@ -896,6 +942,7 @@ export const useGameStore = create<GameStoreState>()(
         soundFx.playClick();
         clearImportBackupRaw();
         const fresh = createFreshCampaignState('Vance', 'striker');
+        const deviceLoopPrefs = readDeviceLoopPrefs();
         set({
           ...fresh,
           language: state.language,
@@ -911,7 +958,10 @@ export const useGameStore = create<GameStoreState>()(
           shopSubTab: 'buy',
           autoRepeatSession: null,
           autoRepeatToast: null,
-          autoRepeatStopOnDefeat: true,
+          autoRepeatDefeatRule: deviceLoopPrefs.defeatRule,
+          autoRepeatDefeatStreakLimit: deviceLoopPrefs.defeatStreakLimit,
+          autoRepeatStopOnDefeat:
+            deviceLoopPrefs.defeatRule === 'stop_immediately',
           quickSellUndo: null,
           autoEquipUndo: null,
           hasImportBackup: false,
@@ -1371,9 +1421,43 @@ export const useGameStore = create<GameStoreState>()(
         set({ autoRepeatLimit });
       },
 
+      setAutoRepeatDefeatRule: (autoRepeatDefeatRule) => {
+        soundFx.playClick();
+        const limit = clampDefeatStreakLimit(get().autoRepeatDefeatStreakLimit);
+        writeDeviceLoopPrefs({
+          defeatRule: autoRepeatDefeatRule,
+          defeatStreakLimit: limit,
+        });
+        set({
+          autoRepeatDefeatRule,
+          autoRepeatStopOnDefeat: autoRepeatDefeatRule === 'stop_immediately',
+        });
+      },
+
+      setAutoRepeatDefeatStreakLimit: (rawLimit) => {
+        const clamped = clampDefeatStreakLimit(rawLimit);
+        const defeatRule = get().autoRepeatDefeatRule;
+        writeDeviceLoopPrefs({
+          defeatRule,
+          defeatStreakLimit: clamped,
+        });
+        set({ autoRepeatDefeatStreakLimit: clamped });
+      },
+
       setAutoRepeatStopOnDefeat: (autoRepeatStopOnDefeat) => {
         soundFx.playClick();
-        set({ autoRepeatStopOnDefeat });
+        const nextRule: AutoRepeatDefeatRule = autoRepeatStopOnDefeat
+          ? 'stop_immediately'
+          : 'stop_after_n';
+        const limit = clampDefeatStreakLimit(get().autoRepeatDefeatStreakLimit);
+        writeDeviceLoopPrefs({
+          defeatRule: nextRule,
+          defeatStreakLimit: limit,
+        });
+        set({
+          autoRepeatDefeatRule: nextRule,
+          autoRepeatStopOnDefeat,
+        });
       },
 
       startAutoRepeat: (limit, sectorId) => {
@@ -1381,6 +1465,9 @@ export const useGameStore = create<GameStoreState>()(
         const chosenLimit = limit ?? state.autoRepeatLimit;
         const chosenSector =
           sectorId ?? state.battle?.sectorId ?? state.selectedSectorId;
+        const streakLimit = clampDefeatStreakLimit(
+          state.autoRepeatDefeatStreakLimit
+        );
 
         if (state.pilot.inventory.length >= BALANCE_CONFIG.maxInventorySize) {
           set({
@@ -1393,6 +1480,7 @@ export const useGameStore = create<GameStoreState>()(
               completedRuns: 0,
               wins: 0,
               consecutiveDefeats: 0,
+              defeatStreakLimit: streakLimit,
               totalExp: 0,
               totalCredits: 0,
               totalWarPoints: 0,
@@ -1415,6 +1503,7 @@ export const useGameStore = create<GameStoreState>()(
             completedRuns: 0,
             wins: 0,
             consecutiveDefeats: 0,
+            defeatStreakLimit: streakLimit,
             totalExp: 0,
             totalCredits: 0,
             totalWarPoints: 0,
@@ -1433,12 +1522,36 @@ export const useGameStore = create<GameStoreState>()(
         const state = get();
         if (!state.autoRepeatSession) return;
         soundFx.playClick();
+        const finalReason = state.autoRepeatSession.stopReason ?? reason;
+        const streakLimit = clampDefeatStreakLimit(
+          state.autoRepeatSession.defeatStreakLimit ??
+            state.autoRepeatDefeatStreakLimit
+        );
         set({
           autoRepeatSession: {
             ...state.autoRepeatSession,
             active: false,
-            stopReason: state.autoRepeatSession.stopReason ?? reason,
+            stopReason: finalReason,
           },
+          battle: state.battle
+            ? {
+                ...state.battle,
+                log: [
+                  ...state.battle.log,
+                  {
+                    id: `log_repeat_stop_${Date.now()}_${state.battle.turnCounter}`,
+                    round: state.battle.round,
+                    actorName: 'SYSTEM',
+                    tag: 'SYSTEM' as const,
+                    templateKey: 'log.autoRepeatStopped' as const,
+                    params: {
+                      reason: finalReason,
+                      streak: streakLimit,
+                    },
+                  },
+                ],
+              }
+            : null,
         });
       },
 
@@ -2223,7 +2336,7 @@ export const useGameStore = create<GameStoreState>()(
         if (!activeUnit || !activeUnit.isPlayer || !activeUnit.alive) return;
 
         const skipVisualFx = state.skipAnimations;
-        const muteSound = state.skipAnimations || state.battleSpeed === 10;
+        const muteSound = state.skipAnimations || state.battleSpeed >= 10;
 
         // Route single_ally skills to selectedAllyTargetId; offensive actions to selectedTargetId
         const skillDef = skillId ? getSkillById(skillId) : undefined;
@@ -2400,17 +2513,39 @@ export const useGameStore = create<GameStoreState>()(
         }
         if (safetyEval.shouldStopAuto && safetyEval.reason) {
           soundFx.playEvade();
+          const safetyReason = safetyEval.reason;
           set((prev) => ({
             autoBattleEnabled: false,
             autoRepeatSession: prev.autoRepeatSession?.active
               ? {
                   ...prev.autoRepeatSession,
                   active: false,
-                  stopReason: safetyEval.reason,
+                  stopReason: safetyReason,
                 }
               : prev.autoRepeatSession,
             battle: prev.battle
-              ? { ...prev.battle, autoStopNotice: safetyEval.reason }
+              ? {
+                  ...prev.battle,
+                  autoStopNotice: safetyReason,
+                  log: prev.autoRepeatSession?.active
+                    ? [
+                        ...prev.battle.log,
+                        {
+                          id: `log_repeat_stop_${Date.now()}_${prev.battle.turnCounter}`,
+                          round: prev.battle.round,
+                          actorName: 'SYSTEM',
+                          tag: 'SYSTEM' as const,
+                          templateKey: 'log.autoRepeatStopped' as const,
+                          params: {
+                            reason: safetyReason,
+                            streak: clampDefeatStreakLimit(
+                              prev.autoRepeatDefeatStreakLimit
+                            ),
+                          },
+                        },
+                      ]
+                    : prev.battle.log,
+                }
               : null,
           }));
           return;
@@ -2422,7 +2557,7 @@ export const useGameStore = create<GameStoreState>()(
           choice.matchedRuleIndex !== null ? choice.matchedRuleIndex + 1 : 0;
 
         const skipVisualFx = state.skipAnimations;
-        const muteSound = state.skipAnimations || state.battleSpeed === 10;
+        const muteSound = state.skipAnimations || state.battleSpeed >= 10;
         const resolution = resolveUnitAction(
           battle.units,
           activeUnit.id,
@@ -2602,7 +2737,7 @@ export const useGameStore = create<GameStoreState>()(
         if (activeUnit.isPlayer && !playerIsCharging) return;
 
         const skipVisualFx = state.skipAnimations;
-        const muteSound = state.skipAnimations || state.battleSpeed === 10;
+        const muteSound = state.skipAnimations || state.battleSpeed >= 10;
         const decision = playerIsCharging
           ? {
               action: 'attack' as ActionType,
@@ -2887,7 +3022,9 @@ export const useGameStore = create<GameStoreState>()(
       },
 
       setBattleSpeed: (battleSpeed) => {
+        if (!isValidBattleSpeed(battleSpeed)) return;
         soundFx.playClick();
+        writeDeviceBattleSpeed(battleSpeed);
         set({ battleSpeed });
       },
 
@@ -3694,9 +3831,11 @@ export const useGameStore = create<GameStoreState>()(
           return;
         }
         if (state) {
-          // Validate & sanitize persisted UI slice so corrupted preferences cannot crash on reload
-          const validSpeeds: BattleSpeed[] = [1, 2, 3, 5, 10];
-          if (!validSpeeds.includes(state.battleSpeed)) {
+          // Validate & sanitize persisted UI slice + per-device speed & loop prefs
+          const deviceSpeed = readDeviceBattleSpeed();
+          if (deviceSpeed !== null) {
+            state.battleSpeed = deviceSpeed;
+          } else if (!ALLOWED_BATTLE_SPEEDS.includes(state.battleSpeed)) {
             state.battleSpeed = 1;
           }
           if (
@@ -3812,9 +3951,27 @@ export const useGameStore = create<GameStoreState>()(
           state.adminUnlocked = readPersistedAdminUnlock();
           state.muted = typeof state.muted === 'boolean' ? state.muted : true;
           state.skipAnimations = Boolean(state.skipAnimations);
-          if (typeof state.autoRepeatStopOnDefeat !== 'boolean') {
-            state.autoRepeatStopOnDefeat = true;
-          }
+          const hasStoredLoopPrefs =
+            typeof window !== 'undefined' &&
+            Boolean(window.localStorage?.getItem(LOOP_PREFS_STORAGE_KEY));
+          const resolvedLoopPrefs = hasStoredLoopPrefs
+            ? readDeviceLoopPrefs()
+            : typeof state.autoRepeatStopOnDefeat === 'boolean'
+            ? (() => {
+                const migrated = migrateLegacyLoopPrefs(
+                  state.autoRepeatStopOnDefeat
+                );
+                writeDeviceLoopPrefs(migrated);
+                return migrated;
+              })()
+            : readDeviceLoopPrefs();
+          state.autoRepeatDefeatRule = resolvedLoopPrefs.defeatRule;
+          state.autoRepeatDefeatStreakLimit = clampDefeatStreakLimit(
+            resolvedLoopPrefs.defeatStreakLimit,
+            DEFAULT_DEFEAT_STREAK_LIMIT
+          );
+          state.autoRepeatStopOnDefeat =
+            resolvedLoopPrefs.defeatRule === 'stop_immediately';
           state.autoRepeatToast = null;
           soundFx.setMuted(state.muted);
         }
