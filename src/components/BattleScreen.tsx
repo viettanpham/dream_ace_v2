@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   AlertTriangle,
-  Award,
   Backpack,
   BarChart3,
   Bot,
@@ -32,7 +31,6 @@ import {
   ZapOff,
 } from 'lucide-react';
 import { BALANCE_CONFIG } from '../data/balance';
-import { STAT_KEYS } from '../data/classes';
 import { RARITY_META } from '../data/items';
 import { getScaledSkillStats, getSkillById } from '../data/skills';
 import {
@@ -43,20 +41,17 @@ import {
   hasStatus,
   isLongRangeAction,
 } from '../engine/combat';
-import { getEffectiveItemStats } from '../engine/equipment';
 import { canUnitUseSkill } from '../engine/skills';
 import {
   getAutoStopReasonLabel,
   getBattleSkillReason,
   getClassName,
   getItemInstanceName,
-  getRarityLabel,
   getSectorName,
   getSkillDesc,
   getSkillName,
   getSkillTargetLabel,
   getSlotLabel,
-  getStatShort,
   getTeamTagLabel,
   useI18n,
 } from '../i18n';
@@ -103,6 +98,7 @@ import {
 } from '../utils/combatLogFormat';
 import { useStatusDisplaySettings } from '../utils/statusDisplayPrefs';
 import { BattleRadarView } from './BattleRadarView';
+import { BattleResultDialog } from './BattleResultDialog';
 import { BattleStatsModal } from './BattleStatsModal';
 import { BattleUnitCard } from './BattleUnitCard';
 import { BottomSheet } from './BottomSheet';
@@ -3516,243 +3512,16 @@ export function BattleScreen() {
         {battle.summary &&
           !autoRepeatSession?.active &&
           !showRepeatBatchSummary && (
-            <div
-              className="fixed inset-0 z-40 bg-black/75 flex items-center justify-center p-4"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="battle-outcome-title"
-            >
-              <div className="w-full max-w-md rounded-lg border border-slate-700 bg-[#0E1521] p-6 space-y-4 shadow-2xl max-h-[92vh] overflow-y-auto tactical-scroll">
-                <div className="space-y-1">
-                  <div
-                    className={`text-[12px] font-semibold tracking-widest uppercase ${
-                      battle.summary.outcome === 'victory'
-                        ? 'text-emerald-400'
-                        : 'text-red-400'
-                    }`}
-                  >
-                    {t('summary.rounds', {
-                      sector: getSectorName(lang, battle.summary.sectorId),
-                      rounds: battle.summary.rounds,
-                    })}
-                  </div>
-                  <h2
-                    id="battle-outcome-title"
-                    className="font-display text-[20px] font-bold tracking-wide text-slate-50"
-                  >
-                    {battle.summary.outcome === 'victory'
-                      ? t('summary.victory')
-                      : battle.summary.retreated
-                      ? t('summary.retreatTitle')
-                      : t('summary.defeat')}
-                  </h2>
-                  <p className="text-[13px] text-slate-400">
-                    {battle.summary.outcome === 'victory'
-                      ? t('summary.victoryDesc')
-                      : t('summary.defeatDesc')}
-                  </p>
-                </div>
-
-                {battle.summary.leveledUp && (
-                  <div className="rounded border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 flex items-center justify-between gap-3">
-                    <div>
-                      <div className="font-display text-[15px] font-bold text-emerald-300">
-                        {t('summary.levelUp', {
-                          gear: getClassName(
-                            lang,
-                            battle.summary.deployedGearId
-                          ),
-                          prev: battle.summary.previousLevel,
-                          next: battle.summary.newLevel,
-                        })}
-                      </div>
-                      <div className="text-[12px] text-emerald-200/80">
-                        {t('summary.levelUpDesc')}
-                      </div>
-                    </div>
-                    <div className="font-mono-nums text-[15px] font-bold text-emerald-300 whitespace-nowrap">
-                      +{battle.summary.statPointsGained} PTS
-                    </div>
-                  </div>
-                )}
-
-                {battle.summary.unlockedSectorId && (
-                  <div className="rounded border border-amber-500/40 bg-amber-500/10 px-3.5 py-2 text-[13px] font-semibold text-amber-300">
-                    {t('summary.sectorUnlocked', {
-                      sector: getSectorName(
-                        lang,
-                        battle.summary.unlockedSectorId
-                      ),
-                    })}
-                  </div>
-                )}
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded border border-slate-800 bg-[#090D14] p-3">
-                    <div className="text-[12px] text-slate-400">
-                      {t('summary.expEarned', {
-                        gear: getClassName(lang, battle.summary.deployedGearId),
-                      })}
-                    </div>
-                    <div className="mt-0.5 font-mono-nums text-[20px] font-bold text-amber-400">
-                      +{battle.summary.expGained} EXP
-                    </div>
-                    <div className="text-[12px] font-mono-nums text-slate-400 mt-0.5">
-                      {battle.summary.newLevel >= BALANCE_CONFIG.maxLevel
-                        ? t('summary.maxLevelReached')
-                        : t('summary.battlesToNext', {
-                            count: battle.summary.battlesToNextLevel,
-                            next: battle.summary.newLevel + 1,
-                          })}
-                    </div>
-                  </div>
-
-                  <div className="rounded border border-slate-800 bg-[#090D14] p-3">
-                    <div className="text-[12px] text-slate-400">
-                      {t('summary.creditsAwarded')}
-                    </div>
-                    <div className="mt-0.5 font-mono-nums text-[20px] font-bold text-slate-100">
-                      +{battle.summary.creditsGained.toLocaleString()} CR
-                    </div>
-                  </div>
-
-                  <div className="col-span-2 rounded border border-purple-500/40 bg-purple-500/10 p-3 flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-[13px] text-purple-200 flex items-center gap-1.5">
-                        <Award className="w-4 h-4 text-purple-400" />
-                        <span>{t('summary.warPointsAwarded')}</span>
-                      </div>
-                      {battle.summary.baseCaptureBonusWp > 0 && (
-                        <div className="text-[12px] text-purple-300/90 mt-0.5">
-                          {t('summary.captureBonusNote', {
-                            wp: battle.summary.baseCaptureBonusWp,
-                          })}
-                        </div>
-                      )}
-                    </div>
-                    <div className="font-mono-nums text-[20px] font-bold text-purple-300">
-                      +{battle.summary.warPointsGained} WP
-                    </div>
-                  </div>
-
-                  <div className="rounded border border-slate-800 bg-[#090D14] p-3">
-                    <div className="text-[12px] text-slate-400">
-                      {t('summary.hostilesDestroyed')}
-                    </div>
-                    <div className="mt-0.5 font-mono-nums text-[15px] font-semibold text-slate-200">
-                      {battle.summary.enemiesDestroyed} /{' '}
-                      {battle.summary.totalEnemies}
-                    </div>
-                  </div>
-
-                  <div className="rounded border border-slate-800 bg-[#090D14] p-3">
-                    <div className="text-[12px] text-slate-400">
-                      {t('summary.alliesSurviving')}
-                    </div>
-                    <div className="mt-0.5 font-mono-nums text-[15px] font-semibold text-slate-200">
-                      {battle.summary.alliesSurviving} / {battle.squadSize}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Salvaged Drops */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-[12px] text-slate-400">
-                    <span className="inline-flex items-center gap-1.5 font-semibold text-slate-200">
-                      <Package className="w-3.5 h-3.5 text-amber-400" />
-                      <span>{t('summary.dropsTitle')}</span>
-                    </span>
-                    <span className="font-mono-nums">
-                      {t('common.itemCount', {
-                        count: battle.summary.droppedItems.length,
-                      })}
-                    </span>
-                  </div>
-
-                  {battle.summary.droppedItems.length === 0 ? (
-                    <div className="rounded border border-slate-800/80 bg-[#090D14] px-3 py-2.5 text-[13px] text-slate-500">
-                      {t('summary.noDrops')}
-                    </div>
-                  ) : (
-                    <div className="space-y-1.5 max-h-36 overflow-y-auto tactical-scroll">
-                      {battle.summary.droppedItems.map((inst) => {
-                        const stats = getEffectiveItemStats(inst);
-                        return (
-                          <div
-                            key={inst.instanceId}
-                            className={`rounded border bg-[#090D14] px-3 py-2 flex items-center justify-between gap-2 ${
-                              RARITY_META[inst.rarity].borderClass
-                            }`}
-                          >
-                            <div className="min-w-0">
-                              <div
-                                className={`text-[13px] font-semibold truncate ${
-                                  RARITY_META[inst.rarity].textClass
-                                }`}
-                              >
-                                {getItemInstanceName(lang, inst)}
-                              </div>
-                              <div className="text-[12px] text-slate-400">
-                                {getSlotLabel(lang, inst.slot)} ·{' '}
-                                {getRarityLabel(lang, inst.rarity)} · T
-                                {inst.tier} · {inst.rollQuality}%
-                              </div>
-                            </div>
-                            <div className="text-right font-mono-nums text-[12px] text-emerald-400 shrink-0">
-                              {STAT_KEYS.filter((k) => stats[k] > 0)
-                                .map(
-                                  (k) => `+${stats[k]} ${getStatShort(lang, k)}`
-                                )
-                                .join(' ')}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-
-                <div className="space-y-2 pt-1">
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      data-testid="battle-open-report-btn"
-                      onClick={() => setStatsModalOpen(true)}
-                      className="min-h-[44px] px-3 rounded-lg border border-sky-500/50 bg-sky-500/12 hover:bg-sky-500/22 text-sky-200 font-semibold text-[13px] inline-flex items-center justify-center gap-2 transition-colors cursor-pointer"
-                    >
-                      <BarChart3 className="w-4 h-4 text-sky-400 shrink-0" />
-                      <span>{t('stats.reportBtn')}</span>
-                    </button>
-                    <button
-                      type="button"
-                      data-testid="battle-outcome-log-btn"
-                      onClick={handleOpenCombatLogPopup}
-                      className="min-h-[44px] px-3 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200 font-semibold text-[13px] inline-flex items-center justify-center gap-2 transition-colors cursor-pointer"
-                    >
-                      <ScrollText className="w-4 h-4 text-sky-400 shrink-0" />
-                      <span className="truncate">{t('stats.openCombatLog')}</span>
-                    </button>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={returnToHangar}
-                      className="flex-1 min-h-[44px] px-4 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold text-[13px] transition-colors cursor-pointer whitespace-nowrap"
-                    >
-                      {t('nav.returnHangar')}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => startBattle()}
-                      className="flex-1 min-h-[44px] px-4 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-100 font-medium text-[13px] transition-colors cursor-pointer whitespace-nowrap"
-                    >
-                      {t('summary.nextSortie')}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <BattleResultDialog
+              summary={battle.summary}
+              squadSize={battle.squadSize}
+              lang={lang}
+              t={t}
+              onOpenReport={() => setStatsModalOpen(true)}
+              onOpenLog={handleOpenCombatLogPopup}
+              onReturnHangar={returnToHangar}
+              onNextSortie={() => startBattle()}
+            />
           )}
       </ErrorBoundary>
 
