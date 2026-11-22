@@ -508,12 +508,11 @@ describe('4) Radar speech bubble truncation, 1.5s auto-hide, bubbles-off toggle,
     expect(buffPopup?.getAttribute('data-popup-compact')).toBe('true');
     expect(dmgPopup?.getAttribute('data-popup-compact')).toBe('false');
 
-    // Down unit marker is drawn smaller than alive unit marker
+    // Dead unit renders no ghost marker on radar (G4a-3a Item 5)
     const aliveToken = container!.querySelector('[data-testid="radar-unit-ally_front"]');
     const downToken = container!.querySelector('[data-testid="radar-unit-ally_back"]');
-    expect(Number(downToken?.getAttribute('data-visual-radius'))).toBeLessThan(
-      Number(aliveToken?.getAttribute('data-visual-radius'))
-    );
+    expect(aliveToken).not.toBeNull();
+    expect(downToken).toBeNull();
 
     // Auto-hides after 1.5s
     act(() => {

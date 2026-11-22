@@ -6,6 +6,7 @@ import type {
   CombatFxKind,
   CombatSide,
   CombatUnit,
+  FloatingPopup,
   MechClassId,
   StatusEffectType,
 } from '../types/game';
@@ -75,9 +76,17 @@ export interface QueuedUnitVfx {
   createdAt: number;
 }
 
+export const RADAR_FLOATING_LABEL_DURATION_MS = 600;
+export const RADAR_FLOATING_LABEL_MAX_QUEUED = 3;
+
 export interface UnitEffectQueueState<T extends { id: string }> {
   activeByUnit: Record<string, T[]>;
   pendingByUnit: Record<string, T[]>;
+}
+
+export interface RadarFloatingLabelQueueState {
+  activeByUnit: Record<string, FloatingPopup | undefined>;
+  pendingByUnit: Record<string, FloatingPopup[]>;
 }
 
 const fxSettingsListeners = new Set<() => void>();
@@ -586,6 +595,127 @@ export function completeUnitEffect<T extends { id: string }>(
     activeByUnit: nextActiveByUnit,
     pendingByUnit: nextPendingByUnit,
   };
+}
+
+/**
+ * Creates an empty per-unit radar floating label queue (1 visible per unit, max 3 pending).
+ */
+export function createRadarFloatingLabelQueue(): RadarFloatingLabelQueueState {
+  return { activeByUnit: {}, pendingByUnit: {} };
+}
+
+/**
+ * Enqueues a radar floating text label for an alive unit.
+ * - Shows 1 label at a time per unit.
+ * - Buffers up to maxQueued pending labels per unit (default 3), dropping older pending items on overflow.
+ */
+export function enqueueRadarFloatingLabel(
+  state: RadarFloatingLabelQueueState,
+  popup: FloatingPopup,
+  maxQueued: number = RADAR_FLOATING_LABEL_MAX_QUEUED
+): RadarFloatingLabelQueueState {
+  const unitId = popup.unitId;
+  const currentActive = state.activeByUnit[unitId];
+  const currentPending = state.pendingByUnit[unitId] ?? [];
+
+  if (
+    currentActive?.id === popup.id ||
+    currentPending.some((item) => item.id === popup.id)
+  ) {
+    return state;
+  }
+
+  if (!currentActive) {
+    return {
+      activeByUnit: {
+        ...state.activeByUnit,
+        [unitId]: popup,
+      },
+      pendingByUnit: state.pendingByUnit,
+    };
+  }
+
+  const cap = Math.max(0, Math.floor(maxQueued));
+  if (cap === 0) return state;
+
+  const combined = [...currentPending, popup];
+  const trimmed =
+    combined.length > cap ? combined.slice(combined.length - cap) : combined;
+
+  return {
+    activeByUnit: state.activeByUnit,
+    pendingByUnit: {
+      ...state.pendingByUnit,
+      [unitId]: trimmed,
+    },
+  };
+}
+
+/**
+ * Completes the active radar floating label for a unit and promotes the next pending label.
+ */
+export function advanceRadarFloatingLabel(
+  state: RadarFloatingLabelQueueState,
+  unitId: string,
+  completedPopupId?: string
+): RadarFloatingLabelQueueState {
+  const currentActive = state.activeByUnit[unitId];
+  if (!currentActive) return state;
+  if (completedPopupId && currentActive.id !== completedPopupId) return state;
+
+  const pending = [...(state.pendingByUnit[unitId] ?? [])];
+  const promoted = pending.shift();
+
+  const nextActive = { ...state.activeByUnit };
+  const nextPending = { ...state.pendingByUnit };
+
+  if (promoted) {
+    nextActive[unitId] = promoted;
+  } else {
+    delete nextActive[unitId];
+  }
+
+  if (pending.length > 0) {
+    nextPending[unitId] = pending;
+  } else {
+    delete nextPending[unitId];
+  }
+
+  return {
+    activeByUnit: nextActive,
+    pendingByUnit: nextPending,
+  };
+}
+
+/**
+ * Purges any active or pending floating labels belonging to dead/missing units.
+ */
+export function pruneDeadRadarFloatingLabels(
+  state: RadarFloatingLabelQueueState,
+  aliveUnitIds: ReadonlySet<string>
+): RadarFloatingLabelQueueState {
+  let changed = false;
+  const nextActive: Record<string, FloatingPopup | undefined> = {};
+  const nextPending: Record<string, FloatingPopup[]> = {};
+
+  for (const [unitId, active] of Object.entries(state.activeByUnit)) {
+    if (active && aliveUnitIds.has(unitId)) {
+      nextActive[unitId] = active;
+    } else if (active) {
+      changed = true;
+    }
+  }
+
+  for (const [unitId, list] of Object.entries(state.pendingByUnit)) {
+    if (aliveUnitIds.has(unitId) && list.length > 0) {
+      nextPending[unitId] = list;
+    } else if (list.length > 0) {
+      changed = true;
+    }
+  }
+
+  if (!changed) return state;
+  return { activeByUnit: nextActive, pendingByUnit: nextPending };
 }
 
 /**

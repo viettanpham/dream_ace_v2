@@ -14,10 +14,10 @@ import {
   sortStatusEffects,
 } from '../data/statusIconMap';
 import { getTeamColorRole, hasStatus } from '../engine/combat';
+import { getRowModifier } from '../engine/formation';
 import {
   formatStatusEffectDetail,
   getClassName,
-  getStatusShortLabel,
   translate,
   useI18n,
 } from '../i18n';
@@ -29,6 +29,7 @@ import type {
   CombatRow,
   CombatUnit,
   FloatingPopup,
+  FormationConfig,
   IconCatalogModRow,
   Language,
   MechClassId,
@@ -45,7 +46,6 @@ import {
   formatSpeechBubbleText,
   getRadarHitAreaSize,
   isCompactPopupTone,
-  layoutStaggeredPopups,
   layoutUnitStatusIcons,
   RADAR_STATUS_MAX_VISIBLE,
   readRadarLegendOpen,
@@ -60,10 +60,17 @@ import {
   type TargetValidityResult,
 } from '../utils/battleDisplay';
 import {
+  advanceRadarFloatingLabel,
+  createRadarFloatingLabelQueue,
+  enqueueRadarFloatingLabel,
+  pruneDeadRadarFloatingLabels,
+  RADAR_FLOATING_LABEL_DURATION_MS,
+  RADAR_FLOATING_LABEL_MAX_QUEUED,
   resolveEffectiveVfxConfig,
   resolveReducedMotion,
   useFxSettings,
   type BattleEffectsMode,
+  type RadarFloatingLabelQueueState,
   type ReducedMotionSetting,
 } from '../utils/battleVfx';
 import { useStatusDisplaySettings } from '../utils/statusDisplayPrefs';
@@ -94,6 +101,7 @@ interface BattleRadarViewProps {
   onSelectEnemy: (unitId: string) => void;
   onSelectAlly: (unitId: string) => void;
   onInspectUnit: (unit: CombatUnit) => void;
+  onInvalidTargetLog?: (reason: TargetInvalidReason | null, unit: CombatUnit) => void;
 }
 
 export interface TokenPos {
@@ -114,6 +122,7 @@ export interface RowLaneRect {
   badgeX: number;
   badgeY: number;
   badgeAnchor: 'start' | 'middle' | 'end';
+  isEmptyCollapsed?: boolean;
 }
 
 type MarkerShapeKind =
@@ -308,16 +317,86 @@ const ClassCenterIcon = memo(function ClassCenterIcon({
   }
 });
 
+export const DESKTOP_RADAR_RING_DIAMETER_PX = 80;
+export const DESKTOP_RADAR_TOKEN_RADIUS = 41; // computeUnitRingArcs(unit, 41).outerRadius === 40 (80px diameter)
+export const PHONE_EMPTY_LANE_HEIGHT_PX = 20;
+
+function formatSignedRowPct(val: number): string {
+  const pct = Math.round(val * 100);
+  return pct > 0 ? `+${pct}` : `${pct}`;
+}
+
+export function formatRadarLaneBuffText(
+  lang: Language,
+  formationConfig: FormationConfig | undefined,
+  row: CombatRow
+): string {
+  const mod = getRowModifier(formationConfig, row);
+  const parts: string[] = [];
+  if (Math.abs(mod.defensePct) >= 0.005) {
+    parts.push(
+      translate(lang, 'formation.effectDef', {
+        val: formatSignedRowPct(mod.defensePct),
+      })
+    );
+  }
+  if (Math.abs(mod.damagePct) >= 0.005) {
+    parts.push(
+      translate(lang, 'formation.effectDmg', {
+        val: formatSignedRowPct(mod.damagePct),
+      })
+    );
+  }
+  if (Math.abs(mod.rangedDamagePct) >= 0.005) {
+    parts.push(
+      translate(lang, 'formation.effectRangedDmg', {
+        val: formatSignedRowPct(mod.rangedDamagePct),
+      })
+    );
+  }
+  return parts.join(' · ');
+}
+
+export function computeLaneTokenRadius(
+  isLandscape: boolean,
+  lane: RowLaneRect | undefined,
+  countInLane: number,
+  squadSize: number
+): number {
+  if (isLandscape) {
+    return DESKTOP_RADAR_TOKEN_RADIUS;
+  }
+  const safeCount = Math.max(1, countInLane);
+  const baseRadius =
+    safeCount <= 2 && squadSize <= 4 ? 22 : safeCount <= 3 ? 18 : 16;
+
+  if (!lane || lane.h < 115) {
+    return baseRadius;
+  }
+
+  // Phone: grow ring only when collapsed empty lanes give the occupied lane room
+  const bodyH = Math.max(20, lane.h - PHONE_EMPTY_LANE_HEIGHT_PX);
+  const maxByHeight = Math.floor((bodyH - 58) / 2);
+  const slotW = (lane.w - 16) / safeCount;
+  const maxByWidth = Math.floor((slotW - 16) / 2);
+  return Math.max(
+    baseRadius,
+    Math.min(DESKTOP_RADAR_TOKEN_RADIUS, maxByHeight, maxByWidth)
+  );
+}
+
 /**
- * Builds 3 fixed-position row lanes (front/middle/back) per side.
- * Lane geometry is strictly fixed and independent of unit counts or alive/dead state
- * so rows never resize or reflow when units die or a row becomes empty.
+ * Builds 3 row lanes (front/middle/back) per side.
+ * - Landscape (desktop/tablet): strictly fixed equal columns independent of alive/dead state,
+ *   starting below the top-right legend button (padTop = 46).
+ * - Portrait phone: collapses empty lanes (0 alive units on that row/side) to a 20px line
+ *   and distributes remaining height proportionally among occupied lanes.
  */
 export function buildRowLanes(
   isLandscape: boolean,
   vw: number,
   vh: number,
-  _units?: CombatUnit[]
+  units?: CombatUnit[]
 ): RowLaneRect[] {
   const distribute = (
     totalSpan: number,
@@ -331,11 +410,13 @@ export function buildRowLanes(
 
   if (isLandscape) {
     const padX = 10;
+    const padTop = 46;
+    const padBottom = 8;
     const centerGap = 16;
     const laneGap = 5;
     const halfW = (vw - padX * 2 - centerGap) / 2;
-    const y = 8;
-    const h = vh - 16;
+    const y = padTop;
+    const h = vh - padTop - padBottom;
 
     const allyRows: CombatRow[] = ['back', 'middle', 'front'];
     const enemyRows: CombatRow[] = ['front', 'middle', 'back'];
@@ -356,11 +437,12 @@ export function buildRowLanes(
         w: colW,
         h,
         labelX: curX + colW / 2,
-        labelY: y + 13,
+        labelY: y + 14,
         labelAnchor: 'middle',
         badgeX: curX + colW / 2,
-        badgeY: y + 24,
+        badgeY: y + 14,
         badgeAnchor: 'middle',
+        isEmptyCollapsed: false,
       });
       curX += colW + laneGap;
     });
@@ -376,11 +458,12 @@ export function buildRowLanes(
         w: colW,
         h,
         labelX: curX + colW / 2,
-        labelY: y + 13,
+        labelY: y + 14,
         labelAnchor: 'middle',
         badgeX: curX + colW / 2,
-        badgeY: y + 24,
+        badgeY: y + 14,
         badgeAnchor: 'middle',
+        isEmptyCollapsed: false,
       });
       curX += colW + laneGap;
     });
@@ -388,25 +471,63 @@ export function buildRowLanes(
     return lanes;
   }
 
-  // Portrait 6 fixed horizontal bands: Enemy Back -> Middle -> Front || Ally Front -> Middle -> Back
+  // Portrait phone 6 horizontal bands: Enemy Back -> Middle -> Front || Ally Front -> Middle -> Back
   const padX = 8;
-  const padY = 8;
-  const centerGap = 12;
+  const padTop = 44;
+  const padBottom = 8;
+  const centerGap = 10;
   const laneGap = 4;
-  const halfH = (vh - padY * 2 - centerGap) / 2;
+  const halfH = (vh - padTop - padBottom - centerGap) / 2;
   const w = vw - padX * 2;
 
   const enemyRows: CombatRow[] = ['back', 'middle', 'front'];
   const allyRows: CombatRow[] = ['front', 'middle', 'back'];
 
-  const fixedWeights = [1, 1, 1];
-  const enemyHeights = distribute(halfH, laneGap, fixedWeights);
-  const allyHeights = distribute(halfH, laneGap, fixedWeights);
+  const computePhoneHeights = (
+    side: 'ally' | 'enemy',
+    rows: CombatRow[]
+  ): { heights: number[]; collapsed: boolean[] } => {
+    if (!units) {
+      return {
+        heights: distribute(halfH, laneGap, [1, 1, 1]),
+        collapsed: rows.map(() => false),
+      };
+    }
+    const hasAliveByRow = rows.map((row) =>
+      units.some((u) => u.side === side && u.row === row && u.alive)
+    );
+    const emptyCount = hasAliveByRow.filter((v) => !v).length;
+    const occupiedCount = rows.length - emptyCount;
+    const totalGaps = laneGap * (rows.length - 1);
+    const usable = Math.max(60, halfH - totalGaps);
+
+    if (occupiedCount === 0) {
+      return {
+        heights: rows.map(() => PHONE_EMPTY_LANE_HEIGHT_PX),
+        collapsed: rows.map(() => true),
+      };
+    }
+
+    const collapsedTotal = emptyCount * PHONE_EMPTY_LANE_HEIGHT_PX;
+    const perOccupied = Math.max(
+      40,
+      (usable - collapsedTotal) / occupiedCount
+    );
+    return {
+      heights: hasAliveByRow.map((hasAlive) =>
+        hasAlive ? perOccupied : PHONE_EMPTY_LANE_HEIGHT_PX
+      ),
+      collapsed: hasAliveByRow.map((hasAlive) => !hasAlive),
+    };
+  };
+
+  const enemyLayout = computePhoneHeights('enemy', enemyRows);
+  const allyLayout = computePhoneHeights('ally', allyRows);
 
   const lanes: RowLaneRect[] = [];
-  let curY = padY;
+  let curY = padTop;
   enemyRows.forEach((row, i) => {
-    const rowH = enemyHeights[i];
+    const rowH = enemyLayout.heights[i];
     lanes.push({
       side: 'enemy',
       row,
@@ -415,18 +536,19 @@ export function buildRowLanes(
       w,
       h: rowH,
       labelX: padX + 7,
-      labelY: curY + 11,
+      labelY: curY + 13,
       labelAnchor: 'start',
       badgeX: padX + w - 7,
-      badgeY: curY + 11,
+      badgeY: curY + 13,
       badgeAnchor: 'end',
+      isEmptyCollapsed: enemyLayout.collapsed[i],
     });
     curY += rowH + laneGap;
   });
 
-  curY = padY + halfH + centerGap;
+  curY = padTop + halfH + centerGap;
   allyRows.forEach((row, i) => {
-    const rowH = allyHeights[i];
+    const rowH = allyLayout.heights[i];
     lanes.push({
       side: 'ally',
       row,
@@ -435,11 +557,12 @@ export function buildRowLanes(
       w,
       h: rowH,
       labelX: padX + 7,
-      labelY: curY + 11,
+      labelY: curY + 13,
       labelAnchor: 'start',
       badgeX: padX + w - 7,
-      badgeY: curY + 11,
+      badgeY: curY + 13,
       badgeAnchor: 'end',
+      isEmptyCollapsed: allyLayout.collapsed[i],
     });
     curY += rowH + laneGap;
   });
@@ -455,8 +578,9 @@ export function computeUnitPositions(
   const map = new Map<string, TokenPos>();
 
   for (const lane of lanes) {
+    // Only position alive units; dead units have no ghost markers and do not reserve space
     const rowUnits = units
-      .filter((u) => u.side === lane.side && u.row === lane.row)
+      .filter((u) => u.alive && u.side === lane.side && u.row === lane.row)
       .sort(
         (a, b) =>
           (a.formationCol ?? 0) - (b.formationCol ?? 0) ||
@@ -467,18 +591,21 @@ export function computeUnitPositions(
     if (count === 0) continue;
 
     rowUnits.forEach((unit, idx) => {
-      const frac = (idx + 0.5) / count;
       if (isLandscape) {
-        const topSafe = lane.y + 34;
-        const bottomSafe = lane.y + lane.h - 26;
+        const topSafe = lane.y + (count <= 2 ? 90 : 78);
+        const bottomSafe = lane.y + lane.h - (count <= 2 ? 78 : 60);
+        const frac = count === 1 ? 0.45 : idx / (count - 1);
         const x = lane.x + lane.w / 2;
         const y = topSafe + frac * Math.max(20, bottomSafe - topSafe);
         map.set(unit.id, { x, y });
       } else {
-        const leftSafe = lane.x + 32;
-        const rightSafe = lane.x + lane.w - 32;
+        const frac = (idx + 0.5) / count;
+        const leftSafe = lane.x + 36;
+        const rightSafe = lane.x + lane.w - 36;
+        const bodyTop = lane.y + PHONE_EMPTY_LANE_HEIGHT_PX;
+        const bodyH = Math.max(24, lane.h - PHONE_EMPTY_LANE_HEIGHT_PX);
         const x = leftSafe + frac * Math.max(20, rightSafe - leftSafe);
-        const y = lane.y + lane.h * 0.54;
+        const y = bodyTop + bodyH * 0.44;
         map.set(unit.id, { x, y });
       }
     });
@@ -505,13 +632,9 @@ interface RadarUnitMarkerProps {
   animationsSkipped: boolean;
   hoverTooltip: string;
   autoBadgeText: string;
-  showStatusLabels: boolean;
-  formatStatusShortText: (st: ActiveStatusEffect) => string;
   formatStatusTooltip: (st: ActiveStatusEffect, unit?: CombatUnit) => string;
   onMarkerRef: (unitId: string, el: SVGGElement | null) => void;
   onHoverUnit: (unitId: string | null) => void;
-  onInspectStatus: (unit: CombatUnit, st: ActiveStatusEffect) => void;
-  onHoverStatus?: (unit: CombatUnit, st: ActiveStatusEffect | null) => void;
   onTap: (unitId: string) => void;
   onLongPressStart: (unitId: string) => void;
   onLongPressCancel: () => void;
@@ -535,51 +658,39 @@ const RadarUnitMarker = memo(function RadarUnitMarker({
   animationsSkipped,
   hoverTooltip,
   autoBadgeText,
-  showStatusLabels,
-  formatStatusShortText,
   formatStatusTooltip,
   onMarkerRef,
   onHoverUnit,
-  onInspectStatus,
-  onHoverStatus,
   onTap,
   onLongPressStart,
   onLongPressCancel,
 }: RadarUnitMarkerProps) {
+  if (!unit.alive) return null;
+
   const isEnemy = unit.side === 'enemy';
   const role = getTeamColorRole(unit);
-  const teamHex = unit.alive ? getTeamHex(role) : '#475569';
+  const teamHex = getTeamHex(role);
   const shape = getMarkerShape(unit);
-  const isStealthed = unit.alive && hasStatus(unit, 'stealth');
+  const isStealthed = hasStatus(unit, 'stealth');
 
   const shortName = formatShortUnitName(unit.name, 10);
 
-  // Down units draw smaller & dimmer so they do not clutter active lanes
-  const visualRadius = unit.alive
-    ? tokenRadius
-    : Math.max(9, Math.round(tokenRadius * 0.52));
-
-  // Concentric 3-ring arcs (Shield outer blue, HP middle green, SP inner purple) or HP-only below min size
+  const visualRadius = tokenRadius;
   const ringResult = computeUnitRingArcs(unit, visualRadius);
-  const shapeRadius = unit.alive ? ringResult.innerShapeRadius : visualRadius;
-  const ringOuterRadius = unit.alive ? ringResult.outerRadius : visualRadius;
+  const shapeRadius = ringResult.innerShapeRadius;
+  const ringOuterRadius = ringResult.outerRadius;
+  const ringDiameter = Math.round(ringOuterRadius * 2);
+  const cornerBadgeOffset = Number((ringOuterRadius * 0.72).toFixed(1));
 
-  const sortedStatuses = unit.alive
-    ? sortStatusEffects(unit.statuses, iconMods)
-    : [];
-  const statusLayout = unit.alive
-    ? layoutUnitStatusIcons(sortedStatuses, RADAR_STATUS_MAX_VISIBLE)
-    : { visible: [] as ActiveStatusEffect[], overflowCount: 0 };
+  const sortedStatuses = sortStatusEffects(unit.statuses, iconMods);
+  const statusLayout = layoutUnitStatusIcons(
+    sortedStatuses,
+    RADAR_STATUS_MAX_VISIBLE
+  );
 
-  const markerOpacity = !unit.alive
-    ? 0.26
-    : isStealthed
-    ? 0.55
-    : isBlockedByRow
-    ? 0.56
-    : 1;
+  const markerOpacity = isStealthed ? 0.55 : isBlockedByRow ? 0.56 : 1;
 
-  const iconScale = Math.max(0.74, Math.min(1.15, shapeRadius / 16));
+  const iconScale = Math.max(0.74, Math.min(1.25, shapeRadius / 18));
   const hexOuter = getPolygonPoints(6, shapeRadius, -90);
   const hexInner = getPolygonPoints(6, Math.max(5, shapeRadius - 2.6), -90);
   const diamondOuter = getDiamondPoints(shapeRadius);
@@ -587,8 +698,8 @@ const RadarUnitMarker = memo(function RadarUnitMarker({
   const fortressOuter = getFortressPoints(shapeRadius);
   const fortressInner = getFortressPoints(Math.max(5, shapeRadius - 2.8));
 
-  // Status row horizontal centering under the name plate
-  const statusStep = 21;
+  // Status row horizontal centering under the name plate (20px chips)
+  const statusStep = 22;
   const statusTotalCount =
     statusLayout.visible.length + (statusLayout.overflowCount > 0 ? 1 : 0);
   const statusStartX =
@@ -602,18 +713,14 @@ const RadarUnitMarker = memo(function RadarUnitMarker({
       data-unit-side={unit.side}
       data-marker-shape={shape}
       data-visual-radius={visualRadius}
-      data-ring-mode={
-        !unit.alive
-          ? 'none'
-          : ringResult.hpOnlyMode
-          ? 'hp-only'
-          : 'three-rings'
-      }
+      data-ring-radius={ringOuterRadius}
+      data-ring-diameter={ringDiameter}
+      data-ring-mode={ringResult.hpOnlyMode ? 'hp-only' : 'three-rings'}
       data-low-hp={ringResult.isLowHp ? 'true' : 'false'}
       data-acting={isActive ? 'true' : 'false'}
       data-targeted={isTargeted ? 'true' : 'false'}
       data-blocked-by-row={isBlockedByRow ? 'true' : 'false'}
-      data-unit-down={!unit.alive ? 'true' : 'false'}
+      data-unit-down="false"
       transform={`translate(${x}, ${y})`}
       role="button"
       tabIndex={0}
@@ -860,20 +967,26 @@ const RadarUnitMarker = memo(function RadarUnitMarker({
             />
           )}
 
-          {/* AUTO Badge on Player Token */}
-          {unit.isPlayer && autoBattleEnabled && unit.alive && (
-            <g transform={`translate(0, ${-ringOuterRadius - 8})`}>
+          {/* 16px AUTO Badge on top-left corner of Player Ring */}
+          {unit.isPlayer && autoBattleEnabled && (
+            <g
+              data-testid={`radar-auto-badge-${unit.id}`}
+              data-badge-size="16"
+              transform={`translate(${-cornerBadgeOffset}, ${-cornerBadgeOffset})`}
+            >
               <rect
-                x="-15"
-                y="-6"
-                width="30"
-                height="11"
-                rx="3"
+                x="-14"
+                y="-8"
+                width="28"
+                height="16"
+                rx="4"
                 fill="#22c55e"
+                stroke="#052e16"
+                strokeWidth="1"
               />
               <text
                 x="0"
-                y="2.2"
+                y="2.5"
                 textAnchor="middle"
                 fontSize="7.5"
                 fontFamily="monospace"
@@ -886,185 +999,129 @@ const RadarUnitMarker = memo(function RadarUnitMarker({
           )}
         </g>
 
-        {/* Under the marker: Name Plate + Status Icons Row (max 3 + "+N" overflow; no horizontal HP/Shield bars) */}
-        {unit.alive ? (
-          <g transform={`translate(0, ${ringOuterRadius + 4})`}>
-            <rect
-              x={-barW / 2 - 4}
-              y="0"
-              width={barW + 8}
-              height="12.5"
-              rx="3"
-              fill="rgba(5, 10, 18, 0.9)"
-            />
-            <text
-              data-testid="radar-unit-name"
-              x="0"
-              y="9.2"
-              textAnchor="middle"
-              fontSize="9.5"
-              fontWeight="700"
-              fill={isActive ? '#fef08a' : '#f1f5f9'}
-            >
-              {shortName}
-            </text>
-
-            {/* Up to 3 compact StatusChips (+N when more) with buff/debuff/normal frames & Material Symbols */}
-            {statusLayout.visible.length > 0 && (
-              <g
-                data-testid={`radar-status-${unit.id}`}
-                transform="translate(0, 22)"
-              >
-                {statusLayout.visible.map((st, sIdx) => {
-                  const row = getCatalogRowForStatus(st.type, iconMods);
-                  const visualKind = getStatusVisualKind(st, row);
-                  const stTip = formatStatusTooltip(st, unit);
-                  const cxIcon = statusStartX + sIdx * statusStep;
-                  return (
-                    <g
-                      key={`${st.type}-${sIdx}`}
-                      data-testid={`radar-status-icon-${unit.id}-${sIdx}`}
-                      data-status-type={st.type}
-                      data-status-kind={visualKind}
-                      data-status-symbol={row?.symbol ?? st.type}
-                      transform={`translate(${cxIcon}, 0)`}
-                      role="button"
-                      tabIndex={-1}
-                      aria-label={stTip}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onInspectStatus(unit, st);
-                      }}
-                      onMouseEnter={(e) => {
-                        e.stopPropagation();
-                        onHoverStatus?.(unit, st);
-                      }}
-                      onMouseLeave={(e) => {
-                        e.stopPropagation();
-                        onHoverStatus?.(unit, null);
-                      }}
-                      className="cursor-pointer"
-                    >
-                      <title>{stTip}</title>
-                      <foreignObject
-                        x="-14"
-                        y="-13"
-                        width="28"
-                        height="26"
-                        overflow="visible"
-                      >
-                        <div className="w-full h-full flex items-center justify-center pointer-events-none">
-                          <StatusChip
-                            status={st}
-                            lang={lang}
-                            unit={unit}
-                            badgeLayout={badgeLayout}
-                            iconMods={iconMods}
-                            size="xs"
-                            showLabel={false}
-                            allowStack={false}
-                            stacks={1}
-                            className="!p-0 !border-0 !bg-transparent"
-                          />
-                        </div>
-                      </foreignObject>
-                    </g>
-                  );
-                })}
-                {statusLayout.overflowCount > 0 && (
-                  <g
-                    transform={`translate(${
-                      statusStartX + statusLayout.visible.length * statusStep
-                    }, 0)`}
-                  >
-                    <rect
-                      x="-8"
-                      y="-7"
-                      width="16"
-                      height="14"
-                      rx="3"
-                      fill="#0f172a"
-                      stroke="#64748b"
-                      strokeWidth="1"
-                    />
-                    <text
-                      data-testid={`radar-status-overflow-${unit.id}`}
-                      x="0"
-                      y="3"
-                      textAnchor="middle"
-                      fontSize="8"
-                      fontFamily="monospace"
-                      fontWeight="800"
-                      fill="#e2e8f0"
-                    >
-                      +{statusLayout.overflowCount}
-                    </text>
-                  </g>
-                )}
-                {showStatusLabels && (
-                  <g
-                    data-testid={`radar-status-labels-${unit.id}`}
-                    transform="translate(0, 15)"
-                  >
-                    <rect
-                      x={-Math.max(24, barW / 2 + 6)}
-                      y="-5.5"
-                      width={Math.max(48, barW + 12)}
-                      height="10.5"
-                      rx="2.5"
-                      fill="rgba(5, 10, 18, 0.88)"
-                    />
-                    <text
-                      data-testid={`radar-status-label-${unit.id}`}
-                      x="0"
-                      y="2.3"
-                      textAnchor="middle"
-                      fontSize="7.2"
-                      fontWeight="700"
-                      fill="#cbd5e1"
-                    >
-                      {statusLayout.visible
-                        .slice(0, 2)
-                        .map((st) => formatStatusShortText(st))
-                        .join(' · ')}
-                      {statusLayout.visible.length > 2 ||
-                      statusLayout.overflowCount > 0
-                        ? ` +${
-                            Math.max(0, statusLayout.visible.length - 2) +
-                            statusLayout.overflowCount
-                          }`
-                        : ''}
-                    </text>
-                  </g>
-                )}
-              </g>
-            )}
-          </g>
-        ) : (
+        {/* Under the marker: 1-line truncated Name Plate + max 3 icon-only 20px mini chips + "+N" (no text tag pills) */}
+        <g transform={`translate(0, ${ringOuterRadius + 4})`}>
+          <title>{unit.name}</title>
+          <rect
+            x={-barW / 2 - 4}
+            y="0"
+            width={barW + 8}
+            height="12"
+            rx="3"
+            fill="rgba(5, 10, 18, 0.9)"
+          />
           <text
             data-testid="radar-unit-name"
             x="0"
-            y={visualRadius + 10}
+            y="8.8"
             textAnchor="middle"
-            fontSize="8"
-            fontWeight="600"
-            fill="#64748b"
+            fontSize="9.5"
+            fontWeight="700"
+            fill={isActive ? '#fef08a' : '#f1f5f9'}
           >
             {shortName}
           </text>
-        )}
+
+          {/* Up to 3 icon-only 20px mini chips (+N when more) */}
+          {statusLayout.visible.length > 0 && (
+            <g
+              data-testid={`radar-status-${unit.id}`}
+              transform="translate(0, 23)"
+            >
+              {statusLayout.visible.map((st, sIdx) => {
+                const row = getCatalogRowForStatus(st.type, iconMods);
+                const visualKind = getStatusVisualKind(st, row);
+                const stTip = formatStatusTooltip(st, unit);
+                const cxIcon = statusStartX + sIdx * statusStep;
+                return (
+                  <g
+                    key={`${st.type}-${sIdx}`}
+                    data-testid={`radar-status-icon-${unit.id}-${sIdx}`}
+                    data-status-type={st.type}
+                    data-status-kind={visualKind}
+                    data-status-symbol={row?.symbol ?? st.type}
+                    transform={`translate(${cxIcon}, 0)`}
+                    role="button"
+                    tabIndex={-1}
+                    aria-label={stTip}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onTap(unit.id);
+                    }}
+                    className="cursor-pointer"
+                  >
+                    <title>{stTip}</title>
+                    <foreignObject
+                      x="-12"
+                      y="-12"
+                      width="24"
+                      height="24"
+                      overflow="visible"
+                    >
+                      <div className="w-full h-full flex items-center justify-center pointer-events-none">
+                        <StatusChip
+                          status={st}
+                          lang={lang}
+                          unit={unit}
+                          badgeLayout={badgeLayout}
+                          iconMods={iconMods}
+                          size="xs"
+                          showLabel={false}
+                          allowStack={false}
+                          stacks={1}
+                          className="!p-0 !border-0 !bg-transparent"
+                        />
+                      </div>
+                    </foreignObject>
+                  </g>
+                );
+              })}
+              {statusLayout.overflowCount > 0 && (
+                <g
+                  transform={`translate(${
+                    statusStartX + statusLayout.visible.length * statusStep
+                  }, 0)`}
+                >
+                  <rect
+                    x="-9"
+                    y="-8"
+                    width="18"
+                    height="16"
+                    rx="3"
+                    fill="#0f172a"
+                    stroke="#64748b"
+                    strokeWidth="1"
+                  />
+                  <text
+                    data-testid={`radar-status-overflow-${unit.id}`}
+                    x="0"
+                    y="3"
+                    textAnchor="middle"
+                    fontSize="8"
+                    fontFamily="monospace"
+                    fontWeight="800"
+                    fill="#e2e8f0"
+                  >
+                    +{statusLayout.overflowCount}
+                  </text>
+                </g>
+              )}
+            </g>
+          )}
+        </g>
       </g>
 
-      {/* Small Lock Icon when unit cannot be targeted because a front/middle row is alive */}
-      {isBlockedByRow && unit.alive && (
+      {/* 16px Lock Icon on top-right corner of Ring when blocked by front/middle row */}
+      {isBlockedByRow && (
         <g
           data-testid={`radar-lock-${unit.id}`}
-          transform={`translate(${ringOuterRadius - 2}, ${ringOuterRadius - 3})`}
+          data-badge-size="16"
+          transform={`translate(${cornerBadgeOffset}, ${-cornerBadgeOffset})`}
         >
           <circle
             cx="0"
             cy="0"
-            r="7.5"
+            r="8"
             fill="#090f1a"
             stroke="#fbbf24"
             strokeWidth="1.4"
@@ -1103,17 +1160,19 @@ export function BattleRadarView({
   effectsMode: effectsModeProp,
   reducedMotionMode: reducedMotionModeProp,
   effectsDebugEnabled: effectsDebugProp,
-  showStatusLabels: showStatusLabelsProp,
+  showStatusLabels: _showStatusLabelsProp,
   playerWeaponId = null,
   layoutMode: layoutModeProp,
   onSelectEnemy,
   onSelectAlly,
   onInspectUnit,
+  onInvalidTargetLog,
 }: BattleRadarViewProps) {
   const { lang, t } = useI18n();
   const adminStatusDefaults = useGameStore(
     (s) => s.adminConfig.statusDisplayDefaults
   );
+  const formationConfig = useGameStore((s) => s.adminConfig.formation);
   const iconMods = useGameStore((s) => s.adminConfig.iconCatalogMods);
   const { settings: statusSettings } =
     useStatusDisplaySettings(adminStatusDefaults);
@@ -1124,8 +1183,6 @@ export function BattleRadarView({
   const effectiveReducedMotionMode =
     reducedMotionModeProp ?? fxSettings.reducedMotionMode;
   const effectiveDebugEnabled = effectsDebugProp ?? fxSettings.effectsDebug;
-  const effectiveShowStatusLabels =
-    showStatusLabelsProp ?? fxSettings.showStatusLabels;
   const resolvedReducedMotion = resolveReducedMotion(
     effectiveReducedMotionMode,
     osReducedMotion
@@ -1166,15 +1223,6 @@ export function BattleRadarView({
   const [legendOpen, setLegendOpen] = useState<boolean>(() =>
     readRadarLegendOpen()
   );
-  const [invalidToast, setInvalidToast] = useState<string | null>(null);
-  const [inspectedStatusInfo, setInspectedStatusInfo] = useState<{
-    unit: CombatUnit;
-    status: ActiveStatusEffect;
-    unitName: string;
-    detailText: string;
-    isDebuff: boolean;
-    source: 'tap' | 'hover';
-  } | null>(null);
   const [fadingDefeatIds, setFadingDefeatIds] = useState<string[]>([]);
   const [rowSlides, setRowSlides] = useState<RowSlideEffect[]>([]);
   const [hoveredTargetId, setHoveredTargetId] = useState<string | null>(null);
@@ -1182,10 +1230,26 @@ export function BattleRadarView({
     battle.wingmanChat?.id ?? null
   );
 
+  // Per-unit floating label FIFO queue (1 active label at a time per unit, ~600ms each, max 3 queued, drop older)
+  const seenPopupIdsRef = useRef<Set<string>>(new Set());
+  const floatingTimersRef = useRef<Map<string, number>>(new Map());
+  const lastTurnForPopupsRef = useRef<number>(battle.turnCounter);
+  const [floatingQueue, setFloatingQueue] =
+    useState<RadarFloatingLabelQueueState>(() => {
+      const aliveIds = new Set(
+        battle.units.filter((u) => u.alive).map((u) => u.id)
+      );
+      let q = createRadarFloatingLabelQueue();
+      for (const pop of battle.popups) {
+        seenPopupIdsRef.current.add(pop.id);
+        if (!aliveIds.has(pop.unitId)) continue;
+        q = enqueueRadarFloatingLabel(q, pop, RADAR_FLOATING_LABEL_MAX_QUEUED);
+      }
+      return q;
+    });
+
   const containerRef = useRef<HTMLDivElement | null>(null);
   const markerElementsRef = useRef<Map<string, SVGGElement>>(new Map());
-  const toastTimerRef = useRef<number | null>(null);
-  const statusTooltipTimerRef = useRef<number | null>(null);
   const longPressTimerRef = useRef<number | null>(null);
   const longPressFiredRef = useRef(false);
   const prevAliveMapRef = useRef<Map<string, boolean>>(new Map());
@@ -1216,17 +1280,6 @@ export function BattleRadarView({
     });
   }, []);
 
-  const showInvalidToast = useCallback((message: string) => {
-    setInvalidToast(message);
-    if (toastTimerRef.current !== null) {
-      window.clearTimeout(toastTimerRef.current);
-    }
-    toastTimerRef.current = window.setTimeout(() => {
-      setInvalidToast(null);
-      toastTimerRef.current = null;
-    }, 2200);
-  }, []);
-
   const formatStatusTooltip = useCallback(
     (st: ActiveStatusEffect, unit?: CombatUnit): string => {
       const detail = formatStatusEffectDetail(lang, st, unit);
@@ -1243,54 +1296,66 @@ export function BattleRadarView({
     [lang]
   );
 
-  const handleInspectStatus = useCallback(
-    (unit: CombatUnit, st: ActiveStatusEffect) => {
-      const row = getCatalogRowForStatus(st.type, iconMods);
-      const isDebuff = getStatusVisualKind(st, row) === 'debuff';
-      setInspectedStatusInfo({
-        unit,
-        status: st,
-        unitName: formatShortUnitName(unit.name, 10),
-        detailText: formatStatusTooltip(st, unit),
-        isDebuff,
-        source: 'tap',
-      });
-      if (statusTooltipTimerRef.current !== null) {
-        window.clearTimeout(statusTooltipTimerRef.current);
-      }
-      statusTooltipTimerRef.current = window.setTimeout(() => {
-        setInspectedStatusInfo(null);
-        statusTooltipTimerRef.current = null;
-      }, 3200);
-    },
-    [formatStatusTooltip, iconMods]
-  );
+  // Sync incoming popups & dead units into per-unit floating label queue
+  useEffect(() => {
+    if (battle.turnCounter < lastTurnForPopupsRef.current) {
+      seenPopupIdsRef.current.clear();
+      floatingTimersRef.current.forEach((id) => window.clearTimeout(id));
+      floatingTimersRef.current.clear();
+    }
+    lastTurnForPopupsRef.current = battle.turnCounter;
 
-  const handleHoverStatus = useCallback(
-    (unit: CombatUnit, st: ActiveStatusEffect | null) => {
-      if (!st) {
-        setInspectedStatusInfo((cur) =>
-          cur && cur.source === 'hover' ? null : cur
+    const aliveIds = new Set(
+      battle.units.filter((u) => u.alive).map((u) => u.id)
+    );
+
+    setFloatingQueue((prev) => {
+      let next = pruneDeadRadarFloatingLabels(prev, aliveIds);
+      for (const pop of battle.popups) {
+        if (seenPopupIdsRef.current.has(pop.id)) continue;
+        seenPopupIdsRef.current.add(pop.id);
+        if (!aliveIds.has(pop.unitId)) continue;
+        next = enqueueRadarFloatingLabel(
+          next,
+          pop,
+          RADAR_FLOATING_LABEL_MAX_QUEUED
         );
-        return;
       }
-      if (statusTooltipTimerRef.current !== null) {
-        window.clearTimeout(statusTooltipTimerRef.current);
-        statusTooltipTimerRef.current = null;
+      return next;
+    });
+  }, [battle.popups, battle.units, battle.turnCounter]);
+
+  // Schedule 600ms auto-advance per active floating label slot
+  useEffect(() => {
+    if (!vfxConfig.showFloatingNumbers) {
+      floatingTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
+      floatingTimersRef.current.clear();
+      return;
+    }
+
+    const activeKeys = new Set<string>();
+    for (const [unitId, popup] of Object.entries(floatingQueue.activeByUnit)) {
+      if (!popup) continue;
+      const timerKey = `${unitId}:${popup.id}`;
+      activeKeys.add(timerKey);
+      if (!floatingTimersRef.current.has(timerKey)) {
+        const timerId = window.setTimeout(() => {
+          floatingTimersRef.current.delete(timerKey);
+          setFloatingQueue((cur) =>
+            advanceRadarFloatingLabel(cur, unitId, popup.id)
+          );
+        }, RADAR_FLOATING_LABEL_DURATION_MS);
+        floatingTimersRef.current.set(timerKey, timerId);
       }
-      const row = getCatalogRowForStatus(st.type, iconMods);
-      const isDebuff = getStatusVisualKind(st, row) === 'debuff';
-      setInspectedStatusInfo({
-        unit,
-        status: st,
-        unitName: formatShortUnitName(unit.name, 10),
-        detailText: formatStatusTooltip(st, unit),
-        isDebuff,
-        source: 'hover',
-      });
-    },
-    [formatStatusTooltip, iconMods]
-  );
+    }
+
+    floatingTimersRef.current.forEach((timerId, key) => {
+      if (!activeKeys.has(key)) {
+        window.clearTimeout(timerId);
+        floatingTimersRef.current.delete(key);
+      }
+    });
+  }, [floatingQueue, vfxConfig.showFloatingNumbers]);
 
   // Auto-hide speech bubble after 1.5s cleanly even when rendered standalone
   useEffect(() => {
@@ -1308,12 +1373,10 @@ export function BattleRadarView({
 
   useEffect(() => {
     return () => {
-      if (toastTimerRef.current !== null) {
-        window.clearTimeout(toastTimerRef.current);
-      }
-      if (statusTooltipTimerRef.current !== null) {
-        window.clearTimeout(statusTooltipTimerRef.current);
-      }
+      floatingTimersRef.current.forEach((timerId) => {
+        window.clearTimeout(timerId);
+      });
+      floatingTimersRef.current.clear();
       if (longPressTimerRef.current !== null) {
         window.clearTimeout(longPressTimerRef.current);
       }
@@ -1369,14 +1432,42 @@ export function BattleRadarView({
   const cy = vh / 2;
 
   const lanes = useMemo(
-    () => buildRowLanes(isLandscape, vw, vh),
-    [isLandscape, vw, vh]
+    () => buildRowLanes(isLandscape, vw, vh, battle.units),
+    [isLandscape, vw, vh, battle.units]
   );
+
+  const laneByKey = useMemo(() => {
+    const map = new Map<string, RowLaneRect>();
+    for (const lane of lanes) {
+      map.set(`${lane.side}:${lane.row}`, lane);
+    }
+    return map;
+  }, [lanes]);
 
   const posMap = useMemo(
     () => computeUnitPositions(battle.units, lanes, isLandscape),
     [battle.units, lanes, isLandscape]
   );
+
+  // Include transient defeat-fade coordinates for BattleVfxOverlay explosion FX only
+  // (never rendered as RadarUnitMarker ghosts or floating labels)
+  const defeatPosFallbackMap = useMemo(() => {
+    const map = new Map(posMap);
+    for (const u of battle.units) {
+      if (u.alive || map.has(u.id)) continue;
+      const lane = laneByKey.get(`${u.side}:${u.row}`);
+      if (!lane) continue;
+      map.set(u.id, {
+        x: lane.x + lane.w / 2,
+        y: isLandscape
+          ? lane.y + lane.h * 0.45
+          : lane.y +
+            PHONE_EMPTY_LANE_HEIGHT_PX +
+            Math.max(24, lane.h - PHONE_EMPTY_LANE_HEIGHT_PX) * 0.44,
+      });
+    }
+    return map;
+  }, [posMap, battle.units, laneByKey, isLandscape]);
 
   // Detect engine-driven unit row changes and play a short compositor-only slide animation
   useEffect(() => {
@@ -1422,33 +1513,46 @@ export function BattleRadarView({
     [battle.units]
   );
 
-  // Adaptive unit marker scaling: larger in 4v4 so units fill the field, clean fit in 8v8
-  const maxUnitsInRow = useMemo(() => {
+  const aliveCountByLane = useMemo(() => {
     const counts = new Map<string, number>();
-    let max = 1;
     for (const u of battle.units) {
+      if (!u.alive) continue;
       const key = `${u.side}:${u.row}`;
-      const next = (counts.get(key) ?? 0) + 1;
-      counts.set(key, next);
-      if (next > max) max = next;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
     }
-    return max;
+    return counts;
   }, [battle.units]);
 
-  const tokenRadius = isLandscape
-    ? maxUnitsInRow <= 2 && battle.squadSize <= 4
-      ? 26
-      : maxUnitsInRow <= 3
-      ? 22
-      : 19
-    : maxUnitsInRow <= 2 && battle.squadSize <= 4
-    ? 22
-    : maxUnitsInRow <= 3
-    ? 18
-    : 16;
+  const unitRingMetaMap = useMemo(() => {
+    const map = new Map<
+      string,
+      { tokenRadius: number; ringOuterRadius: number; barW: number }
+    >();
+    for (const u of battle.units) {
+      if (!u.alive) continue;
+      const laneKey = `${u.side}:${u.row}`;
+      const lane = laneByKey.get(laneKey);
+      const countInLane = aliveCountByLane.get(laneKey) ?? 1;
+      const tokenRadius = computeLaneTokenRadius(
+        isLandscape,
+        lane,
+        countInLane,
+        battle.squadSize
+      );
+      const ringOuterRadius = computeUnitRingArcs(u, tokenRadius).outerRadius;
+      const barW = isLandscape
+        ? 64
+        : tokenRadius >= 28
+        ? 60
+        : tokenRadius >= 22
+        ? 56
+        : 52;
+      map.set(u.id, { tokenRadius, ringOuterRadius, barW });
+    }
+    return map;
+  }, [battle.units, battle.squadSize, laneByKey, aliveCountByLane, isLandscape]);
 
   const hitSize = getRadarHitAreaSize(isLandscape);
-  const barW = isLandscape ? (tokenRadius >= 24 ? 62 : 56) : 52;
 
   // Active unit and targeting actor
   const activeUnit = useMemo(
@@ -1530,36 +1634,32 @@ export function BattleRadarView({
     return set;
   }, [fadingDefeatIds, battle.explodedUnitIds]);
 
-  // All floating text (damage + buff/status like "WPN +30%") shares the same max-6 stagger queue
-  const staggeredPopups = useMemo(
-    () =>
-      layoutStaggeredPopups(battle.popups, posMap, vw, vh, {
-        maxVisible: 6,
-        verticalStepPct: 6.2,
-        staggerDelayMs: 110,
-        durationMs: 800,
-        baseOffsetYPct: 8,
-      }),
-    [battle.popups, posMap, vw, vh]
-  );
-
-  const getInvalidReasonMessage = useCallback(
-    (reason: TargetInvalidReason | null): string => {
-      switch (reason) {
-        case 'front_row_alive':
-          return t('radar.invalidFrontAlive');
-        case 'middle_row_alive':
-          return t('radar.invalidMiddleAlive');
-        case 'stealthed':
-          return t('radar.invalidStealthed');
-        case 'unit_down':
-          return t('radar.invalidDown');
-        default:
-          return t('radar.invalidFrontAlive');
-      }
-    },
-    [t]
-  );
+  // One active floating label per alive unit, fixed 18px slot strictly ABOVE the unit ring
+  const activeFloatingLabels = useMemo(() => {
+    const items: Array<{
+      popup: FloatingPopup;
+      leftPct: number;
+      topPct: number;
+    }> = [];
+    for (const u of battle.units) {
+      if (!u.alive) continue;
+      const popup = floatingQueue.activeByUnit[u.id];
+      if (!popup) continue;
+      const pos = posMap.get(u.id);
+      if (!pos) continue;
+      const ringMeta = unitRingMetaMap.get(u.id);
+      const ringOuterRadius = ringMeta?.ringOuterRadius ?? (isLandscape ? 40 : 25);
+      const leftPct = Number(
+        Math.max(10, Math.min(90, (pos.x / Math.max(1, vw)) * 100)).toFixed(2)
+      );
+      const slotTopSvgY = Math.max(2, pos.y - ringOuterRadius - 21);
+      const topPct = Number(
+        Math.max(0.5, Math.min(88, (slotTopSvgY / Math.max(1, vh)) * 100)).toFixed(2)
+      );
+      items.push({ popup, leftPct, topPct });
+    }
+    return items;
+  }, [battle.units, floatingQueue.activeByUnit, posMap, unitRingMetaMap, isLandscape, vw, vh]);
 
   const interactionRef = useRef({
     battle,
@@ -1569,8 +1669,7 @@ export function BattleRadarView({
     onSelectEnemy,
     onSelectAlly,
     onInspectUnit,
-    showInvalidToast,
-    getInvalidReasonMessage,
+    onInvalidTargetLog,
   });
   interactionRef.current = {
     battle,
@@ -1580,8 +1679,7 @@ export function BattleRadarView({
     onSelectEnemy,
     onSelectAlly,
     onInspectUnit,
-    showInvalidToast,
-    getInvalidReasonMessage,
+    onInvalidTargetLog,
   };
 
   const handleTokenTap = useCallback((unitId: string) => {
@@ -1592,23 +1690,16 @@ export function BattleRadarView({
 
     const ctx = interactionRef.current;
     const unit = ctx.battle.units.find((u) => u.id === unitId);
-    if (!unit) return;
+    if (!unit || !unit.alive) return;
 
     const isEnemy = unit.side === 'enemy';
     const isEnemySelected = ctx.battle.selectedTargetId === unit.id;
     const isAllySelected = ctx.battle.selectedAllyTargetId === unit.id;
 
-    if (!unit.alive) {
-      if (ctx.canPlayerManualAct) {
-        ctx.showInvalidToast(ctx.getInvalidReasonMessage('unit_down'));
-      }
-      return;
-    }
-
     if (isEnemy && ctx.canPlayerManualAct) {
       const validity = ctx.enemyValidityMap.get(unit.id);
       if (validity && !validity.valid) {
-        ctx.showInvalidToast(ctx.getInvalidReasonMessage(validity.reason));
+        ctx.onInvalidTargetLog?.(validity.reason, unit);
         return;
       }
       if (!isEnemySelected) {
@@ -1773,12 +1864,14 @@ export function BattleRadarView({
       ? t('common.middleRow')
       : t('common.backRow');
 
-  const getExposureLabel = (state: RowExposureState) =>
-    state === 'exposed'
-      ? t('battle.rowExposed')
-      : state === 'protected'
-      ? t('battle.rowProtected')
-      : t('battle.rowEmpty');
+  const rowBuffTexts = useMemo<Record<CombatRow, string>>(
+    () => ({
+      front: formatRadarLaneBuffText(lang, formationConfig, 'front'),
+      middle: formatRadarLaneBuffText(lang, formationConfig, 'middle'),
+      back: formatRadarLaneBuffText(lang, formationConfig, 'back'),
+    }),
+    [lang, formationConfig]
+  );
 
   const autoBadgeText = t('auto.badge');
 
@@ -1839,15 +1932,16 @@ export function BattleRadarView({
           />
         ))}
 
-        {/* 3-ROW CONTENT-FIT LANE BANDS (smaller Exposed/Protected labels) */}
+        {/* 3-ROW LANE BANDS — one muted 20px header line (lane name + Lộ diện only when exposed + buff) */}
         {lanes.map((lane) => {
-          const exposure =
+          const exposure: RowExposureState =
             lane.side === 'enemy'
               ? enemyExposure[lane.row]
               : allyExposure[lane.row];
           const isEnemySide = lane.side === 'enemy';
           const isExposed = exposure === 'exposed';
           const isProtected = exposure === 'protected';
+          const isPhoneCollapsed = Boolean(lane.isEmptyCollapsed);
 
           const fillColor = isExposed
             ? isEnemySide
@@ -1865,25 +1959,23 @@ export function BattleRadarView({
             ? 'rgba(148, 163, 184, 0.42)'
             : 'rgba(51, 65, 85, 0.28)';
 
-          const labelFill = isExposed
-            ? isEnemySide
-              ? '#fca5a5'
-              : '#7dd3fc'
-            : '#94a3b8';
-
-          const badgeFill = isExposed
-            ? isEnemySide
-              ? '#f87171'
-              : '#38bdf8'
-            : isProtected
-            ? '#fbbf24'
-            : '#64748b';
+          const rowLabel = getRowLabel(lane.row);
+          const buffText = rowBuffTexts[lane.row];
+          const headerParts = isPhoneCollapsed
+            ? [rowLabel]
+            : [
+                rowLabel,
+                ...(isExposed ? [t('battle.rowExposed')] : []),
+                ...(buffText ? [buffText] : []),
+              ];
+          const headerText = headerParts.join(' · ');
 
           return (
             <g
               key={`${lane.side}-${lane.row}`}
               data-row-band={`${lane.side}-${lane.row}`}
               data-row-state={exposure}
+              data-lane-collapsed={isPhoneCollapsed ? 'true' : 'false'}
             >
               <rect
                 x={lane.x}
@@ -1898,28 +1990,31 @@ export function BattleRadarView({
                   isProtected || exposure === 'empty' ? '4 4' : undefined
                 }
               />
-              <text
-                x={lane.labelX}
-                y={lane.labelY}
-                textAnchor={lane.labelAnchor}
-                fontSize={isLandscape ? '9' : '8.5'}
-                fontFamily="monospace"
-                fontWeight="700"
-                fill={labelFill}
+              <foreignObject
+                x={lane.x + 4}
+                y={lane.y}
+                width={Math.max(32, lane.w - 8)}
+                height={PHONE_EMPTY_LANE_HEIGHT_PX}
               >
-                {getRowLabel(lane.row)}
-              </text>
-              <text
-                x={lane.badgeX}
-                y={lane.badgeY}
-                textAnchor={lane.badgeAnchor}
-                fontSize={isLandscape ? '8' : '7.5'}
-                fontFamily="monospace"
-                fontWeight="700"
-                fill={badgeFill}
-              >
-                {getExposureLabel(exposure)}
-              </text>
+                <div
+                  data-testid={`radar-lane-header-${lane.side}-${lane.row}`}
+                  title={headerText}
+                  style={{ height: `${PHONE_EMPTY_LANE_HEIGHT_PX}px`, lineHeight: `${PHONE_EMPTY_LANE_HEIGHT_PX}px` }}
+                  className={`w-full h-[20px] leading-[20px] px-1 flex items-center text-[10px] font-mono-nums truncate ${
+                    isLandscape ? 'justify-center text-center' : 'justify-start text-left'
+                  } ${
+                    isPhoneCollapsed
+                      ? 'text-slate-500/85'
+                      : isExposed
+                      ? isEnemySide
+                        ? 'text-red-300/90'
+                        : 'text-sky-300/90'
+                      : 'text-slate-400/85'
+                  }`}
+                >
+                  <span className="truncate font-semibold">{headerText}</span>
+                </div>
+              </foreignObject>
             </g>
           );
         })}
@@ -1928,7 +2023,7 @@ export function BattleRadarView({
         {isLandscape ? (
           <line
             x1={cx}
-            y1="8"
+            y1="46"
             x2={cx}
             y2={vh - 8}
             stroke="#f59e0b"
@@ -1939,9 +2034,9 @@ export function BattleRadarView({
         ) : (
           <line
             x1="8"
-            y1={cy}
+            y1={44 + (vh - 52) / 2}
             x2={vw - 8}
-            y2={cy}
+            y2={44 + (vh - 52) / 2}
             stroke="#f59e0b"
             strokeOpacity="0.45"
             strokeWidth="1.5"
@@ -1949,24 +2044,23 @@ export function BattleRadarView({
           />
         )}
 
-        {/* MEMOIZED UNIT MARKERS */}
+        {/* MEMOIZED UNIT MARKERS (alive units only; no dead ghost markers) */}
         {battle.units.map((unit) => {
+          if (!unit.alive) return null;
           const pos = posMap.get(unit.id);
-          if (!pos) return null;
+          const ringMeta = unitRingMetaMap.get(unit.id);
+          if (!pos || !ringMeta) return null;
 
           const isEnemy = unit.side === 'enemy';
           const isActive = activeUnitId === unit.id && !battle.summary;
           const isTargeted =
-            unit.alive &&
-            ((isEnemy && battle.selectedTargetId === unit.id) ||
-              (!isEnemy &&
-                hasSingleAllySkill &&
-                battle.selectedAllyTargetId === unit.id));
+            (isEnemy && battle.selectedTargetId === unit.id) ||
+            (!isEnemy &&
+              hasSingleAllySkill &&
+              battle.selectedAllyTargetId === unit.id);
 
           const validity = isEnemy ? enemyValidityMap.get(unit.id) : undefined;
-          const isBlockedByRow = Boolean(
-            unit.alive && isEnemy && validity?.blockedByRow
-          );
+          const isBlockedByRow = Boolean(isEnemy && validity?.blockedByRow);
 
           const facingAngle = isLandscape
             ? isEnemy
@@ -2000,9 +2094,9 @@ export function BattleRadarView({
               iconMods={iconMods}
               x={pos.x}
               y={pos.y}
-              tokenRadius={tokenRadius}
+              tokenRadius={ringMeta.tokenRadius}
               hitSize={hitSize}
-              barW={barW}
+              barW={ringMeta.barW}
               facingAngle={facingAngle}
               isActive={isActive}
               isTargeted={isTargeted}
@@ -2011,13 +2105,9 @@ export function BattleRadarView({
               animationsSkipped={animationsSkipped}
               hoverTooltip={hoverTooltip}
               autoBadgeText={autoBadgeText}
-              showStatusLabels={effectiveShowStatusLabels}
-              formatStatusShortText={(st) => getStatusShortLabel(lang, st.type)}
               formatStatusTooltip={formatStatusTooltip}
               onMarkerRef={registerMarkerRef}
               onHoverUnit={setHoveredTargetId}
-              onInspectStatus={handleInspectStatus}
-              onHoverStatus={handleHoverStatus}
               onTap={handleTokenTap}
               onLongPressStart={handleLongPressStart}
               onLongPressCancel={handleLongPressCancel}
@@ -2031,7 +2121,7 @@ export function BattleRadarView({
         battle={battle}
         containerRef={containerRef}
         markerElementsRef={markerElementsRef}
-        svgPosMap={posMap}
+        svgPosMap={defeatPosFallbackMap}
         vw={vw}
         vh={vh}
         battleSpeed={battleSpeed}
@@ -2041,7 +2131,9 @@ export function BattleRadarView({
         hitFlashUnitIds={fxHitTargetIds}
         defeatFadingUnitIds={defeatFadingSet}
         rowSlides={rowSlides}
-        renderedPopupCount={vfxConfig.showFloatingNumbers ? staggeredPopups.length : 0}
+        renderedPopupCount={
+          vfxConfig.showFloatingNumbers ? activeFloatingLabels.length : 0
+        }
         effectsDebugEnabled={effectiveDebugEnabled}
         osReducedMotion={osReducedMotion}
         autoReducedNoticeVisible={autoReducedNoticeVisible}
@@ -2217,73 +2309,33 @@ export function BattleRadarView({
         )}
       </div>
 
-      {/* Status Icon Tap & Hover Tooltip (uses shared StatusChip + unit name + exact effect detail) */}
-      {inspectedStatusInfo && (
-        <div
-          role="status"
-          aria-live="polite"
-          data-testid="radar-status-tooltip"
-          onClick={() => setInspectedStatusInfo(null)}
-          className={`absolute bottom-2.5 left-1/2 -translate-x-1/2 z-30 max-w-[92%] rounded-lg border px-2.5 py-1.5 text-[12px] font-semibold font-mono-nums shadow-lg inline-flex items-center gap-2 whitespace-nowrap cursor-pointer ${
-            inspectedStatusInfo.isDebuff
-              ? 'border-red-500/70 bg-[#1a0a0d]/95 text-red-100'
-              : 'border-emerald-500/70 bg-[#071a10]/95 text-emerald-100'
-          }`}
-        >
-          <StatusChip
-            status={inspectedStatusInfo.status}
-            lang={lang}
-            unit={inspectedStatusInfo.unit}
-            badgeLayout={statusSettings.badgeLayout}
-            iconMods={iconMods}
-            size="sm"
-            showLabel={true}
-            allowStack={false}
-            stacks={1}
-          />
-          <span className="truncate">
-            {inspectedStatusInfo.unitName}: {inspectedStatusInfo.detailText}
-          </span>
-        </div>
-      )}
-
-      {/* Invalid Target Reason One-Line Toast (non-blocking) */}
-      {invalidToast && (
-        <div
-          role="status"
-          aria-live="polite"
-          data-testid="radar-invalid-target-toast"
-          className="pointer-events-none absolute bottom-2.5 left-1/2 -translate-x-1/2 z-30 max-w-[92%] rounded-lg border border-amber-400/70 bg-[#120e08]/95 px-3 py-1.5 text-[13px] font-semibold text-amber-200 shadow-lg whitespace-nowrap truncate"
-        >
-          {invalidToast}
-        </div>
-      )}
-
-      {/* Staggered Floating Popups (max 6 simultaneous; kept when Effects=Off, skipped on reduced motion) */}
-      {vfxConfig.showFloatingNumbers && staggeredPopups.length > 0 && (
+      {/* Per-Unit Queued Floating Labels (1 active per alive unit at a time, 18px fixed slot above ring, clipped inside radar box) */}
+      {vfxConfig.showFloatingNumbers && activeFloatingLabels.length > 0 && (
         <div
           data-testid="radar-popups-layer"
           className="pointer-events-none absolute inset-0 overflow-hidden z-30"
         >
-          {staggeredPopups.map((item) => {
+          {activeFloatingLabels.map((item) => {
             const isSmall = isCompactPopupTone(item.popup.tone);
             return (
               <div
                 key={item.popup.id}
                 data-testid="damage-popup"
+                data-unit-id={item.popup.unitId}
+                data-slot-height="18"
                 data-popup-compact={isSmall ? 'true' : 'false'}
                 style={{
                   left: `${item.leftPct}%`,
                   top: `${item.topPct}%`,
-                  animationDelay: `${item.delayMs}ms`,
-                  animationDuration: `${item.durationMs}ms`,
+                  height: '18px',
+                  lineHeight: '18px',
                 }}
-                className={`absolute font-display font-bold tracking-wide drop-shadow-[0_1px_3px_rgba(0,0,0,0.95)] whitespace-nowrap ${
+                className={`absolute -translate-x-1/2 h-[18px] leading-[18px] px-1.5 rounded bg-[#050a12]/90 inline-flex items-center justify-center font-display font-bold tracking-wide drop-shadow-[0_1px_3px_rgba(0,0,0,0.95)] whitespace-nowrap ${
                   isSmall
-                    ? 'text-[12px] px-1 rounded bg-[#050a12]/80 anim-popup-tight'
+                    ? 'text-[11px]'
                     : item.popup.tone === 'crit'
-                    ? 'text-[17px] anim-popup'
-                    : 'text-[15px] anim-popup'
+                    ? 'text-[13px]'
+                    : 'text-[12px]'
                 } ${getPopupColorClass(item.popup.tone)}`}
               >
                 {item.popup.text}

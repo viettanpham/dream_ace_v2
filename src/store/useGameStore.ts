@@ -415,6 +415,7 @@ interface GameStoreState {
   startBattle: (sectorId?: string) => void;
   selectTarget: (unitId: string) => void;
   selectAllyTarget: (unitId: string) => void;
+  logRadarInvalidTarget: (targetName: string, reasonKey: string) => void;
   performPlayerAction: (action: ActionType, skillId?: string) => void;
   performAutoPlayerTurn: () => void;
   performAiTurn: () => void;
@@ -2185,6 +2186,29 @@ export const useGameStore = create<GameStoreState>()(
           battle: {
             ...battle,
             selectedAllyTargetId: unitId,
+          },
+        });
+      },
+
+      logRadarInvalidTarget: (targetName, reasonKey) => {
+        const { battle } = get();
+        if (!battle || battle.summary) return;
+        const cleanTarget = String(targetName ?? '').trim() || '—';
+        const nextEntry: CombatLogEntry = {
+          id: `log_inv_${Date.now()}_${battle.log.length}`,
+          round: battle.round,
+          actorName: cleanTarget,
+          tag: 'SYSTEM',
+          templateKey: 'log.invalidTarget',
+          params: {
+            target: cleanTarget,
+            reasonKey,
+          },
+        };
+        set({
+          battle: {
+            ...battle,
+            log: [...battle.log, nextEntry],
           },
         });
       },

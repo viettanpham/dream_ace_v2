@@ -877,6 +877,16 @@ function formatCombatLogBody(
       });
     }
 
+    case 'log.invalidTarget': {
+      const reasonKey = String(
+        p.reasonKey ?? 'radar.invalidFrontAlive'
+      ) as TranslationKey;
+      return translate(lang, 'log.invalidTarget', {
+        target: String(p.target ?? ''),
+        reason: translate(lang, reasonKey),
+      });
+    }
+
     default:
       return '';
   }

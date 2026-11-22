@@ -260,6 +260,7 @@ describe('1) Target validity function (3-row order + long-range / Siege override
 describe('2) Invalid-target toast reason, lock icons, target rings/arrow, shapes & status overflow', () => {
   it('shows lock icons on blocked rows, displays one-line toast reason on invalid tap, and selects valid targets', () => {
     const onSelectEnemy = vi.fn();
+    const onInvalidTargetLog = vi.fn();
     const player = makeUnit('p1', 'ZARA', 'ally', 'front', {
       classId: 'striker',
       isPlayer: true,
@@ -309,6 +310,7 @@ describe('2) Invalid-target toast reason, lock icons, target rings/arrow, shapes
           onSelectEnemy,
           onSelectAlly: vi.fn(),
           onInspectUnit: vi.fn(),
+          onInvalidTargetLog,
         })
       );
     });
@@ -385,7 +387,7 @@ describe('2) Invalid-target toast reason, lock icons, target rings/arrow, shapes
       container!.querySelector('[data-testid="radar-lock-enemy_back"]')
     ).not.toBeNull();
 
-    // Tapping blocked Back enemy does NOT select it and shows "Front row still alive" toast
+    // Tapping blocked Back enemy does NOT select it, logs reason via onInvalidTargetLog, and renders ZERO toast chips over radar
     const backEl = container!.querySelector(
       '[data-testid="radar-unit-enemy_back"]'
     ) as SVGGElement;
@@ -393,25 +395,18 @@ describe('2) Invalid-target toast reason, lock icons, target rings/arrow, shapes
       backEl.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     expect(onSelectEnemy).not.toHaveBeenCalled();
-    const toast = container!.querySelector(
-      '[data-testid="radar-invalid-target-toast"]'
-    );
-    expect(toast).not.toBeNull();
-    expect(toast!.textContent).toBe('Front row still alive');
-
-    // Tapping down unit does NOT select it and shows "Unit is already down" toast
-    const downEl = container!.querySelector(
-      '[data-testid="radar-unit-enemy_down"]'
-    ) as SVGGElement;
-    expect(downEl.getAttribute('data-unit-down')).toBe('true');
-    act(() => {
-      downEl.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-    expect(onSelectEnemy).not.toHaveBeenCalled();
     expect(
       container!.querySelector('[data-testid="radar-invalid-target-toast"]')
-        ?.textContent
-    ).toBe('Unit is already down');
+    ).toBeNull();
+    expect(onInvalidTargetLog).toHaveBeenCalledWith(
+      'front_row_alive',
+      expect.objectContaining({ id: 'enemy_back' })
+    );
+
+    // Dead units have NO ghost marker on radar (G4a-3a Item 5)
+    expect(
+      container!.querySelector('[data-testid="radar-unit-enemy_down"]')
+    ).toBeNull();
 
     // Switch actor to Siege -> every row becomes targetable, zero lock icons, tapping Back selects it
     const siegePlayer = { ...player, classId: 'siege' as MechClassId };

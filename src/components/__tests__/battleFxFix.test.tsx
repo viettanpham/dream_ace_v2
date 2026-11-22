@@ -553,30 +553,53 @@ describe('FX-fix: Fixed radar row positions & row movement log + slide animation
         : u
     );
 
-    for (const isLandscape of [true, false]) {
-      const vw = isLandscape ? 720 : 380;
-      const vh = isLandscape ? 420 : 520;
+    // Desktop/landscape: all 6 row bands remain fixed and living unit positions remain unchanged
+    {
+      const vw = 720;
+      const vh = 420;
+      const lanesInitial = buildRowLanes(true, vw, vh, unitsAlive);
+      const lanesOneDead = buildRowLanes(true, vw, vh, unitsOneDead);
+      const lanesEmpty = buildRowLanes(true, vw, vh, unitsFrontEmpty);
 
-      const lanesInitial = buildRowLanes(isLandscape, vw, vh, unitsAlive);
-      const lanesOneDead = buildRowLanes(isLandscape, vw, vh, unitsOneDead);
-      const lanesEmpty = buildRowLanes(isLandscape, vw, vh, unitsFrontEmpty);
-
-      // Every lane rect must remain strictly identical
       expect(lanesOneDead).toEqual(lanesInitial);
       expect(lanesEmpty).toEqual(lanesInitial);
 
-      const posInitial = computeUnitPositions(unitsAlive, lanesInitial, isLandscape);
-      const posOneDead = computeUnitPositions(unitsOneDead, lanesOneDead, isLandscape);
-      const posEmpty = computeUnitPositions(unitsFrontEmpty, lanesEmpty, isLandscape);
+      const posInitial = computeUnitPositions(unitsAlive, lanesInitial, true);
+      const posOneDead = computeUnitPositions(unitsOneDead, lanesOneDead, true);
+      const posEmpty = computeUnitPositions(unitsFrontEmpty, lanesEmpty, true);
 
-      // Every unit (living or dead) keeps the exact same coordinates
-      for (const u of unitsAlive) {
-        expect(posOneDead.get(u.id)).toEqual(posInitial.get(u.id));
+      // Dead units have no ghost positions; all remaining living units stay in place
+      expect(posOneDead.has('e1')).toBe(false);
+      expect(posEmpty.has('e1')).toBe(false);
+      expect(posEmpty.has('e2')).toBe(false);
+      for (const u of unitsAlive.filter((x) => x.id !== 'e1' && x.id !== 'e2')) {
         expect(posEmpty.get(u.id)).toEqual(posInitial.get(u.id));
       }
+      expect(posOneDead.get('p1')).toEqual(posInitial.get('p1'));
     }
 
-    // Also verify rendered SVG [data-row-band] <rect> attributes and unit marker transforms stay identical
+    // Phone portrait: empty lane (0 alive) collapses to 20px line while dead units have no positions
+    {
+      const vw = 380;
+      const vh = 520;
+      const lanesEmptyPhone = buildRowLanes(false, vw, vh, unitsFrontEmpty);
+      const collapsedEnemyFront = lanesEmptyPhone.find(
+        (l) => l.side === 'enemy' && l.row === 'front'
+      );
+      expect(collapsedEnemyFront?.h).toBe(20);
+      expect(collapsedEnemyFront?.isEmptyCollapsed).toBe(true);
+
+      const posEmptyPhone = computeUnitPositions(
+        unitsFrontEmpty,
+        lanesEmptyPhone,
+        false
+      );
+      expect(posEmptyPhone.has('e1')).toBe(false);
+      expect(posEmptyPhone.has('e2')).toBe(false);
+      expect(posEmptyPhone.has('e3')).toBe(true);
+    }
+
+    // Also verify rendered SVG [data-row-band] <rect> attributes and living unit marker transforms stay identical on PC
     const renderAndSnapshot = (units: CombatUnit[]) => {
       act(() => {
         root!.render(
@@ -608,7 +631,7 @@ describe('FX-fix: Fixed radar row positions & row movement log + slide animation
         height: r.getAttribute('height'),
       }));
 
-      const markerTransforms = ['p1', 'a2', 'a3', 'e2', 'e3'].map((id) => ({
+      const markerTransforms = ['p1', 'a2', 'a3', 'e3'].map((id) => ({
         id,
         transform: container!
           .querySelector(`[data-testid="radar-unit-${id}"]`)
@@ -622,6 +645,12 @@ describe('FX-fix: Fixed radar row positions & row movement log + slide animation
     const snapFrontEmpty = renderAndSnapshot(unitsFrontEmpty);
     expect(snapFrontEmpty.bands).toEqual(snapAlive.bands);
     expect(snapFrontEmpty.markerTransforms).toEqual(snapAlive.markerTransforms);
+    expect(
+      container!.querySelector('[data-testid="radar-unit-e1"]')
+    ).toBeNull();
+    expect(
+      container!.querySelector('[data-testid="radar-unit-e2"]')
+    ).toBeNull();
   });
 
   it('logs "<unit> moves to <row>" when retreat_back_eva changes a unit row and plays a short slide animation on radar', () => {

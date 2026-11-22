@@ -630,6 +630,7 @@ export const EN_TRANSLATIONS = {
   'log.invincibleBlock': '{target} stasis barrier negates all damage from {actor}!',
   'log.silencedBlocked': '{actor} is Silenced and cannot fire skills — defaults to Primary Lasers.',
   'log.unitMovesRow': '{actor} moves to {row}.',
+  'log.invalidTarget': 'Cannot target {target}: {reason}.',
   'log.primaryWeapons': 'Primary Lasers',
   'log.breakdownBoth': '{shield} SHD, {hp} HP',
   'log.breakdownShield': '{shield} SHD',

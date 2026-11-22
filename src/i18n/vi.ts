@@ -632,6 +632,7 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'log.invincibleBlock': 'Lồng Stasis của {target} chặn đứng toàn bộ sát thương từ {actor}!',
   'log.silencedBlocked': '{actor} đang bị Câm lặng không thể dùng kỹ năng — chuyển sang Pháo Chính.',
   'log.unitMovesRow': '{actor} di chuyển sang {row}.',
+  'log.invalidTarget': 'Không thể chọn {target}: {reason}.',
   'log.primaryWeapons': 'Pháo Chính',
   'log.breakdownBoth': '{shield} Khiên, {hp} HP',
   'log.breakdownShield': '{shield} Khiên',

@@ -142,6 +142,7 @@ export function BattleScreen() {
   const performPlayerAction = useGameStore((s) => s.performPlayerAction);
   const performAutoPlayerTurn = useGameStore((s) => s.performAutoPlayerTurn);
   const performAiTurn = useGameStore((s) => s.performAiTurn);
+  const logRadarInvalidTarget = useGameStore((s) => s.logRadarInvalidTarget);
   const retreatBattle = useGameStore((s) => s.retreatBattle);
   const clearExpiredPopups = useGameStore((s) => s.clearExpiredPopups);
   const clearExpiredFx = useGameStore((s) => s.clearExpiredFx);
@@ -1215,6 +1216,17 @@ export function BattleScreen() {
             setInspectedUnitId(id);
           }}
           onInspectUnit={handleInspectUnit}
+          onInvalidTargetLog={(reason, unit) => {
+            const reasonKey =
+              reason === 'middle_row_alive'
+                ? 'radar.invalidMiddleAlive'
+                : reason === 'stealthed'
+                ? 'radar.invalidStealthed'
+                : reason === 'unit_down'
+                ? 'radar.invalidDown'
+                : 'radar.invalidFrontAlive';
+            logRadarInvalidTarget(unit.name, reasonKey);
+          }}
         />
       );
     }

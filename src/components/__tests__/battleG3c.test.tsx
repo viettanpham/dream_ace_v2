@@ -1013,11 +1013,11 @@ describe('G3c-4: Status effects labels in Card & Radar views + Effects menu togg
     ).toBeNull();
   });
 
-  it('renders short status text labels in Radar view and toggles them via Effects menu ("Hiện tên hiệu ứng")', () => {
+  it('renders NO status text pills on Radar markers (G4a-3a) while Effects menu ("Hiện tên hiệu ứng") toggles Card status labels', () => {
     const battle = makeBattle();
     expect(readShowStatusLabels()).toBe(true);
 
-    // Direct BattleRadarView check
+    // Direct BattleRadarView check: icon-only chips only, zero text tag pills
     act(() => {
       root!.render(
         createElement(BattleRadarView, {
@@ -1042,15 +1042,17 @@ describe('G3c-4: Status effects labels in Card & Radar views + Effects menu togg
     });
     expect(
       container!.querySelector('[data-testid="radar-status-label-player_1"]')
-        ?.textContent
-    ).toBeTruthy();
+    ).toBeNull();
+    expect(
+      container!.querySelector('[data-testid="radar-status-icon-player_1-0"]')
+    ).not.toBeNull();
 
-    // End-to-end toggle in BattleScreen Effects menu
+    // End-to-end toggle in BattleScreen Effects menu (affects Card view + persists preference)
     useGameStore.setState({
       screen: 'BATTLE',
       language: 'vi',
       battle,
-      battleViewMode: 'radar',
+      battleViewMode: 'card',
     });
 
     act(() => {
@@ -1058,7 +1060,7 @@ describe('G3c-4: Status effects labels in Card & Radar views + Effects menu togg
     });
 
     expect(
-      container!.querySelector('[data-testid="radar-status-label-player_1"]')
+      container!.querySelector('[data-testid="card-status-label-player_1-0"]')
     ).not.toBeNull();
 
     const moreBtn = container!.querySelector(
@@ -1086,7 +1088,7 @@ describe('G3c-4: Status effects labels in Card & Radar views + Effects menu togg
     expect(readShowStatusLabels()).toBe(false);
     expect(toggleStatusBtn.getAttribute('aria-pressed')).toBe('false');
     expect(
-      container!.querySelector('[data-testid="radar-status-label-player_1"]')
+      container!.querySelector('[data-testid="card-status-label-player_1-0"]')
     ).toBeNull();
   });
 });
