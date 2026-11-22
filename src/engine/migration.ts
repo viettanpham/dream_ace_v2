@@ -69,6 +69,7 @@ import {
 } from './starter';
 import { createDefaultGearUnit, createDefaultPilotAccount } from './stats';
 import { createDefaultTacticsForClass, sanitizeGearTactics } from './tactics';
+import { ALLOWED_BATTLE_SPEEDS } from '../utils/battleDisplay';
 import { sanitizeStatusDisplayDefaults } from '../utils/statusDisplayPrefs';
 
 export const CURRENT_SAVE_VERSION = 9;
@@ -97,7 +98,7 @@ const VALID_CLASSES = new Set<MechClassId>([
   'support',
 ]);
 
-const VALID_SPEEDS = new Set<BattleSpeed>([1, 2, 3, 5, 10]);
+const VALID_SPEEDS = new Set<BattleSpeed>(ALLOWED_BATTLE_SPEEDS);
 const VALID_BATTLE_SIZES = new Set<BattleSize>([4, 6, 8]);
 
 export function createDefaultAdminConfig(): AdminConfig {

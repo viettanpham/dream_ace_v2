@@ -1156,6 +1156,9 @@ export function BattleScreen() {
           title={stoppedReasonTitle}
           onClick={() => {
             setSelectedLoopCount(autoRepeatLimit);
+            setStreakDraft(
+              String(clampDefeatStreakLimit(autoRepeatDefeatStreakLimit))
+            );
             setDesktopSpeedPopoverOpen(false);
             setPhoneSpeedPopoverOpen(false);
             setLoopPopoverOpen((v) => {

@@ -1237,6 +1237,12 @@ export function BattleRadarView({
   const lastTurnForPopupsRef = useRef<number>(battle.turnCounter);
   const [floatingQueue, setFloatingQueue] =
     useState<RadarFloatingLabelQueueState>(() => {
+      if (shouldSkipRadarFloatingLabels(battleSpeed)) {
+        for (const pop of battle.popups) {
+          seenPopupIdsRef.current.add(pop.id);
+        }
+        return createRadarFloatingLabelQueue();
+      }
       const aliveIds = new Set(
         battle.units.filter((u) => u.alive).map((u) => u.id)
       );
@@ -1317,7 +1323,7 @@ export function BattleRadarView({
       floatingTimersRef.current.clear();
       setFloatingQueue((prev) =>
         Object.keys(prev.activeByUnit).length === 0 &&
-        Object.keys(prev.queuedByUnit).length === 0
+        Object.keys(prev.pendingByUnit).length === 0
           ? prev
           : createRadarFloatingLabelQueue()
       );
@@ -1679,7 +1685,16 @@ export function BattleRadarView({
       items.push({ popup, leftPct, topPct });
     }
     return items;
-  }, [battle.units, floatingQueue.activeByUnit, posMap, unitRingMetaMap, isLandscape, vw, vh]);
+  }, [
+    battle.units,
+    floatingQueue.activeByUnit,
+    posMap,
+    unitRingMetaMap,
+    isLandscape,
+    vw,
+    vh,
+    skipFloatingLabelsForSpeed,
+  ]);
 
   const interactionRef = useRef({
     battle,
