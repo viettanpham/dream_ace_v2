@@ -413,40 +413,19 @@ describe('Task G3d — i18n audit, detailed status chips, readable combat log, p
       slowChip.querySelector('foreignObject')?.textContent ?? '';
     expect(visibleForeignText).toContain('ac_unit');
     expect(visibleForeignText).not.toContain('Làm chậm:');
-    const shortRadarLabel = container!.querySelector(
-      '[data-testid="radar-status-label-u_status-2"]'
-    );
-    if (shortRadarLabel) {
-      expect(shortRadarLabel.textContent).not.toContain('Làm chậm:');
-    }
+    expect(
+      container!.querySelector('[data-testid="radar-status-label-u_status-2"]')
+    ).toBeNull();
 
-    // Hover opens tooltip
-    act(() => {
-      slowChip.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
-    });
-    const tooltip = container!.querySelector(
-      '[data-testid="radar-status-tooltip"]'
+    // Native title / aria-label still carries the full engine detail without radar overlay tooltip
+    const unitMarker = container!.querySelector(
+      `[data-testid="radar-unit-${unit.id}"]`
     );
-    expect(tooltip).not.toBeNull();
-    expect(tooltip!.textContent).toContain('Làm chậm: -30% Tốc');
-    expect(tooltip!.textContent).toContain('Còn 2 vòng');
-
-    // Mouse out clears hover tooltip
-    act(() => {
-      slowChip.dispatchEvent(new MouseEvent('mouseout', { bubbles: true }));
-    });
+    expect(unitMarker?.getAttribute('aria-label')).toContain('Làm chậm: -30% Tốc');
+    expect(unitMarker?.getAttribute('aria-label')).toContain('Còn 2 vòng');
     expect(
       container!.querySelector('[data-testid="radar-status-tooltip"]')
     ).toBeNull();
-
-    // Tapping chip also opens tooltip
-    act(() => {
-      slowChip.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-    expect(
-      container!.querySelector('[data-testid="radar-status-tooltip"]')
-        ?.textContent
-    ).toContain('Làm chậm: -30% Tốc');
   });
 
   it('3) CombatLogList groups by collapsible Vòng N, formats natural sentences + dim SP tags + avatars + strong highlights', () => {

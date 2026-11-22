@@ -63,9 +63,9 @@ export const STATUS_ICON_SIZE_SPECS: Record<
   StatusChipSizeVariant,
   StatusIconSizeSpec
 > = {
-  // Mini size for radar markers — kept untouched (G4a-3 owns radar marker layout)
+  // Mini 20px icon-only chip size for radar markers (G4a-3a)
   xs: {
-    boxPx: 18,
+    boxPx: 20,
     iconFontPx: 12,
     lucideSizePx: 12,
     arrowBoxPx: 9,

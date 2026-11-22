@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { useI18n } from '../i18n';
 import type {
   BattleSpeed,
   BattleState,
@@ -291,7 +290,6 @@ export function BattleVfxOverlay({
   osReducedMotion = false,
   autoReducedNoticeVisible = false,
 }: BattleVfxOverlayProps) {
-  const { t } = useI18n();
   const [unitQueue, setUnitQueue] = useState<UnitEffectQueueState<QueuedUnitVfx>>(
     () => createUnitEffectQueue<QueuedUnitVfx>()
   );
@@ -1011,28 +1009,28 @@ export function BattleVfxOverlay({
                       ))}
 
                     {/* 2) TARGET IMPACT / OUTCOME EFFECT */}
-                    {vfxConfig.showMainImpactOrHeal && outcome === 'dodge' && (
-                      <div
-                        data-testid={`vfx-dodge-${fx.id}-${targetId}`}
-                        className="vfx-dodge-slide absolute flex flex-col items-center"
-                        style={
-                          {
-                            left: to.leftCss,
-                            top: to.topCss,
-                            marginLeft: '-24px',
-                            marginTop: '-24px',
-                            width: '48px',
-                            animationDelay: `${Math.round(impactDelayMs * 0.6)}ms`,
-                            '--dodge-dx': isAlly ? '12px' : '-12px',
-                            '--vfx-dur': `${impactDurMs}ms`,
-                          } as CSSProperties
-                        }
-                      >
-                        <span className="px-1.5 py-0.5 rounded bg-slate-950/90 border border-slate-400/80 text-[11px] font-mono-nums font-bold text-slate-100 whitespace-nowrap">
-                          ↔ {t('battle.vfxMiss')}
-                        </span>
-                      </div>
-                    )}
+                    {vfxConfig.showMainImpactOrHeal &&
+                      outcome === 'dodge' &&
+                      targetUnit?.alive !== false && (
+                        <div
+                          data-testid={`vfx-dodge-${fx.id}-${targetId}`}
+                          className="vfx-dodge-slide absolute rounded-full"
+                          style={
+                            {
+                              left: to.leftCss,
+                              top: to.topCss,
+                              width: '44px',
+                              height: '44px',
+                              marginLeft: '-22px',
+                              marginTop: '-22px',
+                              border: '2px dashed rgba(226, 232, 240, 0.72)',
+                              animationDelay: `${Math.round(impactDelayMs * 0.6)}ms`,
+                              '--dodge-dx': isAlly ? '12px' : '-12px',
+                              '--vfx-dur': `${impactDurMs}ms`,
+                            } as CSSProperties
+                          }
+                        />
+                      )}
 
                     {vfxConfig.showMainImpactOrHeal &&
                       outcome === 'shield_absorbed' && (
@@ -1222,9 +1220,11 @@ export function BattleVfxOverlay({
           );
         })}
 
-      {/* Per-Unit Queued Status Effects (max 2 simultaneous per unit, HTML translate3d + opacity only) */}
+      {/* Per-Unit Queued Status Effects (max 2 simultaneous per unit, ring/shard VFX only; zero overlapping text pills) */}
       {vfxConfig.showStatusEffects &&
         activeStatusEffects.map((fx) => {
+          const unit = battle.units.find((u) => u.id === fx.unitId);
+          if (!unit || !unit.alive) return null;
           const pt = unitCenter(fx.unitId);
           if (!pt) return null;
           const dur = `${fx.durationMs}ms`;
@@ -1253,20 +1253,6 @@ export function BattleVfxOverlay({
                     } as CSSProperties
                   }
                 />
-                <div
-                  className="vfx-particle-rise absolute text-[12px] font-mono-nums font-bold text-emerald-300 drop-shadow-[0_1px_2px_rgba(0,0,0,0.95)] whitespace-nowrap"
-                  style={
-                    {
-                      left: pt.leftCss,
-                      top: pt.topCss,
-                      marginLeft: '-18px',
-                      marginTop: '-26px',
-                      '--vfx-dur': dur,
-                    } as CSSProperties
-                  }
-                >
-                  {fx.label}
-                </div>
                 {vfxConfig.showDecorativeParticles &&
                   [-14, 0, 14].map((dx, i) => (
                     <span
@@ -1315,20 +1301,6 @@ export function BattleVfxOverlay({
                     } as CSSProperties
                   }
                 />
-                <div
-                  className="vfx-particle-rise absolute text-[11px] font-mono-nums font-bold text-sky-300 whitespace-nowrap"
-                  style={
-                    {
-                      left: pt.leftCss,
-                      top: pt.topCss,
-                      marginLeft: '-20px',
-                      marginTop: '-24px',
-                      '--vfx-dur': dur,
-                    } as CSSProperties
-                  }
-                >
-                  +{fx.amount ?? ''} SHD
-                </div>
               </div>
             );
           }
@@ -1357,20 +1329,6 @@ export function BattleVfxOverlay({
                     } as CSSProperties
                   }
                 />
-                <div
-                  className="vfx-particle-rise absolute text-[11px] font-mono-nums font-bold text-purple-300 whitespace-nowrap"
-                  style={
-                    {
-                      left: pt.leftCss,
-                      top: pt.topCss,
-                      marginLeft: '-18px',
-                      marginTop: '-24px',
-                      '--vfx-dur': dur,
-                    } as CSSProperties
-                  }
-                >
-                  ⚡ {fx.label}
-                </div>
               </div>
             );
           }
@@ -1398,20 +1356,6 @@ export function BattleVfxOverlay({
                     } as CSSProperties
                   }
                 />
-                <div
-                  className="vfx-particle-rise absolute px-1 rounded bg-emerald-950/90 border border-emerald-400/70 text-[11px] font-mono-nums font-bold text-emerald-200 whitespace-nowrap"
-                  style={
-                    {
-                      left: pt.leftCss,
-                      top: pt.topCss,
-                      marginLeft: '-24px',
-                      marginTop: '-26px',
-                      '--vfx-dur': dur,
-                    } as CSSProperties
-                  }
-                >
-                  ▲ {fx.label}
-                </div>
               </div>
             );
           }
@@ -1441,20 +1385,6 @@ export function BattleVfxOverlay({
                     } as CSSProperties
                   }
                 />
-                <div
-                  className="vfx-particle-fall absolute px-1 rounded bg-red-950/90 border border-red-400/70 text-[11px] font-mono-nums font-bold text-red-200 whitespace-nowrap"
-                  style={
-                    {
-                      left: pt.leftCss,
-                      top: pt.topCss,
-                      marginLeft: '-24px',
-                      marginTop: '-10px',
-                      '--vfx-dur': dur,
-                    } as CSSProperties
-                  }
-                >
-                  ▼ {fx.label}
-                </div>
               </div>
             );
           }
@@ -1502,20 +1432,6 @@ export function BattleVfxOverlay({
                     } as CSSProperties
                   }
                 />
-                <div
-                  className="vfx-particle-rise absolute px-1 rounded bg-slate-950/90 border border-sky-400/70 text-[11px] font-mono-nums font-bold text-sky-200 whitespace-nowrap"
-                  style={
-                    {
-                      left: pt.leftCss,
-                      top: pt.topCss,
-                      marginLeft: '-30px',
-                      marginTop: '-26px',
-                      '--vfx-dur': dur,
-                    } as CSSProperties
-                  }
-                >
-                  × {t('battle.vfxShieldBreak')}
-                </div>
               </div>
             );
           }
@@ -1572,20 +1488,6 @@ export function BattleVfxOverlay({
                   } as CSSProperties
                 }
               />
-              <div
-                className="vfx-particle-rise absolute px-1 rounded bg-slate-950/90 border border-amber-400/75 text-[11px] font-mono-nums font-bold text-amber-200 whitespace-nowrap"
-                style={
-                  {
-                    left: pt.leftCss,
-                    top: pt.topCss,
-                    marginLeft: '-30px',
-                    marginTop: '-26px',
-                    '--vfx-dur': dur,
-                  } as CSSProperties
-                }
-              >
-                ◎ {t('battle.vfxReveal')}
-              </div>
             </div>
           );
         })}

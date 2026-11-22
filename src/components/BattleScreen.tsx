@@ -45,7 +45,6 @@ import {
 } from '../engine/combat';
 import { getEffectiveItemStats } from '../engine/equipment';
 import { canUnitUseSkill } from '../engine/skills';
-import { AUTO_REPEAT_MAX_DEFEAT_STREAK } from '../engine/tactics';
 import {
   getAutoStopReasonLabel,
   getBattleSkillReason,
@@ -63,15 +62,22 @@ import {
 } from '../i18n';
 import { ENABLE_ADMIN_CP, useGameStore } from '../store/useGameStore';
 import type {
+  AutoRepeatDefeatRule,
   AutoRepeatLimit,
-  BattleSpeed,
   CombatRow,
   CombatUnit,
 } from '../types/game';
 import {
+  ALLOWED_BATTLE_SPEEDS,
+  clampDefeatStreakLimit,
   computeRowExposure,
   evaluateRadarTargetValidity,
+  EXTRA_BATTLE_SPEEDS,
   formatShortUnitName,
+  MAX_DEFEAT_STREAK_LIMIT,
+  MIN_DEFEAT_STREAK_LIMIT,
+  PHONE_RADAR_LOG_GAP_PX,
+  PRIMARY_BATTLE_SPEEDS,
   readSpeechBubblesEnabled,
   SIDEBAR_UNIT_PANEL_HEIGHTS,
   SIDEBAR_UNIT_PANEL_TOTAL_HEIGHT_PX,
@@ -109,8 +115,6 @@ import { StatBar } from './StatBar';
 import { TurnQueueBar } from './TurnQueueBar';
 import { UnitDetailSheet } from './UnitDetailSheet';
 
-const BATTLE_SPEEDS: BattleSpeed[] = [1, 2, 3, 5, 10];
-const PHONE_CYCLE_SPEEDS: BattleSpeed[] = [1, 2, 3];
 const REPEAT_OPTIONS: AutoRepeatLimit[] = [1, 5, 10, 20, 'infinite'];
 const ROWS_ORDER: CombatRow[] = ['front', 'middle', 'back'];
 
@@ -131,7 +135,10 @@ export function BattleScreen() {
   const skipAnimations = useGameStore((s) => s.skipAnimations);
   const autoBattleEnabled = useGameStore((s) => s.autoBattleEnabled);
   const autoRepeatLimit = useGameStore((s) => s.autoRepeatLimit);
-  const autoRepeatStopOnDefeat = useGameStore((s) => s.autoRepeatStopOnDefeat);
+  const autoRepeatDefeatRule = useGameStore((s) => s.autoRepeatDefeatRule);
+  const autoRepeatDefeatStreakLimit = useGameStore(
+    (s) => s.autoRepeatDefeatStreakLimit
+  );
   const autoRepeatSession = useGameStore((s) => s.autoRepeatSession);
   const autoRepeatToast = useGameStore((s) => s.autoRepeatToast);
   const tacticsModalOpen = useGameStore((s) => s.tacticsModalOpen);
@@ -141,6 +148,7 @@ export function BattleScreen() {
   const performPlayerAction = useGameStore((s) => s.performPlayerAction);
   const performAutoPlayerTurn = useGameStore((s) => s.performAutoPlayerTurn);
   const performAiTurn = useGameStore((s) => s.performAiTurn);
+  const logRadarInvalidTarget = useGameStore((s) => s.logRadarInvalidTarget);
   const retreatBattle = useGameStore((s) => s.retreatBattle);
   const clearExpiredPopups = useGameStore((s) => s.clearExpiredPopups);
   const clearExpiredFx = useGameStore((s) => s.clearExpiredFx);
@@ -156,8 +164,11 @@ export function BattleScreen() {
   const toggleAutoBattle = useGameStore((s) => s.toggleAutoBattle);
   const setTacticsModalOpen = useGameStore((s) => s.setTacticsModalOpen);
   const setAutoRepeatLimit = useGameStore((s) => s.setAutoRepeatLimit);
-  const setAutoRepeatStopOnDefeat = useGameStore(
-    (s) => s.setAutoRepeatStopOnDefeat
+  const setAutoRepeatDefeatRule = useGameStore(
+    (s) => s.setAutoRepeatDefeatRule
+  );
+  const setAutoRepeatDefeatStreakLimit = useGameStore(
+    (s) => s.setAutoRepeatDefeatStreakLimit
   );
   const startAutoRepeat = useGameStore((s) => s.startAutoRepeat);
   const stopAutoRepeat = useGameStore((s) => s.stopAutoRepeat);
@@ -183,9 +194,26 @@ export function BattleScreen() {
   const [loopPopoverOpen, setLoopPopoverOpen] = useState(false);
   const [selectedLoopCount, setSelectedLoopCount] =
     useState<AutoRepeatLimit>(autoRepeatLimit);
+  const [streakDraft, setStreakDraft] = useState<string>(() =>
+    String(autoRepeatDefeatStreakLimit)
+  );
   const loopAnchorRef = useRef<HTMLDivElement | null>(null);
   const loopPopoverRef = useRef<HTMLDivElement | null>(null);
   const [loopPopoverPos, setLoopPopoverPos] = useState<{
+    top: number;
+    left: number;
+  }>({ top: 56, left: 8 });
+  const [desktopSpeedPopoverOpen, setDesktopSpeedPopoverOpen] = useState(false);
+  const desktopSpeedAnchorRef = useRef<HTMLButtonElement | null>(null);
+  const desktopSpeedPopoverRef = useRef<HTMLDivElement | null>(null);
+  const [desktopSpeedPopoverPos, setDesktopSpeedPopoverPos] = useState<{
+    top: number;
+    left: number;
+  }>({ top: 56, left: 8 });
+  const [phoneSpeedPopoverOpen, setPhoneSpeedPopoverOpen] = useState(false);
+  const phoneSpeedAnchorRef = useRef<HTMLButtonElement | null>(null);
+  const phoneSpeedPopoverRef = useRef<HTMLDivElement | null>(null);
+  const [phoneSpeedPopoverPos, setPhoneSpeedPopoverPos] = useState<{
     top: number;
     left: number;
   }>({ top: 56, left: 8 });
@@ -212,6 +240,10 @@ export function BattleScreen() {
   }, [autoRepeatLimit]);
 
   useEffect(() => {
+    setStreakDraft(String(autoRepeatDefeatStreakLimit));
+  }, [autoRepeatDefeatStreakLimit]);
+
+  useEffect(() => {
     if (!autoRepeatToast) return;
     const timer = window.setTimeout(() => {
       clearAutoRepeatToast();
@@ -219,31 +251,41 @@ export function BattleScreen() {
     return () => window.clearTimeout(timer);
   }, [autoRepeatToast, clearAutoRepeatToast]);
 
-  const computeLoopPopoverPosition = useCallback(() => {
-    const MARGIN = 8;
-    const vw = typeof window !== 'undefined' ? window.innerWidth || 1280 : 1280;
-    const vh = typeof window !== 'undefined' ? window.innerHeight || 800 : 800;
-    const popoverWidth = Math.max(
-      0,
-      Math.min(252, Math.floor(vw * 0.92), vw - MARGIN * 2)
-    );
-    const rect = loopAnchorRef.current?.getBoundingClientRect();
-    const rawLeft = rect
-      ? rect.right > 0
-        ? rect.right - popoverWidth
-        : rect.left
-      : MARGIN;
-    const maxLeft = Math.max(MARGIN, vw - popoverWidth - MARGIN);
-    const left = Math.max(MARGIN, Math.min(rawLeft, maxLeft));
-    const rawTop = rect ? rect.bottom + 6 : MARGIN;
-    const maxTop = Math.max(MARGIN, vh - 80);
-    const top = Math.max(MARGIN, Math.min(rawTop, maxTop));
-    return { top, left };
-  }, []);
+  const computeAnchoredPopoverPosition = useCallback(
+    (anchorEl: HTMLElement | null, targetWidth: number) => {
+      const MARGIN = 8;
+      const vw = typeof window !== 'undefined' ? window.innerWidth || 1280 : 1280;
+      const vh = typeof window !== 'undefined' ? window.innerHeight || 800 : 800;
+      const popoverWidth = Math.max(
+        0,
+        Math.min(targetWidth, Math.floor(vw * 0.92), vw - MARGIN * 2)
+      );
+      const rect = anchorEl?.getBoundingClientRect();
+      const rawLeft = rect
+        ? rect.right > 0
+          ? rect.right - popoverWidth
+          : rect.left
+        : MARGIN;
+      const maxLeft = Math.max(MARGIN, vw - popoverWidth - MARGIN);
+      const left = Math.max(MARGIN, Math.min(rawLeft, maxLeft));
+      const rawTop = rect ? rect.bottom + 6 : MARGIN;
+      const maxTop = Math.max(MARGIN, vh - 80);
+      const top = Math.max(MARGIN, Math.min(rawTop, maxTop));
+      return { top, left };
+    },
+    []
+  );
+
+  const computeLoopPopoverPosition = useCallback(
+    () => computeAnchoredPopoverPosition(loopAnchorRef.current, 252),
+    [computeAnchoredPopoverPosition]
+  );
 
   useEffect(() => {
     if (battle?.summary) {
       setLoopPopoverOpen(false);
+      setDesktopSpeedPopoverOpen(false);
+      setPhoneSpeedPopoverOpen(false);
     }
   }, [battle?.summary]);
 
@@ -281,6 +323,84 @@ export function BattleScreen() {
       window.removeEventListener('scroll', updatePosition, true);
     };
   }, [loopPopoverOpen, computeLoopPopoverPosition, layoutMode]);
+
+  useEffect(() => {
+    if (!desktopSpeedPopoverOpen) return;
+    const updatePosition = () => {
+      setDesktopSpeedPopoverPos(
+        computeAnchoredPopoverPosition(desktopSpeedAnchorRef.current, 212)
+      );
+    };
+    updatePosition();
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setDesktopSpeedPopoverOpen(false);
+    };
+    const onMouseDown = (e: MouseEvent) => {
+      const target = e.target as Node | null;
+      const inAnchor = Boolean(
+        desktopSpeedAnchorRef.current &&
+          target &&
+          desktopSpeedAnchorRef.current.contains(target)
+      );
+      const inPopover = Boolean(
+        desktopSpeedPopoverRef.current &&
+          target &&
+          desktopSpeedPopoverRef.current.contains(target)
+      );
+      if (!inAnchor && !inPopover) {
+        setDesktopSpeedPopoverOpen(false);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('mousedown', onMouseDown);
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('mousedown', onMouseDown);
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [desktopSpeedPopoverOpen, computeAnchoredPopoverPosition, layoutMode]);
+
+  useEffect(() => {
+    if (!phoneSpeedPopoverOpen) return;
+    const updatePosition = () => {
+      setPhoneSpeedPopoverPos(
+        computeAnchoredPopoverPosition(phoneSpeedAnchorRef.current, 216)
+      );
+    };
+    updatePosition();
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPhoneSpeedPopoverOpen(false);
+    };
+    const onMouseDown = (e: MouseEvent) => {
+      const target = e.target as Node | null;
+      const inAnchor = Boolean(
+        phoneSpeedAnchorRef.current &&
+          target &&
+          phoneSpeedAnchorRef.current.contains(target)
+      );
+      const inPopover = Boolean(
+        phoneSpeedPopoverRef.current &&
+          target &&
+          phoneSpeedPopoverRef.current.contains(target)
+      );
+      if (!inAnchor && !inPopover) {
+        setPhoneSpeedPopoverOpen(false);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('mousedown', onMouseDown);
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('mousedown', onMouseDown);
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [phoneSpeedPopoverOpen, computeAnchoredPopoverPosition, layoutMode]);
 
   useEffect(() => {
     if (!logSheetOpen) return;
@@ -535,7 +655,7 @@ export function BattleScreen() {
   useEffect(() => {
     if (!battle || battle.summary || isPlayerTurn) return;
     const baseDelay = BALANCE_CONFIG.battleSpeedDelays[battleSpeed] ?? 760;
-    const delayMs = skipAnimations ? Math.min(baseDelay, 60) : baseDelay;
+    const delayMs = skipAnimations ? Math.min(baseDelay, 40) : baseDelay;
     const timer = window.setTimeout(() => {
       performAiTurn();
     }, delayMs);
@@ -563,8 +683,8 @@ export function BattleScreen() {
     }
     const baseDelay = BALANCE_CONFIG.battleSpeedDelays[battleSpeed] ?? 760;
     const delayMs = skipAnimations
-      ? Math.min(baseDelay, 60)
-      : Math.max(40, Math.round(baseDelay * 0.75));
+      ? Math.min(baseDelay, 40)
+      : Math.max(8, Math.round(baseDelay * 0.75));
     const timer = window.setTimeout(() => {
       performAutoPlayerTurn();
     }, delayMs);
@@ -584,7 +704,12 @@ export function BattleScreen() {
   // Auto-Repeat next battle launcher
   useEffect(() => {
     if (!battle?.summary || !autoRepeatSession?.active) return;
-    const delayMs = skipAnimations || battleSpeed >= 5 ? 320 : 850;
+    const delayMs =
+      skipAnimations || battleSpeed >= 15
+        ? 120
+        : battleSpeed >= 5
+        ? 320
+        : 850;
     const timer = window.setTimeout(() => {
       startBattle(autoRepeatSession.sectorId);
     }, delayMs);
@@ -797,28 +922,85 @@ export function BattleScreen() {
           onClick={() => stopAutoRepeat('manual_stop')}
           title={t('battle.loopStopTooltip')}
           aria-label={`${t('battle.loopRunningTag')} · ${t('battle.loopStopTooltip')} (${progressText})`}
-          className={`rounded-lg border border-emerald-400/70 bg-emerald-500/20 hover:bg-red-500/20 hover:border-red-400/70 text-emerald-100 font-mono-nums font-bold inline-flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 transition-colors ${
+          className={`rounded-lg border border-emerald-400/70 bg-emerald-500/20 hover:bg-red-500/20 hover:border-red-400/70 text-emerald-100 font-mono-nums font-bold inline-flex items-center justify-center cursor-pointer whitespace-nowrap shrink-0 transition-colors ${
             phoneCompact
-              ? 'min-h-[44px] px-2 text-[12px]'
-              : 'h-[34px] min-h-[34px] px-2 text-[12px]'
+              ? 'h-10 min-w-[44px] max-w-[76px] px-1 gap-0.5 text-[11px]'
+              : 'h-[34px] min-h-[34px] px-2 gap-1.5 text-[12px]'
           }`}
         >
           <span
             data-testid="battle-loop-running-dot"
-            className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0"
+            className={`${
+              phoneCompact ? 'w-1.5 h-1.5' : 'w-2 h-2'
+            } rounded-full bg-emerald-400 animate-pulse shrink-0`}
             aria-hidden="true"
           />
-          <Repeat className="w-3.5 h-3.5 text-emerald-300 shrink-0" aria-hidden="true" />
+          <Repeat
+            className={`${
+              phoneCompact ? 'w-3 h-3' : 'w-3.5 h-3.5'
+            } text-emerald-300 shrink-0`}
+            aria-hidden="true"
+          />
           <span data-testid="battle-loop-progress">{progressText}</span>
           <span
             data-testid="battle-loop-stop"
-            className="inline-flex items-center justify-center w-5 h-5 rounded bg-red-500/25 border border-red-400/60 text-red-300 shrink-0"
+            className={`inline-flex items-center justify-center ${
+              phoneCompact ? 'w-4 h-4' : 'w-5 h-5'
+            } rounded bg-red-500/25 border border-red-400/60 text-red-300 shrink-0`}
           >
             <Square className="w-2.5 h-2.5 fill-current" aria-hidden="true" />
           </span>
         </button>
       );
     }
+
+    const handleSelectDefeatRule = (rule: AutoRepeatDefeatRule) => {
+      setAutoRepeatDefeatRule(rule);
+    };
+
+    const handleStreakInputChange = (rawValue: string) => {
+      if (autoRepeatDefeatRule !== 'stop_after_n') {
+        setAutoRepeatDefeatRule('stop_after_n');
+      }
+      setStreakDraft(rawValue);
+      const trimmed = rawValue.trim();
+      if (trimmed === '') {
+        return;
+      }
+      const parsed = Number(trimmed);
+      if (!Number.isFinite(parsed)) {
+        const fallback = clampDefeatStreakLimit(rawValue);
+        setAutoRepeatDefeatStreakLimit(fallback);
+        setStreakDraft(String(fallback));
+        return;
+      }
+      const clamped = clampDefeatStreakLimit(parsed);
+      setAutoRepeatDefeatStreakLimit(clamped);
+      if (
+        parsed < MIN_DEFEAT_STREAK_LIMIT ||
+        parsed > MAX_DEFEAT_STREAK_LIMIT ||
+        !Number.isInteger(parsed)
+      ) {
+        setStreakDraft(String(clamped));
+      }
+    };
+
+    const handleStreakInputBlur = () => {
+      const clamped = clampDefeatStreakLimit(streakDraft);
+      setAutoRepeatDefeatStreakLimit(clamped);
+      setStreakDraft(String(clamped));
+    };
+
+    const stoppedReasonTitle =
+      autoRepeatSession &&
+      !autoRepeatSession.active &&
+      autoRepeatSession.stopReason
+        ? `${t('battle.loopTitle')} · ${getAutoStopReasonLabel(
+            lang,
+            autoRepeatSession.stopReason,
+            autoRepeatSession.defeatStreakLimit ?? autoRepeatDefeatStreakLimit
+          )}`
+        : t('battle.loopTitle');
 
     const loopPopoverNode =
       loopPopoverOpen && typeof document !== 'undefined'
@@ -872,35 +1054,77 @@ export function BattleScreen() {
                 })}
               </div>
 
-              <label
-                data-testid="battle-loop-stop-on-defeat-label"
-                className="flex items-start justify-between gap-2 rounded-md border border-slate-800 bg-slate-900/70 px-2.5 py-2 text-[12px] text-slate-200 cursor-pointer select-none"
+              <div
+                role="radiogroup"
+                aria-label={t('battle.loopOnDefeatLabel')}
+                data-testid="battle-loop-defeat-rules"
+                className="rounded-md border border-slate-800 bg-slate-900/70 p-2 space-y-1.5"
               >
-                <span className="flex flex-col gap-0.5 min-w-0">
-                  <span className="font-medium leading-tight">
-                    {t('battle.loopStopOnDefeat')}
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  {t('battle.loopOnDefeatLabel')}
+                </div>
+
+                <label className="flex items-center gap-2 text-[12px] text-slate-200 cursor-pointer select-none py-0.5">
+                  <input
+                    type="radio"
+                    name="battle-loop-defeat-rule"
+                    value="stop_immediately"
+                    data-testid="battle-loop-rule-stop-immediately"
+                    checked={autoRepeatDefeatRule === 'stop_immediately'}
+                    onChange={() => handleSelectDefeatRule('stop_immediately')}
+                    className="h-3.5 w-3.5 accent-emerald-400 cursor-pointer shrink-0"
+                  />
+                  <span>{t('battle.loopRuleStopImmediately')}</span>
+                </label>
+
+                <label className="flex items-center gap-2 text-[12px] text-slate-200 cursor-pointer select-none py-0.5 flex-wrap">
+                  <input
+                    type="radio"
+                    name="battle-loop-defeat-rule"
+                    value="stop_after_n"
+                    data-testid="battle-loop-rule-stop-after-n"
+                    checked={autoRepeatDefeatRule === 'stop_after_n'}
+                    onChange={() => handleSelectDefeatRule('stop_after_n')}
+                    className="h-3.5 w-3.5 accent-emerald-400 cursor-pointer shrink-0"
+                  />
+                  <span className="inline-flex items-center gap-1 flex-wrap">
+                    <span>{t('battle.loopRuleStopAfterNPrefix')}</span>
+                    <input
+                      type="number"
+                      min={MIN_DEFEAT_STREAK_LIMIT}
+                      max={MAX_DEFEAT_STREAK_LIMIT}
+                      step={1}
+                      inputMode="numeric"
+                      data-testid="battle-loop-streak-input"
+                      aria-label={t('battle.loopDefeatStreakInputAria')}
+                      value={streakDraft}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (autoRepeatDefeatRule !== 'stop_after_n') {
+                          handleSelectDefeatRule('stop_after_n');
+                        }
+                      }}
+                      onChange={(e) => handleStreakInputChange(e.target.value)}
+                      onBlur={handleStreakInputBlur}
+                      className="w-11 h-6 px-1 rounded border border-slate-700 bg-slate-950 text-center font-mono-nums text-[12px] font-bold text-slate-100 focus:outline-none focus:border-emerald-400"
+                    />
+                    <span>{t('battle.loopRuleStopAfterNSuffix')}</span>
                   </span>
-                  <span
-                    data-testid="battle-loop-stop-on-defeat-hint"
-                    className="text-[11px] leading-snug text-slate-400"
-                  >
-                    {autoRepeatStopOnDefeat
-                      ? t('battle.loopStopOnDefeatHintOn', {
-                          streak: AUTO_REPEAT_MAX_DEFEAT_STREAK,
-                        })
-                      : t('battle.loopStopOnDefeatHintOff', {
-                          streak: AUTO_REPEAT_MAX_DEFEAT_STREAK,
-                        })}
-                  </span>
-                </span>
-                <input
-                  type="checkbox"
-                  data-testid="battle-loop-stop-on-defeat"
-                  checked={autoRepeatStopOnDefeat}
-                  onChange={(e) => setAutoRepeatStopOnDefeat(e.target.checked)}
-                  className="mt-0.5 h-4 w-4 accent-emerald-400 cursor-pointer shrink-0"
-                />
-              </label>
+                </label>
+
+                <label className="flex items-center gap-2 text-[12px] text-slate-200 cursor-pointer select-none py-0.5">
+                  <input
+                    type="radio"
+                    name="battle-loop-defeat-rule"
+                    value="never_stop"
+                    data-testid="battle-loop-rule-never-stop"
+                    checked={autoRepeatDefeatRule === 'never_stop'}
+                    onChange={() => handleSelectDefeatRule('never_stop')}
+                    className="h-3.5 w-3.5 accent-emerald-400 cursor-pointer shrink-0"
+                  />
+                  <span>{t('battle.loopRuleNeverStop')}</span>
+                </label>
+              </div>
 
               <button
                 type="button"
@@ -925,12 +1149,18 @@ export function BattleScreen() {
           type="button"
           data-testid="battle-loop-btn"
           data-loop-running="false"
+          data-stop-reason={autoRepeatSession?.stopReason ?? ''}
           aria-expanded={loopPopoverOpen}
           aria-haspopup="dialog"
-          aria-label={t('battle.loopTitle')}
-          title={t('battle.loopTitle')}
+          aria-label={stoppedReasonTitle}
+          title={stoppedReasonTitle}
           onClick={() => {
             setSelectedLoopCount(autoRepeatLimit);
+            setStreakDraft(
+              String(clampDefeatStreakLimit(autoRepeatDefeatStreakLimit))
+            );
+            setDesktopSpeedPopoverOpen(false);
+            setPhoneSpeedPopoverOpen(false);
             setLoopPopoverOpen((v) => {
               const next = !v;
               if (next) {
@@ -945,7 +1175,7 @@ export function BattleScreen() {
               : 'border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200'
           } ${
             phoneCompact
-              ? 'min-h-[44px] min-w-[44px] px-2 text-[12px] font-mono-nums font-bold'
+              ? 'h-10 min-w-[44px] px-2 text-[12px] font-mono-nums font-bold'
               : 'h-[34px] min-h-[34px] px-2 text-[12px] font-semibold'
           }`}
         >
@@ -969,14 +1199,99 @@ export function BattleScreen() {
     );
   };
 
-  const cyclePhoneSpeed = () => {
-    const idx = PHONE_CYCLE_SPEEDS.indexOf(battleSpeed);
-    const next =
-      idx === -1
-        ? PHONE_CYCLE_SPEEDS[0]
-        : PHONE_CYCLE_SPEEDS[(idx + 1) % PHONE_CYCLE_SPEEDS.length];
-    setBattleSpeed(next);
-  };
+  const isExtraSpeedActive = EXTRA_BATTLE_SPEEDS.includes(battleSpeed);
+
+  const desktopSpeedExtraPopoverNode =
+    desktopSpeedPopoverOpen && typeof document !== 'undefined'
+      ? createPortal(
+          <div
+            ref={desktopSpeedPopoverRef}
+            role="dialog"
+            data-testid="battle-speed-extra-popover"
+            aria-label={t('battle.speedMoreTooltip')}
+            style={{
+              position: 'fixed',
+              top: `${desktopSpeedPopoverPos.top}px`,
+              left: `${desktopSpeedPopoverPos.left}px`,
+              width: 'min(212px, 92vw)',
+              zIndex: 70,
+            }}
+            className="z-[70] rounded-lg border border-slate-700 bg-[#0B111D] p-2.5 shadow-2xl space-y-2"
+          >
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+              {t('battle.speedMoreTooltip')}
+            </div>
+            <div className="grid grid-cols-4 gap-1.5">
+              {EXTRA_BATTLE_SPEEDS.map((spd) => (
+                <button
+                  key={spd}
+                  type="button"
+                  data-testid={`battle-speed-opt-${spd}`}
+                  aria-pressed={battleSpeed === spd}
+                  onClick={() => {
+                    setBattleSpeed(spd);
+                    setDesktopSpeedPopoverOpen(false);
+                  }}
+                  className={`min-h-[36px] rounded-md border font-mono-nums text-[12px] font-bold cursor-pointer transition-colors ${
+                    battleSpeed === spd
+                      ? 'border-sky-400 bg-sky-500 text-slate-950'
+                      : 'border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200'
+                  }`}
+                >
+                  {spd}x
+                </button>
+              ))}
+            </div>
+          </div>,
+          document.body
+        )
+      : null;
+
+  const phoneSpeedPopoverNode =
+    phoneSpeedPopoverOpen && typeof document !== 'undefined'
+      ? createPortal(
+          <div
+            ref={phoneSpeedPopoverRef}
+            role="dialog"
+            data-testid="battle-speed-phone-popover"
+            aria-label={t('battle.speedPopoverTitle')}
+            style={{
+              position: 'fixed',
+              top: `${phoneSpeedPopoverPos.top}px`,
+              left: `${phoneSpeedPopoverPos.left}px`,
+              width: 'min(216px, 92vw)',
+              zIndex: 70,
+            }}
+            className="z-[70] rounded-lg border border-slate-700 bg-[#0B111D] p-2.5 shadow-2xl space-y-2"
+          >
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+              {t('battle.speedPopoverTitle')}
+            </div>
+            <div className="grid grid-cols-3 gap-1.5">
+              {ALLOWED_BATTLE_SPEEDS.map((spd) => (
+                <button
+                  key={spd}
+                  type="button"
+                  data-testid={`battle-speed-phone-opt-${spd}`}
+                  aria-pressed={battleSpeed === spd}
+                  onClick={() => {
+                    setBattleSpeed(spd);
+                    setPhoneSpeedPopoverOpen(false);
+                  }}
+                  className={`min-h-[38px] rounded-md border font-mono-nums text-[12px] font-bold cursor-pointer transition-colors ${
+                    battleSpeed === spd
+                      ? 'border-sky-400 bg-sky-500 text-slate-950'
+                      : 'border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200'
+                  }`}
+                >
+                  {spd}x
+                </button>
+              ))}
+            </div>
+          </div>,
+          document.body
+        )
+      : null;
 
   const canPlayerManualAct = isPlayerTurn && !autoBattleEnabled;
   const showRepeatBatchSummary = Boolean(
@@ -1205,6 +1520,17 @@ export function BattleScreen() {
             setInspectedUnitId(id);
           }}
           onInspectUnit={handleInspectUnit}
+          onInvalidTargetLog={(reason, unit) => {
+            const reasonKey =
+              reason === 'middle_row_alive'
+                ? 'radar.invalidMiddleAlive'
+                : reason === 'stealthed'
+                ? 'radar.invalidStealthed'
+                : reason === 'unit_down'
+                ? 'radar.invalidDown'
+                : 'radar.invalidFrontAlive';
+            logRadarInvalidTarget(unit.name, reasonKey);
+          }}
         />
       );
     }
@@ -1542,16 +1868,42 @@ export function BattleScreen() {
       : 'bg-emerald-500';
 
     if (compactOneRow) {
+      if (isDestroyed) {
+        return (
+          <div
+            data-testid="battle-player-status-bar"
+            data-collapsed="true"
+            data-destroyed="true"
+            className="shrink-0 mx-1.5 mt-1 h-[28px] max-h-[28px] min-w-0 rounded border border-slate-700 bg-slate-900/85 px-2 flex items-center gap-1.5 text-[11px] font-mono-nums text-slate-400 grayscale overflow-hidden"
+          >
+            <span
+              data-testid="battle-player-team-tag"
+              className="px-1.5 py-0.2 rounded bg-slate-800 border border-slate-600 text-slate-300 text-[10px] font-bold shrink-0"
+            >
+              {getTeamTagLabel(lang, 'me')}
+            </span>
+            <span
+              className="font-semibold truncate text-slate-400 line-through min-w-0"
+              title={t('battle.playerShipLabel')}
+            >
+              {ownUnit.name}
+            </span>
+            <span
+              data-testid="battle-player-destroyed-badge"
+              className="px-1.5 py-0.2 rounded bg-slate-800 border border-slate-600 text-slate-200 text-[10px] font-bold shrink-0"
+            >
+              {t('battle.playerDestroyed')}
+            </span>
+          </div>
+        );
+      }
+
       return (
         <div
           data-testid="battle-player-status-bar"
           data-collapsed="true"
-          data-destroyed={isDestroyed ? 'true' : 'false'}
-          className={`shrink-0 mx-1.5 mt-1 rounded border px-2 py-1 space-y-1 text-[11px] font-mono-nums ${
-            isDestroyed
-              ? 'border-slate-700 bg-slate-900/85 text-slate-400 grayscale'
-              : 'border-emerald-500/35 bg-[#09121D] text-slate-100'
-          }`}
+          data-destroyed="false"
+          className="shrink-0 mx-1.5 mt-1 rounded border px-2 py-1 space-y-1 text-[11px] font-mono-nums border-emerald-500/35 bg-[#09121D] text-slate-100"
         >
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 min-w-0 shrink">
@@ -1814,17 +2166,18 @@ export function BattleScreen() {
             }}
           />
 
-          {/* 3) Sticky compact control row (max 48px): Auto, Speed Cycle, View Switch, Loop (icon+num), "..." More */}
+          {/* 3) Sticky compact control row (max 48px): Auto, Speed Cycle, View Switch (icon-only), Loop (icon+num / running chip), "..." More */}
           <div
             data-testid="battle-phone-controls"
-            className="sticky top-0 z-30 h-12 max-h-[48px] shrink-0 border-b border-slate-800/80 bg-[#080D16]/95 backdrop-blur-sm px-1.5 flex items-center justify-between gap-1.5"
+            className="sticky top-0 z-30 h-12 max-h-[48px] shrink-0 border-b border-slate-800/80 bg-[#080D16]/95 backdrop-blur-sm px-1.5 flex items-center justify-between gap-1 flex-nowrap overflow-x-hidden"
           >
             <button
               type="button"
               data-testid="battle-auto-toggle"
               onClick={toggleAutoBattle}
               aria-pressed={autoBattleEnabled}
-              className={`min-h-[44px] flex-1 min-w-0 px-2 rounded-lg border text-[12px] font-bold inline-flex items-center justify-center gap-1 transition-colors cursor-pointer whitespace-nowrap ${
+              title={t('auto.hotkeyHint')}
+              className={`h-10 min-w-[44px] max-w-[88px] shrink-0 px-2 rounded-lg border text-[12px] font-bold inline-flex items-center justify-center gap-1 transition-colors cursor-pointer whitespace-nowrap ${
                 autoBattleEnabled
                   ? 'border-emerald-400 bg-emerald-500 text-slate-950'
                   : 'border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800'
@@ -1837,15 +2190,37 @@ export function BattleScreen() {
             </button>
 
             <button
+              ref={phoneSpeedAnchorRef}
               type="button"
               data-testid="battle-speed-cycle"
-              onClick={cyclePhoneSpeed}
+              aria-expanded={phoneSpeedPopoverOpen}
+              aria-haspopup="dialog"
+              onClick={() => {
+                setLoopPopoverOpen(false);
+                setPhoneSpeedPopoverOpen((v) => {
+                  const next = !v;
+                  if (next) {
+                    setPhoneSpeedPopoverPos(
+                      computeAnchoredPopoverPosition(
+                        phoneSpeedAnchorRef.current,
+                        216
+                      )
+                    );
+                  }
+                  return next;
+                });
+              }}
               title={t('battle.speedCycleTooltip')}
-              aria-label={t('battle.speedCycleTooltip')}
-              className="min-h-[44px] min-w-[44px] px-2 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-sky-300 font-mono-nums text-[12px] font-bold inline-flex items-center justify-center cursor-pointer whitespace-nowrap shrink-0"
+              aria-label={`${t('battle.speedCycleTooltip')}: ${battleSpeed}x`}
+              className={`h-10 min-w-[44px] px-2 rounded-lg border font-mono-nums text-[12px] font-bold inline-flex items-center justify-center cursor-pointer whitespace-nowrap shrink-0 transition-colors ${
+                phoneSpeedPopoverOpen
+                  ? 'border-sky-400 bg-slate-800 text-sky-200 ring-1 ring-sky-400/30'
+                  : 'border-slate-700 bg-slate-900 hover:bg-slate-800 text-sky-300'
+              }`}
             >
               {battleSpeed}x
             </button>
+            {phoneSpeedPopoverNode}
 
             <button
               type="button"
@@ -1855,24 +2230,26 @@ export function BattleScreen() {
                   effectiveViewMode === 'radar' ? 'card' : 'radar'
                 )
               }
-              title={t('battle.viewSwitchTooltip')}
-              aria-label={t('battle.viewSwitchTooltip')}
-              className="min-h-[44px] px-2 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200 text-[12px] font-semibold inline-flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap shrink-0"
+              title={
+                effectiveViewMode === 'radar'
+                  ? t('battle.switchToCard')
+                  : t('battle.switchToRadar')
+              }
+              aria-label={
+                effectiveViewMode === 'radar'
+                  ? t('battle.switchToCard')
+                  : t('battle.switchToRadar')
+              }
+              className="h-10 w-11 min-w-[44px] p-0 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200 inline-flex items-center justify-center cursor-pointer shrink-0"
             >
               {effectiveViewMode === 'radar' ? (
-                <>
-                  <LayoutGrid className="w-4 h-4 text-sky-400 shrink-0" />
-                  <span>{t('battle.viewCard')}</span>
-                </>
+                <LayoutGrid className="w-4 h-4 text-sky-400 shrink-0" aria-hidden="true" />
               ) : (
-                <>
-                  <Radar className="w-4 h-4 text-sky-400 shrink-0" />
-                  <span>{t('battle.viewRadar')}</span>
-                </>
+                <Radar className="w-4 h-4 text-sky-400 shrink-0" aria-hidden="true" />
               )}
             </button>
 
-            {/* Loop Button / Active Progress Chip (phone: icon + number only) */}
+            {/* Loop Button / Active Progress Chip (phone: icon + number or N/M + stop) */}
             {renderLoopControl(true)}
 
             <button
@@ -1881,7 +2258,7 @@ export function BattleScreen() {
               onClick={() => setMoreActionsOpen(true)}
               aria-label={t('battle.moreActions')}
               title={t('battle.moreActions')}
-              className="min-h-[44px] min-w-[44px] rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200 inline-flex items-center justify-center cursor-pointer shrink-0"
+              className="h-10 min-w-[44px] rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200 inline-flex items-center justify-center cursor-pointer shrink-0"
             >
               <MoreHorizontal className="w-5 h-5" />
             </button>
@@ -1930,9 +2307,16 @@ export function BattleScreen() {
           )}
 
           {/* 4) Battlefield — natural page flow, zero inner scroll & zero clipping */}
-          <div className="flex flex-col p-2">
+          <div className="flex flex-col px-2 pt-2">
             {renderFieldContent()}
           </div>
+
+          <div
+            data-testid="battle-phone-radar-log-gap"
+            aria-hidden="true"
+            style={{ height: `${PHONE_RADAR_LOG_GAP_PX}px` }}
+            className="shrink-0"
+          />
 
           {/* 5) Combat log: flows inside page scroll with zero nested scroll box; Dòng = 1 line, Mở rộng = full flow, Cửa sổ = bottom sheet */}
           <div className="shrink-0 px-2 pb-1">
@@ -2109,21 +2493,25 @@ export function BattleScreen() {
                     </button>
                   </div>
 
-                  {/* Speeds 1x 2x 3x 5x 10x */}
+                  {/* Speeds 1x 2x 3x 5x 10x + "..." extra speeds (12x 15x 20x 30x) */}
                   <div
                     data-testid="battle-speed-selector"
                     className="inline-flex items-center rounded-lg border border-slate-800 bg-slate-950 p-0.5 shrink-0"
                     role="group"
                     aria-label={t('battle.speedLabel')}
                   >
-                    {BATTLE_SPEEDS.map((spd) => (
+                    {PRIMARY_BATTLE_SPEEDS.map((spd) => (
                       <button
                         key={spd}
                         type="button"
+                        data-testid={`battle-speed-opt-${spd}`}
+                        aria-pressed={battleSpeed === spd}
                         onClick={() => setBattleSpeed(spd)}
                         title={`${spd}x`}
                         className={`h-[34px] min-h-[34px] px-1.5 rounded-md text-[12px] font-mono-nums font-bold transition-colors cursor-pointer whitespace-nowrap ${
-                          spd >= 5 ? 'hidden lg:inline-flex items-center justify-center' : 'inline-flex items-center justify-center'
+                          spd >= 5
+                            ? 'hidden lg:inline-flex items-center justify-center'
+                            : 'inline-flex items-center justify-center'
                         } ${
                           battleSpeed === spd
                             ? 'bg-sky-500 text-slate-950'
@@ -2133,6 +2521,45 @@ export function BattleScreen() {
                         {spd}x
                       </button>
                     ))}
+                    <button
+                      ref={desktopSpeedAnchorRef}
+                      type="button"
+                      data-testid="battle-speed-more-btn"
+                      aria-expanded={desktopSpeedPopoverOpen}
+                      aria-haspopup="dialog"
+                      aria-pressed={isExtraSpeedActive}
+                      title={t('battle.speedMoreTooltip')}
+                      aria-label={
+                        isExtraSpeedActive
+                          ? `${t('battle.speedLabel')}: ${battleSpeed}x`
+                          : t('battle.speedMoreTooltip')
+                      }
+                      onClick={() => {
+                        setLoopPopoverOpen(false);
+                        setDesktopSpeedPopoverOpen((v) => {
+                          const next = !v;
+                          if (next) {
+                            setDesktopSpeedPopoverPos(
+                              computeAnchoredPopoverPosition(
+                                desktopSpeedAnchorRef.current,
+                                212
+                              )
+                            );
+                          }
+                          return next;
+                        });
+                      }}
+                      className={`h-[34px] min-h-[34px] px-1.5 rounded-md text-[12px] font-mono-nums font-bold transition-colors cursor-pointer whitespace-nowrap inline-flex items-center justify-center ${
+                        isExtraSpeedActive
+                          ? 'bg-sky-500 text-slate-950'
+                          : desktopSpeedPopoverOpen
+                          ? 'bg-slate-800 text-sky-300 ring-1 ring-sky-400/30'
+                          : 'text-slate-400 hover:text-slate-100'
+                      }`}
+                    >
+                      {isExtraSpeedActive ? `${battleSpeed}x` : '…'}
+                    </button>
+                    {desktopSpeedExtraPopoverNode}
                   </div>
 
                   {/* Radar | Card View Switch */}
@@ -2555,13 +2982,13 @@ export function BattleScreen() {
         subtitle={`${sectorLabel} · ${battle.squadSize}v${battle.squadSize}`}
       >
         <div data-testid="battle-more-menu" className="space-y-4">
-          {/* Full Speed Picker (1x / 2x / 3x / 5x / 10x) */}
+          {/* Full Speed Picker (1x - 30x) */}
           <div className="space-y-2">
             <div className="text-[12px] font-semibold uppercase tracking-wider text-slate-400">
               {t('battle.speedLabel')}
             </div>
             <div className="grid grid-cols-5 gap-2">
-              {BATTLE_SPEEDS.map((spd) => (
+              {ALLOWED_BATTLE_SPEEDS.map((spd) => (
                 <button
                   key={spd}
                   type="button"
@@ -2883,8 +3310,16 @@ export function BattleScreen() {
                   {t('auto.repeatSummaryTitle')}
                 </h2>
                 {autoRepeatSession.stopReason && (
-                  <p className="text-[13px] text-orange-300 font-medium">
-                    {getAutoStopReasonLabel(lang, autoRepeatSession.stopReason)}
+                  <p
+                    data-testid="battle-loop-stop-reason"
+                    className="text-[13px] text-orange-300 font-medium"
+                  >
+                    {getAutoStopReasonLabel(
+                      lang,
+                      autoRepeatSession.stopReason,
+                      autoRepeatSession.defeatStreakLimit ??
+                        autoRepeatDefeatStreakLimit
+                    )}
                   </p>
                 )}
               </div>

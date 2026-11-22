@@ -2,6 +2,7 @@ import { BALANCE_CONFIG } from '../data/balance';
 import { getSkillById } from '../data/skills';
 import type {
   ActionType,
+  AutoRepeatDefeatRule,
   AutoRepeatSession,
   AutoSafetyConfig,
   AutoStopReason,
@@ -24,6 +25,10 @@ import type {
   TacticsRule,
   TacticsTargetSelector,
 } from '../types/game';
+import {
+  clampDefeatStreakLimit,
+  DEFAULT_DEFEAT_STREAK_LIMIT,
+} from '../utils/battleDisplay';
 import {
   DEBUFF_TYPES,
   getEffectiveUnitSpeed,
@@ -1124,11 +1129,14 @@ export function evaluateAutoSafety(
   return { shouldStopAuto: false, shouldRetreat: false, reason: null };
 }
 
-export const AUTO_REPEAT_MAX_DEFEAT_STREAK = 3;
+export const AUTO_REPEAT_MAX_DEFEAT_STREAK = DEFAULT_DEFEAT_STREAK_LIMIT;
 
 /**
  * Pure check for whether an Auto-Repeat batch should stop after a battle concludes.
- * Inventory full ALWAYS stops the loop regardless of `stopOnDefeat`.
+ * Inventory full ALWAYS stops the loop regardless of defeat rule.
+ * - 'stop_immediately': stops on first defeat ('defeat')
+ * - 'stop_after_n': stops once consecutive defeats reach defeatStreakLimit 1..99 ('defeat_streak')
+ * - 'never_stop': never stops on defeat
  */
 export function shouldStopAutoRepeat(
   session: AutoRepeatSession,
@@ -1136,22 +1144,33 @@ export function shouldStopAutoRepeat(
   retreated: boolean,
   inventoryCount: number,
   maxInventorySize: number = BALANCE_CONFIG.maxInventorySize,
-  stopOnDefeat: boolean = true
+  defeatRule: AutoRepeatDefeatRule | boolean = 'stop_immediately',
+  defeatStreakLimit: number = DEFAULT_DEFEAT_STREAK_LIMIT
 ): { stop: boolean; reason: AutoStopReason | null } {
   if (retreated) return { stop: true, reason: 'retreat' };
   if (inventoryCount >= maxInventorySize) {
     return { stop: true, reason: 'inventory_full' };
   }
-  if (outcome === 'defeat' && stopOnDefeat) {
-    return { stop: true, reason: 'defeat' };
+
+  const resolvedRule: AutoRepeatDefeatRule =
+    defeatRule === true
+      ? 'stop_immediately'
+      : defeatRule === false
+      ? 'never_stop'
+      : defeatRule;
+
+  if (outcome === 'defeat') {
+    if (resolvedRule === 'stop_immediately') {
+      return { stop: true, reason: 'defeat' };
+    }
+    if (resolvedRule === 'stop_after_n') {
+      const limit = clampDefeatStreakLimit(defeatStreakLimit);
+      if ((session.consecutiveDefeats ?? 0) >= limit) {
+        return { stop: true, reason: 'defeat_streak' };
+      }
+    }
   }
-  if (
-    outcome === 'defeat' &&
-    !stopOnDefeat &&
-    (session.consecutiveDefeats ?? 0) >= AUTO_REPEAT_MAX_DEFEAT_STREAK
-  ) {
-    return { stop: true, reason: 'defeat_streak' };
-  }
+
   if (session.limit !== 'infinite' && session.completedRuns >= session.limit) {
     return { stop: true, reason: 'completed' };
   }

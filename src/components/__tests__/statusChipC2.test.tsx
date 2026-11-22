@@ -289,9 +289,9 @@ describe('TASK C2 — Status chip unclipping + 14px bold arrow badge', () => {
       expect(STATUS_ICON_SIZE_SPECS[variant].turnsOutsetPx).toBe(4);
     }
 
-    // Radar xs chips must remain untouched
+    // Radar xs chips are 20px mini chips per G4a-3a
     expect(STATUS_ICON_SIZE_SPECS.xs).toEqual({
-      boxPx: 18,
+      boxPx: 20,
       iconFontPx: 12,
       lucideSizePx: 12,
       arrowBoxPx: 9,

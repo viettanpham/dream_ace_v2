@@ -239,7 +239,7 @@ describe('Task G4a-C1 — Status chip polish (constants, yellow turns badge, non
     expect(barIconRoot.style.height).toBe('28px');
     expect(barIconRoot.getAttribute('data-glyph-px')).toBe('20');
 
-    // Radar marker mini size ('xs') stays 18px/12px untouched, while legend uses new 32px/20px chip
+    // Radar marker mini size ('xs') is 20px/12px per G4a-3a, while legend uses 32px/20px chip
     act(() => {
       root!.render(
         createElement(BattleRadarView, {
@@ -262,8 +262,8 @@ describe('Task G4a-C1 — Status chip polish (constants, yellow turns badge, non
     ) as HTMLElement;
     expect(radarMarkerIcon).not.toBeNull();
     expect(radarMarkerIcon.getAttribute('data-icon-size')).toBe('xs');
-    expect(radarMarkerIcon.style.width).toBe('18px');
-    expect(radarMarkerIcon.style.height).toBe('18px');
+    expect(radarMarkerIcon.style.width).toBe('20px');
+    expect(radarMarkerIcon.style.height).toBe('20px');
     expect(radarMarkerIcon.getAttribute('data-glyph-px')).toBe('12');
 
     const legendBtn = container!.querySelector(

@@ -458,15 +458,13 @@ describe('5) 3-row field rendering with exposed/protected rows, touch-action pan
       expect((node.textContent ?? '').length).toBeLessThanOrEqual(10);
     }
 
-    // Staggered damage popups have distinct top and animationDelay
+    // Floating labels: 1 active label at a time per unit in an 18px slot (G4a-3a Item 2)
     const popupNodes = Array.from(
       container!.querySelectorAll('[data-testid="damage-popup"]')
     ) as HTMLElement[];
-    expect(popupNodes).toHaveLength(2);
-    expect(popupNodes[0].style.top).not.toBe(popupNodes[1].style.top);
-    expect(popupNodes[0].style.animationDelay).not.toBe(
-      popupNodes[1].style.animationDelay
-    );
+    expect(popupNodes).toHaveLength(1);
+    expect(popupNodes[0].textContent).toBe('-85');
+    expect(popupNodes[0].getAttribute('data-slot-height')).toBe('18');
 
     // Wipe enemy front row -> enemy middle becomes exposed automatically
     const wipedUnits = battleFull.units.map((u) =>

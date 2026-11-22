@@ -9,6 +9,7 @@ import {
 import type {
   ActionType,
   ActiveStatusEffect,
+  AutoRepeatDefeatRule,
   BattleSpeed,
   BattleState,
   CombatFxKind,
@@ -86,6 +87,49 @@ export const RADAR_STATUS_MAX_VISIBLE = 3;
 export const QUEUE_VISIBLE_ROWS = 5;
 export const TURN_QUEUE_UPCOMING_MAX = QUEUE_VISIBLE_ROWS;
 export const TURN_QUEUE_ACTING_NAME_MIN_PX = 56;
+export const PHONE_RADAR_LOG_GAP_PX = 24;
+
+export const PHONE_CONTROL_ROW_LAYOUT = {
+  minViewportWidthPx: 360,
+  horizontalPaddingPx: 12,
+  gapPx: 4,
+  buttonCount: 5,
+  buttonHeightPx: 40,
+  buttonMinWidthPx: 44,
+  autoMaxWidthPx: 88,
+  speedMinWidthPx: 44,
+  viewSwitchWidthPx: 44,
+  loopChipMaxWidthPx: 76,
+  moreBtnWidthPx: 44,
+} as const;
+
+export function computePhoneControlRowBudgetPx(): {
+  totalGapsPx: number;
+  totalButtonsWorstCasePx: number;
+  totalRowWidthPx: number;
+  remainingAt360Px: number;
+} {
+  const totalGapsPx =
+    PHONE_CONTROL_ROW_LAYOUT.gapPx *
+    (PHONE_CONTROL_ROW_LAYOUT.buttonCount - 1);
+  const totalButtonsWorstCasePx =
+    PHONE_CONTROL_ROW_LAYOUT.autoMaxWidthPx +
+    PHONE_CONTROL_ROW_LAYOUT.speedMinWidthPx +
+    PHONE_CONTROL_ROW_LAYOUT.viewSwitchWidthPx +
+    PHONE_CONTROL_ROW_LAYOUT.loopChipMaxWidthPx +
+    PHONE_CONTROL_ROW_LAYOUT.moreBtnWidthPx;
+  const totalRowWidthPx =
+    PHONE_CONTROL_ROW_LAYOUT.horizontalPaddingPx +
+    totalGapsPx +
+    totalButtonsWorstCasePx;
+  return {
+    totalGapsPx,
+    totalButtonsWorstCasePx,
+    totalRowWidthPx,
+    remainingAt360Px:
+      PHONE_CONTROL_ROW_LAYOUT.minViewportWidthPx - totalRowWidthPx,
+  };
+}
 
 export const TURN_QUEUE_SIDEBAR_HEIGHTS = {
   borderPx: 2,
@@ -1006,4 +1050,200 @@ export function buildUpcomingTurnList(
     upcoming,
   };
 }
+
+// ============================================================================
+// LP2: Per-device Loop Defeat Rule & Battle Speed Preferences
+// ============================================================================
+
+export const ALLOWED_BATTLE_SPEEDS: BattleSpeed[] = [
+  1, 2, 3, 5, 10, 12, 15, 20, 30,
+];
+export const PRIMARY_BATTLE_SPEEDS: BattleSpeed[] = [1, 2, 3, 5, 10];
+export const EXTRA_BATTLE_SPEEDS: BattleSpeed[] = [12, 15, 20, 30];
+export const RADAR_FLOATING_LABEL_SKIP_SPEED = 15;
+
+export const LOOP_PREFS_STORAGE_KEY = 'dreamAce.loopPrefs.v1';
+export const BATTLE_SPEED_STORAGE_KEY = 'dreamAce.battleSpeed.v1';
+export const MIN_DEFEAT_STREAK_LIMIT = 1;
+export const MAX_DEFEAT_STREAK_LIMIT = 99;
+export const DEFAULT_DEFEAT_STREAK_LIMIT = 3;
+
+export interface LoopDevicePrefs {
+  defeatRule: AutoRepeatDefeatRule;
+  defeatStreakLimit: number;
+}
+
+export const DEFAULT_LOOP_DEVICE_PREFS: LoopDevicePrefs = {
+  defeatRule: 'stop_immediately',
+  defeatStreakLimit: DEFAULT_DEFEAT_STREAK_LIMIT,
+};
+
+export function clampDefeatStreakLimit(
+  raw: unknown,
+  fallback: number = DEFAULT_DEFEAT_STREAK_LIMIT
+): number {
+  const safeFallback = Math.max(
+    MIN_DEFEAT_STREAK_LIMIT,
+    Math.min(MAX_DEFEAT_STREAK_LIMIT, Math.round(fallback))
+  );
+  if (typeof raw === 'number') {
+    if (!Number.isFinite(raw)) return safeFallback;
+    return Math.max(
+      MIN_DEFEAT_STREAK_LIMIT,
+      Math.min(MAX_DEFEAT_STREAK_LIMIT, Math.round(raw))
+    );
+  }
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    if (!trimmed) return safeFallback;
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed)) return safeFallback;
+    return Math.max(
+      MIN_DEFEAT_STREAK_LIMIT,
+      Math.min(MAX_DEFEAT_STREAK_LIMIT, Math.round(parsed))
+    );
+  }
+  return safeFallback;
+}
+
+export function isValidAutoRepeatDefeatRule(
+  val: unknown
+): val is AutoRepeatDefeatRule {
+  return (
+    val === 'stop_immediately' ||
+    val === 'stop_after_n' ||
+    val === 'never_stop'
+  );
+}
+
+/**
+ * Migrates legacy boolean "Dừng khi thua" toggle:
+ * - true (ON) -> 'stop_immediately' (Dừng ngay)
+ * - false (OFF) -> 'stop_after_n' with N = 3 (Dừng sau 3 trận thua liên tiếp)
+ */
+export function migrateLegacyLoopPrefs(
+  legacyStopOnDefeat?: boolean
+): LoopDevicePrefs {
+  if (legacyStopOnDefeat === false) {
+    return {
+      defeatRule: 'stop_after_n',
+      defeatStreakLimit: DEFAULT_DEFEAT_STREAK_LIMIT,
+    };
+  }
+  return {
+    defeatRule: 'stop_immediately',
+    defeatStreakLimit: DEFAULT_DEFEAT_STREAK_LIMIT,
+  };
+}
+
+export function writeDeviceLoopPrefs(prefs: LoopDevicePrefs): void {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    const clean: LoopDevicePrefs = {
+      defeatRule: isValidAutoRepeatDefeatRule(prefs.defeatRule)
+        ? prefs.defeatRule
+        : 'stop_immediately',
+      defeatStreakLimit: clampDefeatStreakLimit(prefs.defeatStreakLimit),
+    };
+    window.localStorage.setItem(LOOP_PREFS_STORAGE_KEY, JSON.stringify(clean));
+  } catch {
+    // Ignore storage quota / private mode failures
+  }
+}
+
+function extractLegacyStopOnDefeatFromSaveJson(
+  rawJson: string | null | undefined
+): boolean | undefined {
+  if (!rawJson) return undefined;
+  try {
+    const parsed = JSON.parse(rawJson) as {
+      state?: { autoRepeatStopOnDefeat?: unknown };
+      autoRepeatStopOnDefeat?: unknown;
+    };
+    const candidate =
+      parsed?.state && typeof parsed.state === 'object'
+        ? parsed.state.autoRepeatStopOnDefeat
+        : parsed?.autoRepeatStopOnDefeat;
+    return typeof candidate === 'boolean' ? candidate : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function readDeviceLoopPrefs(
+  legacySaveJson?: string | null
+): LoopDevicePrefs {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) {
+      const legacy = extractLegacyStopOnDefeatFromSaveJson(legacySaveJson);
+      return migrateLegacyLoopPrefs(legacy);
+    }
+
+    const raw = window.localStorage.getItem(LOOP_PREFS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      if (parsed && typeof parsed === 'object') {
+        if (isValidAutoRepeatDefeatRule(parsed.defeatRule)) {
+          return {
+            defeatRule: parsed.defeatRule,
+            defeatStreakLimit: clampDefeatStreakLimit(parsed.defeatStreakLimit),
+          };
+        }
+        if (typeof parsed.stopOnDefeat === 'boolean') {
+          const migrated = migrateLegacyLoopPrefs(parsed.stopOnDefeat);
+          writeDeviceLoopPrefs(migrated);
+          return migrated;
+        }
+      }
+    }
+
+    const rawSave =
+      legacySaveJson ??
+      window.localStorage.getItem('starfront_mech_rpg_save_v1');
+    const legacyStopOnDefeat = extractLegacyStopOnDefeatFromSaveJson(rawSave);
+    if (typeof legacyStopOnDefeat === 'boolean') {
+      const migrated = migrateLegacyLoopPrefs(legacyStopOnDefeat);
+      writeDeviceLoopPrefs(migrated);
+      return migrated;
+    }
+
+    return { ...DEFAULT_LOOP_DEVICE_PREFS };
+  } catch {
+    return { ...DEFAULT_LOOP_DEVICE_PREFS };
+  }
+}
+
+export function isValidBattleSpeed(speed: unknown): speed is BattleSpeed {
+  return (
+    typeof speed === 'number' &&
+    ALLOWED_BATTLE_SPEEDS.includes(speed as BattleSpeed)
+  );
+}
+
+export function readDeviceBattleSpeed(): BattleSpeed | null {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return null;
+    const raw = window.localStorage.getItem(BATTLE_SPEED_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = Number(raw);
+    return isValidBattleSpeed(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeDeviceBattleSpeed(speed: BattleSpeed): void {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    if (!isValidBattleSpeed(speed)) return;
+    window.localStorage.setItem(BATTLE_SPEED_STORAGE_KEY, String(speed));
+  } catch {
+    // Ignore storage quota / private mode failures
+  }
+}
+
+export function shouldSkipRadarFloatingLabels(battleSpeed: BattleSpeed): boolean {
+  return battleSpeed >= RADAR_FLOATING_LABEL_SKIP_SPEED;
+}
+
 

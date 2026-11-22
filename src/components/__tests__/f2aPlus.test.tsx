@@ -57,21 +57,28 @@ describe('Task F2a+: Selling Protections, Battle Loop Toast/Stop-on-Defeat & Log
     container.remove();
   });
 
-  describe('1. Engine & Store: shouldStopAutoRepeat & stopOnDefeat', () => {
-    it('stops on defeat when stopOnDefeat=true, continues when false, and ALWAYS stops on inventory_full', () => {
+  describe('1. Engine & Store: shouldStopAutoRepeat & defeatRule', () => {
+    it('stops on defeat when defeatRule=stop_immediately, continues on never_stop, and ALWAYS stops on inventory_full', () => {
       const session = createBaseSession({ limit: 5, completedRuns: 1 });
 
-      // Default (stopOnDefeat=true): stops on defeat
+      // Default ('stop_immediately'): stops on defeat
       expect(
-        shouldStopAutoRepeat(session, 'defeat', false, 10, 50, true)
+        shouldStopAutoRepeat(
+          session,
+          'defeat',
+          false,
+          10,
+          50,
+          'stop_immediately'
+        )
       ).toEqual({ stop: true, reason: 'defeat' });
 
-      // stopOnDefeat=false: continues on defeat when runs remain and bag has space
+      // 'never_stop': continues on defeat when runs remain and bag has space
       expect(
-        shouldStopAutoRepeat(session, 'defeat', false, 10, 50, false)
+        shouldStopAutoRepeat(session, 'defeat', false, 10, 50, 'never_stop')
       ).toEqual({ stop: false, reason: null });
 
-      // Inventory full ALWAYS stops even on defeat with stopOnDefeat=false
+      // Inventory full ALWAYS stops even on defeat with 'never_stop'
       expect(
         shouldStopAutoRepeat(
           session,
@@ -79,19 +86,19 @@ describe('Task F2a+: Selling Protections, Battle Loop Toast/Stop-on-Defeat & Log
           false,
           BALANCE_CONFIG.maxInventorySize,
           BALANCE_CONFIG.maxInventorySize,
-          false
+          'never_stop'
         )
       ).toEqual({ stop: true, reason: 'inventory_full' });
 
       // Inventory full ALWAYS stops on victory too
       expect(
-        shouldStopAutoRepeat(session, 'victory', false, 50, 50, false)
+        shouldStopAutoRepeat(session, 'victory', false, 50, 50, 'never_stop')
       ).toEqual({ stop: true, reason: 'inventory_full' });
     });
   });
 
-  describe('2. Battle Loop UI: Stop-on-defeat checkbox, per-battle toast & batch summary', () => {
-    it('keeps loop button outside "..." menu, defaults Stop on defeat ON, shows toast mid-loop, and shows summary on completion', () => {
+  describe('2. Battle Loop UI: Defeat rule radios, per-battle toast & batch summary', () => {
+    it('keeps loop button outside "..." menu, defaults Stop immediately ON, shows toast mid-loop, and shows summary on completion', () => {
       useGameStore.getState().startBattle('debris_belt');
 
       act(() => {
@@ -104,22 +111,29 @@ describe('Task F2a+: Selling Protections, Battle Loop Toast/Stop-on-Defeat & Log
       );
       expect(loopBtn).not.toBeNull();
 
-      // Open loop popover and verify Stop on defeat defaults to checked (ON)
+      // Open loop popover and verify "Stop immediately" radio defaults to checked
       act(() => {
         loopBtn!.click();
       });
-      const stopOnDefeatCheckbox = document.body.querySelector<HTMLInputElement>(
-        '[data-testid="battle-loop-stop-on-defeat"]'
+      const stopImmediatelyRadio =
+        document.body.querySelector<HTMLInputElement>(
+          '[data-testid="battle-loop-rule-stop-immediately"]'
+        );
+      const neverStopRadio = document.body.querySelector<HTMLInputElement>(
+        '[data-testid="battle-loop-rule-never-stop"]'
       );
-      expect(stopOnDefeatCheckbox).not.toBeNull();
-      expect(stopOnDefeatCheckbox!.checked).toBe(true);
-      expect(useGameStore.getState().autoRepeatStopOnDefeat).toBe(true);
+      expect(stopImmediatelyRadio).not.toBeNull();
+      expect(neverStopRadio).not.toBeNull();
+      expect(stopImmediatelyRadio!.checked).toBe(true);
+      expect(useGameStore.getState().autoRepeatDefeatRule).toBe(
+        'stop_immediately'
+      );
 
-      // Toggle Stop on defeat OFF
+      // Select "Never stop (continuous)"
       act(() => {
-        stopOnDefeatCheckbox!.click();
+        neverStopRadio!.click();
       });
-      expect(useGameStore.getState().autoRepeatStopOnDefeat).toBe(false);
+      expect(useGameStore.getState().autoRepeatDefeatRule).toBe('never_stop');
 
       // Start 5x auto-repeat, force win Run #1 -> toast appears, blocking outcome dialog does NOT
       act(() => {
@@ -142,12 +156,10 @@ describe('Task F2a+: Selling Protections, Battle Loop Toast/Stop-on-Defeat & Log
       expect(toastEl?.textContent).toContain('CR');
       expect(toastEl?.textContent).toContain('WP');
 
-      // Run #2 ends in defeat while stopOnDefeat=false -> still continues with Defeat toast
+      // Run #2 ends in defeat while never_stop -> still continues
       act(() => {
         useGameStore.getState().startBattle('debris_belt');
       });
-      // Force defeat via all allies destroyed in battle & resolve last hit? Use store state for defeat outcome test or retreat=false:
-      // Let's also verify completion summary at 5/5 by stopping cleanly or completing runs
       act(() => {
         useGameStore.setState((s) => ({
           autoRepeatSession: s.autoRepeatSession
@@ -177,7 +189,7 @@ describe('Task F2a+: Selling Protections, Battle Loop Toast/Stop-on-Defeat & Log
         .getState()
         .adminFillInventory(BALANCE_CONFIG.maxInventorySize);
       useGameStore.getState().startBattle('debris_belt');
-      useGameStore.getState().setAutoRepeatStopOnDefeat(false);
+      useGameStore.getState().setAutoRepeatDefeatRule('never_stop');
 
       act(() => {
         root.render(createElement(BattleScreen));

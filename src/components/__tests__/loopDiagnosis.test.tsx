@@ -495,7 +495,7 @@ describe('TASK LP1 — Loop (Lặp) Unclip, Honest State, Defeat Streak & Counte
     ).toBe('3/∞');
   });
 
-  it('stops after 3 consecutive defeats when "Dừng khi thua" is unchecked, and resets the streak on a victory', () => {
+  it('stops after N consecutive defeats when "Dừng sau N trận thua liên tiếp" is selected, and resets the streak on a victory', () => {
     expect(AUTO_REPEAT_MAX_DEFEAT_STREAK).toBe(3);
 
     // Pure shouldStopAutoRepeat check
@@ -513,7 +513,7 @@ describe('TASK LP1 — Loop (Lặp) Unclip, Honest State, Defeat Streak & Counte
       stopReason: null,
     };
     expect(
-      shouldStopAutoRepeat(baseSession, 'defeat', false, 10, 60, false)
+      shouldStopAutoRepeat(baseSession, 'defeat', false, 10, 60, 'stop_after_n', 3)
     ).toEqual({ stop: false, reason: null });
     expect(
       shouldStopAutoRepeat(
@@ -522,9 +522,21 @@ describe('TASK LP1 — Loop (Lặp) Unclip, Honest State, Defeat Streak & Counte
         false,
         10,
         60,
-        false
+        'stop_after_n',
+        3
       )
     ).toEqual({ stop: true, reason: 'defeat_streak' });
+    expect(
+      shouldStopAutoRepeat(
+        { ...baseSession, completedRuns: 3, consecutiveDefeats: 3 },
+        'defeat',
+        false,
+        10,
+        60,
+        'never_stop',
+        3
+      )
+    ).toEqual({ stop: false, reason: null });
     expect(
       shouldStopAutoRepeat(
         { ...baseSession, completedRuns: 3, consecutiveDefeats: 3 },
@@ -532,11 +544,12 @@ describe('TASK LP1 — Loop (Lặp) Unclip, Honest State, Defeat Streak & Counte
         false,
         10,
         60,
-        false
+        'stop_after_n',
+        3
       )
     ).toEqual({ stop: false, reason: null });
 
-    // End-to-end store + UI flow with clear checkbox label + muted hint line
+    // End-to-end store + UI flow with 3 radio options + N input
     setViewport(1280, 800);
     useGameStore.getState().startBattle('debris_belt');
 
@@ -550,25 +563,26 @@ describe('TASK LP1 — Loop (Lặp) Unclip, Honest State, Defeat Streak & Counte
         .click();
     });
 
-    const checkbox = document.body.querySelector<HTMLInputElement>(
-      '[data-testid="battle-loop-stop-on-defeat"]'
+    const stopImmediatelyRadio =
+      document.body.querySelector<HTMLInputElement>(
+        '[data-testid="battle-loop-rule-stop-immediately"]'
+      )!;
+    const stopAfterNRadio = document.body.querySelector<HTMLInputElement>(
+      '[data-testid="battle-loop-rule-stop-after-n"]'
     )!;
-    const hintBefore = document.body.querySelector(
-      '[data-testid="battle-loop-stop-on-defeat-hint"]'
-    )?.textContent;
-    expect(checkbox.checked).toBe(true);
-    expect(hintBefore).toContain('3');
+    const streakInput = document.body.querySelector<HTMLInputElement>(
+      '[data-testid="battle-loop-streak-input"]'
+    )!;
+    expect(stopImmediatelyRadio.checked).toBe(true);
+    expect(stopAfterNRadio.checked).toBe(false);
+    expect(streakInput.value).toBe('3');
 
-    // Uncheck "Dừng khi thua"
+    // Select "Dừng sau 3 trận thua liên tiếp"
     act(() => {
-      checkbox.click();
+      stopAfterNRadio.click();
     });
-    expect(useGameStore.getState().autoRepeatStopOnDefeat).toBe(false);
-    const hintAfter = document.body.querySelector(
-      '[data-testid="battle-loop-stop-on-defeat-hint"]'
-    )?.textContent;
-    expect(hintAfter).toContain('Tiếp tục khi thua');
-    expect(hintAfter).toContain('3');
+    expect(useGameStore.getState().autoRepeatDefeatRule).toBe('stop_after_n');
+    expect(useGameStore.getState().autoRepeatDefeatStreakLimit).toBe(3);
 
     // Start 10x loop
     act(() => {
@@ -645,7 +659,7 @@ describe('TASK LP1 — Loop (Lặp) Unclip, Honest State, Defeat Streak & Counte
     expect(container.querySelector('#repeat-summary-title')?.textContent).toContain(
       'Tổng kết Lặp tự động'
     );
-    expect(container.textContent).toContain('Thua 3 trận liên tiếp');
+    expect(container.textContent).toContain('Dừng: thua 3 trận liên tiếp');
   });
 
   it('launches 3 battles automatically on phone portrait when clicking Lặp -> 5x -> Bắt đầu and keeps vi/en translation key parity', () => {
@@ -655,10 +669,12 @@ describe('TASK LP1 — Loop (Lặp) Unclip, Honest State, Defeat Streak & Counte
     expect(viKeys).toEqual(enKeys);
     expect(VI_TRANSLATIONS['auto.repeatReason.defeat_streak']).toContain('{streak}');
     expect(EN_TRANSLATIONS['auto.repeatReason.defeat_streak']).toContain('{streak}');
-    expect(VI_TRANSLATIONS['battle.loopStopOnDefeatHintOn']).toContain('{streak}');
-    expect(EN_TRANSLATIONS['battle.loopStopOnDefeatHintOn']).toContain('{streak}');
-    expect(VI_TRANSLATIONS['battle.loopStopOnDefeatHintOff']).toContain('{streak}');
-    expect(EN_TRANSLATIONS['battle.loopStopOnDefeatHintOff']).toContain('{streak}');
+    expect(VI_TRANSLATIONS['battle.loopRuleStopImmediately']).toBeTruthy();
+    expect(EN_TRANSLATIONS['battle.loopRuleStopImmediately']).toBeTruthy();
+    expect(VI_TRANSLATIONS['battle.loopRuleNeverStop']).toBeTruthy();
+    expect(EN_TRANSLATIONS['battle.loopRuleNeverStop']).toBeTruthy();
+    expect(VI_TRANSLATIONS['battle.speedPopoverTitle']).toBeTruthy();
+    expect(EN_TRANSLATIONS['battle.speedPopoverTitle']).toBeTruthy();
 
     setViewport(390, 844);
     useGameStore.getState().startBattle('debris_belt');
