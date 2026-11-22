@@ -2,7 +2,7 @@
 Rule: every task reads this file first, finds code with grep on symbols, opens only matching files (line ranges for files over 300 lines), and appends one line per new file it opens: "path — what it does (key functions)".
 
 ## Largest files (lines) — avoid reading whole
-src/store/useGameStore.ts 3981; src/engine/combat.ts 3860; src/components/BattleScreen.tsx 3450; src/components/GearView.tsx 2829; src/components/BattleRadarView.tsx 2424; src/components/AdminPanel.tsx 2139; src/components/ShopScreen.tsx 1933; src/components/BattleStatsModal.tsx 1757; src/store/useCloudSaveStore.ts 1721; src/i18n/vi.ts 1654; src/i18n/en.ts 1653; src/engine/cloudSave.ts 1620; src/engine/tactics.ts 1500; src/components/BattleVfxOverlay.tsx 1496; src/components/MapView.tsx 1359; src/components/CloudSaveDialogs.tsx 1321; src/utils/battleDisplay.ts 1249; src/types/game.ts 1248; src/components/TurnQueueBar.tsx 1170; src/utils/combatLogFormat.ts 1129
+src/store/useGameStore.ts 3981; src/engine/combat.ts 3860; src/components/BattleScreen.tsx 3196; src/components/GearView.tsx 2829; src/components/BattleRadarView.tsx 2424; src/components/AdminPanel.tsx 2139; src/components/ShopScreen.tsx 1933; src/components/BattleStatsModal.tsx 1757; src/store/useCloudSaveStore.ts 1721; src/i18n/vi.ts 1654; src/i18n/en.ts 1653; src/engine/cloudSave.ts 1620; src/engine/tactics.ts 1500; src/components/BattleVfxOverlay.tsx 1496; src/components/MapView.tsx 1359; src/components/CloudSaveDialogs.tsx 1321; src/utils/battleDisplay.ts 1249; src/types/game.ts 1248; src/components/TurnQueueBar.tsx 1170; src/utils/combatLogFormat.ts 1129
 
 ## Battle setup, formation, lanes
 - src/store/useGameStore.ts — persisted campaign store, battle launcher, and squad formation actions (`startBattle()`, `moveSquadUnitRow()`, `autoArrangeSquadFormation()`)
@@ -22,6 +22,9 @@ src/store/useGameStore.ts 3981; src/engine/combat.ts 3860; src/components/Battle
 - src/components/BattleResultDialog.tsx + src/components/__tests__/BattleResultDialog.test.tsx — single-battle victory/defeat/retreat summary modal (2-col desktop, sticky-footer bottom-sheet phone) + tests
 - src/components/AutoRepeatDialogs.tsx + src/components/__tests__/AutoRepeatDialogs.test.tsx — auto-repeat per-battle toast & batch summary modal (`AutoRepeatToast`, `AutoRepeatBatchSummaryModal`, `AutoRepeatDialogs`) + tests
 - src/components/BattleSheets.tsx + src/components/__tests__/BattleSheets.test.tsx — phone unit detail sheet wrapper & combat log popup sheet (`PhoneUnitDetailSheet`, `CombatLogPopupSheet`, `BattleSheets`) + tests
+- src/components/BattleMoreActionsMenu.tsx + src/components/__tests__/BattleMoreActionsMenu.test.tsx — shared "..." overflow actions BottomSheet (`BattleMoreActionsMenu`) + tests
+- src/components/PhoneSkillsSheet.tsx + src/components/__tests__/PhoneSkillsSheet.test.tsx — phone active skills BottomSheet (`PhoneSkillsSheet`) + tests
+- src/components/FieldSuppliesSheet.tsx + src/components/__tests__/FieldSuppliesSheet.test.tsx — field supplies & tactics BottomSheet wrapped in ErrorBoundary (`FieldSuppliesSheet`) + tests
 - src/components/BattleRadarView.tsx — tactical 3-row SVG radar markers, lanes, floating labels, and lane buff formatting (`BattleRadarView`, `formatRadarLaneBuffText()`, `computeLaneTokenRadius()`)
 - src/components/RadarStatusBoard.tsx — collapsible status board under the radar (`RadarStatusBoard`)
 - src/components/StatusChip.tsx — shared compact status icon chip (`StatusChip`)

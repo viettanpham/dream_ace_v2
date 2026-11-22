@@ -3,30 +3,23 @@ import { createPortal } from 'react-dom';
 import {
   AlertTriangle,
   Backpack,
-  BarChart3,
   Bot,
   ChevronsDownUp,
   ChevronsUpDown,
   Crosshair,
-  Flag,
   HeartHandshake,
   Info,
   LayoutGrid,
   Maximize2,
-  MessageSquare,
   MoreHorizontal,
   Radar,
   Repeat,
   ScrollText,
-  Settings,
   Shield,
   ShieldAlert,
-  Sliders,
   Sparkles,
   Square,
   X,
-  Zap,
-  ZapOff,
 } from 'lucide-react';
 import { BALANCE_CONFIG } from '../data/balance';
 import { getScaledSkillStats, getSkillById } from '../data/skills';
@@ -50,7 +43,7 @@ import {
   getTeamTagLabel,
   useI18n,
 } from '../i18n';
-import { ENABLE_ADMIN_CP, useGameStore } from '../store/useGameStore';
+import { useGameStore } from '../store/useGameStore';
 import type {
   AutoRepeatDefeatRule,
   AutoRepeatLimit,
@@ -96,16 +89,17 @@ import {
   AutoRepeatBatchSummaryModal,
   AutoRepeatToast,
 } from './AutoRepeatDialogs';
+import { BattleMoreActionsMenu } from './BattleMoreActionsMenu';
 import { BattleRadarView } from './BattleRadarView';
 import { BattleResultDialog } from './BattleResultDialog';
 import { CombatLogPopupSheet, PhoneUnitDetailSheet } from './BattleSheets';
 import { BattleStatsModal } from './BattleStatsModal';
 import { BattleUnitCard } from './BattleUnitCard';
-import { BottomSheet } from './BottomSheet';
 import { CombatLogList } from './CombatLogList';
-import { EffectsSettingsPanel } from './EffectsSettingsPanel';
 import { ErrorBoundary } from './ErrorBoundary';
+import { FieldSuppliesSheet } from './FieldSuppliesSheet';
 import { FixedStatusArea } from './FixedStatusArea';
+import { PhoneSkillsSheet } from './PhoneSkillsSheet';
 import {
   RadarStatusBoard,
   readStatusBoardCollapsed,
@@ -3033,264 +3027,40 @@ export function BattleScreen() {
       )}
 
       {/* ==================== SHARED MORE ACTIONS ("...") MENU ==================== */}
-      <BottomSheet
-        open={moreActionsOpen}
-        onClose={closeMoreActions}
-        title={t('battle.moreActions')}
-        subtitle={`${sectorLabel} · ${battle.squadSize}v${battle.squadSize}`}
-      >
-        <div data-testid="battle-more-menu" className="space-y-4">
-          {/* Full Speed Picker (1x - 30x) */}
-          <div className="space-y-2">
-            <div className="text-[12px] font-semibold uppercase tracking-wider text-slate-400">
-              {t('battle.speedLabel')}
-            </div>
-            <div className="grid grid-cols-5 gap-2">
-              {ALLOWED_BATTLE_SPEEDS.map((spd) => (
-                <button
-                  key={spd}
-                  type="button"
-                  onClick={() => setBattleSpeed(spd)}
-                  className={`min-h-[44px] rounded-lg border font-mono-nums text-[13px] font-bold cursor-pointer ${
-                    battleSpeed === spd
-                      ? 'border-sky-400 bg-sky-500 text-slate-950'
-                      : 'border-slate-700 bg-slate-900 text-slate-200'
-                  }`}
-                >
-                  {spd}x
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Visual Effects (Full/Compact/Off, Reduced Motion, Status Labels, Debug & Test Preview) */}
-          <EffectsSettingsPanel compact />
-
-          <div className="grid grid-cols-1 gap-2">
-            <button
-              type="button"
-              data-testid="battle-more-tactics"
-              onClick={() => {
-                closeMoreActions();
-                setTacticsModalOpen(true);
-              }}
-              className="min-h-[44px] px-3.5 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-100 text-[13px] font-semibold flex items-center gap-2.5 cursor-pointer"
-            >
-              <Settings className="w-4 h-4 text-emerald-400" />
-              <span>{t('auto.tacticsBtn')}</span>
-            </button>
-
-            <button
-              type="button"
-              data-testid="battle-toggle-bubbles"
-              onClick={toggleSpeechBubbles}
-              aria-pressed={speechBubblesEnabled}
-              className={`min-h-[44px] px-3.5 rounded-lg border text-[13px] font-semibold flex items-center justify-between cursor-pointer ${
-                speechBubblesEnabled
-                  ? 'border-sky-400 bg-sky-500/20 text-sky-200'
-                  : 'border-slate-700 bg-slate-900 text-slate-300'
-              }`}
-            >
-              <span className="inline-flex items-center gap-2.5">
-                <MessageSquare className="w-4 h-4 text-sky-400" />
-                <span>{t('battle.speechBubbles')}</span>
-              </span>
-              <span className="font-mono-nums text-[12px]">
-                {speechBubblesEnabled ? 'ON' : 'OFF'}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              data-testid="battle-toggle-skip-anim"
-              onClick={toggleSkipAnimations}
-              aria-pressed={skipAnimations}
-              className={`min-h-[44px] px-3.5 rounded-lg border text-[13px] font-semibold flex items-center justify-between cursor-pointer ${
-                skipAnimations
-                  ? 'border-sky-400 bg-sky-500/20 text-sky-200'
-                  : 'border-slate-700 bg-slate-900 text-slate-200'
-              }`}
-            >
-              <span className="inline-flex items-center gap-2.5">
-                <ZapOff className="w-4 h-4 text-sky-400" />
-                <span>{t('battle.skipAnim')}</span>
-              </span>
-              <span className="font-mono-nums text-[12px]">
-                {skipAnimations ? 'ON' : 'OFF'}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              data-testid="battle-more-stats"
-              onClick={() => {
-                closeMoreActions();
-                setStatsModalOpen(true);
-              }}
-              className="min-h-[44px] px-3.5 rounded-lg border border-sky-500/45 bg-sky-500/12 text-sky-200 text-[13px] font-semibold flex items-center gap-2.5 cursor-pointer"
-            >
-              <BarChart3 className="w-4 h-4 text-sky-400" />
-              <span>
-                {battle.summary ? t('stats.reportBtn') : t('stats.progressBtn')}
-              </span>
-            </button>
-
-            {!battle.summary &&
-              (retreatConfirmOpen ? (
-                <div
-                  data-testid="battle-retreat-confirm-box"
-                  className="rounded-lg border border-red-500/60 bg-red-950/35 p-3 space-y-2.5"
-                >
-                  <div className="flex items-center gap-2 text-[13px] font-semibold text-red-100">
-                    <Flag className="w-4 h-4 text-red-400 shrink-0" />
-                    <span>{t('battle.retreatConfirmTitle')}</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      data-testid="battle-retreat-cancel"
-                      onClick={() => setRetreatConfirmOpen(false)}
-                      className="min-h-[40px] px-3 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200 text-[13px] font-semibold cursor-pointer"
-                    >
-                      {t('battle.retreatCancelBtn')}
-                    </button>
-                    <button
-                      type="button"
-                      data-testid="battle-retreat-confirm"
-                      onClick={() => {
-                        closeMoreActions();
-                        retreatBattle();
-                      }}
-                      className="min-h-[40px] px-3 rounded-lg bg-red-600 hover:bg-red-500 text-white text-[13px] font-bold cursor-pointer"
-                    >
-                      {t('battle.retreatConfirmBtn')}
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  data-testid="battle-more-retreat"
-                  onClick={() => setRetreatConfirmOpen(true)}
-                  className="min-h-[44px] px-3.5 rounded-lg border border-red-500/45 bg-red-500/12 text-red-200 text-[13px] font-semibold flex items-center gap-2.5 cursor-pointer"
-                >
-                  <Flag className="w-4 h-4 text-red-400" />
-                  <span>{t('battle.retreat')}</span>
-                </button>
-              ))}
-
-            {ENABLE_ADMIN_CP && (
-              <div className="pt-2 border-t border-slate-800/70">
-                <button
-                  type="button"
-                  data-testid="battle-more-admin-btn"
-                  onClick={() => {
-                    closeMoreActions();
-                    toggleAdminPanel();
-                  }}
-                  className="w-full min-h-[38px] px-3 rounded-lg border border-slate-800/80 bg-slate-950/60 hover:bg-slate-900 text-slate-400 hover:text-slate-200 text-[12px] font-medium flex items-center justify-center gap-2 cursor-pointer transition-colors"
-                >
-                  <Sliders className="w-3.5 h-3.5 text-slate-500" />
-                  <span>{t('statusUi.adminBtnMuted')}</span>
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      </BottomSheet>
+      <BattleMoreActionsMenu
+        menu={{
+          open: moreActionsOpen,
+          sectorLabel,
+          squadSize: battle.squadSize,
+          hasSummary: Boolean(battle.summary),
+          battleSpeed,
+          speechBubblesEnabled,
+          skipAnimations,
+          retreatConfirmOpen,
+          t,
+          onClose: closeMoreActions,
+          onSetBattleSpeed: setBattleSpeed,
+          onOpenTactics: () => setTacticsModalOpen(true),
+          onToggleSpeechBubbles: toggleSpeechBubbles,
+          onToggleSkipAnimations: toggleSkipAnimations,
+          onOpenStats: () => setStatsModalOpen(true),
+          onSetRetreatConfirmOpen: setRetreatConfirmOpen,
+          onRetreatBattle: retreatBattle,
+          onToggleAdminPanel: toggleAdminPanel,
+        }}
+      />
 
       {/* ==================== PHONE SKILLS BOTTOM SHEET ==================== */}
-      <BottomSheet
+      <PhoneSkillsSheet
         open={skillsSheetOpen}
+        playerUnit={playerUnit}
+        playerSkillIds={playerSkillIds}
+        canPlayerManualAct={canPlayerManualAct}
+        lang={lang}
+        t={t}
         onClose={() => setSkillsSheetOpen(false)}
-        title={t('battle.skillsSheetTitle')}
-        subtitle={
-          playerUnit
-            ? `SP ${playerUnit.sp}/${playerUnit.derived.maxSp}`
-            : undefined
-        }
-      >
-        {playerSkillIds.length === 0 ? (
-          <div className="rounded-lg border border-slate-800 bg-slate-950/70 p-4 text-center text-[13px] text-slate-400">
-            {t('battle.noSkillsSlotted')}
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {playerSkillIds.slice(0, 6).map((skillId) => {
-              const skill = getSkillById(skillId);
-              if (!skill || !playerUnit) return null;
-              const usability = canUnitUseSkill(playerUnit, skill.id);
-              const clickable = canPlayerManualAct && usability.canUse;
-              const isToggleOn = Boolean(usability.isToggleActive);
-              const isUsedOnce =
-                skill.oncePerBattle &&
-                playerUnit.usedOnceSkills.includes(skill.id);
-              const reasonText = getBattleSkillReason(lang, usability);
-
-              return (
-                <button
-                  key={skill.id}
-                  type="button"
-                  disabled={!clickable}
-                  onClick={() => {
-                    if (clickable) {
-                      performPlayerAction('skill', skill.id);
-                      setSkillsSheetOpen(false);
-                    }
-                  }}
-                  className={`w-full min-h-[56px] p-3 rounded-lg border text-left flex items-start justify-between gap-3 transition-colors ${
-                    isToggleOn
-                      ? 'border-emerald-400 bg-emerald-500/20 text-emerald-100'
-                      : !clickable
-                      ? 'border-slate-800 bg-slate-900/70 text-slate-500 opacity-65'
-                      : skill.category === 'elite'
-                      ? 'border-amber-400/80 bg-amber-500/15 text-amber-100 cursor-pointer'
-                      : skill.category === 'special'
-                      ? 'border-purple-400/80 bg-purple-500/15 text-purple-100 cursor-pointer'
-                      : 'border-sky-500/50 bg-sky-500/15 text-sky-100 cursor-pointer'
-                  }`}
-                >
-                  <div className="flex items-start gap-2.5 min-w-0">
-                    <span className="w-8 h-8 rounded bg-slate-950/80 border border-slate-700 flex items-center justify-center shrink-0">
-                      <SkillIcon icon={skill.icon} className="w-4 h-4" />
-                    </span>
-                    <div className="min-w-0">
-                      <div className="text-[15px] font-bold leading-tight truncate">
-                        {getSkillName(lang, skill.id)}
-                      </div>
-                      <div className="text-[12px] text-slate-300 mt-0.5 leading-snug">
-                        {getSkillDesc(lang, skill.id)}
-                      </div>
-                      {!usability.canUse && reasonText && (
-                        <div className="text-[12px] text-red-400 font-semibold mt-0.5">
-                          {reasonText}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <div
-                    className={`text-right font-mono-nums text-[12px] font-bold shrink-0 ${
-                      usability.cooldownRemaining > 0
-                        ? 'text-red-300'
-                        : SP_COLOR_TOKENS.textClass
-                    }`}
-                  >
-                    {isToggleOn
-                      ? t('battle.skillOnTag')
-                      : isUsedOnce
-                      ? t('battle.skillUsedTag')
-                      : usability.cooldownRemaining > 0
-                      ? t('battle.skillCdShort', {
-                          turns: usability.cooldownRemaining,
-                        })
-                      : `${usability.spCost} SP`}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </BottomSheet>
+        onUseSkill={(skillId) => performPlayerAction('skill', skillId)}
+      />
 
       {/* ==================== AUTO-REPEAT PER-BATTLE TOAST ==================== */}
       {autoRepeatToast && !showRepeatBatchSummary && (
@@ -3397,37 +3167,13 @@ export function BattleScreen() {
       </ErrorBoundary>
 
       {/* ==================== FIELD SUPPLIES & TACTICS BOTTOM SHEET ==================== */}
-      <ErrorBoundary
-        variant="panel"
-        title={t('battle.suppliesTitle')}
-        resetKey={suppliesSheetOpen}
+      <FieldSuppliesSheet
+        open={suppliesSheetOpen}
+        t={t}
         onClose={() => setSuppliesSheetOpen(false)}
+        onOpenTactics={() => setTacticsModalOpen(true)}
         onReloadBattle={() => startBattle(battle.sectorId)}
-      >
-        <BottomSheet
-          open={suppliesSheetOpen}
-          onClose={() => setSuppliesSheetOpen(false)}
-          title={t('battle.suppliesTitle')}
-          footer={
-            <button
-              type="button"
-              onClick={() => {
-                setSuppliesSheetOpen(false);
-                setTacticsModalOpen(true);
-              }}
-              className="w-full min-h-[44px] px-4 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold text-[13px] inline-flex items-center justify-center gap-2 cursor-pointer"
-            >
-              <Settings className="w-4 h-4" />
-              <span>{t('battle.openTactics')}</span>
-            </button>
-          }
-        >
-          <div className="rounded-lg border border-slate-800 bg-[#080D16] p-4 text-[13px] text-slate-300 leading-relaxed flex items-start gap-2">
-            <Zap className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-            <span>{t('battle.noConsumables')}</span>
-          </div>
-        </BottomSheet>
-      </ErrorBoundary>
+      />
 
       {/* ==================== LIVE PROGRESS / END-OF-BATTLE REPORT MODAL ==================== */}
       <ErrorBoundary
