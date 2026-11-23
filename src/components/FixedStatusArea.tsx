@@ -12,6 +12,7 @@ import type {
   ActiveStatusEffect,
   CombatUnit,
   IconCatalogModRow,
+  Language,
   StatusBadgeLayout,
 } from '../types/game';
 import {
@@ -39,6 +40,8 @@ import { StatusChip } from './StatusChip';
 
 export { STATUS_ROW_GAP_PX };
 
+export const CARD_STATUS_FALLBACK_WIDTH_PX = 280;
+
 interface FixedStatusAreaProps {
   statuses: readonly ActiveStatusEffect[];
   rows: number;
@@ -57,6 +60,10 @@ interface FixedStatusAreaProps {
   emptyTestId?: string;
   /** When true, keeps fixed row height, renders all chips with internal vertical scroll, no "+N" badge, and shows muted centered empty state */
   scrollOverflow?: boolean;
+  /** When true, automatically switches into thin internal vertical scroll only when chips exceed `rows` */
+  scrollOnOverflow?: boolean;
+  /** When true alongside scrollOverflow/scrollOnOverflow, keeps rendering the "+N" overflow mark */
+  showOverflowMarkInScroll?: boolean;
   className?: string;
 }
 
@@ -64,7 +71,8 @@ export function getFixedStatusAreaHeightPx(
   rows: number,
   compact = false
 ): number {
-  const safeRows = Math.max(1, Math.min(5, Math.round(rows)));
+  const safeRows = Math.max(0, Math.min(5, Math.round(rows)));
+  if (safeRows === 0) return 0;
   const chipPx = compact ? STATUS_CHIP_BAR_FRAME_PX : STATUS_CHIP_FRAME_PX;
   return safeRows * (chipPx + STATUS_ROW_GAP_PX);
 }
@@ -84,6 +92,50 @@ function estimateChipWidthPx(
     Math.round(shortText.length * STATUS_CHIP_CHAR_WIDTH_PX)
   );
   return iconBox + basePad + STATUS_CHIP_VALUE_GAP_PX + textW;
+}
+
+export function countStatusChipRows(
+  statuses: readonly ActiveStatusEffect[],
+  options: {
+    lang: Language;
+    unit?: CombatUnit | null;
+    iconMods?: readonly IconCatalogModRow[] | null;
+    showLabels?: boolean;
+    compact?: boolean;
+    containerWidthPx?: number;
+  }
+): number {
+  const {
+    lang,
+    unit = null,
+    iconMods,
+    showLabels = true,
+    compact = false,
+    containerWidthPx = CARD_STATUS_FALLBACK_WIDTH_PX,
+  } = options;
+  if (statuses.length === 0) return 0;
+
+  const sorted = sortStatusEffects(statuses, iconMods);
+  const usableW = Math.max(84, containerWidthPx - STATUS_AREA_PAD_X_PX * 2);
+  let row = 1;
+  let curW = 0;
+
+  for (const st of sorted) {
+    const w = estimateChipWidthPx(
+      formatStatusChipShortValue(lang, st, unit, 1, false),
+      showLabels,
+      compact
+    );
+    const clampedW = Math.min(usableW, w);
+    const needed = curW === 0 ? clampedW : STATUS_CHIP_COL_GAP_PX + clampedW;
+    if (curW + needed <= usableW) {
+      curW += needed;
+    } else {
+      row += 1;
+      curW = clampedW;
+    }
+  }
+  return row;
 }
 
 function packStatusChips(
@@ -158,7 +210,7 @@ export function FixedStatusArea({
   badgeLayout = 'B',
   iconMods,
   showLabels = true,
-  fallbackWidthPx = 280,
+  fallbackWidthPx = CARD_STATUS_FALLBACK_WIDTH_PX,
   compact = false,
   rootTestId,
   chipTestIdPrefix,
@@ -166,6 +218,8 @@ export function FixedStatusArea({
   overflowTestId,
   emptyTestId,
   scrollOverflow = false,
+  scrollOnOverflow = false,
+  showOverflowMarkInScroll = false,
   className = '',
 }: FixedStatusAreaProps) {
   const { lang, t } = useI18n();
@@ -222,10 +276,16 @@ export function FixedStatusArea({
     return packStatusChips(measured, widthToUse, rows);
   }, [sorted, lang, unit, showLabels, compact, measuredWidth, fallbackWidthPx, rows]);
 
-  const effectiveRows = Math.max(1, Math.min(5, Math.round(rows)));
+  const effectiveRows = Math.max(0, Math.min(5, Math.round(rows)));
   const heightPx = getFixedStatusAreaHeightPx(effectiveRows, compact);
-  const visibleStatuses = scrollOverflow ? sorted : packed.visible;
-  const overflowCount = scrollOverflow ? 0 : packed.overflowCount;
+  const effectiveScrollOverflow =
+    scrollOverflow || (scrollOnOverflow && packed.overflowCount > 0);
+  const visibleStatuses = effectiveScrollOverflow ? sorted : packed.visible;
+  const overflowCount = effectiveScrollOverflow
+    ? showOverflowMarkInScroll
+      ? packed.overflowCount
+      : 0
+    : packed.overflowCount;
 
   const openDetails = (e: React.SyntheticEvent) => {
     e.stopPropagation();
@@ -308,6 +368,10 @@ export function FixedStatusArea({
     );
   };
 
+  if (effectiveRows <= 0) {
+    return null;
+  }
+
   return (
     <>
       <div
@@ -334,41 +398,45 @@ export function FixedStatusArea({
           rowGap: `${STATUS_ROW_GAP_PX}px`,
           columnGap: `${STATUS_CHIP_COL_GAP_PX}px`,
           paddingLeft: `${
-            scrollOverflow
+            effectiveScrollOverflow
               ? STATUS_AREA_PAD_X_PX + STATUS_BADGE_SAFE_PX
               : STATUS_AREA_PAD_X_PX
           }px`,
           paddingRight: `${
-            scrollOverflow
+            effectiveScrollOverflow
               ? STATUS_AREA_PAD_X_PX + STATUS_BADGE_SAFE_PX
               : STATUS_AREA_PAD_X_PX
           }px`,
           paddingTop: `${
-            scrollOverflow
+            compact
+              ? STATUS_AREA_PAD_TOP_PX
+              : effectiveScrollOverflow
               ? sorted.length > 0
                 ? STATUS_AREA_PAD_TOP_PX + STATUS_BADGE_SAFE_PX
                 : STATUS_BADGE_SAFE_PX
-              : STATUS_AREA_PAD_TOP_PX
+              : STATUS_BADGE_SAFE_PX
           }px`,
-          paddingBottom: scrollOverflow
-            ? `${
-                sorted.length > 0
-                  ? Math.max(
-                      STATUS_BADGE_SAFE_PX,
-                      STATUS_TURNS_BADGE_OUTSET_PX +
-                        Math.ceil(STATUS_ARROW_BADGE_PX / 2) +
-                        1
-                    )
-                  : STATUS_BADGE_SAFE_PX
-              }px`
-            : 0,
+          paddingBottom: `${
+            compact
+              ? 0
+              : effectiveScrollOverflow
+              ? sorted.length > 0
+                ? Math.max(
+                    STATUS_BADGE_SAFE_PX,
+                    STATUS_TURNS_BADGE_OUTSET_PX +
+                      Math.ceil(STATUS_ARROW_BADGE_PX / 2) +
+                      1
+                  )
+                : STATUS_BADGE_SAFE_PX
+              : STATUS_BADGE_SAFE_PX
+          }px`,
         }}
         className={`w-full min-w-0 flex flex-wrap ${
           scrollOverflow && sorted.length === 0
             ? 'items-center justify-center'
             : 'content-start items-start'
         } ${
-          scrollOverflow
+          effectiveScrollOverflow
             ? 'overflow-y-auto overflow-x-hidden tactical-scroll tactical-scroll-thin'
             : 'overflow-visible'
         } rounded cursor-pointer hover:bg-slate-800/30 transition-colors ${className}`}

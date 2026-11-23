@@ -1324,7 +1324,9 @@ export const EN_TRANSLATIONS = {
   // Structured Combat Log, Live Progress & Report Cleanup (G3c)
   'log.filter.all': 'All',
   'log.filter.ally': 'Allies',
+  'log.filter.allyShort': 'Allies',
   'log.filter.enemy': 'Enemies',
+  'log.filter.enemyShort': 'Foes',
   'log.filter.system': 'System',
   'log.modeDocked': 'Docked',
   'log.modePopup': 'Popup',
@@ -1333,6 +1335,11 @@ export const EN_TRANSLATIONS = {
   'log.loadOlder': 'Load older ({count})',
   'log.emptyChannel': 'No entries in this channel yet.',
   'log.dockedCapHint': 'Latest {shown}/{total}',
+  'log.orderNewest': 'Newest first',
+  'log.orderOldest': 'Oldest first',
+  'log.orderNewestShort': 'New',
+  'log.orderOldestShort': 'Old',
+  'log.jumpNewLines': '{count} new lines',
   'log.actionMoveRow': 'Moves',
   'log.actionKill': 'Destroyed',
   'log.actionBurn': 'Burn',
@@ -1638,6 +1645,14 @@ export const EN_TRANSLATIONS = {
   'cloud.overwriteExportBtn': 'Export save (SV1a) first',
   'cloud.overwriteConfirmBtn': 'Overwrite',
   'cloud.overwriteExported': 'Exported backup file: {filename}',
+
+  // Radar Status Board (G4a-3b)
+  'statusBoard.header': 'Statuses · Ally {allies} · Enemy {enemies}',
+  'statusBoard.allyCol': 'Ally',
+  'statusBoard.enemyCol': 'Enemy',
+  'statusBoard.empty': 'No active effects',
+  'statusBoard.collapseLabel': 'Collapse status board',
+  'statusBoard.expandLabel': 'Expand status board',
 } as const;
 
 export type TranslationKey = keyof typeof EN_TRANSLATIONS;

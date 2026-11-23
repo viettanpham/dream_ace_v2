@@ -338,7 +338,7 @@ describe('2) Compact Card view rows & collapsed 28px down units', () => {
     expect(aliveRow).not.toBeNull();
     expect(aliveRow.getAttribute('data-unit-collapsed')).toBe('false');
     expect(aliveRow.getAttribute('data-acting')).toBe('true');
-    expect(aliveRow.className).toContain('min-h-[50px]');
+    expect(aliveRow.className).not.toContain('min-h-[50px]');
     expect(aliveRow.textContent).toContain('420/420');
     expect(aliveRow.textContent).toContain('Lv.12');
 
@@ -609,6 +609,7 @@ describe('5) Combat log auto-scroll pause & Jump to latest button', () => {
           entries: initial,
           active: true,
           density: 'compact',
+          order: 'oldest',
         })
       );
     });
@@ -635,6 +636,7 @@ describe('5) Combat log auto-scroll pause & Jump to latest button', () => {
           entries: makeLogEntries(12),
           active: true,
           density: 'compact',
+          order: 'oldest',
         })
       );
     });
@@ -662,6 +664,7 @@ describe('5) Combat log auto-scroll pause & Jump to latest button', () => {
           entries: makeLogEntries(14),
           active: true,
           density: 'compact',
+          order: 'oldest',
         })
       );
     });

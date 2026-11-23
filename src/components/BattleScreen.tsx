@@ -1,39 +1,27 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   AlertTriangle,
-  Award,
   Backpack,
-  BarChart3,
   Bot,
   ChevronsDownUp,
   ChevronsUpDown,
   Crosshair,
-  Flag,
   HeartHandshake,
   Info,
   LayoutGrid,
   Maximize2,
-  MessageSquare,
-  Minimize2,
   MoreHorizontal,
-  Package,
   Radar,
   Repeat,
   ScrollText,
-  Settings,
   Shield,
   ShieldAlert,
-  Sliders,
   Sparkles,
   Square,
   X,
-  Zap,
-  ZapOff,
 } from 'lucide-react';
 import { BALANCE_CONFIG } from '../data/balance';
-import { STAT_KEYS } from '../data/classes';
-import { RARITY_META } from '../data/items';
 import { getScaledSkillStats, getSkillById } from '../data/skills';
 import {
   getEffectiveUnitSpeed,
@@ -43,24 +31,19 @@ import {
   hasStatus,
   isLongRangeAction,
 } from '../engine/combat';
-import { getEffectiveItemStats } from '../engine/equipment';
 import { canUnitUseSkill } from '../engine/skills';
 import {
   getAutoStopReasonLabel,
   getBattleSkillReason,
   getClassName,
-  getItemInstanceName,
-  getRarityLabel,
   getSectorName,
   getSkillDesc,
   getSkillName,
   getSkillTargetLabel,
-  getSlotLabel,
-  getStatShort,
   getTeamTagLabel,
   useI18n,
 } from '../i18n';
-import { ENABLE_ADMIN_CP, useGameStore } from '../store/useGameStore';
+import { useGameStore } from '../store/useGameStore';
 import type {
   AutoRepeatDefeatRule,
   AutoRepeatLimit,
@@ -95,25 +78,43 @@ import {
 import {
   parseStructuredCombatLogRow,
   readCombatLogExpandAll,
+  readCombatLogOrder,
   readSidebarLogMode,
   writeCombatLogExpandAll,
+  writeCombatLogOrder,
   writeSidebarLogMode,
   type CombatLogChannel,
+  type CombatLogOrder,
   type SidebarCombatLogMode,
 } from '../utils/combatLogFormat';
 import { useStatusDisplaySettings } from '../utils/statusDisplayPrefs';
+import {
+  AutoRepeatBatchSummaryModal,
+  AutoRepeatToast,
+} from './AutoRepeatDialogs';
+import { BattleMoreActionsMenu } from './BattleMoreActionsMenu';
 import { BattleRadarView } from './BattleRadarView';
+import { BattleResultDialog } from './BattleResultDialog';
+import { CombatLogPopupSheet, PhoneUnitDetailSheet } from './BattleSheets';
 import { BattleStatsModal } from './BattleStatsModal';
 import { BattleUnitCard } from './BattleUnitCard';
-import { BottomSheet } from './BottomSheet';
 import { CombatLogList } from './CombatLogList';
-import { EffectsSettingsPanel } from './EffectsSettingsPanel';
 import { ErrorBoundary } from './ErrorBoundary';
-import { FixedStatusArea } from './FixedStatusArea';
+import { FieldSuppliesSheet } from './FieldSuppliesSheet';
+import {
+  CARD_STATUS_FALLBACK_WIDTH_PX,
+  FixedStatusArea,
+  countStatusChipRows,
+} from './FixedStatusArea';
+import { PhoneSkillsSheet } from './PhoneSkillsSheet';
+import {
+  RadarStatusBoard,
+  readStatusBoardCollapsed,
+  writeStatusBoardCollapsed,
+} from './RadarStatusBoard';
 import { SkillIcon } from './SkillIcon';
 import { StatBar } from './StatBar';
 import { TurnQueueBar } from './TurnQueueBar';
-import { UnitDetailSheet } from './UnitDetailSheet';
 
 const REPEAT_OPTIONS: AutoRepeatLimit[] = [1, 5, 10, 20, 'infinite'];
 const ROWS_ORDER: CombatRow[] = ['front', 'middle', 'back'];
@@ -226,10 +227,16 @@ export function BattleScreen() {
     () => readSidebarLogMode()
   );
   const [logChannel, setLogChannel] = useState<CombatLogChannel>('all');
+  const [logOrder, setLogOrder] = useState<CombatLogOrder>(() =>
+    readCombatLogOrder()
+  );
   const [logExpandAll, setLogExpandAll] = useState<boolean>(() =>
     readCombatLogExpandAll()
   );
   const [logExpandNonce, setLogExpandNonce] = useState<number>(0);
+  const [statusBoardCollapsed, setStatusBoardCollapsed] = useState<boolean>(() =>
+    readStatusBoardCollapsed()
+  );
   const [cardToast, setCardToast] = useState<string | null>(null);
   const popupCleanupTimersRef = useRef<Map<string, number>>(new Map());
   const fxCleanupTimersRef = useRef<Map<string, number>>(new Map());
@@ -448,6 +455,19 @@ export function BattleScreen() {
     setLogExpandNonce((n) => n + 1);
   };
 
+  const handleSetLogOrder = (nextOrder: CombatLogOrder) => {
+    setLogOrder(nextOrder);
+    writeCombatLogOrder(nextOrder);
+  };
+
+  const handleToggleStatusBoard = () => {
+    setStatusBoardCollapsed((prev) => {
+      const next = !prev;
+      writeStatusBoardCollapsed(next);
+      return next;
+    });
+  };
+
   const renderLogModeSegmented = () => (
     <div
       role="group"
@@ -552,6 +572,111 @@ export function BattleScreen() {
       activeUnit.alive &&
       !isPlayerCharging
   );
+
+  const currentBattleMeta = useMemo(() => {
+    if (!battle) return null;
+    return {
+      sectorId: battle.sectorId,
+      deployedGearId: battle.deployedGearId,
+      unitSig: battle.units.map((u) => u.id).join('|'),
+      turnCounter: battle.turnCounter,
+      round: battle.round,
+      hadSummary: Boolean(battle.summary),
+    };
+  }, [battle]);
+
+  const currentLaneStatusRows = useMemo((): Record<CombatRow, number> => {
+    const result: Record<CombatRow, number> = {
+      front: 0,
+      middle: 0,
+      back: 0,
+    };
+    if (!battle) return result;
+    for (const row of ROWS_ORDER) {
+      let maxRows = 0;
+      for (const unit of battle.units) {
+        if (!unit.alive || unit.row !== row) continue;
+        const needed = countStatusChipRows(unit.statuses, {
+          lang,
+          unit,
+          iconMods: adminConfig.iconCatalogMods,
+          showLabels: fxSettings.showStatusLabels,
+          compact: false,
+          containerWidthPx: CARD_STATUS_FALLBACK_WIDTH_PX,
+        });
+        if (needed > maxRows) maxRows = needed;
+      }
+      result[row] = Math.min(2, maxRows);
+    }
+    return result;
+  }, [
+    battle,
+    lang,
+    adminConfig.iconCatalogMods,
+    fxSettings.showStatusLabels,
+  ]);
+
+  const [laneStatusState, setLaneStatusState] = useState<{
+    meta: typeof currentBattleMeta;
+    rows: Record<CombatRow, number>;
+  }>(() => ({
+    meta: currentBattleMeta,
+    rows: currentLaneStatusRows,
+  }));
+
+  const isNewBattleForLaneRows = useMemo(() => {
+    const prev = laneStatusState.meta;
+    const curr = currentBattleMeta;
+    if (!curr || !prev) return true;
+    if (curr.sectorId !== prev.sectorId) return true;
+    if (curr.deployedGearId !== prev.deployedGearId) return true;
+    if (curr.unitSig !== prev.unitSig) return true;
+    if (curr.turnCounter < prev.turnCounter) return true;
+    if (curr.round < prev.round) return true;
+    if (prev.hadSummary && !curr.hadSummary) return true;
+    return false;
+  }, [laneStatusState.meta, currentBattleMeta]);
+
+  const laneStatusRows = useMemo((): Record<CombatRow, number> => {
+    if (isNewBattleForLaneRows) return currentLaneStatusRows;
+    return {
+      front: Math.max(laneStatusState.rows.front, currentLaneStatusRows.front),
+      middle: Math.max(laneStatusState.rows.middle, currentLaneStatusRows.middle),
+      back: Math.max(laneStatusState.rows.back, currentLaneStatusRows.back),
+    };
+  }, [isNewBattleForLaneRows, laneStatusState.rows, currentLaneStatusRows]);
+
+  useEffect(() => {
+    const prev = laneStatusState.meta;
+    const curr = currentBattleMeta;
+    const metaChanged =
+      (!prev && Boolean(curr)) ||
+      (Boolean(prev) && !curr) ||
+      (Boolean(prev) &&
+        Boolean(curr) &&
+        (prev!.sectorId !== curr!.sectorId ||
+          prev!.deployedGearId !== curr!.deployedGearId ||
+          prev!.unitSig !== curr!.unitSig ||
+          prev!.turnCounter !== curr!.turnCounter ||
+          prev!.round !== curr!.round ||
+          prev!.hadSummary !== curr!.hadSummary));
+    const rowsChanged =
+      laneStatusState.rows.front !== laneStatusRows.front ||
+      laneStatusState.rows.middle !== laneStatusRows.middle ||
+      laneStatusState.rows.back !== laneStatusRows.back;
+    if (isNewBattleForLaneRows || metaChanged || rowsChanged) {
+      setLaneStatusState({
+        meta: currentBattleMeta,
+        rows: laneStatusRows,
+      });
+    }
+  }, [
+    isNewBattleForLaneRows,
+    currentBattleMeta,
+    laneStatusRows,
+    laneStatusState.meta,
+    laneStatusState.rows,
+  ]);
 
   // Clean up all per-ID expiry timers on unmount
   useEffect(() => {
@@ -1349,7 +1474,11 @@ export function BattleScreen() {
     return t('radar.invalidFrontAlive');
   };
 
-  const renderCardUnit = (unit: CombatUnit, compact: boolean) => {
+  const renderCardUnit = (
+    unit: CombatUnit,
+    compact: boolean,
+    statusRows: number
+  ) => {
     const isEnemy = unit.side === 'enemy';
     const frontBlocked =
       isEnemy && unit.alive && !validBasicTargetIds.has(unit.id);
@@ -1361,6 +1490,7 @@ export function BattleScreen() {
         compact={compact}
         frontBlocked={frontBlocked}
         wingmanChatText={null}
+        statusRows={statusRows}
         isActiveTurn={activeUnitId === unit.id && !battle.summary}
         isTargeted={
           isEnemy
@@ -1400,94 +1530,96 @@ export function BattleScreen() {
     );
   };
 
-  const renderThreeRowCardSide = (
+  const renderCardSideHeader = (side: 'ally' | 'enemy', withTestId = true) => (
+    <div
+      data-testid={withTestId ? `card-side-${side}` : undefined}
+      className="flex items-center justify-between text-[13px] px-1 min-w-0"
+    >
+      <span
+        className="font-display text-[14px] font-bold tracking-wider uppercase truncate"
+        style={{
+          color: side === 'enemy' ? 'var(--team-enemy)' : 'var(--team-ally)',
+        }}
+      >
+        {side === 'enemy' ? t('battle.tabEnemies') : t('battle.tabAllies')}
+      </span>
+      <span className="font-mono-nums text-[12px] text-slate-400 shrink-0">
+        {side === 'enemy'
+          ? `${aliveEnemiesCount}/${enemies.length}`
+          : `${aliveAlliesCount}/${allies.length}`}
+      </span>
+    </div>
+  );
+
+  const renderEmptyBothLaneLine = (row: CombatRow, spanTwo: boolean) => (
+    <div
+      key={`empty-both-${row}`}
+      data-card-row-empty={row}
+      className={`${
+        spanTwo ? 'col-span-2' : ''
+      } min-w-0 h-[20px] min-h-[20px] max-h-[20px] overflow-hidden rounded border border-dashed border-slate-800/70 bg-slate-950/25 px-2 flex items-center text-[12px] leading-none font-mono-nums font-bold text-slate-500`}
+    >
+      <span className="truncate">{getRowTitle(row)}</span>
+    </div>
+  );
+
+  const renderCardLaneCell = (
     side: 'ally' | 'enemy',
+    row: CombatRow,
     units: CombatUnit[],
     compact: boolean
   ) => {
-    const exposureMap =
-      side === 'enemy' ? enemyExposure : allyExposure;
-    const orderedRows: CombatRow[] = ROWS_ORDER;
+    const exposureMap = side === 'enemy' ? enemyExposure : allyExposure;
+    const exposure = exposureMap?.[row] ?? 'empty';
+    const isExposed = exposure === 'exposed';
+    const isProtected = exposure === 'protected';
+    const rowUnits = units
+      .filter((u) => u.row === row)
+      .sort((a, b) => (a.formationCol ?? 0) - (b.formationCol ?? 0));
+
+    const borderClasses = isExposed
+      ? side === 'enemy'
+        ? 'border-red-500/45 bg-red-950/15'
+        : 'border-sky-500/45 bg-sky-950/15'
+      : isProtected
+      ? 'border-dashed border-slate-700/90 bg-slate-950/55'
+      : 'border-dashed border-slate-800/70 bg-slate-950/25';
+
+    if (rowUnits.length === 0) {
+      return (
+        <div
+          key={`${side}-${row}`}
+          data-card-row={`${side}-${row}`}
+          data-row-state={exposure}
+          className={`min-w-0 min-h-[20px] overflow-hidden rounded-lg border p-1.5 ${borderClasses}`}
+        />
+      );
+    }
 
     return (
-      <div className="space-y-1.5 min-w-0" data-testid={`card-side-${side}`}>
-        <div className="flex items-center justify-between text-[13px] px-1">
+      <div
+        key={`${side}-${row}`}
+        data-card-row={`${side}-${row}`}
+        data-row-state={exposure}
+        className={`min-w-0 overflow-hidden rounded-lg border p-1.5 flex flex-col gap-1 ${borderClasses}`}
+      >
+        <div className="flex items-center px-1 text-[12px] font-mono-nums font-bold min-w-0">
           <span
-            className="font-display text-[14px] font-bold tracking-wider uppercase truncate"
-            style={{
-              color:
-                side === 'enemy' ? 'var(--team-enemy)' : 'var(--team-ally)',
-            }}
+            className={
+              isExposed
+                ? side === 'enemy'
+                  ? 'text-red-300'
+                  : 'text-sky-300'
+                : 'text-slate-400'
+            }
           >
-            {side === 'enemy'
-              ? t('battle.tabEnemies')
-              : t('battle.tabAllies')}
-          </span>
-          <span className="font-mono-nums text-[12px] text-slate-400 shrink-0">
-            {side === 'enemy'
-              ? `${aliveEnemiesCount}/${enemies.length}`
-              : `${aliveAlliesCount}/${allies.length}`}
+            {getRowTitle(row)}
           </span>
         </div>
 
-        {orderedRows.map((row) => {
-          const rowUnits = units
-            .filter((u) => u.row === row)
-            .sort((a, b) => (a.formationCol ?? 0) - (b.formationCol ?? 0));
-          const exposure = exposureMap?.[row] ?? 'empty';
-          const isExposed = exposure === 'exposed';
-          const isProtected = exposure === 'protected';
-
-          return (
-            <div
-              key={`${side}-${row}`}
-              data-card-row={`${side}-${row}`}
-              data-row-state={exposure}
-              className={`min-w-0 overflow-hidden rounded-lg border p-1.5 space-y-1 ${
-                isExposed
-                  ? side === 'enemy'
-                    ? 'border-red-500/45 bg-red-950/15'
-                    : 'border-sky-500/45 bg-sky-950/15'
-                  : isProtected
-                  ? 'border-dashed border-slate-700/90 bg-slate-950/55'
-                  : 'border-dashed border-slate-800/70 bg-slate-950/25'
-              }`}
-            >
-              <div className="flex items-center justify-between gap-2 px-1 text-[12px] font-mono-nums font-bold min-w-0">
-                <span
-                  className={
-                    isExposed
-                      ? side === 'enemy'
-                        ? 'text-red-300'
-                        : 'text-sky-300'
-                      : 'text-slate-400'
-                  }
-                >
-                  {getRowTitle(row)}
-                </span>
-                <span
-                  className={`px-1.5 py-0.2 rounded text-[12px] shrink-0 ${
-                    isExposed
-                      ? side === 'enemy'
-                        ? 'bg-red-500/20 text-red-200'
-                        : 'bg-sky-500/20 text-sky-200'
-                      : isProtected
-                      ? 'bg-amber-500/15 text-amber-300'
-                      : 'text-slate-500'
-                  }`}
-                >
-                  {getExposureLabel(exposure)}
-                </span>
-              </div>
-
-              {rowUnits.length > 0 && (
-                <div className="space-y-1 min-w-0">
-                  {rowUnits.map((u) => renderCardUnit(u, compact))}
-                </div>
-              )}
-            </div>
-          );
-        })}
+        <div className="space-y-1 min-w-0">
+          {rowUnits.map((u) => renderCardUnit(u, compact, laneStatusRows[row]))}
+        </div>
       </div>
     );
   };
@@ -1511,6 +1643,7 @@ export function BattleScreen() {
           showStatusLabels={fxSettings.showStatusLabels}
           playerWeaponId={playerWeaponId}
           layoutMode={layoutMode}
+          selectedUnitId={inspectedUnitId}
           onSelectEnemy={(id) => {
             selectTarget(id);
             setInspectedUnitId(id);
@@ -1552,8 +1685,27 @@ export function BattleScreen() {
           )}
 
           <div className="flex flex-col gap-2.5">
-            {renderThreeRowCardSide('ally', allies, true)}
-            {renderThreeRowCardSide('enemy', enemies, true)}
+            {(['ally', 'enemy'] as const).map((side) => {
+              const sideUnits = side === 'enemy' ? enemies : allies;
+              return (
+                <div
+                  key={side}
+                  className="space-y-1.5 min-w-0"
+                  data-testid={`card-side-${side}`}
+                >
+                  {renderCardSideHeader(side, false)}
+                  {ROWS_ORDER.map((row) => {
+                    const hasAnySide =
+                      allies.some((u) => u.row === row) ||
+                      enemies.some((u) => u.row === row);
+                    if (!hasAnySide) {
+                      return renderEmptyBothLaneLine(row, false);
+                    }
+                    return renderCardLaneCell(side, row, sideUnits, true);
+                  })}
+                </div>
+              );
+            })}
           </div>
         </div>
       );
@@ -1577,9 +1729,25 @@ export function BattleScreen() {
           style={{ touchAction: 'pan-y' }}
           className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden tactical-scroll touch-pan-y p-1"
         >
-          <div className="min-w-0 w-full grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2 items-start">
-            {renderThreeRowCardSide('ally', allies, false)}
-            {renderThreeRowCardSide('enemy', enemies, false)}
+          <div
+            data-testid="card-lane-grid"
+            className="min-w-0 w-full grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-x-2 gap-y-1.5 items-stretch"
+          >
+            {renderCardSideHeader('ally', true)}
+            {renderCardSideHeader('enemy', true)}
+            {ROWS_ORDER.map((row) => {
+              const hasAlly = allies.some((u) => u.row === row);
+              const hasEnemy = enemies.some((u) => u.row === row);
+              if (!hasAlly && !hasEnemy) {
+                return renderEmptyBothLaneLine(row, true);
+              }
+              return (
+                <Fragment key={`lane-row-${row}`}>
+                  {renderCardLaneCell('ally', row, allies, false)}
+                  {renderCardLaneCell('enemy', row, enemies, false)}
+                </Fragment>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -2311,6 +2479,30 @@ export function BattleScreen() {
             {renderFieldContent()}
           </div>
 
+          {effectiveViewMode === 'radar' && (
+            <div className="px-2 pt-2">
+              <RadarStatusBoard
+                units={battle.units}
+                variant="phone"
+                collapsed={statusBoardCollapsed}
+                onToggleCollapse={handleToggleStatusBoard}
+                selectedUnitId={inspectedUnitId}
+                onSelectUnit={(unit) => {
+                  setInspectedUnitId(unit.id);
+                  if (unit.side === 'enemy') {
+                    if (validBasicTargetIds.has(unit.id)) {
+                      selectTarget(unit.id);
+                    }
+                  } else {
+                    selectAllyTarget(unit.id);
+                  }
+                }}
+                badgeLayout={statusSettings.badgeLayout}
+                iconMods={adminConfig.iconCatalogMods}
+              />
+            </div>
+          )}
+
           <div
             data-testid="battle-phone-radar-log-gap"
             aria-hidden="true"
@@ -2324,20 +2516,27 @@ export function BattleScreen() {
               data-testid="battle-phone-docked-log"
               className="rounded-lg border border-slate-800 bg-[#070A10] flex flex-col"
             >
-              <div className="shrink-0 px-2 py-1 border-b border-slate-800/90 flex flex-wrap items-center justify-between gap-1.5 text-[11px] text-slate-400">
-                <div className="inline-flex items-center gap-1.5 shrink-0">
+              <div
+                data-testid="combat-log-header-row-1"
+                className="shrink-0 h-[36px] min-h-[36px] max-h-[36px] px-2 border-b border-slate-800/90 flex items-center justify-between gap-1.5 flex-nowrap text-[11px] text-slate-400"
+              >
+                <div className="inline-flex items-center gap-1 min-w-0 shrink">
                   <ScrollText className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-                  <span className="font-semibold text-slate-200 whitespace-nowrap">
+                  <span
+                    data-testid="combat-log-header-title"
+                    className="font-semibold text-slate-200 whitespace-nowrap text-[11px]"
+                  >
                     {t('battle.combatLog')}
                   </span>
-                  <span className="font-mono-nums text-slate-400 whitespace-nowrap">
+                  <span
+                    data-testid="combat-log-header-count"
+                    className="font-mono-nums text-[10px] text-slate-400 whitespace-nowrap"
+                  >
                     ({battle.log.length})
                   </span>
                 </div>
-                <div className="flex items-center gap-1 flex-wrap shrink-0">
+                <div className="flex items-center gap-1 flex-nowrap shrink-0">
                   {renderLogModeSegmented()}
-                  {sidebarLogMode === 'expanded' &&
-                    renderCombatLogExpandButtons(true)}
                   <button
                     type="button"
                     data-testid="combat-log-mode-toggle"
@@ -2345,7 +2544,7 @@ export function BattleScreen() {
                     onClick={handleOpenCombatLogPopup}
                     title={t('log.modePopup')}
                     aria-label={t('log.modePopup')}
-                    className="min-h-[24px] px-1.5 rounded border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200 text-[10px] font-semibold inline-flex items-center gap-1 cursor-pointer shrink-0 whitespace-nowrap"
+                    className="min-h-[24px] h-[24px] px-1.5 rounded border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200 text-[10px] font-semibold inline-flex items-center gap-1 cursor-pointer shrink-0 whitespace-nowrap"
                   >
                     <Maximize2 className="w-3 h-3 text-sky-400 shrink-0" />
                     <span>{t('log.modePopup')}</span>
@@ -2371,8 +2570,12 @@ export function BattleScreen() {
                   mode="docked"
                   channel={logChannel}
                   onChannelChange={setLogChannel}
+                  order={logOrder}
+                  onOrderChange={handleSetLogOrder}
                   expandAll={logExpandAll}
                   expandNonce={logExpandNonce}
+                  onExpandAll={handleExpandAllLogs}
+                  onCollapseAll={handleCollapseAllLogs}
                   inlineFlow
                 />
               )}
@@ -2676,6 +2879,28 @@ export function BattleScreen() {
               {renderFieldContent()}
             </div>
 
+            {effectiveViewMode === 'radar' && (
+              <RadarStatusBoard
+                units={battle.units}
+                variant="desktop"
+                collapsed={statusBoardCollapsed}
+                onToggleCollapse={handleToggleStatusBoard}
+                selectedUnitId={inspectedUnitId}
+                onSelectUnit={(unit) => {
+                  setInspectedUnitId(unit.id);
+                  if (unit.side === 'enemy') {
+                    if (validBasicTargetIds.has(unit.id)) {
+                      selectTarget(unit.id);
+                    }
+                  } else {
+                    selectAllyTarget(unit.id);
+                  }
+                }}
+                badgeLayout={statusSettings.badgeLayout}
+                iconMods={adminConfig.iconCatalogMods}
+              />
+            )}
+
             {/* Pinned Action Bar Under the Field (hidden when Auto is ON to avoid duplicating the top Auto indicator) */}
             {!autoBattleEnabled && (
               <div className="shrink-0 rounded-lg border border-slate-800/90 bg-[#0A0F18]/98 p-2 space-y-2">
@@ -2913,25 +3138,26 @@ export function BattleScreen() {
                   : 'shrink-0'
               } rounded-lg border border-slate-800 bg-[#070A10] flex flex-col overflow-hidden`}
             >
-              <div className="shrink-0 px-2.5 py-1.5 border-b border-slate-800/90 flex flex-wrap items-center justify-between gap-1.5 text-[12px] text-slate-400">
-                <div className="flex items-center gap-1.5 shrink-0">
+              <div
+                data-testid="combat-log-header-row-1"
+                className="shrink-0 h-[36px] min-h-[36px] max-h-[36px] px-2 border-b border-slate-800/90 flex items-center justify-between gap-1.5 flex-nowrap text-[11px] text-slate-400"
+              >
+                <div className="flex items-center gap-1 min-w-0 shrink">
                   <span
                     data-testid="combat-log-header-title"
-                    className="font-semibold text-slate-200 whitespace-nowrap"
+                    className="font-semibold text-slate-200 whitespace-nowrap text-[11px]"
                   >
                     {t('battle.combatLog')}
                   </span>
                   <span
                     data-testid="combat-log-header-count"
-                    className="font-mono-nums text-[11px] text-slate-400 whitespace-nowrap"
+                    className="font-mono-nums text-[10px] text-slate-400 whitespace-nowrap"
                   >
                     {t('battle.eventsCount', { count: battle.log.length })}
                   </span>
                 </div>
-                <div className="flex items-center gap-1 shrink-0">
+                <div className="flex items-center gap-1 shrink-0 flex-nowrap">
                   {renderLogModeSegmented()}
-                  {sidebarLogMode === 'expanded' &&
-                    renderCombatLogExpandButtons(true)}
                   <button
                     type="button"
                     data-testid="combat-log-mode-toggle"
@@ -2939,7 +3165,7 @@ export function BattleScreen() {
                     onClick={handleOpenCombatLogPopup}
                     title={t('log.modePopup')}
                     aria-label={t('log.modePopup')}
-                    className="min-h-[24px] px-1.5 rounded border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200 text-[10px] font-semibold inline-flex items-center gap-1 cursor-pointer shrink-0 whitespace-nowrap"
+                    className="min-h-[24px] h-[24px] px-1.5 rounded border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200 text-[10px] font-semibold inline-flex items-center gap-1 cursor-pointer shrink-0 whitespace-nowrap"
                   >
                     <Maximize2 className="w-3 h-3 text-sky-400 shrink-0" />
                     <span>{t('log.modePopup')}</span>
@@ -2955,8 +3181,12 @@ export function BattleScreen() {
                   mode="docked"
                   channel={logChannel}
                   onChannelChange={setLogChannel}
+                  order={logOrder}
+                  onOrderChange={handleSetLogOrder}
                   expandAll={logExpandAll}
                   expandNonce={logExpandNonce}
+                  onExpandAll={handleExpandAllLogs}
+                  onCollapseAll={handleCollapseAllLogs}
                 />
               ) : (
                 <div
@@ -2975,311 +3205,49 @@ export function BattleScreen() {
       )}
 
       {/* ==================== SHARED MORE ACTIONS ("...") MENU ==================== */}
-      <BottomSheet
-        open={moreActionsOpen}
-        onClose={closeMoreActions}
-        title={t('battle.moreActions')}
-        subtitle={`${sectorLabel} · ${battle.squadSize}v${battle.squadSize}`}
-      >
-        <div data-testid="battle-more-menu" className="space-y-4">
-          {/* Full Speed Picker (1x - 30x) */}
-          <div className="space-y-2">
-            <div className="text-[12px] font-semibold uppercase tracking-wider text-slate-400">
-              {t('battle.speedLabel')}
-            </div>
-            <div className="grid grid-cols-5 gap-2">
-              {ALLOWED_BATTLE_SPEEDS.map((spd) => (
-                <button
-                  key={spd}
-                  type="button"
-                  onClick={() => setBattleSpeed(spd)}
-                  className={`min-h-[44px] rounded-lg border font-mono-nums text-[13px] font-bold cursor-pointer ${
-                    battleSpeed === spd
-                      ? 'border-sky-400 bg-sky-500 text-slate-950'
-                      : 'border-slate-700 bg-slate-900 text-slate-200'
-                  }`}
-                >
-                  {spd}x
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Visual Effects (Full/Compact/Off, Reduced Motion, Status Labels, Debug & Test Preview) */}
-          <EffectsSettingsPanel compact />
-
-          <div className="grid grid-cols-1 gap-2">
-            <button
-              type="button"
-              data-testid="battle-more-tactics"
-              onClick={() => {
-                closeMoreActions();
-                setTacticsModalOpen(true);
-              }}
-              className="min-h-[44px] px-3.5 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-100 text-[13px] font-semibold flex items-center gap-2.5 cursor-pointer"
-            >
-              <Settings className="w-4 h-4 text-emerald-400" />
-              <span>{t('auto.tacticsBtn')}</span>
-            </button>
-
-            <button
-              type="button"
-              data-testid="battle-toggle-bubbles"
-              onClick={toggleSpeechBubbles}
-              aria-pressed={speechBubblesEnabled}
-              className={`min-h-[44px] px-3.5 rounded-lg border text-[13px] font-semibold flex items-center justify-between cursor-pointer ${
-                speechBubblesEnabled
-                  ? 'border-sky-400 bg-sky-500/20 text-sky-200'
-                  : 'border-slate-700 bg-slate-900 text-slate-300'
-              }`}
-            >
-              <span className="inline-flex items-center gap-2.5">
-                <MessageSquare className="w-4 h-4 text-sky-400" />
-                <span>{t('battle.speechBubbles')}</span>
-              </span>
-              <span className="font-mono-nums text-[12px]">
-                {speechBubblesEnabled ? 'ON' : 'OFF'}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              data-testid="battle-toggle-skip-anim"
-              onClick={toggleSkipAnimations}
-              aria-pressed={skipAnimations}
-              className={`min-h-[44px] px-3.5 rounded-lg border text-[13px] font-semibold flex items-center justify-between cursor-pointer ${
-                skipAnimations
-                  ? 'border-sky-400 bg-sky-500/20 text-sky-200'
-                  : 'border-slate-700 bg-slate-900 text-slate-200'
-              }`}
-            >
-              <span className="inline-flex items-center gap-2.5">
-                <ZapOff className="w-4 h-4 text-sky-400" />
-                <span>{t('battle.skipAnim')}</span>
-              </span>
-              <span className="font-mono-nums text-[12px]">
-                {skipAnimations ? 'ON' : 'OFF'}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              data-testid="battle-more-stats"
-              onClick={() => {
-                closeMoreActions();
-                setStatsModalOpen(true);
-              }}
-              className="min-h-[44px] px-3.5 rounded-lg border border-sky-500/45 bg-sky-500/12 text-sky-200 text-[13px] font-semibold flex items-center gap-2.5 cursor-pointer"
-            >
-              <BarChart3 className="w-4 h-4 text-sky-400" />
-              <span>
-                {battle.summary ? t('stats.reportBtn') : t('stats.progressBtn')}
-              </span>
-            </button>
-
-            {!battle.summary &&
-              (retreatConfirmOpen ? (
-                <div
-                  data-testid="battle-retreat-confirm-box"
-                  className="rounded-lg border border-red-500/60 bg-red-950/35 p-3 space-y-2.5"
-                >
-                  <div className="flex items-center gap-2 text-[13px] font-semibold text-red-100">
-                    <Flag className="w-4 h-4 text-red-400 shrink-0" />
-                    <span>{t('battle.retreatConfirmTitle')}</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      data-testid="battle-retreat-cancel"
-                      onClick={() => setRetreatConfirmOpen(false)}
-                      className="min-h-[40px] px-3 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200 text-[13px] font-semibold cursor-pointer"
-                    >
-                      {t('battle.retreatCancelBtn')}
-                    </button>
-                    <button
-                      type="button"
-                      data-testid="battle-retreat-confirm"
-                      onClick={() => {
-                        closeMoreActions();
-                        retreatBattle();
-                      }}
-                      className="min-h-[40px] px-3 rounded-lg bg-red-600 hover:bg-red-500 text-white text-[13px] font-bold cursor-pointer"
-                    >
-                      {t('battle.retreatConfirmBtn')}
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  data-testid="battle-more-retreat"
-                  onClick={() => setRetreatConfirmOpen(true)}
-                  className="min-h-[44px] px-3.5 rounded-lg border border-red-500/45 bg-red-500/12 text-red-200 text-[13px] font-semibold flex items-center gap-2.5 cursor-pointer"
-                >
-                  <Flag className="w-4 h-4 text-red-400" />
-                  <span>{t('battle.retreat')}</span>
-                </button>
-              ))}
-
-            {ENABLE_ADMIN_CP && (
-              <div className="pt-2 border-t border-slate-800/70">
-                <button
-                  type="button"
-                  data-testid="battle-more-admin-btn"
-                  onClick={() => {
-                    closeMoreActions();
-                    toggleAdminPanel();
-                  }}
-                  className="w-full min-h-[38px] px-3 rounded-lg border border-slate-800/80 bg-slate-950/60 hover:bg-slate-900 text-slate-400 hover:text-slate-200 text-[12px] font-medium flex items-center justify-center gap-2 cursor-pointer transition-colors"
-                >
-                  <Sliders className="w-3.5 h-3.5 text-slate-500" />
-                  <span>{t('statusUi.adminBtnMuted')}</span>
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      </BottomSheet>
+      <BattleMoreActionsMenu
+        menu={{
+          open: moreActionsOpen,
+          sectorLabel,
+          squadSize: battle.squadSize,
+          hasSummary: Boolean(battle.summary),
+          battleSpeed,
+          speechBubblesEnabled,
+          skipAnimations,
+          retreatConfirmOpen,
+          t,
+          onClose: closeMoreActions,
+          onSetBattleSpeed: setBattleSpeed,
+          onOpenTactics: () => setTacticsModalOpen(true),
+          onToggleSpeechBubbles: toggleSpeechBubbles,
+          onToggleSkipAnimations: toggleSkipAnimations,
+          onOpenStats: () => setStatsModalOpen(true),
+          onSetRetreatConfirmOpen: setRetreatConfirmOpen,
+          onRetreatBattle: retreatBattle,
+          onToggleAdminPanel: toggleAdminPanel,
+        }}
+      />
 
       {/* ==================== PHONE SKILLS BOTTOM SHEET ==================== */}
-      <BottomSheet
+      <PhoneSkillsSheet
         open={skillsSheetOpen}
+        playerUnit={playerUnit}
+        playerSkillIds={playerSkillIds}
+        canPlayerManualAct={canPlayerManualAct}
+        lang={lang}
+        t={t}
         onClose={() => setSkillsSheetOpen(false)}
-        title={t('battle.skillsSheetTitle')}
-        subtitle={
-          playerUnit
-            ? `SP ${playerUnit.sp}/${playerUnit.derived.maxSp}`
-            : undefined
-        }
-      >
-        {playerSkillIds.length === 0 ? (
-          <div className="rounded-lg border border-slate-800 bg-slate-950/70 p-4 text-center text-[13px] text-slate-400">
-            {t('battle.noSkillsSlotted')}
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {playerSkillIds.slice(0, 6).map((skillId) => {
-              const skill = getSkillById(skillId);
-              if (!skill || !playerUnit) return null;
-              const usability = canUnitUseSkill(playerUnit, skill.id);
-              const clickable = canPlayerManualAct && usability.canUse;
-              const isToggleOn = Boolean(usability.isToggleActive);
-              const isUsedOnce =
-                skill.oncePerBattle &&
-                playerUnit.usedOnceSkills.includes(skill.id);
-              const reasonText = getBattleSkillReason(lang, usability);
-
-              return (
-                <button
-                  key={skill.id}
-                  type="button"
-                  disabled={!clickable}
-                  onClick={() => {
-                    if (clickable) {
-                      performPlayerAction('skill', skill.id);
-                      setSkillsSheetOpen(false);
-                    }
-                  }}
-                  className={`w-full min-h-[56px] p-3 rounded-lg border text-left flex items-start justify-between gap-3 transition-colors ${
-                    isToggleOn
-                      ? 'border-emerald-400 bg-emerald-500/20 text-emerald-100'
-                      : !clickable
-                      ? 'border-slate-800 bg-slate-900/70 text-slate-500 opacity-65'
-                      : skill.category === 'elite'
-                      ? 'border-amber-400/80 bg-amber-500/15 text-amber-100 cursor-pointer'
-                      : skill.category === 'special'
-                      ? 'border-purple-400/80 bg-purple-500/15 text-purple-100 cursor-pointer'
-                      : 'border-sky-500/50 bg-sky-500/15 text-sky-100 cursor-pointer'
-                  }`}
-                >
-                  <div className="flex items-start gap-2.5 min-w-0">
-                    <span className="w-8 h-8 rounded bg-slate-950/80 border border-slate-700 flex items-center justify-center shrink-0">
-                      <SkillIcon icon={skill.icon} className="w-4 h-4" />
-                    </span>
-                    <div className="min-w-0">
-                      <div className="text-[15px] font-bold leading-tight truncate">
-                        {getSkillName(lang, skill.id)}
-                      </div>
-                      <div className="text-[12px] text-slate-300 mt-0.5 leading-snug">
-                        {getSkillDesc(lang, skill.id)}
-                      </div>
-                      {!usability.canUse && reasonText && (
-                        <div className="text-[12px] text-red-400 font-semibold mt-0.5">
-                          {reasonText}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <div
-                    className={`text-right font-mono-nums text-[12px] font-bold shrink-0 ${
-                      usability.cooldownRemaining > 0
-                        ? 'text-red-300'
-                        : SP_COLOR_TOKENS.textClass
-                    }`}
-                  >
-                    {isToggleOn
-                      ? t('battle.skillOnTag')
-                      : isUsedOnce
-                      ? t('battle.skillUsedTag')
-                      : usability.cooldownRemaining > 0
-                      ? t('battle.skillCdShort', {
-                          turns: usability.cooldownRemaining,
-                        })
-                      : `${usability.spCost} SP`}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </BottomSheet>
+        onUseSkill={(skillId) => performPlayerAction('skill', skillId)}
+      />
 
       {/* ==================== AUTO-REPEAT PER-BATTLE TOAST ==================== */}
       {autoRepeatToast && !showRepeatBatchSummary && (
-        <div
-          role="status"
-          aria-live="polite"
-          data-testid="battle-loop-toast"
-          className={`fixed top-14 left-1/2 -translate-x-1/2 z-50 w-[min(94vw,480px)] rounded-lg border px-3 py-2 shadow-2xl flex items-center justify-between gap-2 text-[12px] font-medium backdrop-blur-sm ${
-            autoRepeatToast.outcome === 'victory'
-              ? 'border-emerald-400/70 bg-[#0B1814]/95 text-emerald-100'
-              : 'border-amber-400/70 bg-[#1B130B]/95 text-amber-100'
-          }`}
-        >
-          <div className="flex items-center gap-2 min-w-0">
-            <Repeat
-              className={`w-4 h-4 shrink-0 ${
-                autoRepeatToast.outcome === 'victory'
-                  ? 'text-emerald-400'
-                  : 'text-amber-400'
-              }`}
-              aria-hidden="true"
-            />
-            <span className="truncate">
-              {t('battle.loopToastRun', {
-                run: autoRepeatToast.runNumber,
-                outcome: t(
-                  autoRepeatToast.outcome === 'victory'
-                    ? 'battle.loopToastVictory'
-                    : 'battle.loopToastDefeat'
-                ),
-                exp: autoRepeatToast.expGained.toLocaleString(),
-                credits: autoRepeatToast.creditsGained.toLocaleString(),
-                wp: autoRepeatToast.warPointsGained.toLocaleString(),
-                loot: autoRepeatToast.lootCount,
-              })}
-            </span>
-          </div>
-          <button
-            type="button"
-            data-testid="battle-loop-toast-close"
-            onClick={clearAutoRepeatToast}
-            aria-label={t('common.close')}
-            className="min-w-[28px] min-h-[28px] inline-flex items-center justify-center rounded hover:bg-white/10 text-slate-300 cursor-pointer shrink-0"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
-        </div>
+        <AutoRepeatToast
+          toast={autoRepeatToast}
+          lang={lang}
+          t={t}
+          onClearToast={clearAutoRepeatToast}
+        />
       )}
 
       {/* ==================== AUTO-REPEAT BATCH SUMMARY MODAL ==================== */}
@@ -3291,154 +3259,19 @@ export function BattleScreen() {
         onReloadBattle={() => startBattle(battle.sectorId)}
       >
         {showRepeatBatchSummary && autoRepeatSession && (
-          <div
-            className="fixed inset-0 z-40 bg-black/75 flex items-center justify-center p-4"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="repeat-summary-title"
-          >
-            <div className="w-full max-w-md rounded-lg border border-emerald-500/50 bg-[#0E1521] p-6 space-y-4 shadow-2xl max-h-[92vh] overflow-y-auto tactical-scroll">
-              <div className="space-y-1">
-                <div className="text-[12px] font-semibold tracking-widest uppercase text-emerald-400 flex items-center gap-1.5">
-                  <Repeat className="w-3.5 h-3.5" />
-                  <span>{getSectorName(lang, autoRepeatSession.sectorId)}</span>
-                </div>
-                <h2
-                  id="repeat-summary-title"
-                  className="font-display text-[20px] font-bold tracking-wide text-slate-50"
-                >
-                  {t('auto.repeatSummaryTitle')}
-                </h2>
-                {autoRepeatSession.stopReason && (
-                  <p
-                    data-testid="battle-loop-stop-reason"
-                    className="text-[13px] text-orange-300 font-medium"
-                  >
-                    {getAutoStopReasonLabel(
-                      lang,
-                      autoRepeatSession.stopReason,
-                      autoRepeatSession.defeatStreakLimit ??
-                        autoRepeatDefeatStreakLimit
-                    )}
-                  </p>
-                )}
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded border border-slate-800 bg-[#090D14] p-3">
-                  <div className="text-[12px] text-slate-400">
-                    {t('auto.repeatLabel')}
-                  </div>
-                  <div className="mt-0.5 font-mono-nums text-[20px] font-bold text-emerald-400">
-                    {t('auto.repeatSummaryRuns', {
-                      wins: autoRepeatSession.wins,
-                      runs: autoRepeatSession.completedRuns,
-                    })}
-                  </div>
-                </div>
-
-                <div className="rounded border border-slate-800 bg-[#090D14] p-3">
-                  <div className="text-[12px] text-slate-400">
-                    {t('summary.expEarned', {
-                      gear: getClassName(lang, battle.deployedGearId),
-                    })}
-                  </div>
-                  <div className="mt-0.5 font-mono-nums text-[20px] font-bold text-amber-400">
-                    +{autoRepeatSession.totalExp.toLocaleString()} EXP
-                  </div>
-                </div>
-
-                <div className="rounded border border-slate-800 bg-[#090D14] p-3">
-                  <div className="text-[12px] text-slate-400">
-                    {t('summary.creditsAwarded')}
-                  </div>
-                  <div className="mt-0.5 font-mono-nums text-[15px] font-bold text-slate-100">
-                    +{autoRepeatSession.totalCredits.toLocaleString()} CR
-                  </div>
-                </div>
-
-                <div className="rounded border border-purple-500/40 bg-purple-500/10 p-3">
-                  <div className="text-[12px] text-purple-200">
-                    {t('summary.warPointsAwarded')}
-                  </div>
-                  <div className="mt-0.5 font-mono-nums text-[15px] font-bold text-purple-300">
-                    +{autoRepeatSession.totalWarPoints.toLocaleString()} WP
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-[12px] text-slate-400">
-                  <span className="inline-flex items-center gap-1.5 font-semibold text-slate-200">
-                    <Package className="w-3.5 h-3.5 text-amber-400" />
-                    <span>{t('summary.dropsTitle')}</span>
-                  </span>
-                  <span className="font-mono-nums">
-                    {t('common.itemCount', {
-                      count: autoRepeatSession.totalDrops.length,
-                    })}
-                  </span>
-                </div>
-                {autoRepeatSession.totalDrops.length === 0 ? (
-                  <div className="rounded border border-slate-800/80 bg-[#090D14] px-3 py-2 text-[13px] text-slate-500">
-                    {t('summary.noDrops')}
-                  </div>
-                ) : (
-                  <div className="space-y-1.5 max-h-40 overflow-y-auto tactical-scroll">
-                    {autoRepeatSession.totalDrops.map((inst) => (
-                      <div
-                        key={inst.instanceId}
-                        className={`rounded border bg-[#090D14] px-3 py-1.5 flex items-center justify-between gap-2 ${
-                          RARITY_META[inst.rarity].borderClass
-                        }`}
-                      >
-                        <span
-                          className={`text-[13px] font-semibold truncate ${
-                            RARITY_META[inst.rarity].textClass
-                          }`}
-                        >
-                          {getItemInstanceName(lang, inst)}
-                        </span>
-                        <span className="text-[12px] font-mono-nums text-slate-400 shrink-0">
-                          {getSlotLabel(lang, inst.slot)} · T{inst.tier}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => setStatsModalOpen(true)}
-                  className="w-full min-h-[44px] px-4 rounded-lg border border-sky-500/50 bg-sky-500/12 hover:bg-sky-500/22 text-sky-200 font-semibold text-[13px] inline-flex items-center justify-center gap-2 transition-colors cursor-pointer"
-                >
-                  <BarChart3 className="w-4 h-4 text-sky-400" />
-                  <span>{t('stats.reportBtn')}</span>
-                </button>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={returnToHangar}
-                    className="flex-1 min-h-[44px] px-4 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold text-[13px] transition-colors cursor-pointer"
-                  >
-                    {t('nav.returnHangar')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      clearAutoRepeatSummary();
-                      startAutoRepeat(autoRepeatLimit, battle.sectorId);
-                    }}
-                    className="flex-1 min-h-[44px] px-4 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-100 font-medium text-[13px] transition-colors cursor-pointer"
-                  >
-                    {t('auto.repeatStart')}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
+          <AutoRepeatBatchSummaryModal
+            session={autoRepeatSession}
+            deployedGearId={battle.deployedGearId}
+            autoRepeatDefeatStreakLimit={autoRepeatDefeatStreakLimit}
+            autoRepeatLimit={autoRepeatLimit}
+            sectorId={battle.sectorId}
+            lang={lang}
+            t={t}
+            onOpenReport={() => setStatsModalOpen(true)}
+            onReturnHangar={returnToHangar}
+            onClearSummary={clearAutoRepeatSummary}
+            onStartAutoRepeat={startAutoRepeat}
+          />
         )}
       </ErrorBoundary>
 
@@ -3453,243 +3286,16 @@ export function BattleScreen() {
         {battle.summary &&
           !autoRepeatSession?.active &&
           !showRepeatBatchSummary && (
-            <div
-              className="fixed inset-0 z-40 bg-black/75 flex items-center justify-center p-4"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="battle-outcome-title"
-            >
-              <div className="w-full max-w-md rounded-lg border border-slate-700 bg-[#0E1521] p-6 space-y-4 shadow-2xl max-h-[92vh] overflow-y-auto tactical-scroll">
-                <div className="space-y-1">
-                  <div
-                    className={`text-[12px] font-semibold tracking-widest uppercase ${
-                      battle.summary.outcome === 'victory'
-                        ? 'text-emerald-400'
-                        : 'text-red-400'
-                    }`}
-                  >
-                    {t('summary.rounds', {
-                      sector: getSectorName(lang, battle.summary.sectorId),
-                      rounds: battle.summary.rounds,
-                    })}
-                  </div>
-                  <h2
-                    id="battle-outcome-title"
-                    className="font-display text-[20px] font-bold tracking-wide text-slate-50"
-                  >
-                    {battle.summary.outcome === 'victory'
-                      ? t('summary.victory')
-                      : battle.summary.retreated
-                      ? t('summary.retreatTitle')
-                      : t('summary.defeat')}
-                  </h2>
-                  <p className="text-[13px] text-slate-400">
-                    {battle.summary.outcome === 'victory'
-                      ? t('summary.victoryDesc')
-                      : t('summary.defeatDesc')}
-                  </p>
-                </div>
-
-                {battle.summary.leveledUp && (
-                  <div className="rounded border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 flex items-center justify-between gap-3">
-                    <div>
-                      <div className="font-display text-[15px] font-bold text-emerald-300">
-                        {t('summary.levelUp', {
-                          gear: getClassName(
-                            lang,
-                            battle.summary.deployedGearId
-                          ),
-                          prev: battle.summary.previousLevel,
-                          next: battle.summary.newLevel,
-                        })}
-                      </div>
-                      <div className="text-[12px] text-emerald-200/80">
-                        {t('summary.levelUpDesc')}
-                      </div>
-                    </div>
-                    <div className="font-mono-nums text-[15px] font-bold text-emerald-300 whitespace-nowrap">
-                      +{battle.summary.statPointsGained} PTS
-                    </div>
-                  </div>
-                )}
-
-                {battle.summary.unlockedSectorId && (
-                  <div className="rounded border border-amber-500/40 bg-amber-500/10 px-3.5 py-2 text-[13px] font-semibold text-amber-300">
-                    {t('summary.sectorUnlocked', {
-                      sector: getSectorName(
-                        lang,
-                        battle.summary.unlockedSectorId
-                      ),
-                    })}
-                  </div>
-                )}
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded border border-slate-800 bg-[#090D14] p-3">
-                    <div className="text-[12px] text-slate-400">
-                      {t('summary.expEarned', {
-                        gear: getClassName(lang, battle.summary.deployedGearId),
-                      })}
-                    </div>
-                    <div className="mt-0.5 font-mono-nums text-[20px] font-bold text-amber-400">
-                      +{battle.summary.expGained} EXP
-                    </div>
-                    <div className="text-[12px] font-mono-nums text-slate-400 mt-0.5">
-                      {battle.summary.newLevel >= BALANCE_CONFIG.maxLevel
-                        ? t('summary.maxLevelReached')
-                        : t('summary.battlesToNext', {
-                            count: battle.summary.battlesToNextLevel,
-                            next: battle.summary.newLevel + 1,
-                          })}
-                    </div>
-                  </div>
-
-                  <div className="rounded border border-slate-800 bg-[#090D14] p-3">
-                    <div className="text-[12px] text-slate-400">
-                      {t('summary.creditsAwarded')}
-                    </div>
-                    <div className="mt-0.5 font-mono-nums text-[20px] font-bold text-slate-100">
-                      +{battle.summary.creditsGained.toLocaleString()} CR
-                    </div>
-                  </div>
-
-                  <div className="col-span-2 rounded border border-purple-500/40 bg-purple-500/10 p-3 flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-[13px] text-purple-200 flex items-center gap-1.5">
-                        <Award className="w-4 h-4 text-purple-400" />
-                        <span>{t('summary.warPointsAwarded')}</span>
-                      </div>
-                      {battle.summary.baseCaptureBonusWp > 0 && (
-                        <div className="text-[12px] text-purple-300/90 mt-0.5">
-                          {t('summary.captureBonusNote', {
-                            wp: battle.summary.baseCaptureBonusWp,
-                          })}
-                        </div>
-                      )}
-                    </div>
-                    <div className="font-mono-nums text-[20px] font-bold text-purple-300">
-                      +{battle.summary.warPointsGained} WP
-                    </div>
-                  </div>
-
-                  <div className="rounded border border-slate-800 bg-[#090D14] p-3">
-                    <div className="text-[12px] text-slate-400">
-                      {t('summary.hostilesDestroyed')}
-                    </div>
-                    <div className="mt-0.5 font-mono-nums text-[15px] font-semibold text-slate-200">
-                      {battle.summary.enemiesDestroyed} /{' '}
-                      {battle.summary.totalEnemies}
-                    </div>
-                  </div>
-
-                  <div className="rounded border border-slate-800 bg-[#090D14] p-3">
-                    <div className="text-[12px] text-slate-400">
-                      {t('summary.alliesSurviving')}
-                    </div>
-                    <div className="mt-0.5 font-mono-nums text-[15px] font-semibold text-slate-200">
-                      {battle.summary.alliesSurviving} / {battle.squadSize}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Salvaged Drops */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-[12px] text-slate-400">
-                    <span className="inline-flex items-center gap-1.5 font-semibold text-slate-200">
-                      <Package className="w-3.5 h-3.5 text-amber-400" />
-                      <span>{t('summary.dropsTitle')}</span>
-                    </span>
-                    <span className="font-mono-nums">
-                      {t('common.itemCount', {
-                        count: battle.summary.droppedItems.length,
-                      })}
-                    </span>
-                  </div>
-
-                  {battle.summary.droppedItems.length === 0 ? (
-                    <div className="rounded border border-slate-800/80 bg-[#090D14] px-3 py-2.5 text-[13px] text-slate-500">
-                      {t('summary.noDrops')}
-                    </div>
-                  ) : (
-                    <div className="space-y-1.5 max-h-36 overflow-y-auto tactical-scroll">
-                      {battle.summary.droppedItems.map((inst) => {
-                        const stats = getEffectiveItemStats(inst);
-                        return (
-                          <div
-                            key={inst.instanceId}
-                            className={`rounded border bg-[#090D14] px-3 py-2 flex items-center justify-between gap-2 ${
-                              RARITY_META[inst.rarity].borderClass
-                            }`}
-                          >
-                            <div className="min-w-0">
-                              <div
-                                className={`text-[13px] font-semibold truncate ${
-                                  RARITY_META[inst.rarity].textClass
-                                }`}
-                              >
-                                {getItemInstanceName(lang, inst)}
-                              </div>
-                              <div className="text-[12px] text-slate-400">
-                                {getSlotLabel(lang, inst.slot)} ·{' '}
-                                {getRarityLabel(lang, inst.rarity)} · T
-                                {inst.tier} · {inst.rollQuality}%
-                              </div>
-                            </div>
-                            <div className="text-right font-mono-nums text-[12px] text-emerald-400 shrink-0">
-                              {STAT_KEYS.filter((k) => stats[k] > 0)
-                                .map(
-                                  (k) => `+${stats[k]} ${getStatShort(lang, k)}`
-                                )
-                                .join(' ')}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-
-                <div className="space-y-2 pt-1">
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      data-testid="battle-open-report-btn"
-                      onClick={() => setStatsModalOpen(true)}
-                      className="min-h-[44px] px-3 rounded-lg border border-sky-500/50 bg-sky-500/12 hover:bg-sky-500/22 text-sky-200 font-semibold text-[13px] inline-flex items-center justify-center gap-2 transition-colors cursor-pointer"
-                    >
-                      <BarChart3 className="w-4 h-4 text-sky-400 shrink-0" />
-                      <span>{t('stats.reportBtn')}</span>
-                    </button>
-                    <button
-                      type="button"
-                      data-testid="battle-outcome-log-btn"
-                      onClick={handleOpenCombatLogPopup}
-                      className="min-h-[44px] px-3 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200 font-semibold text-[13px] inline-flex items-center justify-center gap-2 transition-colors cursor-pointer"
-                    >
-                      <ScrollText className="w-4 h-4 text-sky-400 shrink-0" />
-                      <span className="truncate">{t('stats.openCombatLog')}</span>
-                    </button>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={returnToHangar}
-                      className="flex-1 min-h-[44px] px-4 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold text-[13px] transition-colors cursor-pointer whitespace-nowrap"
-                    >
-                      {t('nav.returnHangar')}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => startBattle()}
-                      className="flex-1 min-h-[44px] px-4 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-100 font-medium text-[13px] transition-colors cursor-pointer whitespace-nowrap"
-                    >
-                      {t('summary.nextSortie')}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <BattleResultDialog
+              summary={battle.summary}
+              squadSize={battle.squadSize}
+              lang={lang}
+              t={t}
+              onOpenReport={() => setStatsModalOpen(true)}
+              onOpenLog={handleOpenCombatLogPopup}
+              onReturnHangar={returnToHangar}
+              onNextSortie={() => startBattle()}
+            />
           )}
       </ErrorBoundary>
 
@@ -3701,24 +3307,14 @@ export function BattleScreen() {
         onClose={() => setPhoneUnitSheetId(null)}
         onReloadBattle={() => startBattle(battle.sectorId)}
       >
-        <UnitDetailSheet
+        <PhoneUnitDetailSheet
           unit={phoneSheetUnit}
+          selectedTargetId={battle.selectedTargetId}
+          selectedAllyTargetId={battle.selectedAllyTargetId}
+          hasSingleAllySkill={hasSingleAllySkill}
+          canPlayerManualAct={canPlayerManualAct}
+          validBasicTargetIds={validBasicTargetIds}
           onClose={() => setPhoneUnitSheetId(null)}
-          isTargeted={Boolean(
-            phoneSheetUnit &&
-              ((phoneSheetUnit.side === 'enemy' &&
-                battle.selectedTargetId === phoneSheetUnit.id) ||
-                (phoneSheetUnit.side === 'ally' &&
-                  hasSingleAllySkill &&
-                  battle.selectedAllyTargetId === phoneSheetUnit.id))
-          )}
-          canLockEnemy={canPlayerManualAct}
-          canLockAlly={canPlayerManualAct && hasSingleAllySkill}
-          frontRowBlocked={Boolean(
-            phoneSheetUnit &&
-              phoneSheetUnit.side === 'enemy' &&
-              !validBasicTargetIds.has(phoneSheetUnit.id)
-          )}
           onLockEnemy={selectTarget}
           onLockAlly={selectAllyTarget}
         />
@@ -3733,106 +3329,31 @@ export function BattleScreen() {
         onReloadBattle={() => startBattle(battle.sectorId)}
       >
         {logSheetOpen && (
-          <div
-            data-testid="combat-log-popup"
-            className="fixed inset-0 z-[60] flex items-end md:items-center justify-center bg-slate-950/70 p-0 md:p-4"
-            role="dialog"
-            aria-modal="false"
-            aria-label={t('battle.combatLog')}
-            onClick={(e) => {
-              if (e.target === e.currentTarget) setLogSheetOpen(false);
-            }}
-          >
-            <div className="w-full md:max-w-2xl h-[82dvh] max-h-[88dvh] flex flex-col rounded-t-2xl md:rounded-xl border-t md:border border-slate-700/90 bg-[#0B111C] text-slate-100 shadow-2xl overflow-hidden pb-safe">
-              <div className="md:hidden pt-2.5 pb-1 flex justify-center shrink-0">
-                <span className="w-10 h-1 rounded-full bg-slate-700" />
-              </div>
-
-              <div className="px-4 py-2.5 border-b border-slate-800/90 flex items-center justify-between gap-2 shrink-0">
-                <div className="min-w-0 flex items-center gap-2">
-                  <ScrollText className="w-4 h-4 text-sky-400 shrink-0" />
-                  <div className="min-w-0">
-                    <div className="text-[15px] font-bold text-slate-100 truncate">
-                      {t('battle.combatLog')}
-                    </div>
-                    <div className="text-[11px] font-mono-nums text-slate-400">
-                      {t('battle.eventsCount', { count: battle.log.length })}
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
-                  {renderCombatLogExpandButtons(false)}
-                  <button
-                    type="button"
-                    data-testid="combat-log-popup-dock-btn"
-                    onClick={() => setLogSheetOpen(false)}
-                    className="min-h-[36px] px-2.5 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200 text-[12px] font-semibold inline-flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Minimize2 className="w-3.5 h-3.5 text-sky-400" />
-                    <span>{t('log.modeDocked')}</span>
-                  </button>
-                  <button
-                    type="button"
-                    data-testid="combat-log-popup-close"
-                    onClick={() => setLogSheetOpen(false)}
-                    aria-label={t('common.close')}
-                    className="min-w-[36px] min-h-[36px] flex items-center justify-center rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-slate-100 transition-colors cursor-pointer"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-                <CombatLogList
-                  entries={battle.log}
-                  units={battle.units}
-                  active={logSheetOpen}
-                  density="comfortable"
-                  mode="popup"
-                  channel={logChannel}
-                  onChannelChange={setLogChannel}
-                  expandAll={logExpandAll}
-                  expandNonce={logExpandNonce}
-                />
-              </div>
-            </div>
-          </div>
+          <CombatLogPopupSheet
+            open={logSheetOpen}
+            entries={battle.log}
+            units={battle.units}
+            channel={logChannel}
+            order={logOrder}
+            expandAll={logExpandAll}
+            expandNonce={logExpandNonce}
+            expandButtons={renderCombatLogExpandButtons(false)}
+            t={t}
+            onClose={() => setLogSheetOpen(false)}
+            onChannelChange={setLogChannel}
+            onOrderChange={handleSetLogOrder}
+          />
         )}
       </ErrorBoundary>
 
       {/* ==================== FIELD SUPPLIES & TACTICS BOTTOM SHEET ==================== */}
-      <ErrorBoundary
-        variant="panel"
-        title={t('battle.suppliesTitle')}
-        resetKey={suppliesSheetOpen}
+      <FieldSuppliesSheet
+        open={suppliesSheetOpen}
+        t={t}
         onClose={() => setSuppliesSheetOpen(false)}
+        onOpenTactics={() => setTacticsModalOpen(true)}
         onReloadBattle={() => startBattle(battle.sectorId)}
-      >
-        <BottomSheet
-          open={suppliesSheetOpen}
-          onClose={() => setSuppliesSheetOpen(false)}
-          title={t('battle.suppliesTitle')}
-          footer={
-            <button
-              type="button"
-              onClick={() => {
-                setSuppliesSheetOpen(false);
-                setTacticsModalOpen(true);
-              }}
-              className="w-full min-h-[44px] px-4 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold text-[13px] inline-flex items-center justify-center gap-2 cursor-pointer"
-            >
-              <Settings className="w-4 h-4" />
-              <span>{t('battle.openTactics')}</span>
-            </button>
-          }
-        >
-          <div className="rounded-lg border border-slate-800 bg-[#080D16] p-4 text-[13px] text-slate-300 leading-relaxed flex items-start gap-2">
-            <Zap className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-            <span>{t('battle.noConsumables')}</span>
-          </div>
-        </BottomSheet>
-      </ErrorBoundary>
+      />
 
       {/* ==================== LIVE PROGRESS / END-OF-BATTLE REPORT MODAL ==================== */}
       <ErrorBoundary

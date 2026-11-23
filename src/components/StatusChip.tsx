@@ -4,7 +4,7 @@ import {
   getFirstExpiringTurns,
   getStatusVisualKind,
 } from '../data/statusIconMap';
-import { formatStatusEffectDetail } from '../i18n';
+import { formatStatusEffectDetail, translate } from '../i18n';
 import type {
   ActiveStatusEffect,
   CombatUnit,
@@ -71,6 +71,20 @@ export function StatusChip({
   );
   const turnsLeft = getFirstExpiringTurns(status, stackTurns, allowStack);
   const fullDetail = formatStatusEffectDetail(lang, status, unit);
+  const effectiveStacks =
+    allowStack && Number.isFinite(stacks) && stacks >= 2
+      ? Math.floor(stacks)
+      : 1;
+  const turnsText =
+    turnsLeft !== null
+      ? translate(lang, 'statusUi.turnsLabel', { turns: turnsLeft })
+      : translate(lang, 'statusUi.turnsInfinite');
+  const stacksText = `${translate(lang, 'statusUi.stacksLabel')}: x${effectiveStacks}`;
+  const nameAndValue = fullDetail.valueText
+    ? `${fullDetail.label}: ${fullDetail.valueText}`
+    : fullDetail.label;
+  const accessibleSummary = `${nameAndValue} · ${turnsText} · ${stacksText}`;
+
   const isMini = size === 'xs';
   const framePx = STATUS_ICON_SIZE_SPECS[size].boxPx;
 
@@ -100,7 +114,8 @@ export function StatusChip({
       data-badge-layout={badgeLayout}
       data-chip-size={size}
       data-chip-frame-px={framePx}
-      title={fullDetail.fullText}
+      title={accessibleSummary}
+      aria-label={accessibleSummary}
       style={chipStyle}
       className={`inline-flex items-center rounded-md border font-mono-nums leading-none shrink-0 ${
         isMini

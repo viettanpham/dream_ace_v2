@@ -1326,7 +1326,9 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   // Nhật ký cấu trúc, Diễn biến trực tiếp & Báo cáo cuối trận (G3c)
   'log.filter.all': 'Tất cả',
   'log.filter.ally': 'Phe ta',
+  'log.filter.allyShort': 'Ta',
   'log.filter.enemy': 'Phe địch',
+  'log.filter.enemyShort': 'Địch',
   'log.filter.system': 'Hệ thống',
   'log.modeDocked': 'Gắn khung',
   'log.modePopup': 'Cửa sổ',
@@ -1335,6 +1337,11 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'log.loadOlder': 'Tải thêm cũ hơn ({count})',
   'log.emptyChannel': 'Chưa có mục nào trong kênh này.',
   'log.dockedCapHint': '{shown}/{total} mới nhất',
+  'log.orderNewest': 'Mới nhất trước',
+  'log.orderOldest': 'Cũ nhất trước',
+  'log.orderNewestShort': 'Mới',
+  'log.orderOldestShort': 'Cũ',
+  'log.jumpNewLines': '{count} dòng mới',
   'log.actionMoveRow': 'Di chuyển',
   'log.actionKill': 'Hạ gục',
   'log.actionBurn': 'Thiêu đốt',
@@ -1641,6 +1648,14 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'cloud.overwriteExportBtn': 'Xuất save (SV1a) trước',
   'cloud.overwriteConfirmBtn': 'Ghi đè',
   'cloud.overwriteExported': 'Đã xuất bản sao dự phòng: {filename}',
+
+  // Bảng trạng thái dưới radar (G4a-3b)
+  'statusBoard.header': 'Trạng thái · Ta {allies} · Địch {enemies}',
+  'statusBoard.allyCol': 'Ta',
+  'statusBoard.enemyCol': 'Địch',
+  'statusBoard.empty': 'Không có hiệu ứng',
+  'statusBoard.collapseLabel': 'Thu gọn bảng trạng thái',
+  'statusBoard.expandLabel': 'Mở rộng bảng trạng thái',
 };
 
 

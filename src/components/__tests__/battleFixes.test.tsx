@@ -546,7 +546,13 @@ describe('4) Combat Log Stick-to-Bottom — pure helpers & DOM scrolling behavio
     const initialEntries = makeLogEntries(20);
 
     act(() => {
-      root!.render(createElement(CombatLogList, { entries: initialEntries, active: true }));
+      root!.render(
+        createElement(CombatLogList, {
+          entries: initialEntries,
+          active: true,
+          order: 'oldest',
+        })
+      );
     });
 
     const scrollEl = container!.querySelector(
@@ -569,7 +575,13 @@ describe('4) Combat Log Stick-to-Bottom — pure helpers & DOM scrolling behavio
     currentScrollHeight = 2400;
     const burstEntries = makeLogEntries(95);
     act(() => {
-      root!.render(createElement(CombatLogList, { entries: burstEntries, active: true }));
+      root!.render(
+        createElement(CombatLogList, {
+          entries: burstEntries,
+          active: true,
+          order: 'oldest',
+        })
+      );
     });
     expect(container!.querySelectorAll('[data-testid="combat-log-entry"]')).toHaveLength(95);
     expect(scrollEl.scrollTop).toBe(2400);
@@ -592,7 +604,11 @@ describe('4) Combat Log Stick-to-Bottom — pure helpers & DOM scrolling behavio
     currentScrollHeight = 2600;
     act(() => {
       root!.render(
-        createElement(CombatLogList, { entries: makeLogEntries(105), active: true })
+        createElement(CombatLogList, {
+          entries: makeLogEntries(105),
+          active: true,
+          order: 'oldest',
+        })
       );
     });
     expect(scrollEl.scrollTop).toBe(300);
@@ -608,7 +624,11 @@ describe('4) Combat Log Stick-to-Bottom — pure helpers & DOM scrolling behavio
     currentScrollHeight = 2750;
     act(() => {
       root!.render(
-        createElement(CombatLogList, { entries: makeLogEntries(110), active: true })
+        createElement(CombatLogList, {
+          entries: makeLogEntries(110),
+          active: true,
+          order: 'oldest',
+        })
       );
     });
     expect(scrollEl.scrollTop).toBe(2750);

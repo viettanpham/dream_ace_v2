@@ -10,6 +10,8 @@ import {
   ArrowDown,
   ChevronDown,
   ChevronRight,
+  ChevronsDownUp,
+  ChevronsUpDown,
   Flame,
   Heart,
   MoveHorizontal,
@@ -30,16 +32,25 @@ import {
   parseStructuredCombatLogRow,
   POPUP_LOG_PAGE_SIZE,
   readCombatLogExpandAll,
+  readCombatLogOrder,
+  writeCombatLogOrder,
   type CombatLogActionKind,
   type CombatLogChannel,
   type CombatLogDisplayMode,
+  type CombatLogOrder,
   type CombatLogStrongTone,
   type CombatLogValueTone,
 } from '../utils/combatLogFormat';
 import {
+  computePreservedScrollTopOnPrepend,
   computeStickScrollState,
+  computeTopStickScrollState,
   DEFAULT_BOTTOM_THRESHOLD_PX,
+  DEFAULT_TOP_THRESHOLD_PX,
+  isInlineFlowAtTop,
 } from '../utils/scrollStick';
+
+export const DEFAULT_EXPANDED_RECENT_ROUNDS = 3;
 
 interface CombatLogListProps {
   entries: CombatLogEntry[];
@@ -54,10 +65,16 @@ interface CombatLogListProps {
   /** Optional controlled channel filter */
   channel?: CombatLogChannel;
   onChannelChange?: (channel: CombatLogChannel) => void;
+  /** Optional controlled chronological order (default: persisted 'newest') */
+  order?: CombatLogOrder;
+  onOrderChange?: (order: CombatLogOrder) => void;
   /** When true, expands all existing and newly created rounds; defaults to persisted localStorage preference */
   expandAll?: boolean;
   /** Monotonic counter incremented when Expand All / Collapse All is clicked to clear manual per-round overrides */
   expandNonce?: number;
+  /** Optional callbacks to render compact icon-only Expand All / Collapse All controls in Row 2 */
+  onExpandAll?: () => void;
+  onCollapseAll?: () => void;
   /** When true (phone Expanded mode), flows inside page scroll with zero nested scroll containers */
   inlineFlow?: boolean;
   className?: string;
@@ -298,17 +315,26 @@ export function CombatLogList({
   mode = 'docked',
   channel: controlledChannel,
   onChannelChange,
+  order: controlledOrder,
+  onOrderChange,
   expandAll: controlledExpandAll,
   expandNonce = 0,
+  onExpandAll,
+  onCollapseAll,
   inlineFlow = false,
   className = '',
 }: CombatLogListProps) {
   const { lang, t } = useI18n();
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const isAtTopRef = useRef<boolean>(true);
   const isAtBottomRef = useRef<boolean>(true);
+  const [unseenNewCount, setUnseenNewCount] = useState<number>(0);
   const [showJumpToLatest, setShowJumpToLatest] = useState<boolean>(false);
   const [internalChannel, setInternalChannel] =
     useState<CombatLogChannel>('all');
+  const [internalOrder, setInternalOrder] = useState<CombatLogOrder>(() =>
+    readCombatLogOrder()
+  );
   const [popupLimit, setPopupLimit] = useState<number>(POPUP_LOG_PAGE_SIZE);
   const [roundOverrides, setRoundOverrides] = useState<Record<number, boolean>>(
     {}
@@ -324,6 +350,13 @@ export function CombatLogList({
   const setChannel = (ch: CombatLogChannel) => {
     if (onChannelChange) onChannelChange(ch);
     else setInternalChannel(ch);
+  };
+
+  const activeOrder = controlledOrder ?? internalOrder;
+  const setOrder = (nextOrder: CombatLogOrder) => {
+    writeCombatLogOrder(nextOrder);
+    if (onOrderChange) onOrderChange(nextOrder);
+    else setInternalOrder(nextOrder);
   };
 
   const filteredEntries = useMemo(
@@ -343,16 +376,56 @@ export function CombatLogList({
   );
 
   const roundGroups = useMemo(
-    () => groupCombatLogEntriesByRound(visibleEntries),
-    [visibleEntries]
+    () => groupCombatLogEntriesByRound(visibleEntries, activeOrder),
+    [visibleEntries, activeOrder]
   );
-  const latestRound =
-    roundGroups.length > 0 ? roundGroups[roundGroups.length - 1].round : 1;
+  const defaultExpandedRounds = useMemo(() => {
+    const roundsDesc = roundGroups
+      .map((grp) => grp.round)
+      .sort((a, b) => b - a);
+    return new Set(roundsDesc.slice(0, DEFAULT_EXPANDED_RECENT_ROUNDS));
+  }, [roundGroups]);
 
   const lastEntryId =
-    visibleEntries.length > 0
-      ? visibleEntries[visibleEntries.length - 1].id
+    filteredEntries.length > 0
+      ? filteredEntries[filteredEntries.length - 1].id
       : 'empty';
+
+  const prevLastFilteredIdRef = useRef<string | null>(
+    filteredEntries.length > 0
+      ? filteredEntries[filteredEntries.length - 1].id
+      : null
+  );
+  const prevFilteredLenRef = useRef<number>(filteredEntries.length);
+  const prevTotalEntriesLenRef = useRef<number>(entries.length);
+  const prevScrollHeightRef = useRef<number>(0);
+  const prevContextRef = useRef<{
+    channel: CombatLogChannel;
+    order: CombatLogOrder;
+  }>({ channel: activeChannel, order: activeOrder });
+
+  const scrollToTop = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    if (inlineFlow) {
+      if (typeof window !== 'undefined') {
+        const rect = el.getBoundingClientRect();
+        const targetY =
+          rect.height > 0
+            ? Math.max(0, (window.scrollY || 0) + rect.top - 56)
+            : 0;
+        try {
+          if (typeof window.scrollTo === 'function') {
+            window.scrollTo({ top: targetY, behavior: 'auto' });
+          }
+        } catch {
+          // Ignore unimplemented jsdom scrollTo
+        }
+      }
+      return;
+    }
+    el.scrollTop = 0;
+  }, [inlineFlow]);
 
   const scrollToBottom = useCallback(() => {
     const el = scrollRef.current;
@@ -363,6 +436,23 @@ export function CombatLogList({
   const handleScroll = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
+    prevScrollHeightRef.current = el.scrollHeight;
+    if (activeOrder === 'newest') {
+      const next = computeTopStickScrollState(
+        {
+          scrollHeight: el.scrollHeight,
+          scrollTop: el.scrollTop,
+          clientHeight: el.clientHeight,
+        },
+        DEFAULT_TOP_THRESHOLD_PX
+      );
+      isAtTopRef.current = next.isAtTop;
+      if (next.isAtTop) {
+        setUnseenNewCount((prev) => (prev === 0 ? prev : 0));
+      }
+      return;
+    }
+
     const next = computeStickScrollState(
       {
         scrollHeight: el.scrollHeight,
@@ -375,16 +465,132 @@ export function CombatLogList({
     setShowJumpToLatest((prev) =>
       prev === next.showJumpToLatest ? prev : next.showJumpToLatest
     );
-  }, []);
+  }, [activeOrder]);
+
+  useEffect(() => {
+    if (!inlineFlow || !active || typeof window === 'undefined') return;
+    const handleInlineScroll = () => {
+      const el = scrollRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const atTop = isInlineFlowAtTop(
+        rect.top,
+        rect.height,
+        window.scrollY || 0
+      );
+      isAtTopRef.current = atTop;
+      if (atTop) {
+        setUnseenNewCount((prev) => (prev === 0 ? prev : 0));
+      }
+    };
+    window.addEventListener('scroll', handleInlineScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleInlineScroll);
+  }, [inlineFlow, active]);
 
   const handleJumpToLatest = useCallback(() => {
+    if (activeOrder === 'newest') {
+      isAtTopRef.current = true;
+      setUnseenNewCount(0);
+      scrollToTop();
+      return;
+    }
     isAtBottomRef.current = true;
     setShowJumpToLatest(false);
     scrollToBottom();
-  }, [scrollToBottom]);
+  }, [activeOrder, scrollToBottom, scrollToTop]);
 
-  // Stick to bottom whenever new entries arrive (or popup opens), ONLY while pinned to bottom
+  // Stick-to-edge or preserve reading offset & count unseen lines when entries update
   useLayoutEffect(() => {
+    const el = scrollRef.current;
+    const contextChanged =
+      prevContextRef.current.channel !== activeChannel ||
+      prevContextRef.current.order !== activeOrder;
+    const entriesReset = entries.length < prevTotalEntriesLenRef.current;
+
+    if (contextChanged || entriesReset) {
+      prevContextRef.current = {
+        channel: activeChannel,
+        order: activeOrder,
+      };
+      prevTotalEntriesLenRef.current = entries.length;
+      prevLastFilteredIdRef.current =
+        filteredEntries.length > 0
+          ? filteredEntries[filteredEntries.length - 1].id
+          : null;
+      prevFilteredLenRef.current = filteredEntries.length;
+      isAtTopRef.current = true;
+      isAtBottomRef.current = true;
+      setUnseenNewCount(0);
+      setShowJumpToLatest(false);
+      if (!inlineFlow && active && el) {
+        if (activeOrder === 'newest') el.scrollTop = 0;
+        else el.scrollTop = el.scrollHeight;
+      }
+      prevScrollHeightRef.current = el ? el.scrollHeight : 0;
+      return;
+    }
+
+    let newlyAdded = 0;
+    const prevId = prevLastFilteredIdRef.current;
+    const currentLastId =
+      filteredEntries.length > 0
+        ? filteredEntries[filteredEntries.length - 1].id
+        : null;
+    if (currentLastId && currentLastId !== prevId) {
+      if (prevId === null) {
+        newlyAdded = 0;
+      } else {
+        const prevIdx = filteredEntries.findIndex((e) => e.id === prevId);
+        newlyAdded =
+          prevIdx >= 0
+            ? filteredEntries.length - 1 - prevIdx
+            : Math.max(0, filteredEntries.length - prevFilteredLenRef.current);
+      }
+    }
+    prevLastFilteredIdRef.current = currentLastId;
+    prevFilteredLenRef.current = filteredEntries.length;
+    prevTotalEntriesLenRef.current = entries.length;
+
+    if (activeOrder === 'newest') {
+      if (inlineFlow) {
+        if (newlyAdded > 0 && active && !isAtTopRef.current) {
+          setUnseenNewCount((prev) => prev + newlyAdded);
+        }
+      } else if (el) {
+        if (!isAtTopRef.current) {
+          const preservedTop = computePreservedScrollTopOnPrepend(
+            el.scrollTop,
+            prevScrollHeightRef.current,
+            el.scrollHeight
+          );
+          if (preservedTop !== el.scrollTop) {
+            el.scrollTop = preservedTop;
+          }
+          if (newlyAdded > 0 && active) {
+            setUnseenNewCount((prev) => prev + newlyAdded);
+          }
+        } else if (active) {
+          el.scrollTop = 0;
+          if (
+            typeof window !== 'undefined' &&
+            typeof window.requestAnimationFrame === 'function'
+          ) {
+            const rafId = window.requestAnimationFrame(() => {
+              if (isAtTopRef.current && scrollRef.current) {
+                scrollRef.current.scrollTop = 0;
+              }
+            });
+            prevScrollHeightRef.current = el.scrollHeight;
+            return () => window.cancelAnimationFrame(rafId);
+          }
+        }
+      }
+      prevScrollHeightRef.current = el ? el.scrollHeight : 0;
+      return;
+    }
+
+    // Oldest-first: keep existing stick-to-bottom behavior
+    prevScrollHeightRef.current = el ? el.scrollHeight : 0;
     if (inlineFlow || !active || !isAtBottomRef.current) return;
     scrollToBottom();
 
@@ -402,9 +608,12 @@ export function CombatLogList({
   }, [
     inlineFlow,
     active,
+    activeOrder,
+    activeChannel,
+    entries.length,
+    filteredEntries,
     visibleEntries.length,
     lastEntryId,
-    activeChannel,
     scrollToBottom,
   ]);
 
@@ -423,31 +632,41 @@ export function CombatLogList({
         inlineFlow ? '' : 'flex-1 min-h-0'
       } flex flex-col ${className}`}
     >
-      {/* Channel Filter Tabs: All / Allies / Enemies / System */}
+      {/* Row 2: Channel Filter Tabs + Order Toggle + Expand/Collapse icon buttons */}
       <div
         data-testid="combat-log-filters"
         role="tablist"
         aria-label={t('battle.combatLog')}
-        className={`shrink-0 border-b border-slate-800/90 bg-[#090E17] flex items-center justify-between gap-1 ${
-          isCompact ? 'px-2 py-1' : 'px-3 py-1.5'
+        className={`shrink-0 border-b border-slate-800/90 bg-[#090E17] flex items-center justify-between gap-1 flex-nowrap ${
+          isCompact
+            ? 'h-[36px] min-h-[36px] max-h-[36px] px-1.5'
+            : 'px-3 py-1.5'
         }`}
       >
-        <div
-          className={`flex items-center gap-1 min-w-0 ${
-            inlineFlow ? 'flex-wrap' : 'overflow-x-auto'
-          }`}
-        >
+        <div className="flex items-center gap-0.5 min-w-0 flex-nowrap">
           {CHANNELS.map((ch) => {
             const isSelected = activeChannel === ch;
+            const fullLabel = t(`log.filter.${ch}` as const);
+            const displayLabel = isCompact
+              ? ch === 'ally'
+                ? t('log.filter.allyShort')
+                : ch === 'enemy'
+                ? t('log.filter.enemyShort')
+                : fullLabel
+              : fullLabel;
             return (
               <button
                 key={ch}
                 type="button"
                 role="tab"
                 aria-selected={isSelected}
+                aria-label={fullLabel}
+                title={fullLabel}
                 data-testid={`combat-log-filter-${ch}`}
                 onClick={() => setChannel(ch)}
-                className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-colors cursor-pointer whitespace-nowrap ${
+                className={`${
+                  isCompact ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-0.5 text-[11px]'
+                } rounded font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                   isSelected
                     ? ch === 'ally'
                       ? 'bg-sky-500/25 text-sky-200 border border-sky-400/60'
@@ -459,177 +678,301 @@ export function CombatLogList({
                     : 'text-slate-400 hover:text-slate-200 border border-transparent'
                 }`}
               >
-                {t(`log.filter.${ch}` as const)}
+                {displayLabel}
               </button>
             );
           })}
         </div>
-        {mode === 'docked' && hiddenOlderCount > 0 && (
-          <span
-            data-testid="combat-log-docked-cap"
-            className="font-mono-nums text-[10px] text-slate-500 shrink-0"
+        <div className="flex items-center gap-1 shrink-0 flex-nowrap">
+          {mode === 'docked' && hiddenOlderCount > 0 && (
+            <span
+              data-testid="combat-log-docked-cap"
+              className="font-mono-nums text-[10px] text-slate-500 shrink-0 hidden md:inline"
+            >
+              {t('log.dockedCapHint', {
+                shown: visibleEntries.length,
+                total: filteredEntries.length,
+              })}
+            </span>
+          )}
+          <div
+            role="group"
+            aria-label={t('log.orderNewest')}
+            data-testid="combat-log-order-toggle"
+            data-order={activeOrder}
+            className="inline-flex items-center rounded border border-slate-700 bg-slate-950 p-0.5 shrink-0"
           >
-            {t('log.dockedCapHint', {
-              shown: visibleEntries.length,
-              total: filteredEntries.length,
-            })}
-          </span>
-        )}
+            <button
+              type="button"
+              data-testid="combat-log-order-newest"
+              aria-pressed={activeOrder === 'newest'}
+              title={t('log.orderNewest')}
+              aria-label={t('log.orderNewest')}
+              onClick={() => setOrder('newest')}
+              className={`min-h-[22px] px-1.5 rounded text-[10px] font-semibold transition-colors cursor-pointer whitespace-nowrap ${
+                activeOrder === 'newest'
+                  ? 'bg-sky-500 text-slate-950'
+                  : 'text-slate-300 hover:text-slate-100'
+              }`}
+            >
+              {isCompact ? t('log.orderNewestShort') : t('log.orderNewest')}
+            </button>
+            <button
+              type="button"
+              data-testid="combat-log-order-oldest"
+              aria-pressed={activeOrder === 'oldest'}
+              title={t('log.orderOldest')}
+              aria-label={t('log.orderOldest')}
+              onClick={() => setOrder('oldest')}
+              className={`min-h-[22px] px-1.5 rounded text-[10px] font-semibold transition-colors cursor-pointer whitespace-nowrap ${
+                activeOrder === 'oldest'
+                  ? 'bg-sky-500 text-slate-950'
+                  : 'text-slate-300 hover:text-slate-100'
+              }`}
+            >
+              {isCompact ? t('log.orderOldestShort') : t('log.orderOldest')}
+            </button>
+          </div>
+          {onExpandAll && onCollapseAll && (
+            <div className="inline-flex items-center gap-0.5 shrink-0">
+              <button
+                type="button"
+                data-testid="combat-log-expand-all"
+                aria-pressed={effectiveExpandAll}
+                aria-label={t('log.expandAll')}
+                title={t('log.expandAll')}
+                onClick={onExpandAll}
+                className={`w-[24px] h-[24px] min-w-[24px] min-h-[24px] p-0 rounded border inline-flex items-center justify-center cursor-pointer transition-colors shrink-0 ${
+                  effectiveExpandAll
+                    ? 'border-sky-400/70 bg-sky-500/20 text-sky-200'
+                    : 'border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-300'
+                }`}
+              >
+                <ChevronsUpDown className="w-3.5 h-3.5 text-sky-400 shrink-0" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                data-testid="combat-log-collapse-all"
+                aria-pressed={!effectiveExpandAll}
+                aria-label={t('log.collapseAll')}
+                title={t('log.collapseAll')}
+                onClick={onCollapseAll}
+                className={`w-[24px] h-[24px] min-w-[24px] min-h-[24px] p-0 rounded border inline-flex items-center justify-center cursor-pointer transition-colors shrink-0 ${
+                  !effectiveExpandAll
+                    ? 'border-slate-600 bg-slate-800 text-slate-100'
+                    : 'border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-300'
+                }`}
+              >
+                <ChevronsDownUp className="w-3.5 h-3.5 text-slate-400 shrink-0" aria-hidden="true" />
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Log Body grouped by Round (inner scroll when docked/popup, page-flow when inlineFlow) */}
       <div
-        ref={scrollRef}
-        data-testid="combat-log-scroll"
-        onScroll={inlineFlow ? undefined : handleScroll}
-        className={`${
-          inlineFlow
-            ? ''
-            : 'flex-1 min-h-0 overflow-y-auto overscroll-contain tactical-scroll'
-        } ${
-          isCompact
-            ? 'px-2.5 py-1.5 space-y-1.5 text-[12px]'
-            : 'px-3.5 py-2.5 space-y-2 text-[13px]'
-        }`}
+        className={`relative ${
+          inlineFlow ? '' : 'flex-1 min-h-0'
+        } flex flex-col`}
       >
-        {mode === 'popup' && hiddenOlderCount > 0 && (
-          <div className="pb-1 flex justify-center">
-            <button
-              type="button"
-              data-testid="combat-log-load-older"
-              onClick={() =>
-                setPopupLimit((prev) => prev + POPUP_LOG_PAGE_SIZE)
+        {activeOrder === 'newest' &&
+          unseenNewCount > 0 &&
+          visibleEntries.length > 0 && (
+            <div
+              className={
+                inlineFlow
+                  ? 'sticky top-[54px] z-20 h-0 flex justify-end pr-2 pointer-events-none'
+                  : 'pointer-events-none'
               }
-              className="px-3 py-1 rounded-md border border-slate-700 bg-slate-900 hover:bg-slate-800 text-sky-300 text-[12px] font-semibold cursor-pointer"
             >
-              {t('log.loadOlder', { count: hiddenOlderCount })}
-            </button>
-          </div>
-        )}
-
-        {visibleEntries.length === 0 ? (
-          <div
-            data-testid="combat-log-empty"
-            className="py-4 text-center text-[12px] text-slate-500"
-          >
-            {t('log.emptyChannel')}
-          </div>
-        ) : (
-          roundGroups.map((grp) => {
-            const isOpen =
-              roundOverrides[grp.round] ??
-              (effectiveExpandAll ? true : grp.round === latestRound);
-            return (
-              <div
-                key={`round-${grp.round}`}
-                data-testid={`combat-log-round-group-${grp.round}`}
-                className="space-y-0.5"
+              <button
+                type="button"
+                data-testid="combat-log-jump-latest"
+                data-direction="up"
+                data-unseen-count={unseenNewCount}
+                onClick={handleJumpToLatest}
+                className={`${
+                  inlineFlow ? 'pointer-events-auto' : 'absolute right-3 top-2 z-10 pointer-events-auto'
+                } min-h-[34px] px-3 py-1 rounded-full border border-sky-400/70 bg-sky-500/95 hover:bg-sky-400 text-slate-950 font-semibold text-[12px] shadow-lg inline-flex items-center gap-1 cursor-pointer transition-colors`}
               >
-                <button
-                  type="button"
-                  data-testid={`combat-log-round-header-${grp.round}`}
-                  aria-expanded={isOpen}
-                  data-round-open={isOpen ? 'true' : 'false'}
-                  onClick={() => toggleRound(grp.round, isOpen)}
-                  className="w-full px-2 py-1 rounded border border-slate-800/80 bg-[#0B121F] hover:bg-slate-900 text-[11px] font-semibold text-slate-300 flex items-center justify-between gap-2 cursor-pointer transition-colors"
-                >
-                  <span className="inline-flex items-center gap-1">
-                    {isOpen ? (
-                      <ChevronDown className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-                    ) : (
-                      <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                    )}
-                    <span className="font-mono-nums text-slate-100">
-                      {t('log.roundHeader', { round: grp.round })}
-                    </span>
-                  </span>
-                  <span className="font-mono-nums text-[10px] text-slate-400">
-                    {t('log.roundEntriesCount', { count: grp.entries.length })}
-                  </span>
-                </button>
+                <span aria-hidden="true">↑</span>
+                <span>{t('log.jumpNewLines', { count: unseenNewCount })}</span>
+              </button>
+            </div>
+          )}
 
+        <div
+          ref={scrollRef}
+          data-testid="combat-log-scroll"
+          onScroll={inlineFlow ? undefined : handleScroll}
+          className={`${
+            inlineFlow
+              ? ''
+              : 'flex-1 min-h-0 overflow-y-auto overscroll-contain tactical-scroll'
+          } ${
+            isCompact
+              ? 'px-2.5 py-1.5 space-y-1.5 text-[12px]'
+              : 'px-3.5 py-2.5 space-y-2 text-[13px]'
+          }`}
+        >
+          {mode === 'popup' && activeOrder === 'oldest' && hiddenOlderCount > 0 && (
+            <div className="pb-1 flex justify-center">
+              <button
+                type="button"
+                data-testid="combat-log-load-older"
+                onClick={() =>
+                  setPopupLimit((prev) => prev + POPUP_LOG_PAGE_SIZE)
+                }
+                className="px-3 py-1 rounded-md border border-slate-700 bg-slate-900 hover:bg-slate-800 text-sky-300 text-[12px] font-semibold cursor-pointer"
+              >
+                {t('log.loadOlder', { count: hiddenOlderCount })}
+              </button>
+            </div>
+          )}
+
+          {visibleEntries.length === 0 ? (
+            <div
+              data-testid="combat-log-empty"
+              className="py-4 text-center text-[12px] text-slate-500"
+            >
+              {t('log.emptyChannel')}
+            </div>
+          ) : (
+            roundGroups.map((grp) => {
+              const isOpen =
+                roundOverrides[grp.round] ??
+                (effectiveExpandAll ? true : defaultExpandedRounds.has(grp.round));
+              return (
                 <div
-                  data-testid={`combat-log-round-body-${grp.round}`}
-                  className={isOpen ? 'space-y-1 pt-0.5' : 'hidden'}
+                  key={`round-${grp.round}`}
+                  data-testid={`combat-log-round-group-${grp.round}`}
+                  className="space-y-0.5"
                 >
-                  {grp.entries.map((entry) => {
-                    const row = parseStructuredCombatLogRow(
-                      lang,
-                      entry,
-                      units
-                    );
+                  <button
+                    type="button"
+                    data-testid={`combat-log-round-header-${grp.round}`}
+                    aria-expanded={isOpen}
+                    data-round-open={isOpen ? 'true' : 'false'}
+                    onClick={() => toggleRound(grp.round, isOpen)}
+                    className="w-full px-2 py-1 rounded border border-slate-800/80 bg-[#0B121F] hover:bg-slate-900 text-[11px] font-semibold text-slate-300 flex items-center justify-between gap-2 cursor-pointer transition-colors"
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      {isOpen ? (
+                        <ChevronDown className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                      ) : (
+                        <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      )}
+                      <span className="font-mono-nums text-slate-100">
+                        {t('log.roundHeader', { round: grp.round })}
+                      </span>
+                    </span>
+                    <span className="font-mono-nums text-[10px] text-slate-400">
+                      {t('log.roundEntriesCount', { count: grp.entries.length })}
+                    </span>
+                  </button>
 
-                    return (
-                      <div
-                        key={entry.id}
-                        data-testid="combat-log-entry"
-                        data-action-kind={row.actionKind}
-                        data-faction={row.faction}
-                        data-value-tone={row.valueTone}
-                        data-strong={row.isStrong ? 'true' : 'false'}
-                        title={row.sentence}
-                        className={`leading-snug flex items-center gap-1.5 py-1 pr-1 ${getStrongRowClass(
-                          row.strongTone
-                        )}`}
-                      >
-                        {/* [avatar with faction-colored border + faction dot] */}
-                        <ActorAvatarBadge
-                          actorName={row.actorName || row.actionLabel}
-                          isPilotActor={row.isPilotActor}
-                          classId={row.actorClassId}
-                          role={row.actorFactionRole}
-                          faction={row.faction}
-                        />
+                  <div
+                    data-testid={`combat-log-round-body-${grp.round}`}
+                    className={isOpen ? 'space-y-1 pt-0.5' : 'hidden'}
+                  >
+                    {grp.entries.map((entry) => {
+                      const row = parseStructuredCombatLogRow(
+                        lang,
+                        entry,
+                        units
+                      );
 
-                        {/* [single action icon] */}
-                        <ActionKindIcon kind={row.actionKind} />
-
-                        {row.autoBadge && (
-                          <span className="font-mono-nums text-[10px] px-1 rounded bg-emerald-500/15 text-emerald-300 shrink-0">
-                            {row.autoBadge}
-                          </span>
-                        )}
-
-                        {/* [natural sentence] */}
-                        <span
-                          data-testid="combat-log-sentence"
-                          className={`min-w-0 flex-1 break-words ${getSentenceToneClass(
-                            row.valueTone
+                      return (
+                        <div
+                          key={entry.id}
+                          data-testid="combat-log-entry"
+                          data-action-kind={row.actionKind}
+                          data-faction={row.faction}
+                          data-value-tone={row.valueTone}
+                          data-strong={row.isStrong ? 'true' : 'false'}
+                          title={row.sentence}
+                          className={`leading-snug flex items-center gap-1.5 py-1 pr-1 ${getStrongRowClass(
+                            row.strongTone
                           )}`}
                         >
-                          {row.sentence}
-                        </span>
+                          {/* [avatar with faction-colored border + faction dot] */}
+                          <ActorAvatarBadge
+                            actorName={row.actorName || row.actionLabel}
+                            isPilotActor={row.isPilotActor}
+                            classId={row.actorClassId}
+                            role={row.actorFactionRole}
+                            faction={row.faction}
+                          />
 
-                        {/* [separate dim skill SP cost] */}
-                        {row.spCost !== null && row.spCost > 0 && (
+                          {/* [single action icon] */}
+                          <ActionKindIcon kind={row.actionKind} />
+
+                          {row.autoBadge && (
+                            <span className="font-mono-nums text-[10px] px-1 rounded bg-emerald-500/15 text-emerald-300 shrink-0">
+                              {row.autoBadge}
+                            </span>
+                          )}
+
+                          {/* [natural sentence] */}
                           <span
-                            data-testid="combat-log-sp-cost"
-                            className={`font-mono-nums text-[10px] px-1 py-0.5 rounded border shrink-0 whitespace-nowrap ${SP_COLOR_TOKENS.badgeClass}`}
+                            data-testid="combat-log-sentence"
+                            className={`min-w-0 flex-1 break-words ${getSentenceToneClass(
+                              row.valueTone
+                            )}`}
                           >
-                            {t('log.spCostTag', { cost: row.spCost })}
+                            {row.sentence}
                           </span>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })
-        )}
-      </div>
 
-      {!inlineFlow && showJumpToLatest && visibleEntries.length > 0 && (
-        <button
-          type="button"
-          data-testid="combat-log-jump-latest"
-          onClick={handleJumpToLatest}
-          className="absolute right-3 bottom-2 z-10 min-h-[44px] px-3 py-1 rounded-full border border-sky-400/70 bg-sky-500/95 hover:bg-sky-400 text-slate-950 font-semibold text-[12px] shadow-lg inline-flex items-center gap-1.5 cursor-pointer transition-colors"
-        >
-          <ArrowDown className="w-3.5 h-3.5 shrink-0" />
-          <span>{t('battle.jumpToLatest')}</span>
-        </button>
-      )}
+                          {/* [separate dim skill SP cost] */}
+                          {row.spCost !== null && row.spCost > 0 && (
+                            <span
+                              data-testid="combat-log-sp-cost"
+                              className={`font-mono-nums text-[10px] px-1 py-0.5 rounded border shrink-0 whitespace-nowrap ${SP_COLOR_TOKENS.badgeClass}`}
+                            >
+                              {t('log.spCostTag', { cost: row.spCost })}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })
+          )}
+          {mode === 'popup' && activeOrder === 'newest' && hiddenOlderCount > 0 && (
+            <div className="pt-1 flex justify-center">
+              <button
+                type="button"
+                data-testid="combat-log-load-older"
+                onClick={() =>
+                  setPopupLimit((prev) => prev + POPUP_LOG_PAGE_SIZE)
+                }
+                className="px-3 py-1 rounded-md border border-slate-700 bg-slate-900 hover:bg-slate-800 text-sky-300 text-[12px] font-semibold cursor-pointer"
+              >
+                {t('log.loadOlder', { count: hiddenOlderCount })}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {activeOrder === 'oldest' &&
+          !inlineFlow &&
+          showJumpToLatest &&
+          visibleEntries.length > 0 && (
+            <button
+              type="button"
+              data-testid="combat-log-jump-latest"
+              data-direction="down"
+              onClick={handleJumpToLatest}
+              className="absolute right-3 bottom-2 z-10 min-h-[44px] px-3 py-1 rounded-full border border-sky-400/70 bg-sky-500/95 hover:bg-sky-400 text-slate-950 font-semibold text-[12px] shadow-lg inline-flex items-center gap-1.5 cursor-pointer transition-colors"
+            >
+              <ArrowDown className="w-3.5 h-3.5 shrink-0" />
+              <span>{t('battle.jumpToLatest')}</span>
+            </button>
+          )}
+      </div>
     </div>
   );
 }
