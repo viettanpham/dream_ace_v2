@@ -49,6 +49,8 @@ export const EN_TRANSLATIONS = {
   'nav.deploy': 'Launch Sortie',
   'nav.returnHangar': 'Return to Base',
   'sidebar.gear': 'GEAR',
+  'sidebar.warehouse': 'Warehouse',
+  'sidebar.warehouseBaseOnly': 'Base only',
   'sidebar.garage': 'Character',
   'sidebar.skill': 'Skill',
   'sidebar.shop': 'Shop',
@@ -83,7 +85,7 @@ export const EN_TRANSLATIONS = {
   // Gear Wireframe View
   'gear.slotsHeading': 'Equipment Slots',
   'gear.statsHeading': 'Stats',
-  'gear.gridHeading': 'Shared Cargo Inventory',
+  'gear.gridHeading': 'Cargo box',
   'gear.detailHeading': 'Details & Stat Comparison',
   'gear.emptyDetailTitle': 'Select a ship part to inspect',
   'gear.emptyDetailDesc':
@@ -711,7 +713,7 @@ export const EN_TRANSLATIONS = {
   'auto.repeatReason.elite_ready': 'Stopped: Elite skill ready',
   'auto.repeatReason.boss_present': 'Stopped: Boss detected',
   'auto.repeatReason.auto_retreat': 'Auto-retreated on critical HP',
-  'auto.repeatReason.inventory_full': 'Stopped: Cargo full ({max} items)',
+  'auto.repeatReason.inventory_full': 'Stopped: Cargo box full ({max} items)',
   'auto.repeatReason.manual_stop': 'Stopped by pilot',
   'auto.cond.always': 'Always',
   'auto.cond.my_hp_below': 'My HP < {value}%',
@@ -1142,7 +1144,7 @@ export const EN_TRANSLATIONS = {
   'shop.shipyardBonusBadge': 'Shipyard +{n} stock',
   'shop.soldOut': 'SOLD OUT',
   'shop.stockAvailable': '{avail}/{total} available',
-  'shop.cargoCount': 'Cargo: {count}/{max}',
+  'shop.cargoCount': 'Cargo box: {count}/{max}',
   'shop.cargoFullTag': 'Cargo Full ({count}/{max})',
   'shop.cargoFullBtn': 'Cargo Full',
   'shop.cargoFullHint':
@@ -1153,7 +1155,7 @@ export const EN_TRANSLATIONS = {
   'shop.wpRefreshBtn': 'Refresh ({cost} WP)',
   'shop.wpRefreshedMsg': 'War Point Market refreshed with new rotating offers!',
   'shop.wpOpeningCardsTitle': 'Class Skill Opening Cards',
-  'shop.wpBoughtOfferFeedback': 'Purchased {name} — check Inventory → Consumables.',
+  'shop.wpBoughtOfferFeedback': 'Purchased {name} — check Cargo box → Consumables.',
   'shop.goToConsumables': 'Open Consumables →',
   'shop.buyOfferBtn': 'Buy ({cost} WP)',
   'shop.wpNoOffers': 'No rotating War Point offers available.',
@@ -1677,6 +1679,26 @@ export const EN_TRANSLATIONS = {
   'statusBoard.empty': 'No active effects',
   'statusBoard.collapseLabel': 'Collapse status board',
   'statusBoard.expandLabel': 'Expand status board',
+
+  // Warehouse (W1b-1)
+  'warehouse.title': 'Warehouse & Cargo box',
+  'warehouse.boxHeading': 'Cargo box {count}/{max}',
+  'warehouse.storageHeading': 'Warehouse {count}/{max}',
+  'warehouse.switchBox': 'Cargo box ({count}/{max})',
+  'warehouse.switchStorage': 'Warehouse ({count}/{max})',
+  'warehouse.slotAll': 'All slots',
+  'warehouse.moveAllUnusedBtn': 'Move all unused',
+  'warehouse.moveToWarehouseBtn': 'Move to Warehouse',
+  'warehouse.moveToBoxBtn': 'Move to Cargo box',
+  'warehouse.emptyBox': 'No matching items in Cargo box.',
+  'warehouse.emptyStorage': 'No matching items in Warehouse.',
+  'warehouse.equippedCannotMove':
+    'Equipped on {gear} — unequip before moving.',
+  'warehouse.toastMoved': 'Moved {count} items',
+  'warehouse.toastSkippedEquipped': '{count} equipped',
+  'warehouse.toastSkippedProtected': '{count} protected',
+  'warehouse.toastSkippedFull': '{count} target full',
+  'warehouse.toastLocked': 'Base only (locked during battle or auto-repeat).',
 } as const;
 
 export type TranslationKey = keyof typeof EN_TRANSLATIONS;

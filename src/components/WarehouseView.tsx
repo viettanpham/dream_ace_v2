@@ -1,0 +1,607 @@
+import { useMemo, useState } from 'react';
+import {
+  Archive,
+  ArrowLeftRight,
+  Lock,
+  PackageOpen,
+  Star,
+  X,
+} from 'lucide-react';
+import { BALANCE_CONFIG } from '../data/balance';
+import { STAT_KEYS } from '../data/classes';
+import { EQUIPMENT_SLOTS, RARITY_META } from '../data/items';
+import { getEffectiveItemStats, getItemEquippedByGear } from '../engine/equipment';
+import { sanitizeWarehouseCapacity } from '../engine/migration';
+import type { WarehouseTransferResult } from '../engine/warehouse';
+import {
+  formatItemTraitsList,
+  getClassName,
+  getItemInstanceDesc,
+  getItemInstanceName,
+  getRarityLabel,
+  getSlotLabel,
+  getSlotShort,
+  getStatShort,
+  useI18n,
+} from '../i18n';
+import type { TranslationKey } from '../i18n/en';
+import { isBattleActive, useGameStore } from '../store/useGameStore';
+import type { ItemInstance, MechClassId } from '../types/game';
+import { BottomSheet } from './BottomSheet';
+import { ClassIcon, SlotIcon } from './GameIcons';
+
+type WarehouseContainer = 'box' | 'warehouse';
+type SlotFilter = 'all' | (typeof EQUIPMENT_SLOTS)[number];
+
+interface SelectedWarehouseItem {
+  container: WarehouseContainer;
+  item: ItemInstance;
+}
+
+export function formatWarehouseTransferToast(
+  result: WarehouseTransferResult,
+  t: (key: TranslationKey, vars?: Record<string, string | number>) => string
+): string {
+  if (result.reason === 'locked') {
+    return t('warehouse.toastLocked');
+  }
+  const parts: string[] = [
+    t('warehouse.toastMoved', { count: result.moved }),
+  ];
+  if (result.skippedEquipped > 0) {
+    parts.push(
+      t('warehouse.toastSkippedEquipped', { count: result.skippedEquipped })
+    );
+  }
+  if (result.skippedProtected > 0) {
+    parts.push(
+      t('warehouse.toastSkippedProtected', { count: result.skippedProtected })
+    );
+  }
+  if (result.skippedFull > 0) {
+    parts.push(
+      t('warehouse.toastSkippedFull', { count: result.skippedFull })
+    );
+  }
+  return parts.join(' · ');
+}
+
+interface WarehouseItemCellProps {
+  item: ItemInstance;
+  container: WarehouseContainer;
+  equippedBy: MechClassId | null;
+  activeGearId: MechClassId;
+  onSelect: (container: WarehouseContainer, item: ItemInstance) => void;
+}
+
+function WarehouseItemCell({
+  item,
+  container,
+  equippedBy,
+  activeGearId,
+  onSelect,
+}: WarehouseItemCellProps) {
+  const { lang, t } = useI18n();
+  const displayName = getItemInstanceName(lang, item);
+  const isEquippedSelected = equippedBy === activeGearId;
+
+  const frameClasses = equippedBy
+    ? isEquippedSelected
+      ? 'border-emerald-400 bg-emerald-500/12 ring-1 ring-emerald-400/50'
+      : 'border-sky-400/75 bg-sky-500/10'
+    : `${RARITY_META[item.rarity].borderClass} ${
+        RARITY_META[item.rarity].bgTintClass
+      } hover:bg-slate-900/90`;
+
+  return (
+    <button
+      type="button"
+      data-testid={`warehouse-cell-${container}-${item.instanceId}`}
+      title={displayName}
+      onClick={() => onSelect(container, item)}
+      className={`relative h-[128px] overflow-hidden p-2.5 rounded-lg lg:rounded border text-left transition-colors cursor-pointer flex flex-col justify-between ${frameClasses}`}
+    >
+      {/* Equipped Corner Ribbon */}
+      {equippedBy && (
+        <div
+          data-testid={`warehouse-equipped-badge-${item.instanceId}`}
+          className={`absolute top-0 right-0 z-10 px-1.5 py-0.5 rounded-bl text-[9px] font-bold tracking-tight inline-flex items-center gap-1 max-w-[85%] ${
+            isEquippedSelected
+              ? 'bg-emerald-500 text-slate-950'
+              : 'bg-sky-500/90 text-slate-950'
+          }`}
+        >
+          <ClassIcon
+            classId={equippedBy}
+            colored={false}
+            className="w-2.5 h-2.5 shrink-0"
+          />
+          <span className="truncate">
+            {isEquippedSelected
+              ? t('inv.ribbonEquipped')
+              : t('inv.ribbonOnGear', {
+                  gear: getClassName(lang, equippedBy),
+                })}
+          </span>
+        </div>
+      )}
+
+      {/* Top Metadata Row */}
+      <div className="relative z-10 flex items-center justify-between gap-1 pt-0.5">
+        <span
+          className={`inline-flex items-center gap-1 text-[11px] font-mono-nums min-w-0 ${
+            RARITY_META[item.rarity].textClass
+          }`}
+        >
+          <SlotIcon slot={item.slot} className="w-3.5 h-3.5 shrink-0" />
+          <span>T{item.tier}</span>
+          <span className="text-[10px] text-slate-400 font-sans truncate">
+            {getSlotShort(lang, item.slot)}
+          </span>
+        </span>
+
+        <div
+          className={`flex items-center gap-1 font-mono-nums text-[11px] shrink-0 ${
+            equippedBy ? 'mt-3' : ''
+          }`}
+        >
+          {item.locked && (
+            <span title={t('inv.badgeLocked')}>
+              <Lock className="w-3 h-3 text-amber-300 shrink-0" />
+            </span>
+          )}
+          {item.favorited && (
+            <span title={t('inv.badgeFavorited')}>
+              <Star className="w-3 h-3 text-yellow-400 fill-yellow-400 shrink-0" />
+            </span>
+          )}
+          {item.enchantLevel > 0 && (
+            <span className="font-bold text-amber-400">
+              +{item.enchantLevel}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Clamped 2-Line Item Name */}
+      <div
+        title={displayName}
+        className={`relative z-10 text-xs font-semibold leading-snug line-clamp-2 ${
+          RARITY_META[item.rarity].textClass
+        }`}
+      >
+        {displayName}
+      </div>
+
+      {/* Bottom Level & Quality Line */}
+      <div className="relative z-10 text-[11px] font-mono-nums flex items-center justify-between gap-1 text-slate-400">
+        <span className="truncate">
+          {t('common.levelShort')}
+          {item.requiredLevel}
+          {item.classRestriction
+            ? ` · ${getClassName(lang, item.classRestriction)}`
+            : ''}
+        </span>
+        <span className="shrink-0">{item.rollQuality}%</span>
+      </div>
+    </button>
+  );
+}
+
+export function WarehouseView() {
+  const { lang, t } = useI18n();
+  const pilot = useGameStore((s) => s.pilot);
+  const warehouseCapacityRaw = useGameStore(
+    (s) => s.adminConfig.warehouseCapacity
+  );
+  const screen = useGameStore((s) => s.screen);
+  const battle = useGameStore((s) => s.battle);
+  const autoRepeatActive = useGameStore((s) =>
+    Boolean(s.autoRepeatSession?.active)
+  );
+  const moveToWarehouse = useGameStore((s) => s.moveToWarehouse);
+  const moveToBox = useGameStore((s) => s.moveToBox);
+  const moveAllUnusedToWarehouse = useGameStore(
+    (s) => s.moveAllUnusedToWarehouse
+  );
+
+  const [mobilePanel, setMobilePanel] = useState<WarehouseContainer>('box');
+  const [slotFilter, setSlotFilter] = useState<SlotFilter>('all');
+  const [selected, setSelected] = useState<SelectedWarehouseItem | null>(null);
+  const [toastText, setToastText] = useState<string | null>(null);
+
+  const boxCap = BALANCE_CONFIG.maxInventorySize;
+  const warehouseCap = sanitizeWarehouseCapacity(warehouseCapacityRaw);
+  const boxItems = pilot.inventory;
+  const warehouseItems = Array.isArray(pilot.warehouse) ? pilot.warehouse : [];
+  const transferLocked =
+    isBattleActive({ screen, battle }) || autoRepeatActive;
+
+  const filteredBoxItems = useMemo(
+    () =>
+      slotFilter === 'all'
+        ? boxItems
+        : boxItems.filter((it) => it.slot === slotFilter),
+    [boxItems, slotFilter]
+  );
+
+  const filteredWarehouseItems = useMemo(
+    () =>
+      slotFilter === 'all'
+        ? warehouseItems
+        : warehouseItems.filter((it) => it.slot === slotFilter),
+    [warehouseItems, slotFilter]
+  );
+
+  const selectedEquippedBy = selected
+    ? getItemEquippedByGear(pilot.gears, selected.item.instanceId)
+    : null;
+
+  const selectedStats = selected ? getEffectiveItemStats(selected.item) : null;
+  const selectedTraits = selected
+    ? formatItemTraitsList(lang, selected.item)
+    : [];
+
+  const handleBulkMoveUnused = () => {
+    const res = moveAllUnusedToWarehouse();
+    setToastText(formatWarehouseTransferToast(res, t));
+  };
+
+  const handleSingleMove = () => {
+    if (!selected) return;
+    if (selected.container === 'box') {
+      const res = moveToWarehouse([selected.item.instanceId]);
+      setToastText(formatWarehouseTransferToast(res, t));
+      if (res.moved > 0 || res.reason === 'locked') {
+        setSelected(null);
+      }
+      return;
+    }
+    const res = moveToBox([selected.item.instanceId]);
+    setToastText(formatWarehouseTransferToast(res, t));
+    if (res.moved > 0 || res.reason === 'locked') {
+      setSelected(null);
+    }
+  };
+
+  return (
+    <div
+      data-testid="warehouse-view"
+      className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-3 py-3 md:px-4 md:py-4"
+    >
+      <div className="max-w-7xl mx-auto flex flex-col gap-3 min-w-0">
+        {/* Top Header & Controls */}
+        <section className="rounded-lg border border-slate-800 bg-[#0B111C]/90 p-3 flex flex-col gap-2.5 min-w-0">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <Archive className="w-4 h-4 text-amber-400 shrink-0" />
+              <h2 className="text-sm md:text-base font-bold text-slate-100 truncate">
+                {t('warehouse.title')}
+              </h2>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+              {/* Slot Filter Select */}
+              <select
+                data-testid="warehouse-slot-filter"
+                aria-label={t('warehouse.slotAll')}
+                value={slotFilter}
+                onChange={(e) => setSlotFilter(e.target.value as SlotFilter)}
+                className="h-9 px-2.5 rounded border border-slate-700 bg-slate-900 text-xs text-slate-100 min-w-0 flex-1 sm:flex-none cursor-pointer"
+              >
+                <option value="all">{t('warehouse.slotAll')}</option>
+                {EQUIPMENT_SLOTS.map((slot) => (
+                  <option key={slot} value={slot}>
+                    {getSlotLabel(lang, slot)}
+                  </option>
+                ))}
+              </select>
+
+              {/* Move All Unused Button */}
+              <button
+                type="button"
+                data-testid="warehouse-move-all-btn"
+                disabled={transferLocked}
+                onClick={handleBulkMoveUnused}
+                className={`h-9 px-3 rounded border text-xs font-semibold inline-flex items-center justify-center gap-1.5 whitespace-nowrap transition-colors ${
+                  transferLocked
+                    ? 'border-slate-700 bg-slate-900 text-slate-500 cursor-not-allowed opacity-50'
+                    : 'border-amber-500/60 bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 cursor-pointer'
+                }`}
+              >
+                <ArrowLeftRight className="w-3.5 h-3.5 shrink-0" />
+                <span>{t('warehouse.moveAllUnusedBtn')}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Result Toast */}
+          {toastText && (
+            <div
+              role="status"
+              data-testid="warehouse-toast"
+              className="rounded border border-cyan-500/45 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-100 flex items-center justify-between gap-2"
+            >
+              <span className="min-w-0 break-words">{toastText}</span>
+              <button
+                type="button"
+                onClick={() => setToastText(null)}
+                aria-label={t('common.close')}
+                className="p-1 text-cyan-300 hover:text-cyan-100 cursor-pointer shrink-0"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
+          {/* Phone Segmented Switch (< 768px) */}
+          <div
+            data-testid="warehouse-mobile-switch"
+            className="md:hidden grid grid-cols-2 gap-1.5 rounded-lg bg-slate-950/90 p-1 border border-slate-800"
+          >
+            <button
+              type="button"
+              data-testid="warehouse-switch-box"
+              aria-pressed={mobilePanel === 'box'}
+              onClick={() => setMobilePanel('box')}
+              className={`h-9 px-2 rounded text-xs font-semibold truncate transition-colors cursor-pointer ${
+                mobilePanel === 'box'
+                  ? 'bg-amber-500/20 border border-amber-400/70 text-amber-200'
+                  : 'border border-transparent text-slate-400'
+              }`}
+            >
+              {t('warehouse.switchBox', {
+                count: boxItems.length,
+                max: boxCap,
+              })}
+            </button>
+            <button
+              type="button"
+              data-testid="warehouse-switch-warehouse"
+              aria-pressed={mobilePanel === 'warehouse'}
+              onClick={() => setMobilePanel('warehouse')}
+              className={`h-9 px-2 rounded text-xs font-semibold truncate transition-colors cursor-pointer ${
+                mobilePanel === 'warehouse'
+                  ? 'bg-amber-500/20 border border-amber-400/70 text-amber-200'
+                  : 'border border-transparent text-slate-400'
+              }`}
+            >
+              {t('warehouse.switchStorage', {
+                count: warehouseItems.length,
+                max: warehouseCap,
+              })}
+            </button>
+          </div>
+        </section>
+
+        {/* Side-by-side panels on tablet/desktop; single active panel on phone */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 min-w-0 items-start">
+          {/* Left Panel: Cargo Box ("Hòm đồ") */}
+          <section
+            data-testid="warehouse-panel-box"
+            data-mobile-active={mobilePanel === 'box' ? 'true' : 'false'}
+            className={`rounded-lg border border-slate-800 bg-[#0B111C]/90 p-3 min-w-0 flex-col gap-2.5 ${
+              mobilePanel === 'box' ? 'flex' : 'hidden md:flex'
+            }`}
+          >
+            <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-slate-800/80">
+              <h3
+                data-testid="warehouse-box-heading"
+                className="text-xs md:text-sm font-bold text-slate-100 inline-flex items-center gap-1.5 truncate"
+              >
+                <PackageOpen className="w-4 h-4 text-sky-400 shrink-0" />
+                <span className="truncate">
+                  {t('warehouse.boxHeading', {
+                    count: boxItems.length,
+                    max: boxCap,
+                  })}
+                </span>
+              </h3>
+            </div>
+
+            {filteredBoxItems.length === 0 ? (
+              <div className="py-6 text-center text-xs text-slate-500">
+                {t('warehouse.emptyBox')}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-2 xl:grid-cols-3 gap-2">
+                {filteredBoxItems.map((item) => (
+                  <WarehouseItemCell
+                    key={item.instanceId}
+                    item={item}
+                    container="box"
+                    equippedBy={getItemEquippedByGear(
+                      pilot.gears,
+                      item.instanceId
+                    )}
+                    activeGearId={pilot.activeGearId}
+                    onSelect={(c, it) => setSelected({ container: c, item: it })}
+                  />
+                ))}
+              </div>
+            )}
+          </section>
+
+          {/* Right Panel: Warehouse ("Kho đồ") */}
+          <section
+            data-testid="warehouse-panel-warehouse"
+            data-mobile-active={mobilePanel === 'warehouse' ? 'true' : 'false'}
+            className={`rounded-lg border border-slate-800 bg-[#0B111C]/90 p-3 min-w-0 flex-col gap-2.5 ${
+              mobilePanel === 'warehouse' ? 'flex' : 'hidden md:flex'
+            }`}
+          >
+            <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-slate-800/80">
+              <h3
+                data-testid="warehouse-storage-heading"
+                className="text-xs md:text-sm font-bold text-slate-100 inline-flex items-center gap-1.5 truncate"
+              >
+                <Archive className="w-4 h-4 text-amber-400 shrink-0" />
+                <span className="truncate">
+                  {t('warehouse.storageHeading', {
+                    count: warehouseItems.length,
+                    max: warehouseCap,
+                  })}
+                </span>
+              </h3>
+            </div>
+
+            {filteredWarehouseItems.length === 0 ? (
+              <div className="py-6 text-center text-xs text-slate-500">
+                {t('warehouse.emptyStorage')}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-2 xl:grid-cols-3 gap-2">
+                {filteredWarehouseItems.map((item) => (
+                  <WarehouseItemCell
+                    key={item.instanceId}
+                    item={item}
+                    container="warehouse"
+                    equippedBy={getItemEquippedByGear(
+                      pilot.gears,
+                      item.instanceId
+                    )}
+                    activeGearId={pilot.activeGearId}
+                    onSelect={(c, it) => setSelected({ container: c, item: it })}
+                  />
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+      </div>
+
+      {/* Item Info & Single-Move Sheet */}
+      <BottomSheet
+        open={selected !== null}
+        onClose={() => setSelected(null)}
+        title={
+          selected ? (
+            <span className={RARITY_META[selected.item.rarity].textClass}>
+              {getItemInstanceName(lang, selected.item)}
+              {selected.item.enchantLevel > 0
+                ? ` +${selected.item.enchantLevel}`
+                : ''}
+            </span>
+          ) : null
+        }
+        subtitle={
+          selected
+            ? `${getSlotLabel(lang, selected.item.slot)} · T${selected.item.tier} · ${getRarityLabel(
+                lang,
+                selected.item.rarity
+              )} · ${t('common.levelShort')}${selected.item.requiredLevel} · ${
+                selected.item.rollQuality
+              }%`
+            : undefined
+        }
+        footer={
+          selected ? (
+            <div className="flex flex-col gap-2">
+              {selectedEquippedBy && (
+                <div
+                  data-testid="warehouse-sheet-equipped-reason"
+                  className="text-xs text-amber-300 bg-amber-500/10 border border-amber-500/40 rounded px-2.5 py-1.5"
+                >
+                  {t('warehouse.equippedCannotMove', {
+                    gear: getClassName(lang, selectedEquippedBy),
+                  })}
+                </div>
+              )}
+              <button
+                type="button"
+                data-testid="warehouse-sheet-move-btn"
+                disabled={Boolean(selectedEquippedBy) || transferLocked}
+                onClick={handleSingleMove}
+                className={`h-10 w-full rounded font-semibold text-xs inline-flex items-center justify-center gap-2 transition-colors ${
+                  selectedEquippedBy || transferLocked
+                    ? 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed'
+                    : 'bg-amber-500 hover:bg-amber-400 text-slate-950 cursor-pointer'
+                }`}
+              >
+                <ArrowLeftRight className="w-4 h-4 shrink-0" />
+                <span>
+                  {selected.container === 'box'
+                    ? t('warehouse.moveToWarehouseBtn')
+                    : t('warehouse.moveToBoxBtn')}
+                </span>
+              </button>
+            </div>
+          ) : undefined
+        }
+      >
+        {selected && (
+          <div className="flex flex-col gap-3 text-xs text-slate-200">
+            {/* Status badges */}
+            {(selectedEquippedBy ||
+              selected.item.locked ||
+              selected.item.favorited) && (
+              <div className="flex flex-wrap gap-1.5">
+                {selectedEquippedBy && (
+                  <span
+                    data-testid="warehouse-sheet-equipped-badge"
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-sky-500/20 border border-sky-400/50 text-sky-200 font-semibold"
+                  >
+                    <ClassIcon
+                      classId={selectedEquippedBy}
+                      colored={false}
+                      className="w-3 h-3"
+                    />
+                    {t('common.equippedOnGear', {
+                      gear: getClassName(lang, selectedEquippedBy),
+                    })}
+                  </span>
+                )}
+                {selected.item.locked && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-500/15 border border-amber-400/40 text-amber-200">
+                    <Lock className="w-3 h-3" />
+                    {t('inv.badgeLocked')}
+                  </span>
+                )}
+                {selected.item.favorited && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-yellow-500/15 border border-yellow-400/40 text-yellow-200">
+                    <Star className="w-3 h-3 fill-yellow-400" />
+                    {t('inv.badgeFavorited')}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {getItemInstanceDesc(lang, selected.item) && (
+              <p className="text-slate-400 leading-relaxed">
+                {getItemInstanceDesc(lang, selected.item)}
+              </p>
+            )}
+
+            {selectedStats && (
+              <div className="grid grid-cols-2 gap-1.5 rounded border border-slate-800 bg-slate-950/60 p-2.5 font-mono-nums">
+                {STAT_KEYS.filter((k) => selectedStats[k] !== 0).map((k) => (
+                  <div key={k} className="flex items-center justify-between">
+                    <span className="text-slate-400 font-sans">
+                      {getStatShort(lang, k)}
+                    </span>
+                    <span className="text-emerald-300 font-semibold">
+                      +{selectedStats[k]}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {selectedTraits.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {selectedTraits.map((tr) => (
+                  <span
+                    key={tr}
+                    className="px-2 py-0.5 rounded border border-slate-700 bg-slate-900 text-slate-300"
+                  >
+                    {tr}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </BottomSheet>
+    </div>
+  );
+}

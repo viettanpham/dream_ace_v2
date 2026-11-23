@@ -957,7 +957,11 @@ export const useGameStore = create<GameStoreState>()(
       },
 
       setActiveTab: (activeTab) => {
-        if (isBattleActive(get())) return;
+        const state = get();
+        if (isBattleActive(state)) return;
+        if (activeTab === 'warehouse' && state.autoRepeatSession?.active) {
+          return;
+        }
         soundFx.playClick();
         set({ screen: 'HANGAR', activeTab });
       },

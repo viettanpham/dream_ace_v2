@@ -1273,6 +1273,6 @@ export interface AdminConfig {
   showRawI18nKeys: boolean;
 }
 
-export type BaseTab = 'gear' | 'garage' | 'skill' | 'shop' | 'map';
+export type BaseTab = 'gear' | 'warehouse' | 'garage' | 'skill' | 'shop' | 'map';
 
 export type ScreenState = 'TITLE' | 'HANGAR' | 'SHOP' | 'BATTLE';

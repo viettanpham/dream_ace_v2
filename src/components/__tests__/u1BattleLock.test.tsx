@@ -200,7 +200,7 @@ describe('TASK U1 — Tab labels, i18n parity & SidebarNav render', () => {
     );
   });
 
-  it('SidebarNav renders Nhân vật & GEAR in vi, Character & GEAR in en, preserves unspent badge, and keeps 5 truncated mobile tabs', () => {
+  it('SidebarNav renders Nhân vật & GEAR in vi, Character & GEAR in en, preserves unspent badge, and keeps 6 truncated mobile tabs', () => {
     const pilot = useGameStore.getState().pilot;
     const activeGear = pilot.gears[pilot.activeGearId];
     useGameStore.setState({
@@ -223,19 +223,21 @@ describe('TASK U1 — Tab labels, i18n parity & SidebarNav render', () => {
 
     expect(container!.textContent).toContain('Nhân vật');
     expect(container!.textContent).toContain('GEAR');
+    expect(container!.textContent).toContain('KHO ĐỒ');
     expect(container!.textContent).not.toContain('Garage');
 
     const mobileNav = container!.querySelector('nav[aria-label="Mobile navigation"]');
     expect(mobileNav).not.toBeNull();
     const mobileButtons = Array.from(mobileNav!.querySelectorAll('button'));
-    expect(mobileButtons).toHaveLength(5);
+    expect(mobileButtons).toHaveLength(6);
     for (const btn of mobileButtons) {
       const labelSpan = btn.querySelector('span.truncate');
       expect(labelSpan).not.toBeNull();
     }
-    // Unspent-points badge sits on the Nhân vật (garage) tab
-    expect(mobileButtons[1].textContent).toContain('Nhân vật');
-    expect(mobileButtons[1].textContent).toContain('3');
+    // Unspent-points badge sits on the Nhân vật (garage) tab (3rd slot after GEAR & KHO ĐỒ)
+    expect(mobileButtons[1].textContent).toContain('KHO ĐỒ');
+    expect(mobileButtons[2].textContent).toContain('Nhân vật');
+    expect(mobileButtons[2].textContent).toContain('3');
 
     act(() => {
       useGameStore.setState({ language: 'en' });

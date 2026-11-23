@@ -53,7 +53,7 @@ src/store/useGameStore.ts 3981; src/engine/combat.ts 3860; src/components/Battle
 - src/components/GearView.tsx — gear loadout, equipment, and inventory management
 - src/components/ShopScreen.tsx — item, gear, and WP market shop
 - src/components/MapView.tsx + src/components/__tests__/mapM1.test.tsx — sector campaign map, phone compact layout/initial zoom (`computeInitialPhoneMapView()`, `clampMapPan()`, `clampMapZoom()`), and base status view + tests
-- src/components/HangarScreen.tsx + src/components/SidebarNav.tsx + src/components/BottomSheet.tsx — hangar tab shell (`pb-[60px]` above mobile fixed tab bar), sidebar/mobile nav (`GEAR`, `Nhân vật`/`Character`), and shared BottomSheet modal
+- src/components/HangarScreen.tsx + src/components/SidebarNav.tsx + src/components/BottomSheet.tsx — hangar tab shell (`pb-[60px]` above mobile fixed tab bar), 6-tab sidebar/mobile nav (`GEAR`, `KHO ĐỒ`/`Warehouse`, `Nhân vật`/`Character`), and shared BottomSheet modal
 - src/components/TopHud.tsx — top HUD bar, slim phone battle bar, and battle-exit confirm dialog (`confirmExitBattle()`, `returnToHangar()`)
 - src/components/__tests__/u1BattleLock.test.tsx — store battle lock (`isBattleActive`), `reloadBattle` ErrorBoundary recovery, and tab label/i18n parity tests
 - src/App.tsx + src/components/ErrorBoundary.tsx — root shell and crash-recovery ErrorBoundary (`reloadBattle()` callbacks)
@@ -65,3 +65,4 @@ src/store/useGameStore.ts 3981; src/engine/combat.ts 3860; src/components/Battle
 - src/engine/__tests__/itemPrice.test.ts — D1-2a unified item price formula, monotonicity, affix/trait percentages, floor, shop multiplier, priceOverride, and legacy save price preservation tests
 - docs/audit/D1-items-prices.md + docs/audit/D1-items-prices-after.md — read-only before/after item count & 96-cell + 200-roll shop-buy / quick-sell price audit tables
 - src/engine/warehouse.ts + src/engine/worldClock.ts + src/engine/__tests__/warehouseAndClock.test.ts — pure warehouse transfers (`moveToWarehouse()`, `moveToBox()`, `moveAllUnusedToWarehouse()`) + store wrappers guarded by battle/loop lock, and pure world clock helpers (`settleWorldClock()`, `changeWorldSpeed()`, `resetWorldClock()`) + W1a-2 tests
+- src/components/WarehouseView.tsx + src/components/__tests__/warehouseViewW1b1.test.tsx — two-panel desktop / switched phone Warehouse & Cargo box view, single move sheet, bulk unused move, slot filter, toast formatter (`formatWarehouseTransferToast()`) + W1b-1 tests

@@ -51,6 +51,8 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'nav.deploy': 'Xuất kích',
   'nav.returnHangar': 'Về căn cứ',
   'sidebar.gear': 'GEAR',
+  'sidebar.warehouse': 'KHO ĐỒ',
+  'sidebar.warehouseBaseOnly': 'Chỉ dùng ở căn cứ',
   'sidebar.garage': 'Nhân vật',
   'sidebar.skill': 'Skill',
   'sidebar.shop': 'Chợ',
@@ -85,7 +87,7 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   // Gear Wireframe View
   'gear.slotsHeading': 'Slot trang bị',
   'gear.statsHeading': 'Chỉ số',
-  'gear.gridHeading': 'Kho đồ chung',
+  'gear.gridHeading': 'Hòm đồ',
   'gear.detailHeading': 'Chi tiết & So sánh chỉ số',
   'gear.emptyDetailTitle': 'Chọn linh kiện để xem',
   'gear.emptyDetailDesc':
@@ -713,7 +715,7 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'auto.repeatReason.elite_ready': 'Dừng: Kỹ năng Tinh anh đã sẵn sàng',
   'auto.repeatReason.boss_present': 'Dừng: Phát hiện BOSS',
   'auto.repeatReason.auto_retreat': 'Tự động rút lui do HP nguy kịch',
-  'auto.repeatReason.inventory_full': 'Dừng: Kho đồ đã đầy ({max} món)',
+  'auto.repeatReason.inventory_full': 'Dừng: Hòm đồ đã đầy ({max} món)',
   'auto.repeatReason.manual_stop': 'Đã dừng theo lệnh phi công',
   'auto.cond.always': 'Luôn luôn',
   'auto.cond.my_hp_below': 'HP của tôi < {value}%',
@@ -1144,7 +1146,7 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'shop.shipyardBonusBadge': 'Xưởng tàu +{n} hàng',
   'shop.soldOut': 'ĐÃ BÁN',
   'shop.stockAvailable': 'Còn {avail}/{total} món',
-  'shop.cargoCount': 'Kho đồ: {count}/{max}',
+  'shop.cargoCount': 'Hòm đồ: {count}/{max}',
   'shop.cargoFullTag': 'Kho đầy ({count}/{max})',
   'shop.cargoFullBtn': 'Kho đã đầy',
   'shop.cargoFullHint':
@@ -1155,7 +1157,7 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'shop.wpRefreshBtn': 'Làm mới ({cost} WP)',
   'shop.wpRefreshedMsg': 'Đã làm mới các ưu đãi luân phiên tại Chợ Điểm Chiến Công!',
   'shop.wpOpeningCardsTitle': 'Thẻ Mở Khóa Kỹ Năng Hệ',
-  'shop.wpBoughtOfferFeedback': 'Đã mua {name} — mở Kho đồ → Tiêu hao để dùng.',
+  'shop.wpBoughtOfferFeedback': 'Đã mua {name} — mở Hòm đồ → Tiêu hao để dùng.',
   'shop.goToConsumables': 'Mở Kho Tiêu Hao →',
   'shop.buyOfferBtn': 'Mua ({cost} WP)',
   'shop.wpNoOffers': 'Hiện chưa có ưu đãi luân phiên nào.',
@@ -1680,6 +1682,26 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'statusBoard.empty': 'Không có hiệu ứng',
   'statusBoard.collapseLabel': 'Thu gọn bảng trạng thái',
   'statusBoard.expandLabel': 'Mở rộng bảng trạng thái',
+
+  // Kho đồ (W1b-1)
+  'warehouse.title': 'Kho đồ & Hòm đồ',
+  'warehouse.boxHeading': 'Hòm đồ {count}/{max}',
+  'warehouse.storageHeading': 'Kho đồ {count}/{max}',
+  'warehouse.switchBox': 'Hòm đồ ({count}/{max})',
+  'warehouse.switchStorage': 'Kho đồ ({count}/{max})',
+  'warehouse.slotAll': 'Tất cả slot',
+  'warehouse.moveAllUnusedBtn': 'Chuyển tất cả đồ không dùng',
+  'warehouse.moveToWarehouseBtn': 'Chuyển sang Kho',
+  'warehouse.moveToBoxBtn': 'Lấy ra Hòm',
+  'warehouse.emptyBox': 'Hòm đồ không có vật phẩm phù hợp.',
+  'warehouse.emptyStorage': 'Kho đồ chưa có vật phẩm phù hợp.',
+  'warehouse.equippedCannotMove':
+    'Đang lắp trên {gear} — hãy tháo ra trước khi chuyển.',
+  'warehouse.toastMoved': 'Đã chuyển {count} món',
+  'warehouse.toastSkippedEquipped': '{count} đang lắp',
+  'warehouse.toastSkippedProtected': '{count} khóa/yêu thích',
+  'warehouse.toastSkippedFull': '{count} không đủ chỗ',
+  'warehouse.toastLocked': 'Chỉ dùng ở căn cứ (đang trong trận hoặc vòng lặp).',
 };
 
 
