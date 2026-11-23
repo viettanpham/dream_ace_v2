@@ -104,7 +104,7 @@ export function SidebarNav() {
                 type="button"
                 onClick={() => setActiveTab(item.id)}
                 aria-current={isActive ? 'page' : undefined}
-                className={`relative min-h-[56px] py-1.5 px-1 flex flex-col items-center justify-center gap-0.5 transition-colors cursor-pointer ${
+                className={`relative min-w-0 min-h-[56px] py-1.5 px-1 flex flex-col items-center justify-center gap-0.5 transition-colors cursor-pointer ${
                   isActive
                     ? 'text-amber-400 bg-amber-500/10'
                     : 'text-slate-400 active:bg-slate-800/70'

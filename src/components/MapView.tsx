@@ -1,4 +1,10 @@
-import { useRef, useState, type PointerEvent, type WheelEvent } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent,
+  type WheelEvent,
+} from 'react';
 import {
   AlertTriangle,
   Calendar,
@@ -6,6 +12,7 @@ import {
   ChevronUp,
   Coins,
   FastForward,
+  Info,
   Lock,
   Maximize2,
   Rocket,
@@ -51,9 +58,87 @@ import type {
   MechClassId,
   SectorDifficulty,
 } from '../types/game';
+import { useBattleLayoutMode } from '../utils/battleDisplay';
 import { soundFx } from '../utils/sound';
 import { BottomSheet } from './BottomSheet';
 import { FighterSvg } from './FighterSvg';
+
+export const MAP_VIEWBOX_WIDTH = 840;
+export const MAP_VIEWBOX_HEIGHT = 310;
+export const MAP_SVG_LABEL_FONT_SIZE = 11.5;
+export const MAP_MIN_PHONE_LABEL_PX = 11;
+export const MAP_MIN_ZOOM = 0.75;
+export const MAP_MAX_ZOOM = 3.2;
+
+export function clampMapZoom(z: number): number {
+  return Math.max(MAP_MIN_ZOOM, Math.min(MAP_MAX_ZOOM, z));
+}
+
+export function clampMapPan(
+  x: number,
+  y: number,
+  zoom: number,
+  boxWidth: number,
+  boxHeight: number
+): { x: number; y: number } {
+  const safeW = Math.max(120, boxWidth);
+  const safeH = Math.max(120, boxHeight);
+  const baseScale = Math.min(
+    safeW / MAP_VIEWBOX_WIDTH,
+    safeH / MAP_VIEWBOX_HEIGHT
+  );
+  const scaledW = MAP_VIEWBOX_WIDTH * baseScale * zoom;
+  const scaledH = MAP_VIEWBOX_HEIGHT * baseScale * zoom;
+  const maxPanX = Math.abs(scaledW - safeW) / 2;
+  const maxPanY = Math.abs(scaledH - safeH) / 2;
+  return {
+    x: Number(Math.max(-maxPanX, Math.min(maxPanX, x)).toFixed(2)),
+    y: Number(Math.max(-maxPanY, Math.min(maxPanY, y)).toFixed(2)),
+  };
+}
+
+export function computeInitialPhoneMapView(
+  targetPos: { x: number; y: number },
+  boxWidth: number,
+  boxHeight: number
+): { zoom: number; pan: { x: number; y: number } } {
+  const safeW = Math.max(120, boxWidth);
+  const safeH = Math.max(120, boxHeight);
+  const baseScale = Math.min(
+    safeW / MAP_VIEWBOX_WIDTH,
+    safeH / MAP_VIEWBOX_HEIGHT
+  );
+  const neededZoom =
+    MAP_MIN_PHONE_LABEL_PX / (MAP_SVG_LABEL_FONT_SIZE * baseScale);
+  const zoom = clampMapZoom(
+    Math.max(1, Math.ceil(neededZoom * 100) / 100)
+  );
+  const rawPanX = -(targetPos.x - MAP_VIEWBOX_WIDTH / 2) * baseScale * zoom;
+  const rawPanY = -(targetPos.y - MAP_VIEWBOX_HEIGHT / 2) * baseScale * zoom;
+  return {
+    zoom,
+    pan: clampMapPan(rawPanX, rawPanY, zoom, safeW, safeH),
+  };
+}
+
+function getFallbackMapBoxSize(phone: boolean): {
+  width: number;
+  height: number;
+} {
+  if (typeof window === 'undefined') {
+    return phone ? { width: 364, height: 420 } : { width: 760, height: 320 };
+  }
+  if (!phone) {
+    return {
+      width: Math.max(320, window.innerWidth - 220),
+      height: 320,
+    };
+  }
+  return {
+    width: Math.max(296, window.innerWidth - 26),
+    height: Math.max(360, Math.min(560, Math.round(window.innerHeight * 0.62))),
+  };
+}
 
 const DIFFICULTY_TEXT_CLASS: Record<SectorDifficulty, string> = {
   Standard: 'text-emerald-400',
@@ -159,12 +244,30 @@ export function MapView() {
   const acceptMissionAtBase = useGameStore((s) => s.acceptMissionAtBase);
   const useEngineerAtBase = useGameStore((s) => s.useEngineerAtBase);
 
-  const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const layoutMode = useBattleLayoutMode();
+  const isPhone = layoutMode === 'phone-portrait';
+  const initialSelectedSector = getSectorById(selectedSectorId);
+  const initialFallbackSize = getFallbackMapBoxSize(isPhone);
+  const initialView = isPhone
+    ? computeInitialPhoneMapView(
+        initialSelectedSector.mapPos,
+        initialFallbackSize.width,
+        initialFallbackSize.height
+      )
+    : { zoom: 1, pan: { x: 0, y: 0 } };
+
+  const [zoom, setZoom] = useState(initialView.zoom);
+  const [pan, setPan] = useState(initialView.pan);
+  const [mapBoxSize, setMapBoxSize] = useState(initialFallbackSize);
+  const [hintFaded, setHintFaded] = useState(false);
+  const [mapInfoOpen, setMapInfoOpen] = useState(false);
   const [mobileBriefingOpen, setMobileBriefingOpen] = useState(false);
   const [preBattleDetailsOpen, setPreBattleDetailsOpen] = useState(false);
   const [hireClass, setHireClass] = useState<MechClassId>('interceptor');
 
+  const mapViewportRef = useRef<HTMLDivElement | null>(null);
+  const userInteractedRef = useRef(false);
+  const prevIsPhoneRef = useRef(isPhone);
   // Pointer drag-to-pan & 2-finger pinch-to-zoom state
   const pointersRef = useRef(new Map<number, { x: number; y: number }>());
   const pinchBaseRef = useRef<{ dist: number; zoom: number } | null>(null);
@@ -210,11 +313,108 @@ export function MapView() {
       adminConfig.rewardMultiplier
   );
 
-  const clampZoom = (z: number) => Math.max(0.75, Math.min(2.4, z));
-  const clampPan = (x: number, y: number) => ({
-    x: Math.max(-260, Math.min(260, x)),
-    y: Math.max(-150, Math.min(150, y)),
-  });
+  const getCurrentMapBoxSize = () => {
+    const el = mapViewportRef.current;
+    if (el && el.clientWidth > 0 && el.clientHeight > 0) {
+      return { width: el.clientWidth, height: el.clientHeight };
+    }
+    return mapBoxSize;
+  };
+
+  const clampZoom = (z: number) => clampMapZoom(z);
+  const clampPan = (x: number, y: number, targetZoom = zoom) => {
+    const size = getCurrentMapBoxSize();
+    return clampMapPan(x, y, targetZoom, size.width, size.height);
+  };
+
+  const resetMapView = () => {
+    userInteractedRef.current = false;
+    if (isPhone) {
+      const size = getCurrentMapBoxSize();
+      const view = computeInitialPhoneMapView(
+        selectedSector.mapPos,
+        size.width,
+        size.height
+      );
+      setZoom(view.zoom);
+      setPan(view.pan);
+    } else {
+      setZoom(1);
+      setPan({ x: 0, y: 0 });
+    }
+  };
+
+  useEffect(() => {
+    const el = mapViewportRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const syncSize = () => {
+      if (el.clientWidth > 0 && el.clientHeight > 0) {
+        const nextSize = { width: el.clientWidth, height: el.clientHeight };
+        setMapBoxSize(nextSize);
+        if (isPhone && !userInteractedRef.current) {
+          const view = computeInitialPhoneMapView(
+            selectedSector.mapPos,
+            nextSize.width,
+            nextSize.height
+          );
+          setZoom(view.zoom);
+          setPan(view.pan);
+        }
+      }
+    };
+    syncSize();
+    const ro = new ResizeObserver(syncSize);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [isPhone, selectedSector.mapPos]);
+
+  useEffect(() => {
+    const fallback = getFallbackMapBoxSize(isPhone);
+    setMapBoxSize((prev) => {
+      const el = mapViewportRef.current;
+      if (el && el.clientWidth > 0 && el.clientHeight > 0) {
+        return { width: el.clientWidth, height: el.clientHeight };
+      }
+      return prev.width > 0 && prev.height > 0 && prevIsPhoneRef.current === isPhone
+        ? prev
+        : fallback;
+    });
+
+    if (prevIsPhoneRef.current !== isPhone) {
+      prevIsPhoneRef.current = isPhone;
+      userInteractedRef.current = false;
+      if (isPhone) {
+        const el = mapViewportRef.current;
+        const size =
+          el && el.clientWidth > 0 && el.clientHeight > 0
+            ? { width: el.clientWidth, height: el.clientHeight }
+            : fallback;
+        const view = computeInitialPhoneMapView(
+          selectedSector.mapPos,
+          size.width,
+          size.height
+        );
+        setZoom(view.zoom);
+        setPan(view.pan);
+      } else {
+        setZoom(1);
+        setPan({ x: 0, y: 0 });
+        setMapInfoOpen(false);
+      }
+    }
+  }, [isPhone, selectedSector.mapPos]);
+
+  useEffect(() => {
+    if (!isPhone) {
+      setHintFaded(false);
+      return;
+    }
+    setHintFaded(false);
+    const timer = window.setTimeout(() => {
+      setHintFaded(true);
+    }, 4000);
+    return () => window.clearTimeout(timer);
+  }, [isPhone]);
 
   const handleSelectSector = (sectorId: string) => {
     if (dragOriginRef.current?.moved) return;
@@ -225,8 +425,17 @@ export function MapView() {
     setMobileBriefingOpen(true);
   };
 
+  const applyZoomDelta = (delta: number) => {
+    userInteractedRef.current = true;
+    setZoom((z) => {
+      const nextZoom = clampZoom(z + delta);
+      setPan((prevPan) => clampPan(prevPan.x, prevPan.y, nextZoom));
+      return nextZoom;
+    });
+  };
+
   const handlePointerDown = (e: PointerEvent<HTMLDivElement>) => {
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
     pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
     if (pointersRef.current.size === 1) {
@@ -251,17 +460,20 @@ export function MapView() {
     pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
     if (pointersRef.current.size === 2 && pinchBaseRef.current) {
+      userInteractedRef.current = true;
       const pts = Array.from(pointersRef.current.values());
       const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
       const nextZoom = clampZoom(
         pinchBaseRef.current.zoom * (dist / pinchBaseRef.current.dist)
       );
       setZoom(nextZoom);
+      setPan((prevPan) => clampPan(prevPan.x, prevPan.y, nextZoom));
     } else if (pointersRef.current.size === 1 && dragOriginRef.current) {
       const dx = e.clientX - dragOriginRef.current.x;
       const dy = e.clientY - dragOriginRef.current.y;
       if (Math.hypot(dx, dy) > 6) {
         dragOriginRef.current.moved = true;
+        userInteractedRef.current = true;
       }
       setPan(
         clampPan(dragOriginRef.current.panX + dx, dragOriginRef.current.panY + dy)
@@ -283,7 +495,7 @@ export function MapView() {
 
   const handleWheel = (e: WheelEvent<HTMLDivElement>) => {
     const delta = e.deltaY > 0 ? -0.15 : 0.15;
-    setZoom((z) => clampZoom(z + delta));
+    applyZoomDelta(delta);
   };
 
   const renderNpcRow = (npc: BaseNpcRole) => {
@@ -740,56 +952,101 @@ export function MapView() {
   };
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-5 space-y-3.5 sm:space-y-4">
-      {/* Header: Title + Campaign Month + Income + Advance Month + Quick Deploy */}
-      <div className="rounded-lg border border-slate-800/90 bg-[#0C121D]/95 p-3.5 sm:p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="font-display text-2xl font-bold tracking-wide text-slate-100">
+    <div
+      data-testid="map-scroll-container"
+      className={
+        isPhone
+          ? 'flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-3 pt-2.5 space-y-3'
+          : 'flex-1 min-h-0 overflow-y-auto p-3 sm:p-5 space-y-3.5 sm:space-y-4'
+      }
+    >
+      {/* Header: Compact <=72px on Phone, Full Header + Actions on Desktop/Tablet */}
+      {isPhone ? (
+        <div
+          data-testid="map-compact-header"
+          className="rounded-lg border border-slate-800/90 bg-[#0C121D]/95 px-2.5 py-1 space-y-1 max-h-[72px]"
+        >
+          <div className="flex items-center justify-between gap-2 h-8 min-w-0">
+            <h1 className="font-display text-base font-bold tracking-wide text-slate-100 truncate min-w-0">
               {t('map.pageTitle')}
             </h1>
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-sky-500/40 bg-sky-500/12 text-xs font-mono-nums font-semibold text-sky-200">
-              <Calendar className="w-3.5 h-3.5 text-sky-400" />
+            <button
+              type="button"
+              data-testid="map-info-btn"
+              onClick={() => setMapInfoOpen(true)}
+              aria-label={t('map.infoBtnAria')}
+              title={t('map.pageSubtitle')}
+              className="w-10 h-10 -my-1 -mr-1.5 shrink-0 inline-flex items-center justify-center rounded-lg text-slate-300 hover:text-sky-300 hover:bg-slate-800/80 transition-colors cursor-pointer"
+            >
+              <Info className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-sky-500/40 bg-sky-500/12 text-[11px] leading-4 font-mono-nums font-semibold text-sky-200 shrink-0 whitespace-nowrap">
+              <Calendar className="w-3 h-3 text-sky-400" />
               {t('map.monthBadge', { month: pilot.campaignMonth ?? 1 })}
             </span>
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-emerald-500/40 bg-emerald-500/10 text-xs font-mono-nums font-semibold text-emerald-300">
-              {t('map.monthlyTotal', {
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded border border-emerald-500/40 bg-emerald-500/10 text-[11px] leading-4 font-mono-nums font-semibold text-emerald-300 truncate min-w-0">
+              {t('map.monthlyTotalShort', {
                 cr: totalIncome.credits.toLocaleString(),
                 wp: totalIncome.warPoints,
               })}
             </span>
           </div>
-          <p className="text-xs text-slate-400 mt-0.5">
-            {t('map.pageSubtitle')}
-          </p>
         </div>
+      ) : (
+        <div
+          data-testid="map-desktop-header"
+          className="rounded-lg border border-slate-800/90 bg-[#0C121D]/95 p-3.5 sm:p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3"
+        >
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="font-display text-2xl font-bold tracking-wide text-slate-100">
+                {t('map.pageTitle')}
+              </h1>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-sky-500/40 bg-sky-500/12 text-xs font-mono-nums font-semibold text-sky-200">
+                <Calendar className="w-3.5 h-3.5 text-sky-400" />
+                {t('map.monthBadge', { month: pilot.campaignMonth ?? 1 })}
+              </span>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-emerald-500/40 bg-emerald-500/10 text-xs font-mono-nums font-semibold text-emerald-300">
+                {t('map.monthlyTotal', {
+                  cr: totalIncome.credits.toLocaleString(),
+                  wp: totalIncome.warPoints,
+                })}
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 mt-0.5">
+              {t('map.pageSubtitle')}
+            </p>
+          </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              soundFx.playClick();
-              advanceMonth();
-            }}
-            className="flex-1 sm:flex-none min-h-[44px] px-3.5 inline-flex items-center justify-center gap-1.5 rounded-lg border border-sky-500/50 bg-sky-500/15 hover:bg-sky-500/25 text-sky-200 font-semibold text-xs sm:text-sm transition-colors cursor-pointer whitespace-nowrap"
-          >
-            <FastForward className="w-4 h-4" />
-            <span>{t('map.advanceMonth')}</span>
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                soundFx.playClick();
+                advanceMonth();
+              }}
+              className="flex-1 sm:flex-none min-h-[44px] px-3.5 inline-flex items-center justify-center gap-1.5 rounded-lg border border-sky-500/50 bg-sky-500/15 hover:bg-sky-500/25 text-sky-200 font-semibold text-xs sm:text-sm transition-colors cursor-pointer whitespace-nowrap"
+            >
+              <FastForward className="w-4 h-4" />
+              <span>{t('map.advanceMonth')}</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => startBattle(selectedSector.id)}
-            className="flex-1 sm:flex-none min-h-[44px] px-4 inline-flex items-center justify-center gap-2 rounded-lg bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-slate-950 font-semibold text-xs sm:text-sm transition-colors cursor-pointer whitespace-nowrap"
-          >
-            <Rocket className="w-4 h-4" />
-            <span>
-              {t('hangar.deploySquad')} ({getClassName(lang, activeGear.classId)}{' '}
-              Lv.{activeGear.level})
-            </span>
-          </button>
+            <button
+              type="button"
+              onClick={() => startBattle(selectedSector.id)}
+              className="flex-1 sm:flex-none min-h-[44px] px-4 inline-flex items-center justify-center gap-2 rounded-lg bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-slate-950 font-semibold text-xs sm:text-sm transition-colors cursor-pointer whitespace-nowrap"
+            >
+              <Rocket className="w-4 h-4" />
+              <span>
+                {t('hangar.deploySquad')} ({getClassName(lang, activeGear.classId)}{' '}
+                Lv.{activeGear.level})
+              </span>
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Active Pre-Battle Buffs & Bonus Mission Strip */}
       {(pilot.hiredWingman ||
@@ -835,48 +1092,84 @@ export function MapView() {
 
       {/* Interactive Pan & Pinch-to-Zoom Star Chart + Legend */}
       <section className="rounded-lg border border-slate-800/90 bg-[#080C14] relative overflow-hidden">
-        <div className="absolute top-2 left-2.5 z-10 text-[11px] text-slate-400 bg-slate-950/85 border border-slate-800 rounded px-2 py-1 pointer-events-none">
-          {t('mobile.mapPanHint')}
-        </div>
-
-        <div className="absolute top-2 right-2 z-10 flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => setZoom((z) => clampZoom(z + 0.25))}
-            aria-label={t('mobile.mapZoomIn')}
-            className="min-w-[44px] min-h-[44px] rounded-lg border border-slate-700 bg-slate-900/90 hover:bg-slate-800 text-slate-200 flex items-center justify-center cursor-pointer"
-          >
-            <ZoomIn className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setZoom((z) => clampZoom(z - 0.25))}
-            aria-label={t('mobile.mapZoomOut')}
-            className="min-w-[44px] min-h-[44px] rounded-lg border border-slate-700 bg-slate-900/90 hover:bg-slate-800 text-slate-200 flex items-center justify-center cursor-pointer"
-          >
-            <ZoomOut className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setZoom(1);
-              setPan({ x: 0, y: 0 });
-            }}
-            aria-label={t('mobile.mapResetView')}
-            className="min-w-[44px] min-h-[44px] rounded-lg border border-slate-700 bg-slate-900/90 hover:bg-slate-800 text-slate-200 flex items-center justify-center cursor-pointer"
-          >
-            <Maximize2 className="w-4 h-4" />
-          </button>
-        </div>
-
         <div
+          ref={mapViewportRef}
+          data-testid="map-viewport-box"
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerUp}
           onWheel={handleWheel}
-          className="w-full h-72 sm:h-80 touch-none cursor-grab active:cursor-grabbing overflow-hidden flex items-center justify-center"
+          style={isPhone ? { height: 'clamp(360px, 62dvh, 560px)' } : undefined}
+          className={
+            isPhone
+              ? 'relative w-full touch-none cursor-grab active:cursor-grabbing overflow-hidden flex items-center justify-center'
+              : 'relative w-full h-72 sm:h-80 touch-none cursor-grab active:cursor-grabbing overflow-hidden flex items-center justify-center'
+          }
         >
+          <div
+            data-testid="map-pan-hint"
+            data-hint-faded={isPhone && hintFaded ? 'true' : 'false'}
+            className={
+              isPhone
+                ? `absolute bottom-2 left-2 z-10 max-w-[calc(100%-148px)] text-[11px] leading-tight text-slate-300 bg-slate-950/85 border border-slate-800 rounded px-2 py-1 pointer-events-none transition-opacity duration-500 ${
+                    hintFaded ? 'opacity-0' : 'opacity-100'
+                  }`
+                : 'absolute top-2 left-2.5 z-10 text-[11px] text-slate-400 bg-slate-950/85 border border-slate-800 rounded px-2 py-1 pointer-events-none'
+            }
+          >
+            {t('mobile.mapPanHint')}
+          </div>
+
+          <div
+            data-testid="map-zoom-controls"
+            className={
+              isPhone
+                ? 'absolute bottom-2 right-2 z-10 flex items-center gap-1'
+                : 'absolute top-2 right-2 z-10 flex items-center gap-1'
+            }
+          >
+            <button
+              type="button"
+              onClick={() => applyZoomDelta(0.25)}
+              onPointerDown={(e) => e.stopPropagation()}
+              aria-label={t('mobile.mapZoomIn')}
+              className={
+                isPhone
+                  ? 'w-10 h-10 min-w-[40px] min-h-[40px] rounded-lg border border-slate-700 bg-slate-900/90 hover:bg-slate-800 text-slate-200 flex items-center justify-center cursor-pointer'
+                  : 'min-w-[44px] min-h-[44px] rounded-lg border border-slate-700 bg-slate-900/90 hover:bg-slate-800 text-slate-200 flex items-center justify-center cursor-pointer'
+              }
+            >
+              <ZoomIn className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => applyZoomDelta(-0.25)}
+              onPointerDown={(e) => e.stopPropagation()}
+              aria-label={t('mobile.mapZoomOut')}
+              className={
+                isPhone
+                  ? 'w-10 h-10 min-w-[40px] min-h-[40px] rounded-lg border border-slate-700 bg-slate-900/90 hover:bg-slate-800 text-slate-200 flex items-center justify-center cursor-pointer'
+                  : 'min-w-[44px] min-h-[44px] rounded-lg border border-slate-700 bg-slate-900/90 hover:bg-slate-800 text-slate-200 flex items-center justify-center cursor-pointer'
+              }
+            >
+              <ZoomOut className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={resetMapView}
+              onPointerDown={(e) => e.stopPropagation()}
+              aria-label={t('mobile.mapResetView')}
+              className={
+                isPhone
+                  ? 'w-10 h-10 min-w-[40px] min-h-[40px] rounded-lg border border-slate-700 bg-slate-900/90 hover:bg-slate-800 text-slate-200 flex items-center justify-center cursor-pointer'
+                  : 'min-w-[44px] min-h-[44px] rounded-lg border border-slate-700 bg-slate-900/90 hover:bg-slate-800 text-slate-200 flex items-center justify-center cursor-pointer'
+              }
+            >
+              <Maximize2 className="w-4 h-4" />
+            </button>
+          </div>
+
           <svg
             viewBox="0 0 840 310"
             className="w-full h-full select-none transition-transform duration-75"
@@ -1216,7 +1509,11 @@ export function MapView() {
       </section>
 
       {/* Base List + Desktop Inline Base Panel */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+      <div
+        className={`grid grid-cols-1 lg:grid-cols-12 gap-4 items-start ${
+          isPhone ? 'pb-16' : ''
+        }`}
+      >
         <div className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-3">
           {SECTORS_CATALOG.map((sector) => {
             const unlocked = pilot.unlockedSectorIds.includes(sector.id);
@@ -1340,6 +1637,62 @@ export function MapView() {
           {renderBriefingBody()}
         </section>
       </div>
+
+      {/* Phone Sticky Bottom Action Bar (< 640px, sits above bottom tab bar) */}
+      {isPhone && (
+        <div
+          data-testid="map-phone-action-bar"
+          className="sticky bottom-0 z-20 -mx-3 px-3 py-2 border-t border-slate-800/95 bg-[#080C15]/95 backdrop-blur-md flex items-center gap-2"
+        >
+          <button
+            type="button"
+            data-testid="map-phone-advance-btn"
+            onClick={() => {
+              soundFx.playClick();
+              advanceMonth();
+            }}
+            className="flex-1 min-h-[44px] h-[44px] px-2.5 inline-flex items-center justify-center gap-1.5 rounded-lg border border-sky-500/50 bg-sky-500/15 active:bg-sky-500/25 text-sky-200 font-semibold text-xs transition-colors cursor-pointer whitespace-nowrap"
+          >
+            <FastForward className="w-4 h-4 shrink-0" />
+            <span>{t('map.advanceMonthShort')}</span>
+          </button>
+
+          <button
+            type="button"
+            data-testid="map-phone-deploy-btn"
+            title={`${t('hangar.deploySquad')} (${getClassName(
+              lang,
+              activeGear.classId
+            )} Lv.${activeGear.level})`}
+            onClick={() => startBattle(selectedSector.id)}
+            className="flex-1 min-h-[44px] h-[44px] px-2.5 inline-flex flex-col items-center justify-center leading-tight rounded-lg bg-amber-500 active:bg-amber-600 text-slate-950 font-semibold transition-colors cursor-pointer whitespace-nowrap"
+          >
+            <span className="inline-flex items-center gap-1 text-xs font-bold">
+              <Rocket className="w-3.5 h-3.5 shrink-0" />
+              <span>{t('map.deployShort')}</span>
+            </span>
+            <span className="text-[10px] font-mono-nums font-bold opacity-85">
+              Lv.{activeGear.level}
+            </span>
+          </button>
+        </div>
+      )}
+
+      {/* Mobile Map Subtitle Info Sheet (< 640px) */}
+      {isPhone && (
+        <BottomSheet
+          open={mapInfoOpen}
+          onClose={() => setMapInfoOpen(false)}
+          title={t('map.pageTitle')}
+        >
+          <p
+            data-testid="map-info-subtitle"
+            className="text-sm text-slate-300 leading-relaxed"
+          >
+            {t('map.pageSubtitle')}
+          </p>
+        </BottomSheet>
+      )}
 
       {/* Mobile Base Panel BottomSheet (< lg) */}
       <div className="lg:hidden">

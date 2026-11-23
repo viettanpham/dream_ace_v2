@@ -877,6 +877,7 @@ export const useGameStore = create<GameStoreState>()(
       },
 
       setScreen: (screen) => {
+        if (isBattleActive(get())) return;
         soundFx.playClick();
         if (screen === 'SHOP') {
           set({ screen: 'HANGAR', activeTab: 'shop' });
@@ -886,6 +887,7 @@ export const useGameStore = create<GameStoreState>()(
       },
 
       setActiveTab: (activeTab) => {
+        if (isBattleActive(get())) return;
         soundFx.playClick();
         set({ screen: 'HANGAR', activeTab });
       },
@@ -896,6 +898,7 @@ export const useGameStore = create<GameStoreState>()(
       },
 
       openWarPointShop: () => {
+        if (isBattleActive(get())) return;
         soundFx.playClick();
         set({ screen: 'HANGAR', activeTab: 'shop', shopSubTab: 'warpoints' });
       },
@@ -2218,6 +2221,7 @@ export const useGameStore = create<GameStoreState>()(
 
       startBattle: (sectorId) => {
         const state = get();
+        if (isBattleActive(state)) return;
         const requestedSector = sectorId ?? state.selectedSectorId;
         const targetSectorId = state.pilot.unlockedSectorIds.includes(
           requestedSector
