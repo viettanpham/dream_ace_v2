@@ -82,6 +82,7 @@ export const SPEECH_BUBBLE_MAX_CHARS = 28;
 export const SPEECH_BUBBLE_DURATION_MS = 1500;
 export const RADAR_RING_MIN_MARKER_RADIUS = 17;
 export const RADAR_RING_DEFAULT_STROKE_WIDTH = 3;
+export const RADAR_SPLIT_RING_STROKE_WIDTH = 8;
 export const RADAR_LOW_HP_THRESHOLD = 0.25;
 export const RADAR_STATUS_MAX_VISIBLE = 3;
 export const QUEUE_VISIBLE_ROWS = 5;
@@ -731,12 +732,17 @@ export interface RadarRingArcSpec {
   max: number;
   ratio: number;
   circumference: number;
+  sweepFraction: number;
+  arcLength: number;
   filledLength: number;
   strokeDasharray: string;
   strokeDashoffset: string;
+  trackDasharray: string;
+  transform: string;
   color: string;
   trackColor: string;
   isLowHp: boolean;
+  hasCapacity: boolean;
   tickY: number;
 }
 
@@ -744,7 +750,13 @@ export interface UnitRingArcsResult {
   hpOnlyMode: boolean;
   isLowHp: boolean;
   outerRadius: number;
+  innerCircleRadius: number;
   innerShapeRadius: number;
+  ringRadius: number;
+  spRatio: number;
+  spWaterHeight: number;
+  spWaterTopY: number;
+  hasShield: boolean;
   arcs: RadarRingArcSpec[];
 }
 
@@ -784,9 +796,12 @@ const DEFAULT_DEBUFF_TYPES: ReadonlySet<StatusEffectType> = new Set([
 ]);
 
 /**
- * Pure concentric ring arc computation for radar unit markers.
- * Uses stroke-dasharray / stroke-dashoffset attributes (zero animated SVG transforms)
- * starting at 12 o'clock (top) and progressing clockwise.
+ * Pure ring arc computation for radar unit markers.
+ * Uses stroke-dasharray / stroke-dashoffset attributes (zero animated SVG transforms).
+ * - Full-circle (`sweepFraction = 1`): starts at 12 o'clock and progresses clockwise (`rotate(-90)`).
+ * - Split-ring (`sweepFraction = 0.5`):
+ *   - `hp` (left half): fills bottom (6 o'clock) -> left (9) -> top (12) via `rotate(90)`.
+ *   - `shield` (right half): fills bottom (6 o'clock) -> right (3) -> top (12) via `scale(-1, 1) rotate(90)`.
  */
 export function computeRingArcSpec(
   kind: RadarRingKind,
@@ -796,15 +811,26 @@ export function computeRingArcSpec(
   max: number,
   color: string,
   trackColor: string,
-  isLowHp = false
+  isLowHp = false,
+  sweepFraction = 1
 ): RadarRingArcSpec {
   const safeRadius = Math.max(1, radius);
   const safeStroke = Math.max(RADAR_RING_DEFAULT_STROKE_WIDTH, strokeWidth);
+  const safeSweep = Number.isFinite(sweepFraction)
+    ? Math.max(0.05, Math.min(1, sweepFraction))
+    : 1;
   const safeMax = Number.isFinite(max) && max > 0 ? max : 0;
   const safeCur = Number.isFinite(current) ? Math.max(0, current) : 0;
   const ratio = safeMax > 0 ? Math.max(0, Math.min(1, safeCur / safeMax)) : 0;
   const circumference = 2 * Math.PI * safeRadius;
-  const filledLength = circumference * ratio;
+  const arcLength = circumference * safeSweep;
+  const filledLength = arcLength * ratio;
+  const transform =
+    safeSweep >= 0.999
+      ? 'rotate(-90)'
+      : kind === 'shield'
+      ? 'scale(-1, 1) rotate(90)'
+      : 'rotate(90)';
 
   return {
     kind,
@@ -814,20 +840,29 @@ export function computeRingArcSpec(
     max: safeMax,
     ratio: Number(ratio.toFixed(4)),
     circumference: Number(circumference.toFixed(2)),
+    sweepFraction: Number(safeSweep.toFixed(4)),
+    arcLength: Number(arcLength.toFixed(2)),
     filledLength: Number(filledLength.toFixed(2)),
     strokeDasharray: `${filledLength.toFixed(2)} ${circumference.toFixed(2)}`,
     strokeDashoffset: '0',
+    trackDasharray:
+      safeSweep >= 0.999
+        ? `${circumference.toFixed(2)} 0`
+        : `${arcLength.toFixed(2)} ${circumference.toFixed(2)}`,
+    transform,
     color,
     trackColor,
     isLowHp,
+    hasCapacity: safeMax > 0,
     tickY: Number((-safeRadius).toFixed(2)),
   };
 }
 
 /**
- * Computes the 3 concentric ring arcs (Shield outer blue, HP middle green, SP inner purple)
- * for a radar unit marker. Falls back to HP-only when markerRadius < RADAR_RING_MIN_MARKER_RADIUS.
- * Marks low HP strictly below 25% (hp / maxHp < 0.25) with red-orange color & pulse flag.
+ * Computes the RM1 split ring (left half HP, right half Shield, ~8px stroke) and
+ * inner SP water level for a radar unit marker, keeping outerRadius unchanged (40 at 80px).
+ * Falls back to HP-only full ring when markerRadius < RADAR_RING_MIN_MARKER_RADIUS.
+ * Marks low HP strictly below 25% (hp / maxHp < 0.25) with red (#ef4444) & pulse flag.
  */
 export function computeUnitRingArcs(
   unit: CombatUnit,
@@ -841,15 +876,19 @@ export function computeUnitRingArcs(
   const isLowHp =
     unit.alive && hpRatio > 0 && hpRatio < RADAR_LOW_HP_THRESHOLD;
   const hpOnlyMode = safeMarkerRadius < RADAR_RING_MIN_MARKER_RADIUS;
-  const strokeWidth = RADAR_RING_DEFAULT_STROKE_WIDTH;
-  const hpColor = isLowHp ? '#f97316' : '#22c55e';
+  const hpColor = isLowHp ? '#ef4444' : '#22c55e';
   const hpTrack = isLowHp
-    ? 'rgba(249, 115, 22, 0.24)'
-    : 'rgba(34, 197, 94, 0.20)';
+    ? 'rgba(127, 29, 29, 0.55)'
+    : 'rgba(26, 46, 36, 0.85)';
 
   if (hpOnlyMode) {
+    const strokeWidth = RADAR_RING_DEFAULT_STROKE_WIDTH;
     const innerShapeRadius = Math.max(8, safeMarkerRadius - 3);
     const hpR = innerShapeRadius + 3;
+    const outerRadius = Number((hpR + strokeWidth / 2).toFixed(2));
+    const innerCircleRadius = Number(
+      Math.max(4, hpR - strokeWidth / 2).toFixed(2)
+    );
     const hpArc = computeRingArcSpec(
       'hp',
       hpR,
@@ -857,60 +896,90 @@ export function computeUnitRingArcs(
       unit.hp,
       unit.derived.maxHp,
       hpColor,
-      hpTrack,
-      isLowHp
+      isLowHp ? 'rgba(239, 68, 68, 0.24)' : 'rgba(34, 197, 94, 0.20)',
+      isLowHp,
+      1
     );
     return {
       hpOnlyMode: true,
       isLowHp,
-      outerRadius: Number((hpR + strokeWidth / 2).toFixed(2)),
+      outerRadius,
+      innerCircleRadius,
       innerShapeRadius,
+      ringRadius: hpR,
+      spRatio: 0,
+      spWaterHeight: 0,
+      spWaterTopY: innerCircleRadius,
+      hasShield: false,
       arcs: [hpArc],
     };
   }
 
-  const innerShapeRadius = Math.max(10, Math.round(safeMarkerRadius * 0.68));
-  const spR = innerShapeRadius + 2.5;
-  const hpR = spR + 4;
-  const shieldR = hpR + 4;
-
-  const shieldArc = computeRingArcSpec(
-    'shield',
-    shieldR,
-    strokeWidth,
-    unit.shield,
-    unit.derived.maxShield,
-    '#38bdf8',
-    'rgba(56, 189, 248, 0.18)',
-    false
+  const outerRadius = Number(
+    (Math.max(10, Math.round(safeMarkerRadius * 0.68)) + 12).toFixed(2)
   );
+  const strokeWidth = RADAR_SPLIT_RING_STROKE_WIDTH;
+  const ringRadius = Number((outerRadius - strokeWidth / 2).toFixed(2));
+  const innerCircleRadius = Number(
+    Math.max(6, outerRadius - strokeWidth).toFixed(2)
+  );
+  const innerShapeRadius = Math.max(10, Math.round(innerCircleRadius - 2));
+
   const hpArc = computeRingArcSpec(
     'hp',
-    hpR,
+    ringRadius,
     strokeWidth,
     unit.hp,
     unit.derived.maxHp,
     hpColor,
     hpTrack,
-    isLowHp
+    isLowHp,
+    0.5
   );
-  const spArc = computeRingArcSpec(
-    'sp',
-    spR,
+
+  const hasShield =
+    Number.isFinite(unit.derived.maxShield) && unit.derived.maxShield > 0;
+  const shieldTrack = hasShield
+    ? 'rgba(20, 44, 72, 0.85)'
+    : 'rgba(148, 163, 184, 0.28)';
+  const shieldArc = computeRingArcSpec(
+    'shield',
+    ringRadius,
     strokeWidth,
-    unit.sp,
-    unit.derived.maxSp,
-    '#c084fc',
-    'rgba(192, 132, 252, 0.20)',
-    false
+    hasShield ? unit.shield : 0,
+    unit.derived.maxShield,
+    '#38bdf8',
+    shieldTrack,
+    false,
+    0.5
   );
+
+  const safeMaxSp =
+    Number.isFinite(unit.derived.maxSp) && unit.derived.maxSp > 0
+      ? unit.derived.maxSp
+      : 0;
+  const safeSp = Number.isFinite(unit.sp) ? Math.max(0, unit.sp) : 0;
+  const spRatio = Number(
+    (safeMaxSp > 0 ? Math.max(0, Math.min(1, safeSp / safeMaxSp)) : 0).toFixed(
+      4
+    )
+  );
+  const innerDiameter = innerCircleRadius * 2;
+  const spWaterHeight = Number((spRatio * innerDiameter).toFixed(2));
+  const spWaterTopY = Number((innerCircleRadius - spWaterHeight).toFixed(2));
 
   return {
     hpOnlyMode: false,
     isLowHp,
-    outerRadius: Number((shieldR + strokeWidth / 2).toFixed(2)),
+    outerRadius,
+    innerCircleRadius,
     innerShapeRadius,
-    arcs: [shieldArc, hpArc, spArc],
+    ringRadius,
+    spRatio,
+    spWaterHeight,
+    spWaterTopY,
+    hasShield,
+    arcs: [hpArc, shieldArc],
   };
 }
 

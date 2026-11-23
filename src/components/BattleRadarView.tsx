@@ -2,6 +2,7 @@ import {
   memo,
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -669,8 +670,10 @@ const RadarUnitMarker = memo(function RadarUnitMarker({
   onLongPressStart,
   onLongPressCancel,
 }: RadarUnitMarkerProps) {
+  const markerUid = useId().replace(/:/g, '');
   if (!unit.alive) return null;
 
+  const spClipId = `radar-sp-clip-${markerUid}`;
   const isEnemy = unit.side === 'enemy';
   const role = getTeamColorRole(unit);
   const teamHex = getTeamHex(role);
@@ -719,7 +722,7 @@ const RadarUnitMarker = memo(function RadarUnitMarker({
       data-visual-radius={visualRadius}
       data-ring-radius={ringOuterRadius}
       data-ring-diameter={ringDiameter}
-      data-ring-mode={ringResult.hpOnlyMode ? 'hp-only' : 'three-rings'}
+      data-ring-mode={ringResult.hpOnlyMode ? 'hp-only' : 'split-ring'}
       data-low-hp={ringResult.isLowHp ? 'true' : 'false'}
       data-acting={isActive ? 'true' : 'false'}
       data-targeted={isTargeted ? 'true' : 'false'}
@@ -834,65 +837,188 @@ const RadarUnitMarker = memo(function RadarUnitMarker({
               />
             )}
 
-          {/* 3 Concentric Ring Arcs (Shield outer blue, HP middle green/orange-red, SP inner purple) */}
-          {unit.alive && (
-            <g data-testid={`radar-rings-${unit.id}`}>
-              {ringResult.arcs.map((arc) => (
-                <g key={arc.kind}>
-                  {/* Subtle full-circle track */}
-                  <circle
-                    cx="0"
-                    cy="0"
-                    r={arc.radius}
-                    fill="none"
-                    stroke={arc.trackColor}
-                    strokeWidth={arc.strokeWidth}
-                  />
-                  {/* Filled arc clockwise from 12 o'clock using stroke-dasharray / stroke-dashoffset (Firefox-safe) */}
-                  <circle
-                    data-testid={`radar-ring-${arc.kind}-${unit.id}`}
-                    data-ring-kind={arc.kind}
-                    data-ratio={arc.ratio}
-                    data-stroke-width={arc.strokeWidth}
-                    data-low-hp={arc.isLowHp ? 'true' : 'false'}
-                    cx="0"
-                    cy="0"
-                    r={arc.radius}
-                    fill="none"
-                    stroke={arc.color}
-                    strokeWidth={arc.strokeWidth}
-                    strokeDasharray={arc.strokeDasharray}
-                    strokeDashoffset={arc.strokeDashoffset}
-                    strokeLinecap="butt"
-                    transform="rotate(-90)"
-                    className={
-                      arc.kind === 'hp' && arc.isLowHp && !animationsSkipped
-                        ? 'vfx-low-hp-pulse'
-                        : undefined
-                    }
-                  />
-                  {/* Tiny start tick mark at top 12 o'clock for color-blind ring order clarity */}
-                  <line
-                    data-testid={`radar-ring-tick-${arc.kind}-${unit.id}`}
-                    x1="0"
-                    y1={arc.tickY - 1.4}
-                    x2="0"
-                    y2={arc.tickY + 1.4}
-                    stroke="#f8fafc"
-                    strokeOpacity="0.85"
-                    strokeWidth="1.1"
-                  />
+          {/* Inner Circle Base + Static Orange SP Water Fill (hidden at 0 SP and in hpOnlyMode) */}
+          {unit.alive && !ringResult.hpOnlyMode && (
+            <g>
+              <circle
+                cx="0"
+                cy="0"
+                r={ringResult.innerCircleRadius}
+                fill="#070d17"
+              />
+              {ringResult.spRatio > 0 && ringResult.spWaterHeight > 0 && (
+                <g
+                  data-testid={`radar-ring-sp-${unit.id}`}
+                  data-ring-kind="sp"
+                  data-ratio={ringResult.spRatio}
+                  data-water-height={ringResult.spWaterHeight}
+                >
+                  <defs>
+                    <clipPath id={spClipId}>
+                      <circle cx="0" cy="0" r={ringResult.innerCircleRadius} />
+                    </clipPath>
+                  </defs>
+                  <g clipPath={`url(#${spClipId})`}>
+                    <rect
+                      data-testid={`radar-ring-sp-fill-${unit.id}`}
+                      x={-ringResult.innerCircleRadius}
+                      y={ringResult.spWaterTopY}
+                      width={ringResult.innerCircleRadius * 2}
+                      height={ringResult.spWaterHeight}
+                      fill="#f59e0b"
+                      fillOpacity="0.45"
+                    />
+                    <line
+                      data-testid={`radar-ring-sp-surface-${unit.id}`}
+                      x1={-ringResult.innerCircleRadius}
+                      y1={ringResult.spWaterTopY}
+                      x2={ringResult.innerCircleRadius}
+                      y2={ringResult.spWaterTopY}
+                      stroke="#fcd34d"
+                      strokeOpacity="0.88"
+                      strokeWidth="1"
+                    />
+                  </g>
                 </g>
-              ))}
+              )}
             </g>
           )}
 
-          {/* Color-blind readable team shape + outline */}
+          {/* Split Ring (Left HP, Right Shield, bottom -> top) or HP-only fallback */}
+          {unit.alive && (
+            <g data-testid={`radar-rings-${unit.id}`}>
+              {ringResult.hpOnlyMode ? (
+                ringResult.arcs.map((arc) => (
+                  <g key={arc.kind}>
+                    <circle
+                      cx="0"
+                      cy="0"
+                      r={arc.radius}
+                      fill="none"
+                      stroke={arc.trackColor}
+                      strokeWidth={arc.strokeWidth}
+                    />
+                    <circle
+                      data-testid={`radar-ring-${arc.kind}-${unit.id}`}
+                      data-ring-kind={arc.kind}
+                      data-ratio={arc.ratio}
+                      data-stroke-width={arc.strokeWidth}
+                      data-low-hp={arc.isLowHp ? 'true' : 'false'}
+                      cx="0"
+                      cy="0"
+                      r={arc.radius}
+                      fill="none"
+                      stroke={arc.color}
+                      strokeWidth={arc.strokeWidth}
+                      strokeDasharray={arc.strokeDasharray}
+                      strokeDashoffset={arc.strokeDashoffset}
+                      strokeLinecap="butt"
+                      transform={arc.transform}
+                      className={
+                        arc.kind === 'hp' && arc.isLowHp && !animationsSkipped
+                          ? 'vfx-low-hp-pulse'
+                          : undefined
+                      }
+                    />
+                    <line
+                      data-testid={`radar-ring-tick-${arc.kind}-${unit.id}`}
+                      x1="0"
+                      y1={arc.tickY - 1.4}
+                      x2="0"
+                      y2={arc.tickY + 1.4}
+                      stroke="#f8fafc"
+                      strokeOpacity="0.85"
+                      strokeWidth="1.1"
+                    />
+                  </g>
+                ))
+              ) : (
+                <>
+                  {ringResult.arcs.map((arc) => (
+                    <g key={arc.kind}>
+                      {arc.kind === 'shield' && !ringResult.hasShield ? (
+                        <path
+                          data-testid={`radar-ring-shield-empty-track-${unit.id}`}
+                          d={`M 0 ${arc.radius} A ${arc.radius} ${arc.radius} 0 0 0 0 ${-arc.radius}`}
+                          fill="none"
+                          stroke={arc.trackColor}
+                          strokeWidth={arc.strokeWidth}
+                          strokeDasharray="3 3"
+                          strokeOpacity="0.65"
+                        />
+                      ) : (
+                        <circle
+                          data-testid={`radar-ring-track-${arc.kind}-${unit.id}`}
+                          cx="0"
+                          cy="0"
+                          r={arc.radius}
+                          fill="none"
+                          stroke={arc.trackColor}
+                          strokeWidth={arc.strokeWidth}
+                          strokeDasharray={arc.trackDasharray}
+                          strokeDashoffset="0"
+                          strokeLinecap="butt"
+                          transform={arc.transform}
+                        />
+                      )}
+                      <circle
+                        data-testid={`radar-ring-${arc.kind}-${unit.id}`}
+                        data-ring-kind={arc.kind}
+                        data-ratio={arc.ratio}
+                        data-stroke-width={arc.strokeWidth}
+                        data-low-hp={arc.isLowHp ? 'true' : 'false'}
+                        data-has-capacity={arc.hasCapacity ? 'true' : 'false'}
+                        cx="0"
+                        cy="0"
+                        r={arc.radius}
+                        fill="none"
+                        stroke={arc.color}
+                        strokeWidth={arc.strokeWidth}
+                        strokeDasharray={arc.strokeDasharray}
+                        strokeDashoffset={arc.strokeDashoffset}
+                        strokeLinecap="butt"
+                        transform={arc.transform}
+                        className={
+                          arc.kind === 'hp' && arc.isLowHp && !animationsSkipped
+                            ? 'vfx-low-hp-pulse'
+                            : undefined
+                        }
+                      />
+                    </g>
+                  ))}
+                  {/* 6px ticks at 12 and 6 o'clock marking the vertical 50/50 split */}
+                  <line
+                    data-testid={`radar-ring-tick-top-${unit.id}`}
+                    x1="0"
+                    y1={-(ringResult.ringRadius + 3)}
+                    x2="0"
+                    y2={-(ringResult.ringRadius - 3)}
+                    stroke="#f8fafc"
+                    strokeOpacity="0.9"
+                    strokeWidth="1.3"
+                  />
+                  <line
+                    data-testid={`radar-ring-tick-bottom-${unit.id}`}
+                    x1="0"
+                    y1={ringResult.ringRadius - 3}
+                    x2="0"
+                    y2={ringResult.ringRadius + 3}
+                    stroke="#f8fafc"
+                    strokeOpacity="0.9"
+                    strokeWidth="1.3"
+                  />
+                </>
+              )}
+            </g>
+          )}
+
+          {/* Color-blind readable team shape + outline (semi-transparent interior over SP water) */}
           {shape === 'player-hex' && (
             <g>
               <polygon
                 points={hexOuter}
                 fill={unit.alive ? '#0a1622' : '#0b1019'}
+                fillOpacity={unit.alive && !ringResult.hpOnlyMode ? 0.25 : 1}
                 stroke={isActive ? '#fef08a' : teamHex}
                 strokeWidth={isActive ? '2.1' : unit.alive ? '1.8' : '1.2'}
                 strokeLinejoin="round"
@@ -916,6 +1042,7 @@ const RadarUnitMarker = memo(function RadarUnitMarker({
               cy="0"
               r={shapeRadius}
               fill={unit.alive ? '#0b1320' : '#0b1019'}
+              fillOpacity={unit.alive && !ringResult.hpOnlyMode ? 0.25 : 1}
               stroke={isActive ? '#fef08a' : teamHex}
               strokeWidth={isActive ? '2' : unit.alive ? '1.6' : '1.2'}
               strokeDasharray={isStealthed ? '3 2' : undefined}
@@ -927,6 +1054,7 @@ const RadarUnitMarker = memo(function RadarUnitMarker({
               <polygon
                 points={diamondOuter}
                 fill={unit.alive ? '#140b12' : '#0b1019'}
+                fillOpacity={unit.alive && !ringResult.hpOnlyMode ? 0.25 : 1}
                 stroke={isActive ? '#fef08a' : teamHex}
                 strokeWidth={isActive ? '2' : unit.alive ? '1.7' : '1.2'}
                 strokeDasharray={isStealthed ? '3 2' : undefined}
@@ -950,6 +1078,7 @@ const RadarUnitMarker = memo(function RadarUnitMarker({
               <polygon
                 points={fortressOuter}
                 fill={unit.alive ? '#170f0c' : '#0b1019'}
+                fillOpacity={unit.alive && !ringResult.hpOnlyMode ? 0.25 : 1}
                 stroke={isActive ? '#fef08a' : teamHex}
                 strokeWidth={isActive ? '2.1' : unit.alive ? '1.9' : '1.2'}
                 strokeLinejoin="miter"
@@ -2273,20 +2402,41 @@ export function BattleRadarView({
                 <span>{t('radar.legendEnemyShape')}</span>
               </div>
 
-              <div className="flex items-center gap-2 pt-0.5 border-t border-slate-800/90">
+              <div
+                data-testid="radar-legend-split-ring"
+                className="flex items-center gap-2 pt-0.5 border-t border-slate-800/90"
+              >
                 <svg width="20" height="20" viewBox="0 0 20 20" className="shrink-0">
-                  <circle cx="10" cy="10" r="8.2" fill="none" stroke="#38bdf8" strokeWidth="1.6" strokeDasharray="38 52" transform="rotate(-90 10 10)" />
-                  <circle cx="10" cy="10" r="5.8" fill="none" stroke="#22c55e" strokeWidth="1.6" strokeDasharray="28 37" transform="rotate(-90 10 10)" />
-                  <circle cx="10" cy="10" r="3.4" fill="none" stroke="#c084fc" strokeWidth="1.6" strokeDasharray="16 22" transform="rotate(-90 10 10)" />
-                  <line x1="10" y1="0.8" x2="10" y2="7.5" stroke="#f8fafc" strokeWidth="0.9" />
+                  <defs>
+                    <clipPath id="legend-sp-water-clip">
+                      <circle cx="10" cy="10" r="5.5" />
+                    </clipPath>
+                  </defs>
+                  <circle cx="10" cy="10" r="5.5" fill="#070d17" />
+                  <g clipPath="url(#legend-sp-water-clip)">
+                    <rect x="4" y="10.5" width="12" height="6" fill="#f59e0b" fillOpacity="0.45" />
+                    <line x1="4" y1="10.5" x2="16" y2="10.5" stroke="#fcd34d" strokeWidth="0.9" />
+                  </g>
+                  <path d="M 10 17.5 A 7.5 7.5 0 0 1 10 2.5" fill="none" stroke="rgba(26,46,36,0.85)" strokeWidth="2.6" />
+                  <path d="M 10 17.5 A 7.5 7.5 0 0 1 5.1 4.3" fill="none" stroke="#22c55e" strokeWidth="2.6" />
+                  <path d="M 10 17.5 A 7.5 7.5 0 0 0 10 2.5" fill="none" stroke="rgba(20,44,72,0.85)" strokeWidth="2.6" />
+                  <path d="M 10 17.5 A 7.5 7.5 0 0 0 16.5 6.3" fill="none" stroke="#38bdf8" strokeWidth="2.6" />
+                  <line x1="10" y1="1.2" x2="10" y2="4.2" stroke="#f8fafc" strokeWidth="1" />
+                  <line x1="10" y1="15.8" x2="10" y2="18.8" stroke="#f8fafc" strokeWidth="1" />
                 </svg>
                 <span>{t('radar.legendRings')}</span>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div
+                data-testid="radar-legend-low-hp"
+                className="flex items-center gap-2"
+              >
                 <svg width="20" height="20" viewBox="0 0 20 20" className="shrink-0">
-                  <circle cx="10" cy="10" r="6.5" fill="none" stroke="rgba(249,115,22,0.28)" strokeWidth="2.2" />
-                  <circle cx="10" cy="10" r="6.5" fill="none" stroke="#f97316" strokeWidth="2.2" strokeDasharray="10 41" transform="rotate(-90 10 10)" />
+                  <path d="M 10 17.5 A 7.5 7.5 0 0 1 10 2.5" fill="none" stroke="rgba(127,29,29,0.55)" strokeWidth="2.6" />
+                  <path d="M 10 17.5 A 7.5 7.5 0 0 1 3.5 13.8" fill="none" stroke="#ef4444" strokeWidth="2.6" />
+                  <path d="M 10 17.5 A 7.5 7.5 0 0 0 10 2.5" fill="none" stroke="rgba(20,44,72,0.55)" strokeWidth="2.6" />
+                  <line x1="10" y1="1.2" x2="10" y2="4.2" stroke="#f8fafc" strokeWidth="1" />
+                  <line x1="10" y1="15.8" x2="10" y2="18.8" stroke="#f8fafc" strokeWidth="1" />
                 </svg>
                 <span>{t('radar.legendLowHp')}</span>
               </div>
