@@ -28,6 +28,7 @@ import {
 export type CombatLogChannel = 'all' | 'ally' | 'enemy' | 'system';
 export type CombatLogDisplayMode = 'docked' | 'popup';
 export type SidebarCombatLogMode = 'line' | 'expanded';
+export type CombatLogOrder = 'newest' | 'oldest';
 export type CombatLogActionKind =
   | 'attack'
   | 'skill'
@@ -49,6 +50,7 @@ export type CombatLogValueTone =
 export const DOCKED_LOG_MAX_ENTRIES = 200;
 export const POPUP_LOG_PAGE_SIZE = 200;
 export const LOG_MODE_STORAGE_KEY = 'dreamAce.logMode.v1';
+export const LOG_ORDER_STORAGE_KEY = 'dreamAce.logOrder.v1';
 export const COMBAT_LOG_MODE_STORAGE_KEY = 'starfront_combat_log_mode_v1';
 export const COMBAT_LOG_EXPAND_ALL_STORAGE_KEY =
   'starfront_combat_log_expand_all_v1';
@@ -156,6 +158,27 @@ export function writeSidebarLogMode(mode: SidebarCombatLogMode): void {
   }
 }
 
+export function readCombatLogOrder(): CombatLogOrder {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) {
+      return 'newest';
+    }
+    const raw = window.localStorage.getItem(LOG_ORDER_STORAGE_KEY);
+    return raw === 'oldest' ? 'oldest' : 'newest';
+  } catch {
+    return 'newest';
+  }
+}
+
+export function writeCombatLogOrder(order: CombatLogOrder): void {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    window.localStorage.setItem(LOG_ORDER_STORAGE_KEY, order);
+  } catch {
+    // Ignore storage quota or private mode failures
+  }
+}
+
 export function readCombatLogMode(): CombatLogDisplayMode {
   try {
     if (typeof window === 'undefined' || !window.localStorage) return 'docked';
@@ -257,7 +280,8 @@ const PILOT_CALLSIGN_SET = new Set(ALLY_PILOT_POOL.callsigns);
  * Groups combat log entries chronologically by round number for collapsible Vòng N headers.
  */
 export function groupCombatLogEntriesByRound(
-  entries: CombatLogEntry[]
+  entries: CombatLogEntry[],
+  order: CombatLogOrder = 'oldest'
 ): CombatLogRoundGroup[] {
   const groups: CombatLogRoundGroup[] = [];
   const byRound = new Map<number, CombatLogRoundGroup>();
@@ -272,6 +296,16 @@ export function groupCombatLogEntriesByRound(
     }
     grp.entries.push(entry);
   }
+
+  if (order === 'newest') {
+    return groups
+      .map((grp) => ({
+        round: grp.round,
+        entries: [...grp.entries].reverse(),
+      }))
+      .sort((a, b) => b.round - a.round);
+  }
+
   return groups;
 }
 
