@@ -498,7 +498,7 @@ describe('SH1 — Shield regeneration engine & UI integration', () => {
   });
 
   it('6) Admin sanitizer clamps pct 0-50, mult 0-200, turns 1-10 and migration fills defaults at CURRENT_SAVE_VERSION = 9', () => {
-    expect(CURRENT_SAVE_VERSION).toBe(9);
+    expect(CURRENT_SAVE_VERSION).toBe(10);
     const clamped = sanitizeShieldRegenConfig({
       enabled: false,
       basePct: -5,

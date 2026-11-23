@@ -45,7 +45,7 @@ src/store/useGameStore.ts 3981; src/engine/combat.ts 3860; src/components/Battle
 - src/components/ActionStage.tsx + src/utils/actionStagePrefs.ts + src/components/__tests__/g4bSActionStage.test.tsx — card-mode Action Stage ("Sân khấu hành động", shared `StageToken`/`StageProjectile`, `ActionStage`, `resolveStageFxActorAndTargets`, `dreamAce.actionStage.v1` pref hook) + G4b-S tests
 
 ## Save and cloud
-- src/engine/migration.ts — save validation and version migration (`CURRENT_SAVE_VERSION = 9`)
+- src/engine/migration.ts + src/engine/__tests__/saveV10Migration.test.ts — save validation and version migration (`CURRENT_SAVE_VERSION = 10`, `warehouse`, `warehouseCapacity`, `worldClock`, `sanitizeWorldClock()`, `sanitizeWarehouseCapacity()`, `createDefaultWorldClock()`)
 - src/engine/saveExport.ts — SV1a JSON export/import and checksum validation
 - src/engine/cloudSave.ts + src/store/useCloudSaveStore.ts + src/components/CloudSaveDialogs.tsx — Firebase Auth/Firestore cloud save sync
 

@@ -130,7 +130,7 @@ describe('ST1 Starter Equipment Set Engine & Store', () => {
 
     const migrated = migrateSaveData(
       legacyState,
-      CURRENT_SAVE_VERSION - 1,
+      8,
       createDeterministicRng()
     );
     const migratedGear = migrated.pilot.gears.striker;

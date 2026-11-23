@@ -542,6 +542,6 @@ describe('TASK P1b — Phone battle control row, destroyed-player line, legend b
     expect(EN_TRANSLATIONS['battle.switchToCard']).toBeTruthy();
     expect(VI_TRANSLATIONS['battle.switchToRadar']).toBeTruthy();
     expect(EN_TRANSLATIONS['battle.switchToRadar']).toBeTruthy();
-    expect(CURRENT_SAVE_VERSION).toBe(9);
+    expect(CURRENT_SAVE_VERSION).toBe(10);
   });
 });

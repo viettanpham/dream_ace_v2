@@ -35,6 +35,8 @@ import type {
   QuickSellFilterConfig,
   ShopItemListing,
   StarterSetConfig,
+  WorldClockSpeedMode,
+  WorldClockState,
   WpMarketOffer,
 } from '../types/game';
 import {
@@ -68,12 +70,99 @@ import {
   fillEmptyStarterSlotsForPilot,
   grantStarterSetToGear,
 } from './starter';
-import { createDefaultGearUnit, createDefaultPilotAccount } from './stats';
+import {
+  createDefaultGearUnit,
+  createDefaultPilotAccount,
+  createDefaultWorldClock,
+} from './stats';
 import { createDefaultTacticsForClass, sanitizeGearTactics } from './tactics';
 import { ALLOWED_BATTLE_SPEEDS } from '../utils/battleDisplay';
 import { sanitizeStatusDisplayDefaults } from '../utils/statusDisplayPrefs';
 
-export const CURRENT_SAVE_VERSION = 9;
+export { createDefaultWorldClock };
+
+export const CURRENT_SAVE_VERSION = 10;
+
+export const DEFAULT_WAREHOUSE_CAPACITY = 300;
+export const MIN_WAREHOUSE_CAPACITY = 50;
+export const MAX_WAREHOUSE_CAPACITY = 2000;
+
+export const WORLD_CLOCK_SPEED_PRESETS: Record<
+  Exclude<WorldClockSpeedMode, 'custom'>,
+  number
+> = {
+  fast: 30,
+  normal: 180,
+  slow: 600,
+};
+export const MIN_WORLD_CLOCK_SECONDS_PER_DAY = 10;
+export const MAX_WORLD_CLOCK_SECONDS_PER_DAY = 86400;
+
+export function sanitizeWarehouseCapacity(raw: unknown): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) {
+    return DEFAULT_WAREHOUSE_CAPACITY;
+  }
+  return Math.max(
+    MIN_WAREHOUSE_CAPACITY,
+    Math.min(MAX_WAREHOUSE_CAPACITY, Math.round(raw))
+  );
+}
+
+export function sanitizeWorldClock(raw: unknown): WorldClockState {
+  const def = createDefaultWorldClock();
+  if (!raw || typeof raw !== 'object') {
+    return def;
+  }
+  const obj = raw as Record<string, unknown>;
+  const speedMode: WorldClockSpeedMode =
+    obj.speedMode === 'fast' ||
+    obj.speedMode === 'normal' ||
+    obj.speedMode === 'slow' ||
+    obj.speedMode === 'custom'
+      ? obj.speedMode
+      : 'normal';
+
+  let secondsPerDay: number;
+  if (speedMode === 'custom') {
+    if (
+      typeof obj.secondsPerDay === 'number' &&
+      Number.isFinite(obj.secondsPerDay)
+    ) {
+      secondsPerDay = Math.max(
+        MIN_WORLD_CLOCK_SECONDS_PER_DAY,
+        Math.min(MAX_WORLD_CLOCK_SECONDS_PER_DAY, obj.secondsPerDay)
+      );
+    } else {
+      secondsPerDay = def.secondsPerDay;
+    }
+  } else {
+    secondsPerDay = WORLD_CLOCK_SPEED_PRESETS[speedMode];
+  }
+
+  const worldDay =
+    typeof obj.worldDay === 'number' &&
+    Number.isFinite(obj.worldDay) &&
+    obj.worldDay >= 0
+      ? obj.worldDay
+      : 0;
+
+  const lastTickAt =
+    typeof obj.lastTickAt === 'number' &&
+    Number.isFinite(obj.lastTickAt) &&
+    obj.lastTickAt >= 0
+      ? obj.lastTickAt
+      : null;
+
+  const paused = typeof obj.paused === 'boolean' ? obj.paused : false;
+
+  return {
+    worldDay,
+    lastTickAt,
+    speedMode,
+    secondsPerDay,
+    paused,
+  };
+}
 
 export interface PersistedCampaignState {
   pilot: PilotAccount;
@@ -123,6 +212,7 @@ export function createDefaultAdminConfig(): AdminConfig {
     starterSet: cloneStarterSetConfig(DEFAULT_STARTER_SET_CONFIG),
     iconCatalogMods: [],
     shieldRegen: { ...DEFAULT_SHIELD_REGEN_CONFIG },
+    warehouseCapacity: DEFAULT_WAREHOUSE_CAPACITY,
     showRawI18nKeys: false,
   };
 }
@@ -416,6 +506,10 @@ export function migrateSaveData(
       rawAdmin.statusDisplayDefaults
     ),
     shieldRegen: sanitizeShieldRegenConfig(rawAdmin.shieldRegen),
+    warehouseCapacity:
+      version < CURRENT_SAVE_VERSION
+        ? DEFAULT_WAREHOUSE_CAPACITY
+        : sanitizeWarehouseCapacity(rawAdmin.warehouseCapacity),
     showRawI18nKeys: Boolean(rawAdmin.showRawI18nKeys),
   };
 
@@ -443,13 +537,45 @@ export function migrateSaveData(
   // Case A: v4 / v5 (`pilot` object present)
   if (version >= 4 && raw.pilot && typeof raw.pilot === 'object') {
     const rawPilot = raw.pilot as Partial<PilotAccount>;
-    const rawInventory = Array.isArray(rawPilot.inventory)
+    const convertedInventory = Array.isArray(rawPilot.inventory)
       ? rawPilot.inventory
           .map((it) => convertLegacyItemInstance(it, rng))
           .filter((it): it is ItemInstance => it !== null)
       : [];
 
-    const invIds = new Set(rawInventory.map((i) => i.instanceId));
+    const invIds = new Set<string>();
+    const rawInventory: ItemInstance[] = [];
+    if (version >= CURRENT_SAVE_VERSION) {
+      for (const it of convertedInventory) {
+        if (invIds.has(it.instanceId)) continue;
+        invIds.add(it.instanceId);
+        rawInventory.push(it);
+      }
+    } else {
+      for (const it of convertedInventory) {
+        invIds.add(it.instanceId);
+        rawInventory.push(it);
+      }
+    }
+
+    const rawWarehouse: ItemInstance[] = [];
+    if (version >= CURRENT_SAVE_VERSION && Array.isArray(rawPilot.warehouse)) {
+      const warehouseIds = new Set<string>();
+      for (const entry of rawPilot.warehouse) {
+        const converted = convertLegacyItemInstance(entry, rng);
+        if (!converted) continue;
+        if (invIds.has(converted.instanceId)) continue;
+        if (warehouseIds.has(converted.instanceId)) continue;
+        warehouseIds.add(converted.instanceId);
+        rawWarehouse.push(converted);
+      }
+    }
+
+    const sanitizedWorldClock =
+      version < CURRENT_SAVE_VERSION
+        ? createDefaultWorldClock()
+        : sanitizeWorldClock(rawPilot.worldClock);
+
     const claimedIds = new Set<string>();
 
     const activeGearId: MechClassId = VALID_CLASSES.has(
@@ -632,6 +758,8 @@ export function migrateSaveData(
       warPoints: Math.max(0, Number(rawPilot.warPoints) || 0),
       ownedOpeningCards,
       inventory: rawInventory,
+      warehouse: rawWarehouse,
+      worldClock: sanitizedWorldClock,
       gears,
       activeGearId: finalActiveGearId,
       unlockedSectorIds: finalUnlockedSectors,
@@ -655,7 +783,7 @@ export function migrateSaveData(
     };
 
     const finalMigratedPilot =
-      version < CURRENT_SAVE_VERSION && adminConfig.starterSet?.enabled
+      version < 9 && adminConfig.starterSet?.enabled
         ? fillEmptyStarterSlotsForPilot(
             migratedPilot,
             adminConfig.starterSet,
@@ -798,6 +926,8 @@ export function migrateSaveData(
     warPoints: 0,
     ownedOpeningCards: [],
     inventory: migratedInventory,
+    warehouse: [],
+    worldClock: createDefaultWorldClock(),
     gears,
     activeGearId: legacyClass,
     unlockedSectorIds: Array.from(
@@ -824,7 +954,7 @@ export function migrateSaveData(
   };
 
   const finalLegacyPilot =
-    version < CURRENT_SAVE_VERSION && adminConfig.starterSet?.enabled
+    version < 9 && adminConfig.starterSet?.enabled
       ? fillEmptyStarterSlotsForPilot(
           legacyPilot,
           adminConfig.starterSet,

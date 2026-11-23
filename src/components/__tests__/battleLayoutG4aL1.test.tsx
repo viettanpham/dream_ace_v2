@@ -512,6 +512,6 @@ describe('G4a-L1: Battle main column layout fix & orange SP token', () => {
         (EN_TRANSLATIONS as Record<string, string>)[k].trim().length
       ).toBeGreaterThan(0);
     }
-    expect(CURRENT_SAVE_VERSION).toBe(9);
+    expect(CURRENT_SAVE_VERSION).toBe(10);
   });
 });

@@ -707,12 +707,24 @@ export interface GearUnit {
   battlesFought: number;
 }
 
+export type WorldClockSpeedMode = 'fast' | 'normal' | 'slow' | 'custom';
+
+export interface WorldClockState {
+  worldDay: number;
+  lastTickAt: number | null;
+  speedMode: WorldClockSpeedMode;
+  secondsPerDay: number;
+  paused: boolean;
+}
+
 export interface PilotAccount {
   name: string;
   credits: number;
   warPoints: number;
   ownedOpeningCards: string[];
   inventory: ItemInstance[];
+  warehouse: ItemInstance[];
+  worldClock: WorldClockState;
   gears: Record<MechClassId, GearUnit>;
   activeGearId: MechClassId;
   unlockedSectorIds: string[];
@@ -1257,6 +1269,7 @@ export interface AdminConfig {
   iconCatalogMods?: IconCatalogModRow[];
   statusDisplayDefaults?: StatusDisplayDefaults;
   shieldRegen?: ShieldRegenConfig;
+  warehouseCapacity: number;
   showRawI18nKeys: boolean;
 }
 

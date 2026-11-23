@@ -16,6 +16,7 @@ import type {
   MechClassId,
   PilotAccount,
   StatBlock,
+  WorldClockState,
 } from '../types/game';
 import { sumGearEquipmentStats, sumGearSpecialTraits } from './equipment';
 import { createDefaultSquadFormation } from './formation';
@@ -227,6 +228,16 @@ export function createDefaultGearUnit(
   };
 }
 
+export function createDefaultWorldClock(): WorldClockState {
+  return {
+    worldDay: 0,
+    lastTickAt: null,
+    speedMode: 'normal',
+    secondsPerDay: 180,
+    paused: false,
+  };
+}
+
 export function createDefaultPilotAccount(
   name = 'Vance',
   starterClassId: MechClassId = 'striker',
@@ -243,6 +254,8 @@ export function createDefaultPilotAccount(
     warPoints: BALANCE_CONFIG.startingWarPoints,
     ownedOpeningCards: [],
     inventory: starterItems,
+    warehouse: [],
+    worldClock: createDefaultWorldClock(),
     gears,
     activeGearId: starterClassId,
     unlockedSectorIds: [

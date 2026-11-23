@@ -163,7 +163,7 @@ describe('Task G4a-C1 — Status chip polish (constants, yellow turns badge, non
     expect(STATUS_ROW_GAP_PX).toBeGreaterThanOrEqual(14);
     expect(BUILTIN_STATUS_DISPLAY_DEFAULTS.playerPhoneRows).toBe(1);
     expect(BUILTIN_STATUS_DISPLAY_DEFAULTS.playerDesktopRows).toBe(1);
-    expect(CURRENT_SAVE_VERSION).toBe(9);
+    expect(CURRENT_SAVE_VERSION).toBe(10);
 
     const sampleStatuses: ActiveStatusEffect[] = [
       { type: 'atk_up', turnsRemaining: 3, isDebuff: false, magnitude: 0.25 },
