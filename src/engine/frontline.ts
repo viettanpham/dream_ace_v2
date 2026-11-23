@@ -1,15 +1,24 @@
+import {
+  BATTLE_KIND_RULES,
+  checkBattleSource,
+} from '../data/battleKinds';
 import { MAP_LANES, SECTORS_CATALOG } from '../data/maps';
-import type { AdminConfig, BaseFaction, PilotAccount } from '../types/game';
-
-export type BattleOptionKind = 'assault' | 'defend' | 'patrol';
+import type {
+  AdminConfig,
+  BaseFaction,
+  BattleKind,
+  BattleSize,
+  PilotAccount,
+} from '../types/game';
 
 export type BattleOptionReasonKey =
   | 'map.reason.notFrontline'
   | 'map.reason.rearBase'
-  | 'map.reason.hidden';
+  | 'map.reason.hidden'
+  | 'map.reason.sourceInactive';
 
 export interface BattleOption {
-  kind: BattleOptionKind;
+  kind: BattleKind;
   allowed: boolean;
   reasonKey?: BattleOptionReasonKey;
 }
@@ -177,7 +186,7 @@ export function getBattleOptions(
   return options;
 }
 
-const DEFAULT_BATTLE_PRIORITY: readonly BattleOptionKind[] = [
+const DEFAULT_BATTLE_PRIORITY: readonly BattleKind[] = [
   'defend',
   'assault',
   'patrol',
@@ -188,10 +197,83 @@ const DEFAULT_BATTLE_PRIORITY: readonly BattleOptionKind[] = [
  */
 export function pickDefaultBattle(
   options: readonly BattleOption[]
-): BattleOptionKind | null {
+): BattleKind | null {
   for (const kind of DEFAULT_BATTLE_PRIORITY) {
     const match = options.find((opt) => opt.kind === kind && opt.allowed);
     if (match) return match.kind;
   }
   return null;
+}
+
+export interface BattleLaunchValidation {
+  allowed: boolean;
+  kind: BattleKind;
+  sourceId: string | null;
+  reasonKey?: BattleOptionReasonKey;
+  sizeOverride?: BattleSize | null;
+  rewardMult?: number;
+}
+
+/**
+ * Validates whether a specific BattleKind (+ optional sourceId) can launch at `nodeId`.
+ */
+export function validateBattleLaunch(
+  pilot: PilotAccount,
+  nodeId: string,
+  kind: BattleKind,
+  sourceId: string | null = null,
+  adminConfig?: Partial<Pick<AdminConfig, 'ignoreFrontline'>> | null
+): BattleLaunchValidation {
+  const rule = BATTLE_KIND_RULES[kind];
+
+  if (rule.needsVisible && !isVisible(pilot, nodeId)) {
+    return {
+      allowed: false,
+      kind,
+      sourceId,
+      reasonKey: 'map.reason.hidden',
+    };
+  }
+
+  if (rule.requiresSource) {
+    const status = checkBattleSource(kind, pilot, sourceId, nodeId);
+    if (!status.active) {
+      return {
+        allowed: false,
+        kind,
+        sourceId,
+        reasonKey: 'map.reason.sourceInactive',
+      };
+    }
+    return {
+      allowed: true,
+      kind,
+      sourceId,
+      sizeOverride: status.sizeOverride,
+      rewardMult: status.rewardMult,
+    };
+  }
+
+  const options = getBattleOptions(pilot, nodeId, adminConfig);
+  const matching = options.find((opt) => opt.kind === kind);
+  if (matching?.allowed) {
+    return {
+      allowed: true,
+      kind,
+      sourceId: null,
+    };
+  }
+
+  const fallbackReason: BattleOptionReasonKey =
+    matching?.reasonKey ??
+    (getSectorFaction(pilot, nodeId) === 'allied'
+      ? 'map.reason.rearBase'
+      : 'map.reason.notFrontline');
+
+  return {
+    allowed: false,
+    kind,
+    sourceId: null,
+    reasonKey: fallbackReason,
+  };
 }

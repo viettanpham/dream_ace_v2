@@ -119,7 +119,24 @@ describe('TASK LP1 — Loop (Lặp) Unclip, Honest State, Defeat Streak & Counte
     vi.useRealTimers();
   });
 
+function setBorderOutpostAlliedPatrol(): void {
+  useGameStore.setState((s) => ({
+    pilot: {
+      ...s.pilot,
+      baseStates: {
+        ...s.pilot.baseStates,
+        border_outpost: {
+          ...s.pilot.baseStates.border_outpost,
+          faction: 'allied',
+          underAttack: false,
+        },
+      },
+    },
+  }));
+}
+
   it('auto-starts battles 2 and 3 without clicking when loop is active for 3 runs with forced victory', () => {
+    setBorderOutpostAlliedPatrol();
     useGameStore.getState().startBattle('border_outpost');
 
     act(() => {
@@ -199,6 +216,7 @@ describe('TASK LP1 — Loop (Lặp) Unclip, Honest State, Defeat Streak & Counte
         await useCloudSaveStore.getState().createCloudSave('1234', false);
       });
 
+      setBorderOutpostAlliedPatrol();
       useGameStore.getState().startBattle('border_outpost');
 
       act(() => {
@@ -361,6 +379,7 @@ describe('TASK LP1 — Loop (Lặp) Unclip, Honest State, Defeat Streak & Counte
 
   it('uses honest non-emerald button state while popover is open on desktop and launches battles 2 and 3 via Lặp -> Bắt đầu', () => {
     setViewport(1280, 800);
+    setBorderOutpostAlliedPatrol();
     useGameStore.getState().startBattle('border_outpost');
 
     act(() => {
@@ -448,6 +467,7 @@ describe('TASK LP1 — Loop (Lặp) Unclip, Honest State, Defeat Streak & Counte
 
   it('displays N/M and N/∞ counters accurately on the running chip', () => {
     setViewport(1280, 800);
+    setBorderOutpostAlliedPatrol();
     useGameStore.getState().startBattle('border_outpost');
 
     act(() => {
@@ -551,6 +571,7 @@ describe('TASK LP1 — Loop (Lặp) Unclip, Honest State, Defeat Streak & Counte
 
     // End-to-end store + UI flow with 3 radio options + N input
     setViewport(1280, 800);
+    setBorderOutpostAlliedPatrol();
     useGameStore.getState().startBattle('border_outpost');
 
     act(() => {
@@ -677,6 +698,7 @@ describe('TASK LP1 — Loop (Lặp) Unclip, Honest State, Defeat Streak & Counte
     expect(EN_TRANSLATIONS['battle.speedPopoverTitle']).toBeTruthy();
 
     setViewport(390, 844);
+    setBorderOutpostAlliedPatrol();
     useGameStore.getState().startBattle('border_outpost');
 
     act(() => {

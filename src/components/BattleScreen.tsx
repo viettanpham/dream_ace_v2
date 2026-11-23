@@ -854,7 +854,15 @@ export function BattleScreen() {
         ? 320
         : 850;
     const timer = window.setTimeout(() => {
-      startBattle(autoRepeatSession.sectorId);
+      startBattle(
+        autoRepeatSession.sectorId,
+        autoRepeatSession.kind
+          ? {
+              kind: autoRepeatSession.kind,
+              sourceId: autoRepeatSession.sourceId ?? null,
+            }
+          : undefined
+      );
     }, delayMs);
     return () => window.clearTimeout(timer);
   }, [
@@ -862,6 +870,8 @@ export function BattleScreen() {
     autoRepeatSession?.active,
     autoRepeatSession?.completedRuns,
     autoRepeatSession?.sectorId,
+    autoRepeatSession?.kind,
+    autoRepeatSession?.sourceId,
     battleSpeed,
     skipAnimations,
     startBattle,

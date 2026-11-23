@@ -99,6 +99,19 @@ describe('Task F2a+: Selling Protections, Battle Loop Toast/Stop-on-Defeat & Log
 
   describe('2. Battle Loop UI: Defeat rule radios, per-battle toast & batch summary', () => {
     it('keeps loop button outside "..." menu, defaults Stop immediately ON, shows toast mid-loop, and shows summary on completion', () => {
+      useGameStore.setState((s) => ({
+        pilot: {
+          ...s.pilot,
+          baseStates: {
+            ...s.pilot.baseStates,
+            border_outpost: {
+              ...s.pilot.baseStates.border_outpost,
+              faction: 'allied',
+              underAttack: false,
+            },
+          },
+        },
+      }));
       useGameStore.getState().startBattle('border_outpost');
 
       act(() => {

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { BALANCE_CONFIG, getGarageUnlockCost } from '../data/balance';
+import { BATTLE_KIND_RULES } from '../data/battleKinds';
 import { sanitizeAutoEquipConfig } from '../data/autoEquipConfig';
 import { EMPTY_STAT_BLOCK, MECH_CLASS_LIST } from '../data/classes';
 import { EQUIPMENT_SLOTS } from '../data/items';
@@ -48,6 +49,7 @@ import {
   isVisible,
   mergeVisibleUnlockedSectors,
   pickDefaultBattle,
+  validateBattleLaunch,
 } from '../engine/frontline';
 import {
   getDefaultInventoryFilterState,
@@ -144,6 +146,7 @@ import type {
   BaseFaction,
   BaseTab,
   BattleEvent,
+  BattleKind,
   BattleRoundSnapshot,
   BattleSpeed,
   BattleState,
@@ -160,6 +163,7 @@ import type {
   ItemInstance,
   ItemRarity,
   Language,
+  LaunchBattleOptions,
   MechClassId,
   PilotAccount,
   QuickSellFilterConfig,
@@ -396,7 +400,11 @@ interface GameStoreState {
   setAutoRepeatDefeatRule: (rule: AutoRepeatDefeatRule) => void;
   setAutoRepeatDefeatStreakLimit: (limit: number) => void;
   setAutoRepeatStopOnDefeat: (stopOnDefeat: boolean) => void;
-  startAutoRepeat: (limit?: AutoRepeatLimit, sectorId?: string) => void;
+  startAutoRepeat: (
+    limit?: AutoRepeatLimit,
+    sectorId?: string,
+    opts?: LaunchBattleOptions
+  ) => void;
   stopAutoRepeat: (reason?: AutoStopReason) => void;
   clearAutoRepeatSummary: () => void;
   clearAutoRepeatToast: () => void;
@@ -451,8 +459,8 @@ interface GameStoreState {
   enchantEquippedSlot: (slot: EquipmentSlot) => EnchantAttemptResult | null;
 
   // Battle actions
-  startBattle: (sectorId?: string) => void;
-  reloadBattle: (sectorId?: string) => void;
+  startBattle: (sectorId?: string, opts?: LaunchBattleOptions) => void;
+  reloadBattle: (sectorId?: string, opts?: LaunchBattleOptions) => void;
   selectTarget: (unitId: string) => void;
   selectAllyTarget: (unitId: string) => void;
   logRadarInvalidTarget: (targetName: string, reasonKey: string) => void;
@@ -633,16 +641,23 @@ function finalizeBattleOutcome(
   extraEvents = battle.events,
   extraTurnCounter = battle.turnCounter
 ): Partial<GameStoreState> {
+  const battleKind: BattleKind = battle.kind ?? 'assault';
+  const kindRule = BATTLE_KIND_RULES[battleKind];
   const deployedGearId = battle.deployedGearId;
   const deployedGear = state.pilot.gears[deployedGearId];
   const alreadyCaptured = state.pilot.capturedSectorIds.includes(battle.sectorId);
+  const effectiveAlreadyCaptured = kindRule.capturesOnWin
+    ? alreadyCaptured
+    : true;
+  const effectiveRewardMult =
+    state.adminConfig.rewardMultiplier * (battle.rewardMult ?? 1);
 
   const rewards = calculateBattleRewards(
     updatedUnits,
     won,
-    state.adminConfig.rewardMultiplier,
+    effectiveRewardMult,
     battle.sectorId,
-    alreadyCaptured
+    effectiveAlreadyCaptured
   );
   const droppedItems = rollBattleItemDrops(
     updatedUnits.filter((u) => u.side === 'enemy'),
@@ -666,9 +681,9 @@ function finalizeBattleOutcome(
     rewards.fullVictoryExp
   );
 
-  // Record base capture on victory; unlockedSectorIds is cumulative visibility history (never shrinks)
+  // Record base capture only when kind captures on win; unlockedSectorIds is cumulative visibility history (never shrinks)
   let nextCapturedSectors = state.pilot.capturedSectorIds;
-  if (won && !alreadyCaptured) {
+  if (won && kindRule.capturesOnWin && !alreadyCaptured) {
     nextCapturedSectors = [...state.pilot.capturedSectorIds, battle.sectorId];
   }
 
@@ -688,11 +703,12 @@ function finalizeBattleOutcome(
       : 0,
   };
 
-  // Freshly captured bases start Damaged; repelled raids clear alert; hired wingman/engineer boost consumed; bonus missions paid
+  // Freshly captured bases start Damaged (assault only); repelled raids clear alert (defend only); bonus missions paid (assault/defend)
   const baseConseq = applyBattleBaseConsequences(
     basePilotBeforeConsequences,
     battle.sectorId,
-    won
+    won,
+    battleKind
   );
   // Advance campaign calendar 1 month after each completed non-retreat sortie
   const monthStep = retreated
@@ -764,20 +780,31 @@ function finalizeBattleOutcome(
         state.autoRepeatDefeatRule,
         streakLimit
       );
-      const nextBattleAllowed =
-        !stopCheck.stop &&
-        pickDefaultBattle(
-          getBattleOptions(
+      const loopKind: BattleKind = updatedSession.kind ?? battleKind;
+      const loopSourceId =
+        updatedSession.sourceId !== undefined
+          ? updatedSession.sourceId
+          : battle.sourceId ?? null;
+      const nextValidation = !stopCheck.stop
+        ? validateBattleLaunch(
             nextPilot,
             updatedSession.sectorId,
+            loopKind,
+            loopSourceId,
             state.adminConfig
           )
-        ) !== null;
-      const shouldStopNow = stopCheck.stop || !nextBattleAllowed;
+        : null;
+      const shouldStopNow =
+        stopCheck.stop || (nextValidation !== null && !nextValidation.allowed);
       if (shouldStopNow) {
+        const blockedStopReason: AutoStopReason =
+          (loopKind === 'mission' || loopKind === 'event') &&
+          nextValidation?.reasonKey === 'map.reason.sourceInactive'
+            ? 'source_inactive'
+            : 'node_not_contested';
         const finalReason: AutoStopReason | null =
           updatedSession.stopReason ??
-          (stopCheck.stop ? stopCheck.reason : 'node_not_contested');
+          (stopCheck.stop ? stopCheck.reason : blockedStopReason);
         nextAutoRepeat = {
           ...updatedSession,
           active: false,
@@ -846,6 +873,7 @@ function finalizeBattleOutcome(
       summary: {
         outcome: won ? 'victory' : 'defeat',
         retreated,
+        kind: battleKind,
         deployedGearId,
         sectorId: battle.sectorId,
         rounds: battle.round,
@@ -875,19 +903,59 @@ const initialDeviceSpeed = readDeviceBattleSpeed();
 function launchBattleForSector(
   state: GameStoreState,
   set: (partial: Partial<GameStoreState>) => void,
-  sectorId?: string
+  sectorId?: string,
+  opts?: LaunchBattleOptions
 ): void {
   const targetSectorId = sectorId ?? state.selectedSectorId;
-  const battleOptions = getBattleOptions(
-    state.pilot,
-    targetSectorId,
-    state.adminConfig
-  );
-  const defaultBattle = pickDefaultBattle(battleOptions);
-  if (defaultBattle === null) {
+  const activeLoopKind =
+    opts?.kind === undefined && state.autoRepeatSession?.active
+      ? state.autoRepeatSession.kind
+      : undefined;
+  const requestedKind = opts?.kind ?? activeLoopKind;
+  const requestedSourceId =
+    opts?.sourceId !== undefined
+      ? opts.sourceId
+      : activeLoopKind !== undefined
+      ? state.autoRepeatSession?.sourceId ?? null
+      : null;
+
+  let validation: ReturnType<typeof validateBattleLaunch>;
+  if (requestedKind !== undefined) {
+    validation = validateBattleLaunch(
+      state.pilot,
+      targetSectorId,
+      requestedKind,
+      requestedSourceId,
+      state.adminConfig
+    );
+  } else {
+    const battleOptions = getBattleOptions(
+      state.pilot,
+      targetSectorId,
+      state.adminConfig
+    );
+    const defaultKind = pickDefaultBattle(battleOptions);
+    if (defaultKind === null) {
+      validation = {
+        allowed: false,
+        kind: 'assault',
+        sourceId: null,
+        reasonKey:
+          battleOptions.find((opt) => !opt.allowed && opt.reasonKey)
+            ?.reasonKey ?? 'map.reason.notFrontline',
+      };
+    } else {
+      validation = {
+        allowed: true,
+        kind: defaultKind,
+        sourceId: null,
+      };
+    }
+  }
+
+  if (!validation.allowed) {
     const reasonKey: BattleOptionReasonKey =
-      battleOptions.find((opt) => !opt.allowed && opt.reasonKey)?.reasonKey ??
-      'map.reason.notFrontline';
+      validation.reasonKey ?? 'map.reason.notFrontline';
     const patch: Partial<GameStoreState> = {
       battleLaunchToast: {
         id: `launch_toast_${Date.now()}`,
@@ -897,7 +965,11 @@ function launchBattleForSector(
     };
     if (state.autoRepeatSession?.active) {
       const stopReason: AutoStopReason =
-        state.autoRepeatSession.stopReason ?? 'node_not_contested';
+        state.autoRepeatSession.stopReason ??
+        ((validation.kind === 'mission' || validation.kind === 'event') &&
+        reasonKey === 'map.reason.sourceInactive'
+          ? 'source_inactive'
+          : 'node_not_contested');
       const streakLimit = clampDefeatStreakLimit(
         state.autoRepeatSession.defeatStreakLimit ??
           state.autoRepeatDefeatStreakLimit
@@ -932,12 +1004,17 @@ function launchBattleForSector(
     return;
   }
 
+  const effectiveSizeOverride =
+    validation.sizeOverride ?? state.adminConfig.battleSizeOverride;
   const battleState = createInitialBattleState(
     state.pilot,
     targetSectorId,
     Math.random,
-    state.adminConfig.battleSizeOverride,
-    state.adminConfig
+    effectiveSizeOverride,
+    state.adminConfig,
+    validation.kind,
+    validation.sourceId,
+    validation.rewardMult
   );
   soundFx.playConfirm();
 
@@ -1616,7 +1693,7 @@ export const useGameStore = create<GameStoreState>()(
         });
       },
 
-      startAutoRepeat: (limit, sectorId) => {
+      startAutoRepeat: (limit, sectorId, opts) => {
         const state = get();
         const chosenLimit = limit ?? state.autoRepeatLimit;
         const chosenSector =
@@ -1624,6 +1701,22 @@ export const useGameStore = create<GameStoreState>()(
         const streakLimit = clampDefeatStreakLimit(
           state.autoRepeatDefeatStreakLimit
         );
+
+        const ongoingBattle =
+          state.battle && !state.battle.summary ? state.battle : null;
+        const resolvedKind: BattleKind | undefined =
+          opts?.kind ??
+          ongoingBattle?.kind ??
+          pickDefaultBattle(
+            getBattleOptions(state.pilot, chosenSector, state.adminConfig)
+          ) ??
+          undefined;
+        const resolvedSourceId =
+          opts?.sourceId !== undefined
+            ? opts.sourceId
+            : ongoingBattle
+            ? ongoingBattle.sourceId ?? null
+            : null;
 
         if (state.pilot.inventory.length >= BALANCE_CONFIG.maxInventorySize) {
           set({
@@ -1633,6 +1726,8 @@ export const useGameStore = create<GameStoreState>()(
               active: false,
               limit: chosenLimit,
               sectorId: chosenSector,
+              kind: resolvedKind,
+              sourceId: resolvedSourceId,
               completedRuns: 0,
               wins: 0,
               consecutiveDefeats: 0,
@@ -1648,44 +1743,61 @@ export const useGameStore = create<GameStoreState>()(
         }
 
         const isNextBattleIdle = !state.battle || Boolean(state.battle.summary);
-        if (
-          isNextBattleIdle &&
-          pickDefaultBattle(
-            getBattleOptions(state.pilot, chosenSector, state.adminConfig)
-          ) === null
-        ) {
-          const opts = getBattleOptions(
-            state.pilot,
-            chosenSector,
-            state.adminConfig
-          );
-          const reasonKey: BattleOptionReasonKey =
-            opts.find((opt) => !opt.allowed && opt.reasonKey)?.reasonKey ??
-            'map.reason.notFrontline';
-          set({
-            autoRepeatLimit: chosenLimit,
-            autoRepeatToast: null,
-            battleLaunchToast: {
-              id: `launch_toast_${Date.now()}`,
-              reasonKey,
-              sectorId: chosenSector,
-            },
-            autoRepeatSession: {
-              active: false,
-              limit: chosenLimit,
-              sectorId: chosenSector,
-              completedRuns: 0,
-              wins: 0,
-              consecutiveDefeats: 0,
-              defeatStreakLimit: streakLimit,
-              totalExp: 0,
-              totalCredits: 0,
-              totalWarPoints: 0,
-              totalDrops: [],
-              stopReason: 'node_not_contested',
-            },
-          });
-          return;
+        if (isNextBattleIdle) {
+          const checkKind: BattleKind = resolvedKind ?? 'assault';
+          const validation =
+            resolvedKind !== undefined
+              ? validateBattleLaunch(
+                  state.pilot,
+                  chosenSector,
+                  checkKind,
+                  resolvedSourceId,
+                  state.adminConfig
+                )
+              : null;
+          if (!validation || !validation.allowed) {
+            const optsList = getBattleOptions(
+              state.pilot,
+              chosenSector,
+              state.adminConfig
+            );
+            const reasonKey: BattleOptionReasonKey =
+              validation?.reasonKey ??
+              optsList.find((opt) => !opt.allowed && opt.reasonKey)
+                ?.reasonKey ??
+              'map.reason.notFrontline';
+            const stopReason: AutoStopReason =
+              (checkKind === 'mission' || checkKind === 'event') &&
+              reasonKey === 'map.reason.sourceInactive'
+                ? 'source_inactive'
+                : 'node_not_contested';
+            set({
+              autoRepeatLimit: chosenLimit,
+              autoRepeatToast: null,
+              battleLaunchToast: {
+                id: `launch_toast_${Date.now()}`,
+                reasonKey,
+                sectorId: chosenSector,
+              },
+              autoRepeatSession: {
+                active: false,
+                limit: chosenLimit,
+                sectorId: chosenSector,
+                kind: resolvedKind,
+                sourceId: resolvedSourceId,
+                completedRuns: 0,
+                wins: 0,
+                consecutiveDefeats: 0,
+                defeatStreakLimit: streakLimit,
+                totalExp: 0,
+                totalCredits: 0,
+                totalWarPoints: 0,
+                totalDrops: [],
+                stopReason,
+              },
+            });
+            return;
+          }
         }
 
         soundFx.playConfirm();
@@ -1697,6 +1809,8 @@ export const useGameStore = create<GameStoreState>()(
             active: true,
             limit: chosenLimit,
             sectorId: chosenSector,
+            kind: resolvedKind,
+            sourceId: resolvedSourceId,
             completedRuns: 0,
             wins: 0,
             consecutiveDefeats: 0,
@@ -1711,7 +1825,10 @@ export const useGameStore = create<GameStoreState>()(
 
         // If not currently in an ongoing battle, start immediately
         if (!state.battle || state.battle.summary) {
-          get().startBattle(chosenSector);
+          get().startBattle(chosenSector, {
+            kind: resolvedKind,
+            sourceId: resolvedSourceId,
+          });
         }
       },
 
@@ -2553,14 +2670,14 @@ export const useGameStore = create<GameStoreState>()(
         return result;
       },
 
-      startBattle: (sectorId) => {
+      startBattle: (sectorId, opts) => {
         const state = get();
         if (isBattleActive(state)) return;
-        launchBattleForSector(state, set, sectorId);
+        launchBattleForSector(state, set, sectorId, opts);
       },
 
-      reloadBattle: (sectorId) => {
-        launchBattleForSector(get(), set, sectorId);
+      reloadBattle: (sectorId, opts) => {
+        launchBattleForSector(get(), set, sectorId, opts);
       },
 
       selectTarget: (unitId) => {

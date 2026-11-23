@@ -4,6 +4,7 @@ import {
   MAP_LANES,
   SECTORS_CATALOG,
 } from '../data/maps';
+import { BATTLE_KIND_RULES } from '../data/battleKinds';
 import {
   isContested,
   mergeVisibleUnlockedSectors,
@@ -11,6 +12,7 @@ import {
 } from './frontline';
 import type {
   BaseRuntimeState,
+  BattleKind,
   BonusMissionState,
   MechClassId,
   PilotAccount,
@@ -375,13 +377,15 @@ export function applyBaseEngineerBoost(
 export function applyBattleBaseConsequences(
   pilot: PilotAccount,
   sectorId: string,
-  won: boolean
+  won: boolean,
+  kind: BattleKind = 'assault'
 ): {
   pilot: PilotAccount;
   bonusMissionCredits: number;
   bonusMissionWarPoints: number;
   capturedFreshly: boolean;
 } {
+  const rule = BATTLE_KIND_RULES[kind];
   const curBase = getBaseState(pilot, sectorId);
   const nextBaseStates: Record<string, BaseRuntimeState> = {
     ...(pilot.baseStates ?? createInitialBaseStates()),
@@ -389,7 +393,7 @@ export function applyBattleBaseConsequences(
   let capturedFreshly = false;
 
   if (won) {
-    if (curBase.faction !== 'allied') {
+    if (rule.capturesOnWin && curBase.faction !== 'allied') {
       // Freshly captured base starts DAMAGED!
       nextBaseStates[sectorId] = {
         faction: 'allied',
@@ -400,7 +404,7 @@ export function applyBattleBaseConsequences(
         attackFromSectorId: null,
       };
       capturedFreshly = true;
-    } else if (curBase.underAttack) {
+    } else if (rule.clearsRaid && curBase.faction === 'allied' && curBase.underAttack) {
       // Successfully defended Allied base from incoming raid
       nextBaseStates[sectorId] = {
         ...curBase,
@@ -417,12 +421,13 @@ export function applyBattleBaseConsequences(
     unlockedSectorIds: pilot.unlockedSectorIds,
   });
 
-  // Check Bonus Mission completion
+  // Check Bonus Mission completion (overlay: assault or defend win at target base)
   let bonusMissionCredits = 0;
   let bonusMissionWarPoints = 0;
   let nextBonusMission = pilot.activeBonusMission;
   if (
     won &&
+    rule.completesBonusMissionOnWin &&
     pilot.activeBonusMission &&
     !pilot.activeBonusMission.completed &&
     pilot.activeBonusMission.targetSectorId === sectorId

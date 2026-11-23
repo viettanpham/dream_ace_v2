@@ -628,6 +628,18 @@ export interface GearTacticsProfile {
 
 export type AutoRepeatLimit = 1 | 5 | 10 | 20 | 'infinite';
 
+export type BattleKind =
+  | 'assault'
+  | 'defend'
+  | 'patrol'
+  | 'mission'
+  | 'event';
+
+export interface LaunchBattleOptions {
+  kind?: BattleKind;
+  sourceId?: string | null;
+}
+
 export type AutoStopReason =
   | 'completed'
   | 'defeat'
@@ -639,6 +651,7 @@ export type AutoStopReason =
   | 'auto_retreat'
   | 'inventory_full'
   | 'node_not_contested'
+  | 'source_inactive'
   | 'manual_stop';
 
 export type AutoRepeatDefeatRule =
@@ -650,6 +663,8 @@ export interface AutoRepeatSession {
   active: boolean;
   limit: AutoRepeatLimit;
   sectorId: string;
+  kind?: BattleKind;
+  sourceId?: string | null;
   completedRuns: number;
   wins: number;
   consecutiveDefeats?: number;
@@ -904,6 +919,7 @@ export interface CombatFxEvent {
 export interface BattleSummary {
   outcome: 'victory' | 'defeat';
   retreated?: boolean;
+  kind?: BattleKind;
   deployedGearId: MechClassId;
   sectorId: string;
   rounds: number;
@@ -1078,6 +1094,9 @@ export interface BattleStatsSummary {
 
 export interface BattleState {
   sectorId: string;
+  kind?: BattleKind;
+  sourceId?: string | null;
+  rewardMult?: number;
   deployedGearId: MechClassId;
   squadSize: BattleSize;
   units: CombatUnit[];

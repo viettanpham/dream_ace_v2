@@ -379,6 +379,19 @@ describe('TASK LP2 — Loop defeat rule + extra speeds + high speed safety', () 
   });
 
   it('2) Option 2 stops exactly after custom N defeats in a row (resets on win) and logs rule reason', () => {
+    useGameStore.setState((s) => ({
+      pilot: {
+        ...s.pilot,
+        baseStates: {
+          ...s.pilot.baseStates,
+          border_outpost: {
+            ...s.pilot.baseStates.border_outpost,
+            faction: 'allied',
+            underAttack: false,
+          },
+        },
+      },
+    }));
     useGameStore.getState().startBattle('border_outpost');
     useGameStore.getState().setAutoRepeatDefeatRule('stop_after_n');
     useGameStore.getState().setAutoRepeatDefeatStreakLimit(2);

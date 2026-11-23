@@ -717,6 +717,7 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'auto.repeatReason.auto_retreat': 'Tự động rút lui do HP nguy kịch',
   'auto.repeatReason.inventory_full': 'Dừng: Hòm đồ đã đầy ({max} món)',
   'auto.repeatReason.node_not_contested': 'Dừng: căn cứ không còn giao tranh',
+  'auto.repeatReason.source_inactive': 'Dừng: nguồn nhiệm vụ/sự kiện không còn hoạt động',
   'auto.repeatReason.manual_stop': 'Đã dừng theo lệnh phi công',
   'auto.cond.always': 'Luôn luôn',
   'auto.cond.my_hp_below': 'HP của tôi < {value}%',
@@ -1719,6 +1720,13 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'map.reason.notFrontline': 'Chưa tiếp giáp lãnh thổ ta',
   'map.reason.rearBase': 'Căn cứ hậu phương, không có giao tranh',
   'map.reason.hidden': 'Chưa phát hiện',
+  'map.reason.sourceInactive': 'Nguồn nhiệm vụ/sự kiện không còn hoạt động',
+  'battle.kind.assault': 'Tấn công',
+  'battle.kind.defend': 'Phòng thủ',
+  'battle.kind.patrol': 'Tuần tra',
+  'battle.kind.mission': 'Nhiệm vụ',
+  'battle.kind.event': 'Sự kiện',
+  'summary.battleKindLine': 'Loại trận: {kind}',
   'admin.campaignIgnoreFrontline': 'Bỏ qua luật tiền tuyến (test)',
 };
 

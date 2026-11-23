@@ -715,6 +715,7 @@ export const EN_TRANSLATIONS = {
   'auto.repeatReason.auto_retreat': 'Auto-retreated on critical HP',
   'auto.repeatReason.inventory_full': 'Stopped: Cargo box full ({max} items)',
   'auto.repeatReason.node_not_contested': 'Stopped: node is no longer contested',
+  'auto.repeatReason.source_inactive': 'Stopped: mission/event source inactive',
   'auto.repeatReason.manual_stop': 'Stopped by pilot',
   'auto.cond.always': 'Always',
   'auto.cond.my_hp_below': 'My HP < {value}%',
@@ -1716,6 +1717,13 @@ export const EN_TRANSLATIONS = {
   'map.reason.notFrontline': 'Not adjacent to allied territory',
   'map.reason.rearBase': 'Rear base, no active frontline',
   'map.reason.hidden': 'Undiscovered',
+  'map.reason.sourceInactive': 'Mission/event source inactive',
+  'battle.kind.assault': 'Assault',
+  'battle.kind.defend': 'Defend',
+  'battle.kind.patrol': 'Patrol',
+  'battle.kind.mission': 'Mission',
+  'battle.kind.event': 'Event',
+  'summary.battleKindLine': 'Battle type: {kind}',
   'admin.campaignIgnoreFrontline': 'Ignore frontline rule (test)',
 } as const;
 

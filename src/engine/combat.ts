@@ -18,6 +18,7 @@ import type {
   ActiveStatusEffect,
   AdminConfig,
   BattleEvent,
+  BattleKind,
   BattleRoundSnapshot,
   BattleSize,
   BattleState,
@@ -51,6 +52,7 @@ import {
   pickRowForClass,
   sanitizeFormationConfig,
 } from './formation';
+import { getBattleOptions, pickDefaultBattle } from './frontline';
 import {
   canUnitUseSkill,
   type GearPassiveBonuses,
@@ -517,8 +519,15 @@ export function createInitialBattleState(
   sectorId: string,
   rng: () => number = Math.random,
   squadSizeOverride?: BattleSize | null,
-  adminConfig?: Partial<AdminConfig>
+  adminConfig?: Partial<AdminConfig>,
+  battleKind?: BattleKind,
+  sourceId: string | null = null,
+  rewardMult?: number
 ): BattleState {
+  const resolvedKind: BattleKind =
+    battleKind ??
+    pickDefaultBattle(getBattleOptions(pilot, sectorId, adminConfig)) ??
+    'assault';
   const sector = getSectorById(sectorId);
   const rawSquadSize: BattleSize = squadSizeOverride ?? sector.squadSize ?? 4;
   const formationConfig = sanitizeFormationConfig(
@@ -762,6 +771,9 @@ export function createInitialBattleState(
 
   return {
     sectorId: sector.id,
+    kind: resolvedKind,
+    sourceId: sourceId ?? null,
+    ...(rewardMult !== undefined ? { rewardMult } : {}),
     deployedGearId: activeGear.classId,
     squadSize,
     units,

@@ -87,6 +87,16 @@ export function BattleResultDialog({
                 <p className="text-[13px] text-slate-400 leading-relaxed">
                   {outcomeDesc}
                 </p>
+                <p
+                  data-testid="battle-result-kind"
+                  className="text-[12px] text-slate-300"
+                >
+                  {t('summary.battleKindLine', {
+                    kind: t(
+                      `battle.kind.${summary.kind ?? 'assault'}` as TranslationKey
+                    ),
+                  })}
+                </p>
               </div>
 
               {summary.leveledUp && (
