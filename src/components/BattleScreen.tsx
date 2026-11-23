@@ -156,6 +156,7 @@ export function BattleScreen() {
   const clearWingmanChat = useGameStore((s) => s.clearWingmanChat);
   const returnToHangar = useGameStore((s) => s.returnToHangar);
   const startBattle = useGameStore((s) => s.startBattle);
+  const reloadBattle = useGameStore((s) => s.reloadBattle);
   const setBattleSpeed = useGameStore((s) => s.setBattleSpeed);
   const setBattleViewMode = useGameStore((s) => s.setBattleViewMode);
   const toggleSkipAnimations = useGameStore((s) => s.toggleSkipAnimations);
@@ -3244,7 +3245,7 @@ export function BattleScreen() {
         title={t('auto.repeatSummaryTitle')}
         resetKey={showRepeatBatchSummary}
         onClose={clearAutoRepeatSummary}
-        onReloadBattle={() => startBattle(battle.sectorId)}
+        onReloadBattle={() => reloadBattle(battle.sectorId)}
       >
         {showRepeatBatchSummary && autoRepeatSession && (
           <AutoRepeatBatchSummaryModal
@@ -3269,7 +3270,7 @@ export function BattleScreen() {
         title={t('summary.victory')}
         resetKey={Boolean(battle.summary)}
         onClose={returnToHangar}
-        onReloadBattle={() => startBattle(battle.sectorId)}
+        onReloadBattle={() => reloadBattle(battle.sectorId)}
       >
         {battle.summary &&
           !autoRepeatSession?.active &&
@@ -3293,7 +3294,7 @@ export function BattleScreen() {
         title={phoneSheetUnit?.name ?? 'Unit Telemetry'}
         resetKey={phoneUnitSheetId ?? 'none'}
         onClose={() => setPhoneUnitSheetId(null)}
-        onReloadBattle={() => startBattle(battle.sectorId)}
+        onReloadBattle={() => reloadBattle(battle.sectorId)}
       >
         <PhoneUnitDetailSheet
           unit={phoneSheetUnit}
@@ -3314,7 +3315,7 @@ export function BattleScreen() {
         title={t('battle.combatLog')}
         resetKey={logSheetOpen}
         onClose={() => setLogSheetOpen(false)}
-        onReloadBattle={() => startBattle(battle.sectorId)}
+        onReloadBattle={() => reloadBattle(battle.sectorId)}
       >
         {logSheetOpen && (
           <CombatLogPopupSheet
@@ -3340,7 +3341,7 @@ export function BattleScreen() {
         t={t}
         onClose={() => setSuppliesSheetOpen(false)}
         onOpenTactics={() => setTacticsModalOpen(true)}
-        onReloadBattle={() => startBattle(battle.sectorId)}
+        onReloadBattle={() => reloadBattle(battle.sectorId)}
       />
 
       {/* ==================== LIVE PROGRESS / END-OF-BATTLE REPORT MODAL ==================== */}
@@ -3349,7 +3350,7 @@ export function BattleScreen() {
         title={battle.summary ? t('stats.reportTitle') : t('stats.progressTitle')}
         resetKey={statsModalOpen}
         onClose={() => setStatsModalOpen(false)}
-        onReloadBattle={() => startBattle(battle.sectorId)}
+        onReloadBattle={() => reloadBattle(battle.sectorId)}
       >
         <BattleStatsModal
           open={statsModalOpen}

@@ -430,6 +430,7 @@ interface GameStoreState {
 
   // Battle actions
   startBattle: (sectorId?: string) => void;
+  reloadBattle: (sectorId?: string) => void;
   selectTarget: (unitId: string) => void;
   selectAllyTarget: (unitId: string) => void;
   logRadarInvalidTarget: (targetName: string, reasonKey: string) => void;
@@ -837,6 +838,66 @@ function finalizeBattleOutcome(
 const initialFresh = createFreshCampaignState('Vance', 'striker');
 const initialDeviceLoopPrefs = readDeviceLoopPrefs();
 const initialDeviceSpeed = readDeviceBattleSpeed();
+
+function launchBattleForSector(
+  state: GameStoreState,
+  set: (partial: Partial<GameStoreState>) => void,
+  sectorId?: string
+): void {
+  const requestedSector = sectorId ?? state.selectedSectorId;
+  const targetSectorId = state.pilot.unlockedSectorIds.includes(requestedSector)
+    ? requestedSector
+    : state.pilot.unlockedSectorIds[0] ?? SECTORS_CATALOG[0].id;
+
+  const battleState = createInitialBattleState(
+    state.pilot,
+    targetSectorId,
+    Math.random,
+    state.adminConfig.battleSizeOverride,
+    state.adminConfig
+  );
+  soundFx.playConfirm();
+
+  if (state.adminConfig.alwaysWin) {
+    const defeatedEnemies = battleState.units.map((u) =>
+      u.side === 'enemy'
+        ? {
+            ...u,
+            hp: 0,
+            shield: 0,
+            alive: false,
+            animState: 'destroyed' as const,
+          }
+        : u
+    );
+    const outcomePatch = finalizeBattleOutcome(
+      state,
+      battleState,
+      defeatedEnemies,
+      true,
+      false
+    );
+    set({
+      ...outcomePatch,
+      selectedSectorId: targetSectorId,
+      screen: 'BATTLE',
+      ...(!state.autoRepeatSession?.active
+        ? { autoRepeatSession: null, autoRepeatToast: null }
+        : {}),
+    });
+    return;
+  }
+
+  set({
+    selectedSectorId: targetSectorId,
+    battle: battleState,
+    screen: 'BATTLE',
+    hasSaveData: true,
+    ...(!state.autoRepeatSession?.active
+      ? { autoRepeatSession: null, autoRepeatToast: null }
+      : {}),
+  });
+}
 
 export function isBattleActive(
   state?: Pick<GameStoreState, 'screen' | 'battle'>
@@ -2222,61 +2283,11 @@ export const useGameStore = create<GameStoreState>()(
       startBattle: (sectorId) => {
         const state = get();
         if (isBattleActive(state)) return;
-        const requestedSector = sectorId ?? state.selectedSectorId;
-        const targetSectorId = state.pilot.unlockedSectorIds.includes(
-          requestedSector
-        )
-          ? requestedSector
-          : state.pilot.unlockedSectorIds[0] ?? SECTORS_CATALOG[0].id;
+        launchBattleForSector(state, set, sectorId);
+      },
 
-        const battleState = createInitialBattleState(
-          state.pilot,
-          targetSectorId,
-          Math.random,
-          state.adminConfig.battleSizeOverride,
-          state.adminConfig
-        );
-        soundFx.playConfirm();
-
-        if (state.adminConfig.alwaysWin) {
-          const defeatedEnemies = battleState.units.map((u) =>
-            u.side === 'enemy'
-              ? {
-                  ...u,
-                  hp: 0,
-                  shield: 0,
-                  alive: false,
-                  animState: 'destroyed' as const,
-                }
-              : u
-          );
-          const outcomePatch = finalizeBattleOutcome(
-            state,
-            battleState,
-            defeatedEnemies,
-            true,
-            false
-          );
-          set({
-            ...outcomePatch,
-            selectedSectorId: targetSectorId,
-            screen: 'BATTLE',
-            ...(!state.autoRepeatSession?.active
-              ? { autoRepeatSession: null, autoRepeatToast: null }
-              : {}),
-          });
-          return;
-        }
-
-        set({
-          selectedSectorId: targetSectorId,
-          battle: battleState,
-          screen: 'BATTLE',
-          hasSaveData: true,
-          ...(!state.autoRepeatSession?.active
-            ? { autoRepeatSession: null, autoRepeatToast: null }
-            : {}),
-        });
+      reloadBattle: (sectorId) => {
+        launchBattleForSector(get(), set, sectorId);
       },
 
       selectTarget: (unitId) => {

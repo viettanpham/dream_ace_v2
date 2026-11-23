@@ -6,6 +6,7 @@ import { EN_TRANSLATIONS } from '../../i18n/en';
 import { VI_TRANSLATIONS } from '../../i18n/vi';
 import { isBattleActive, useGameStore } from '../../store/useGameStore';
 import { soundFx } from '../../utils/sound';
+import { ErrorBoundary } from '../ErrorBoundary';
 import { SidebarNav } from '../SidebarNav';
 
 (
@@ -241,5 +242,195 @@ describe('TASK U1 — Tab labels, i18n parity & SidebarNav render', () => {
     });
     expect(container!.textContent).toContain('Character');
     expect(container!.textContent).toContain('GEAR');
+  });
+});
+
+describe('TASK U1-F1 — reloadBattle & ErrorBoundary crash recovery', () => {
+  it('reloadBattle discards an active battle and starts a fresh round-1 battle while startBattle remains locked', () => {
+    useGameStore.getState().startBattle('border_outpost');
+    const firstBattle = useGameStore.getState().battle!;
+    useGameStore.setState({
+      battle: {
+        ...firstBattle,
+        round: 4,
+      },
+    });
+    expect(isBattleActive()).toBe(true);
+
+    // startBattle is still a no-op during active battle
+    useGameStore.getState().startBattle('border_outpost');
+    expect(useGameStore.getState().battle?.round).toBe(4);
+
+    // reloadBattle bypasses the lock and produces a fresh battle
+    useGameStore.getState().reloadBattle('border_outpost');
+    const reloaded = useGameStore.getState().battle!;
+    expect(reloaded).not.toBe(firstBattle);
+    expect(reloaded.round).toBe(1);
+    expect(reloaded.summary).toBeNull();
+    expect(reloaded.sectorId).toBe('border_outpost');
+    expect(useGameStore.getState().screen).toBe('BATTLE');
+  });
+
+  it('reloadBattle works when battle is null and when battle.summary is already set', () => {
+    // Case 1: battle === null
+    useGameStore.setState({ screen: 'HANGAR', battle: null });
+    useGameStore.getState().reloadBattle('border_outpost');
+    const fromNull = useGameStore.getState().battle;
+    expect(fromNull).not.toBeNull();
+    expect(fromNull?.round).toBe(1);
+    expect(fromNull?.summary).toBeNull();
+    expect(useGameStore.getState().screen).toBe('BATTLE');
+
+    // Case 2: battle.summary is set
+    useGameStore.setState({
+      battle: {
+        ...fromNull!,
+        round: 3,
+        summary: {
+          outcome: 'victory',
+          deployedGearId: fromNull!.deployedGearId,
+          sectorId: fromNull!.sectorId,
+          rounds: 3,
+          expGained: 50,
+          creditsGained: 120,
+          warPointsGained: 8,
+          baseCaptureBonusWp: 0,
+          leveledUp: false,
+          previousLevel: 1,
+          newLevel: 1,
+          statPointsGained: 0,
+          battlesToNextLevel: 3,
+          unlockedSectorId: null,
+          enemiesDestroyed: 4,
+          totalEnemies: 4,
+          alliesSurviving: 4,
+          droppedItems: [],
+        },
+      },
+    });
+    expect(isBattleActive()).toBe(false);
+    useGameStore.getState().reloadBattle('border_outpost');
+    const fromSummary = useGameStore.getState().battle!;
+    expect(fromSummary.round).toBe(1);
+    expect(fromSummary.summary).toBeNull();
+    expect(fromSummary).not.toBe(fromNull);
+  });
+
+  it('ErrorBoundary reload button recovers an active battle crash via reloadBattle', () => {
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+
+    useGameStore.getState().startBattle('border_outpost');
+    const brokenBattle = useGameStore.getState().battle!;
+    useGameStore.setState({
+      battle: {
+        ...brokenBattle,
+        round: 3,
+      },
+    });
+    expect(isBattleActive()).toBe(true);
+
+    function CrashWhileBrokenChild() {
+      const round = useGameStore((s) => s.battle?.round ?? 0);
+      if (round > 1) {
+        throw new Error('Simulated battle render crash');
+      }
+      return createElement(
+        'div',
+        { 'data-testid': 'recovered-battle' },
+        `round:${round}`
+      );
+    }
+
+    act(() => {
+      root!.render(
+        createElement(ErrorBoundary, {
+          variant: 'global',
+          onReloadBattle: () =>
+            useGameStore
+              .getState()
+              .reloadBattle(useGameStore.getState().battle?.sectorId),
+          children: createElement(CrashWhileBrokenChild),
+        })
+      );
+    });
+
+    const reloadBtn = container!.querySelector(
+      '[data-testid="error-boundary-reload"]'
+    ) as HTMLButtonElement;
+    expect(reloadBtn).not.toBeNull();
+
+    act(() => {
+      reloadBtn.click();
+    });
+
+    const freshBattle = useGameStore.getState().battle!;
+    expect(freshBattle).not.toBe(brokenBattle);
+    expect(freshBattle.round).toBe(1);
+    expect(freshBattle.summary).toBeNull();
+    expect(
+      container!.querySelector('[data-testid="recovered-battle"]')?.textContent
+    ).toBe('round:1');
+    expect(
+      container!.querySelector('[data-testid="error-boundary-fallback"]')
+    ).toBeNull();
+
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('auto-repeat still starts the next battle via startBattle once summary is set', () => {
+    useGameStore.getState().startBattle('border_outpost');
+    const finishedBattle = useGameStore.getState().battle!;
+    useGameStore.setState({
+      autoRepeatSession: {
+        active: true,
+        limit: 5,
+        sectorId: 'border_outpost',
+        completedRuns: 1,
+        wins: 1,
+        consecutiveDefeats: 0,
+        defeatStreakLimit: 1,
+        totalExp: 40,
+        totalCredits: 100,
+        totalWarPoints: 5,
+        totalDrops: [],
+        stopReason: null,
+      },
+      battle: {
+        ...finishedBattle,
+        round: 2,
+        summary: {
+          outcome: 'victory',
+          deployedGearId: finishedBattle.deployedGearId,
+          sectorId: finishedBattle.sectorId,
+          rounds: 2,
+          expGained: 40,
+          creditsGained: 100,
+          warPointsGained: 5,
+          baseCaptureBonusWp: 0,
+          leveledUp: false,
+          previousLevel: 1,
+          newLevel: 1,
+          statPointsGained: 0,
+          battlesToNextLevel: 3,
+          unlockedSectorId: null,
+          enemiesDestroyed: 4,
+          totalEnemies: 4,
+          alliesSurviving: 4,
+          droppedItems: [],
+        },
+      },
+    });
+    expect(isBattleActive()).toBe(false);
+
+    useGameStore
+      .getState()
+      .startBattle(useGameStore.getState().autoRepeatSession!.sectorId);
+    const nextBattle = useGameStore.getState().battle!;
+    expect(nextBattle).not.toBe(finishedBattle);
+    expect(nextBattle.round).toBe(1);
+    expect(nextBattle.summary).toBeNull();
+    expect(useGameStore.getState().autoRepeatSession?.active).toBe(true);
   });
 });

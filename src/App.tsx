@@ -23,7 +23,7 @@ function AppShell() {
   const unlockAdminMode = useGameStore((s) => s.unlockAdminMode);
   const setAdminPanelOpen = useGameStore((s) => s.setAdminPanelOpen);
   const setTacticsModalOpen = useGameStore((s) => s.setTacticsModalOpen);
-  const startBattle = useGameStore((s) => s.startBattle);
+  const reloadBattle = useGameStore((s) => s.reloadBattle);
   const battleSectorId = useGameStore((s) => s.battle?.sectorId);
   const layoutMode = useBattleLayoutMode();
   const isPhoneBattle = screen === 'BATTLE' && layoutMode === 'phone-portrait';
@@ -90,7 +90,7 @@ function AppShell() {
       {screen === 'BATTLE' && (
         <ErrorBoundary
           variant="global"
-          onReloadBattle={() => startBattle(battleSectorId)}
+          onReloadBattle={() => reloadBattle(battleSectorId)}
         >
           <BattleScreen />
         </ErrorBoundary>
@@ -102,7 +102,7 @@ function AppShell() {
         resetKey={tacticsModalOpen}
         onClose={() => setTacticsModalOpen(false)}
         onReloadBattle={
-          screen === 'BATTLE' ? () => startBattle(battleSectorId) : undefined
+          screen === 'BATTLE' ? () => reloadBattle(battleSectorId) : undefined
         }
       >
         <AutoTacticsModal />
@@ -114,7 +114,7 @@ function AppShell() {
         resetKey={adminPanelOpen}
         onClose={() => setAdminPanelOpen(false)}
         onReloadBattle={
-          screen === 'BATTLE' ? () => startBattle(battleSectorId) : undefined
+          screen === 'BATTLE' ? () => reloadBattle(battleSectorId) : undefined
         }
       >
         <AdminPanel />
