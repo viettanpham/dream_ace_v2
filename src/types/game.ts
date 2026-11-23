@@ -869,10 +869,12 @@ export interface CombatLogEntry {
 }
 
 export type CombatFxKind = 'laser' | 'missile' | 'railgun' | 'heal';
+export type CombatFxTone = 'heal' | 'shield' | 'sp' | 'buff';
 
 export interface CombatFxEvent {
   id: string;
   kind: CombatFxKind;
+  tone?: CombatFxTone;
   fromSide: CombatSide;
   fromSlotIndex: number; // 0..7
   fromUnitId?: string;

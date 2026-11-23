@@ -2975,6 +2975,7 @@ function resolveUnitActionCore(
               fxEvent: {
                 id: nextId('fx'),
                 kind: 'heal',
+                tone: 'heal',
                 fromSide: act.side,
                 fromSlotIndex,
                 toSide: act.side,
@@ -3031,6 +3032,7 @@ function resolveUnitActionCore(
               fxEvent: {
                 id: nextId('fx'),
                 kind: 'heal',
+                tone: 'sp',
                 fromSide: act.side,
                 fromSlotIndex,
                 toSide: act.side,
@@ -3083,6 +3085,7 @@ function resolveUnitActionCore(
             fxEvent: {
               id: nextId('fx'),
               kind: 'heal',
+              tone: 'heal',
               fromSide: act.side,
               fromSlotIndex,
               toSide: act.side,
@@ -3156,6 +3159,7 @@ function resolveUnitActionCore(
             fxEvent: {
               id: nextId('fx'),
               kind: 'heal',
+              tone: 'shield',
               fromSide: act.side,
               fromSlotIndex,
               toSide: act.side,
@@ -3216,6 +3220,7 @@ function resolveUnitActionCore(
             fxEvent: {
               id: nextId('fx'),
               kind: 'heal',
+              tone: 'buff',
               fromSide: act.side,
               fromSlotIndex,
               toSide: act.side,
@@ -3267,6 +3272,7 @@ function resolveUnitActionCore(
               fxEvent: {
                 id: nextId('fx'),
                 kind: 'heal',
+                tone: 'buff',
                 fromSide: act.side,
                 fromSlotIndex,
                 toSide: act.side,
@@ -3326,6 +3332,7 @@ function resolveUnitActionCore(
             fxEvent: {
               id: nextId('fx'),
               kind: 'heal',
+              tone: 'buff',
               fromSide: act.side,
               fromSlotIndex,
               toSide: act.side,
@@ -3418,6 +3425,7 @@ function resolveUnitActionCore(
             fxEvent: {
               id: nextId('fx'),
               kind: 'heal',
+              tone: 'heal',
               fromSide: act.side,
               fromSlotIndex,
               toSide: act.side,

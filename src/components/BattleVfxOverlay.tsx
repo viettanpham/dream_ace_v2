@@ -25,6 +25,7 @@ import {
   type QueuedUnitVfx,
   type UnitEffectQueueState,
 } from '../utils/battleVfx';
+import { resolveFxTone, resolveFxToneColor } from '../utils/fxTone';
 
 export interface ManualAimLineSpec {
   fromId: string;
@@ -751,6 +752,7 @@ export function BattleVfxOverlay({
       {fxRenderItems.map(
         ({
           fx,
+          actor,
           targetIds,
           snap,
           weaponStyle,
@@ -762,18 +764,68 @@ export function BattleVfxOverlay({
           const palette = getTeamPalette(fx.fromSide);
           const isAlly = fx.fromSide === 'ally';
           const isHealFx = fx.kind === 'heal';
+          const fxTone = resolveFxTone(fx);
+          const toneColor = resolveFxToneColor(fx);
+          const canSendHealProjectile =
+            isHealFx && vfxConfig.showProjectiles && battleSpeed < 5;
+          const healProjDurationMs = Math.max(
+            85,
+            Math.round(vfxDurationMs * 0.72)
+          );
+          const casterGlowDurationMs = Math.max(
+            120,
+            Math.round(400 / Math.max(1, battleSpeed))
+          );
+          const healProjectileTargetSet = canSendHealProjectile
+            ? new Set(
+                targetIds
+                  .filter((tid) => {
+                    const tPt = snap.targets[tid];
+                    if (!tPt) return false;
+                    const isSelfTarget =
+                      (actor ? tid === actor.id : false) ||
+                      (Math.abs(tPt.x - snap.from.x) < 1 &&
+                        Math.abs(tPt.y - snap.from.y) < 1);
+                    return !isSelfTarget;
+                  })
+                  .slice(0, 3)
+              )
+            : new Set<string>();
 
           return (
             <div
               key={fx.id}
               data-testid={`radar-fx-${fx.id}`}
               data-fx-kind={fx.kind}
+              data-fx-tone={fxTone}
               data-weapon-vfx={isHealFx ? 'heal' : weaponStyle}
               data-fx-duration={durationMs}
               data-used-fallback={snap.usedFallback ? 'true' : 'false'}
               data-reduced-marker={vfxConfig.reducedMotion ? 'true' : 'false'}
               className="pointer-events-none absolute inset-0"
             >
+              {/* Short caster glow ring (~400ms) for support/heal actions */}
+              {isHealFx && vfxConfig.showMainImpactOrHeal && (
+                <div
+                  data-testid={`vfx-heal-caster-${fx.id}`}
+                  data-fx-tone={fxTone}
+                  className="vfx-caster-glow absolute rounded-full"
+                  style={
+                    {
+                      left: snap.from.leftCss,
+                      top: snap.from.topCss,
+                      width: '38px',
+                      height: '38px',
+                      marginLeft: '-19px',
+                      marginTop: '-19px',
+                      border: `2px solid ${toneColor}`,
+                      boxShadow: `0 0 12px ${toneColor}`,
+                      '--vfx-dur': `${casterGlowDurationMs}ms`,
+                    } as CSSProperties
+                  }
+                />
+              )}
+
               {targetIds.map((targetId, tIdx) => {
                 const to = snap.targets[targetId];
                 if (!to) return null;
@@ -785,27 +837,121 @@ export function BattleVfxOverlay({
                   targetUnit
                 );
 
-                // Heal beam/ring FX
+                // Support / Heal FX: optional non-damaging projectile + tone-colored ring (+ buff carets)
                 if (isHealFx) {
+                  const firesHealProj = healProjectileTargetSet.has(targetId);
+                  const hDx = to.x - from.x;
+                  const hDy = to.y - from.y;
+                  const hDist = Math.max(12, Math.hypot(hDx, hDy));
+                  const hAngleDeg = (Math.atan2(hDy, hDx) * 180) / Math.PI;
+                  const ringDelayMs =
+                    firesHealProj && !vfxConfig.reducedMotion
+                      ? Math.round(healProjDurationMs * 0.65)
+                      : 0;
+
                   return (
-                    <div
-                      key={targetId}
-                      data-testid={`vfx-heal-ring-${targetId}`}
-                      className="vfx-ring-expand absolute rounded-full"
-                      style={
-                        {
-                          left: to.leftCss,
-                          top: to.topCss,
-                          width: '44px',
-                          height: '44px',
-                          marginLeft: '-22px',
-                          marginTop: '-22px',
-                          border: '2px solid #34d399',
-                          boxShadow: '0 0 10px rgba(52, 211, 153, 0.45)',
-                          '--vfx-dur': `${vfxDurationMs}ms`,
-                        } as CSSProperties
-                      }
-                    />
+                    <div key={targetId} className="absolute inset-0">
+                      {firesHealProj &&
+                        (vfxConfig.reducedMotion ? (
+                          <div
+                            data-testid={`vfx-heal-proj-${fx.id}-${targetId}`}
+                            data-fx-tone={fxTone}
+                            data-reduced-marker="true"
+                            className="vfx-reduced-marker absolute"
+                            style={
+                              {
+                                left: from.leftCss,
+                                top: from.topCss,
+                                width: `${hDist.toFixed(1)}px`,
+                                height: '3px',
+                                marginTop: '-1.5px',
+                                transformOrigin: '0% 50%',
+                                transform: `rotate(${hAngleDeg.toFixed(2)}deg)`,
+                                borderRadius: '9999px',
+                                background: `linear-gradient(90deg, transparent 0%, ${toneColor} 45%, #ffffff 100%)`,
+                                '--vfx-dur': `${Math.max(160, Math.round(vfxDurationMs * 0.65))}ms`,
+                              } as CSSProperties
+                            }
+                          />
+                        ) : (
+                          <div
+                            data-testid={`vfx-heal-proj-${fx.id}-${targetId}`}
+                            data-fx-tone={fxTone}
+                            className="vfx-cannon-fly absolute"
+                            style={
+                              {
+                                left: from.leftCss,
+                                top: from.topCss,
+                                width: '18px',
+                                height: '5px',
+                                marginLeft: '-9px',
+                                marginTop: '-2.5px',
+                                borderRadius: '9999px',
+                                background: `linear-gradient(90deg, transparent 0%, ${toneColor} 45%, #ffffff 100%)`,
+                                boxShadow: `0 0 8px ${toneColor}`,
+                                '--dx1': `${(hDx * 0.14).toFixed(1)}px`,
+                                '--dy1': `${(hDy * 0.14).toFixed(1)}px`,
+                                '--dx2': `${(hDx * 0.86).toFixed(1)}px`,
+                                '--dy2': `${(hDy * 0.86).toFixed(1)}px`,
+                                '--dx': `${hDx.toFixed(1)}px`,
+                                '--dy': `${hDy.toFixed(1)}px`,
+                                '--ang': `${hAngleDeg.toFixed(2)}deg`,
+                                '--vfx-dur': `${healProjDurationMs}ms`,
+                              } as CSSProperties
+                            }
+                          />
+                        ))}
+
+                      {vfxConfig.showMainImpactOrHeal && (
+                        <div
+                          data-testid={`vfx-heal-ring-${targetId}`}
+                          data-fx-tone={fxTone}
+                          className="vfx-ring-expand absolute rounded-full flex items-center justify-center"
+                          style={
+                            {
+                              left: to.leftCss,
+                              top: to.topCss,
+                              width: '44px',
+                              height: '44px',
+                              marginLeft: '-22px',
+                              marginTop: '-22px',
+                              border: `2px solid ${toneColor}`,
+                              boxShadow: `0 0 10px ${toneColor}`,
+                              animationDelay:
+                                ringDelayMs > 0 ? `${ringDelayMs}ms` : undefined,
+                              '--vfx-dur': `${vfxDurationMs}ms`,
+                            } as CSSProperties
+                          }
+                        >
+                          {fxTone === 'buff' &&
+                            [-9, 0, 9].map((offsetX, cIdx) => (
+                              <span
+                                key={cIdx}
+                                data-testid={`vfx-buff-caret-${fx.id}-${targetId}-${cIdx}`}
+                                className={
+                                  vfxConfig.reducedMotion
+                                    ? 'vfx-reduced-marker absolute text-[9px] leading-none font-bold select-none'
+                                    : 'vfx-buff-caret absolute text-[9px] leading-none font-bold select-none'
+                                }
+                                style={
+                                  {
+                                    left: `calc(50% + ${offsetX}px)`,
+                                    top: '50%',
+                                    marginLeft: '-4px',
+                                    marginTop: '-5px',
+                                    color: toneColor,
+                                    textShadow: `0 0 6px ${toneColor}`,
+                                    animationDelay: `${ringDelayMs + cIdx * 55}ms`,
+                                    '--vfx-dur': `${Math.max(140, Math.round(vfxDurationMs * 0.9))}ms`,
+                                  } as CSSProperties
+                                }
+                              >
+                                ▲
+                              </span>
+                            ))}
+                        </div>
+                      )}
+                    </div>
                   );
                 }
 

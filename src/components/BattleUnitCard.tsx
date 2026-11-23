@@ -382,23 +382,31 @@ export const BattleUnitCard = memo(function BattleUnitCard({
           data-testid={`card-popups-container-${unit.id}`}
           className="pointer-events-none absolute inset-0 overflow-hidden z-20"
         >
-          {popups.slice(-6).map((pop, idx) => {
+          {popups.slice(-3).map((pop, idx) => {
             const isSmall = isCompactPopupTone(pop.tone);
+            const popupLeft = (['30%', '50%', '70%'] as const)[idx] ?? '50%';
+            const popupAnimClass = resolvedReducedMotion
+              ? 'anim-popup-reduced'
+              : isSmall
+              ? 'anim-popup-tight-in'
+              : 'anim-popup-in';
             return (
               <div
                 key={pop.id}
                 data-testid="damage-popup"
                 data-popup-compact={isSmall ? 'true' : 'false'}
                 style={{
-                  top: `${2 + (idx % 3) * 14}px`,
-                  animationDelay: `${idx * 100}ms`,
-                  animationDuration: '800ms',
+                  top: '18px',
+                  left: popupLeft,
+                  maxWidth: idx === 1 ? 'calc(100% - 16px)' : '48%',
+                  animationDelay: resolvedReducedMotion
+                    ? '0ms'
+                    : `${idx * 100}ms`,
+                  animationDuration: resolvedReducedMotion ? '700ms' : '800ms',
                 }}
-                className={`pointer-events-none absolute left-1/2 -translate-x-1/2 font-display font-bold tracking-wide drop-shadow-[0_1px_3px_rgba(0,0,0,0.95)] whitespace-nowrap ${
-                  isSmall
-                    ? 'text-[12px] anim-popup-tight'
-                    : 'text-[15px] anim-popup'
-                } ${getPopupColor(pop.tone)}`}
+                className={`pointer-events-none absolute -translate-x-1/2 truncate font-display font-bold tracking-wide drop-shadow-[0_1px_3px_rgba(0,0,0,0.95)] ${
+                  isSmall ? 'text-[12px]' : 'text-[15px]'
+                } ${popupAnimClass} ${getPopupColor(pop.tone)}`}
               >
                 {pop.text}
               </div>

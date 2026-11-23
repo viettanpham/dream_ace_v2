@@ -271,6 +271,44 @@
   }
 }
 
+@keyframes float-popup-in {
+  0% {
+    opacity: 0;
+    transform: translate3d(-50%, 0px, 0) scale(0.94);
+  }
+  18% {
+    opacity: 1;
+    transform: translate3d(-50%, 3px, 0) scale(1.02);
+  }
+  78% {
+    opacity: 1;
+    transform: translate3d(-50%, 10px, 0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(-50%, 12px, 0) scale(0.96);
+  }
+}
+
+@keyframes float-popup-tight-in {
+  0% {
+    opacity: 0;
+    transform: translate3d(-50%, 0px, 0) scale(0.96);
+  }
+  18% {
+    opacity: 1;
+    transform: translate3d(-50%, 3px, 0) scale(1);
+  }
+  80% {
+    opacity: 1;
+    transform: translate3d(-50%, 10px, 0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(-50%, 12px, 0) scale(0.96);
+  }
+}
+
 @keyframes radar-spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
@@ -358,6 +396,18 @@
 
 .anim-popup-tight {
   animation: float-popup-tight 800ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.anim-popup-in {
+  animation: float-popup-in 800ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.anim-popup-tight-in {
+  animation: float-popup-tight-in 800ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.anim-popup-reduced {
+  animation: float-popup-reduced 700ms linear both;
 }
 
 @keyframes radar-sweep {
@@ -646,6 +696,40 @@
   }
 }
 
+@keyframes vfx-caster-glow {
+  0% {
+    opacity: 0;
+    transform: translate3d(0px, 0px, 0) scale(0.76);
+  }
+  28% {
+    opacity: 0.92;
+    transform: translate3d(0px, 0px, 0) scale(1.06);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(0px, 0px, 0) scale(1.38);
+  }
+}
+
+@keyframes vfx-buff-caret-rise {
+  0% {
+    opacity: 0;
+    transform: translate3d(0px, 6px, 0) scale(0.85);
+  }
+  25% {
+    opacity: 0.96;
+    transform: translate3d(0px, 0px, 0) scale(1);
+  }
+  80% {
+    opacity: 0.9;
+    transform: translate3d(0px, -11px, 0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(0px, -16px, 0) scale(0.9);
+  }
+}
+
 @keyframes vfx-crit-flash {
   0% {
     opacity: 0;
@@ -853,6 +937,16 @@
   will-change: transform, opacity;
 }
 
+.vfx-caster-glow {
+  animation: vfx-caster-glow var(--vfx-dur, 400ms) ease-out both;
+  will-change: transform, opacity;
+}
+
+.vfx-buff-caret {
+  animation: vfx-buff-caret-rise var(--vfx-dur, 460ms) cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: transform, opacity;
+}
+
 .vfx-crit-flash {
   animation: vfx-crit-flash var(--vfx-dur, 460ms) cubic-bezier(0.16, 1, 0.3, 1) both;
   will-change: transform, opacity;
@@ -977,7 +1071,9 @@
 }
 
 [data-reduced-motion="true"] .anim-popup,
-[data-reduced-motion="true"] .anim-popup-tight {
+[data-reduced-motion="true"] .anim-popup-tight,
+[data-reduced-motion="true"] .anim-popup-in,
+[data-reduced-motion="true"] .anim-popup-tight-in {
   animation: float-popup-reduced 700ms linear both;
 }
 
@@ -985,6 +1081,8 @@
 [data-reduced-motion="true"] .vfx-beam-fire,
 [data-reduced-motion="true"] .vfx-missile-arc,
 [data-reduced-motion="true"] .vfx-ring-expand,
+[data-reduced-motion="true"] .vfx-caster-glow,
+[data-reduced-motion="true"] .vfx-buff-caret,
 [data-reduced-motion="true"] .vfx-crit-flash,
 [data-reduced-motion="true"] .vfx-hit-flash-html,
 [data-reduced-motion="true"] .vfx-defeat-html,
