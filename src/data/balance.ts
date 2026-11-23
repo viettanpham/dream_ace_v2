@@ -106,6 +106,7 @@ export const BALANCE_CONFIG = {
   } as Record<ItemRarity, number>,
 
   tierStatScale: [1.0, 1.45, 2.05, 2.8] as readonly number[],
+  /** @deprecated Replaced by PRICE_FORMULA.tierFactor in src/data/itemPricing.ts */
   tierPriceScale: [1.0, 1.85, 3.2, 5.4] as readonly number[],
 
   // ---- Drop Rates per Sector Difficulty ----

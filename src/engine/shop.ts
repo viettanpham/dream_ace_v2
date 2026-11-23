@@ -1,3 +1,4 @@
+import { PRICE_FORMULA } from '../data/itemPricing';
 import { EQUIPMENT_SLOTS, ITEM_TEMPLATES } from '../data/items';
 import { SECTORS_CATALOG } from '../data/maps';
 import {
@@ -138,7 +139,7 @@ export function generateCategorizedShopStock(
       );
       stock.push({
         ...item,
-        price: Math.max(40, Math.round(item.price * priceMult)),
+        price: Math.max(PRICE_FORMULA.minPrice, Math.round(item.price * priceMult)),
         soldOut: false,
       });
     }

@@ -12,6 +12,7 @@ import {
   SHOP_CONFIG,
 } from '../data/items';
 import { getSectorById } from '../data/maps';
+import { computeItemPrice, countNonZeroTraits } from './itemPrice';
 import type {
   CombatUnit,
   EnchantAttemptResult,
@@ -53,7 +54,7 @@ export interface GenerateItemOptions {
   rollQuality?: number; // optional fixed 1..100% quality roll
   statScale?: number; // optional stat multiplier (e.g. lower stats for Starter items)
   statPowerLevel?: number; // optional level used for stat scaling independent of requiredLevel
-  priceOverride?: number; // optional explicit price (bypasses min 60 CR floor)
+  priceOverride?: number; // optional explicit price (bypasses computeItemPrice & minPrice)
   isStarter?: boolean;
   registryTag?: string;
   isNew?: boolean;
@@ -191,23 +192,18 @@ export function generateItemInstance(
     suffixId = bestAffix.suffixId;
   }
 
-  const tierPriceMult =
-    (BALANCE_CONFIG.tierPriceScale[tier - 1] ?? 1) /
-    (BALANCE_CONFIG.tierPriceScale[template.tier - 1] ?? 1);
-  const rarityPriceMult = BALANCE_CONFIG.rarityPriceMultiplier[rarity];
-  const qualityPriceMult = 0.88 + (rollQuality / 100) * 0.28;
+  const traitCount = countNonZeroTraits(template.specialTraits);
   const price =
     options.priceOverride !== undefined
       ? Math.max(1, Math.round(options.priceOverride))
-      : Math.max(
-          60,
-          Math.round(
-            template.basePrice *
-              tierPriceMult *
-              rarityPriceMult *
-              qualityPriceMult
-          )
-        );
+      : computeItemPrice({
+          slot: template.slot,
+          tier,
+          rarity,
+          rollQuality,
+          affixCount: affixes.length,
+          traitCount,
+        });
 
   itemUidSeq += 1;
   return {
