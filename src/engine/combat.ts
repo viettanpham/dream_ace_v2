@@ -63,6 +63,7 @@ import {
   calculateEffectiveStats,
   generateNpcAllocations,
 } from './stats';
+import { computeShieldRegen, sanitizeShieldRegenConfig } from './shieldRegen';
 
 let uidCounter = 1;
 function nextId(prefix: string): string {
@@ -90,6 +91,7 @@ function getSlotIndex(units: CombatUnit[], unitId: string): number {
 export const DEBUFF_TYPES = new Set<StatusEffectType>([
   'burn',
   'shield_break',
+  'shield_cracked',
   'slow',
   'silence',
   'vulnerable',
@@ -1377,6 +1379,36 @@ function applyDamageToUnit(
     ? 'shielded'
     : 'hit';
 
+  const shieldRegenCfg = sanitizeShieldRegenConfig(options.adminConfig?.shieldRegen);
+  let nextStatuses = destroyed ? [] : curTarget.statuses;
+  let nextHitSinceOwnTurn = curTarget.hitSinceOwnTurn;
+
+  if (shieldRegenCfg.enabled) {
+    if (shieldAbsorbed > 0 || hullDamage > 0) {
+      nextHitSinceOwnTurn = true;
+    }
+    if (!destroyed && curTarget.shield > 0 && nextShield === 0) {
+      nextStatuses = addOrRefreshStatus(nextStatuses, {
+        type: 'shield_cracked',
+        turnsRemaining: shieldRegenCfg.brokenTurns,
+        magnitude: shieldRegenCfg.brokenMult / 100,
+        isDebuff: true,
+        sourceName: curAttacker.name,
+      });
+      options.events?.push({
+        id: nextId('ev'),
+        round: options.round,
+        turn: 0,
+        actorId: curAttacker.id,
+        targetId: curTarget.id,
+        type: 'status_applied',
+        statusId: 'shield_cracked',
+        skillId: options.actionMeta.skillId || undefined,
+        flags: { isDebuff: true },
+      });
+    }
+  }
+
   return {
     attackerAfter: curAttacker,
     targetAfter: {
@@ -1385,7 +1417,10 @@ function applyDamageToUnit(
       hp: nextHp,
       alive: !destroyed,
       isDefending: destroyed ? false : curTarget.isDefending,
-      statuses: destroyed ? [] : curTarget.statuses,
+      statuses: nextStatuses,
+      ...(nextHitSinceOwnTurn !== undefined
+        ? { hitSinceOwnTurn: nextHitSinceOwnTurn }
+        : {}),
       animState: anim,
     },
     logs,
@@ -1431,6 +1466,7 @@ function tryInflictStatus(
   const popupMap: Partial<Record<StatusEffectType, string>> = {
     burn: 'BURN',
     shield_break: 'SHD BREAK',
+    shield_cracked: 'SHD CRACK',
     slow: 'SLOW',
     silence: 'SILENCED',
     vulnerable: 'VULN +15%',
@@ -1598,6 +1634,60 @@ function resolveUnitActionCore(
       ...actor,
       sp: Math.min(actor.derived.maxSp, actor.sp + actor.derived.spRegenPerTurn),
     };
+  }
+
+  // Passive per-turn Shield Regeneration (next to SP regen, before status tick)
+  const shieldRegenCfg = sanitizeShieldRegenConfig(adminConfig?.shieldRegen);
+  if (shieldRegenCfg.enabled) {
+    const shieldRegen = computeShieldRegen(actor, shieldRegenCfg);
+    if (shieldRegen.amount > 0) {
+      actor = {
+        ...actor,
+        shield: Math.min(
+          actor.derived.maxShield,
+          actor.shield + shieldRegen.amount
+        ),
+      };
+      events.push({
+        id: nextId('ev'),
+        round,
+        turn: 0,
+        actorId: actor.id,
+        targetId: actor.id,
+        type: 'shield_grant',
+        amount: shieldRegen.amount,
+        flags: { isRegen: true },
+      });
+      if (
+        actor.derived.maxShield > 0 &&
+        shieldRegen.amount >= actor.derived.maxShield * 0.01
+      ) {
+        popups.push({
+          id: nextId('pop'),
+          unitId: actor.id,
+          text: `SHD +${shieldRegen.amount}`,
+          tone: 'shield',
+        });
+      }
+      logs.push({
+        id: nextId('log'),
+        round,
+        actorName: actor.name,
+        actorSide: actor.side,
+        tag: 'SHIELD',
+        templateKey: 'log.shieldRegen',
+        params: {
+          target: actor.name,
+          amount: shieldRegen.amount,
+          reason: shieldRegen.reason,
+          multPct: shieldRegen.multPct,
+          classId: actor.classId,
+        },
+      });
+    }
+    if (actor.hitSinceOwnTurn) {
+      actor = { ...actor, hitSinceOwnTurn: false };
+    }
   }
 
   // Healing Field HoT tick

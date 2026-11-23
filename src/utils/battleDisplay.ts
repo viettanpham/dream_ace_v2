@@ -795,6 +795,7 @@ export interface UpcomingTurnListResult {
 const DEFAULT_DEBUFF_TYPES: ReadonlySet<StatusEffectType> = new Set([
   'burn',
   'shield_break',
+  'shield_cracked',
   'slow',
   'silence',
   'vulnerable',
@@ -1029,6 +1030,9 @@ export function getStatusIconMeta(status: ActiveStatusEffect): StatusIconMeta {
       break;
     case 'shield_break':
       symbol = '✕';
+      break;
+    case 'shield_cracked':
+      symbol = '⊗';
       break;
     case 'def_down':
       symbol = '↓';

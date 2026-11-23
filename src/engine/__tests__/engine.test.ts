@@ -1178,13 +1178,17 @@ describe('11. Battle Skill Mechanics (SP, CD, Once-Per-Battle, Silence, Siege, C
     ).updatedUnits;
     expect(hasStatus(intUnits.find((u) => u.isPlayer)!, 'counter')).toBe(true);
 
+    const defAdmin = createDefaultAdminConfig();
     const counterRes = resolveUnitAction(
       intUnits,
       attackerEnemy.id,
       'attack',
       'ally_player',
       1,
-      undefined,
+      {
+        ...defAdmin,
+        shieldRegen: { ...defAdmin.shieldRegen!, enabled: false },
+      },
       () => 0.99
     );
     const enemyAfterRiposte = counterRes.updatedUnits.find(

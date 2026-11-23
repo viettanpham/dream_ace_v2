@@ -348,7 +348,7 @@ describe('Task G4a-1 Part 2 — Icon catalog, status chips, settings, Bảng ico
     const allowSet = new Set(UNMAPPED_STATUS_ALLOWLIST);
     const catalogIds = new Set(getCatalog().map((r) => r.id));
 
-    expect(ALL_ENGINE_STATUS_TYPES).toHaveLength(21);
+    expect(ALL_ENGINE_STATUS_TYPES).toHaveLength(22);
     for (const statusType of ALL_ENGINE_STATUS_TYPES) {
       const mappedId = STATUS_TO_CATALOG_ID[statusType];
       if (mappedId !== null) {

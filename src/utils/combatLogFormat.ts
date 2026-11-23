@@ -65,6 +65,7 @@ export const COMBAT_LOG_CHROME_HEIGHTS = {
 const DEBUFF_STATUS_TYPES = new Set<StatusEffectType>([
   'burn',
   'shield_break',
+  'shield_cracked',
   'slow',
   'silence',
   'vulnerable',
@@ -701,6 +702,31 @@ export function parseStructuredCombatLogRow(
         valueTone: 'heal',
         fallbackText,
         sentence,
+        spCost: null,
+        isStrong: false,
+        strongTone: null,
+        ...regenAvatar,
+      };
+    }
+
+    case 'log.shieldRegen': {
+      const amount = Number(p.amount ?? 0);
+      const unitName = targetFromParams ?? actorFromParams;
+      const regenAvatar = resolveActorAvatarMeta(entry, unitName, faction, units);
+      return {
+        id: entry.id,
+        round,
+        turnLabel,
+        faction,
+        actorName: unitName,
+        autoBadge,
+        actionKind: 'shield',
+        actionLabel: translate(lang, 'log.tag.SHIELD'),
+        targetName: null,
+        valueText: `+${amount} SHD`,
+        valueTone: 'shield',
+        fallbackText,
+        sentence: fallbackText,
         spCost: null,
         isStrong: false,
         strongTone: null,

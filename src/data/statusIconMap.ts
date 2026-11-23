@@ -18,6 +18,7 @@ import { getCatalogRow } from './iconCatalog';
 export const STATUS_TO_CATALOG_ID: Record<StatusEffectType, string | null> = {
   burn: 'DT01',
   shield_break: 'DB10',
+  shield_cracked: null,
   slow: 'DB05',
   silence: 'CC04',
   stealth: 'BF18',
@@ -45,6 +46,7 @@ export const STATUS_TO_CATALOG_ID: Record<StatusEffectType, string | null> = {
  * mapped to a catalog row nor listed here.
  */
 export const UNMAPPED_STATUS_ALLOWLIST: readonly StatusEffectType[] = [
+  'shield_cracked',
   'evade_all',
   'invincible',
   'siege_mode',
@@ -55,6 +57,7 @@ export const UNMAPPED_STATUS_ALLOWLIST: readonly StatusEffectType[] = [
 export const ALL_ENGINE_STATUS_TYPES: readonly StatusEffectType[] = [
   'burn',
   'shield_break',
+  'shield_cracked',
   'slow',
   'silence',
   'stealth',
@@ -90,7 +93,7 @@ export function getStatusVisualKind(
   catalogRow: IconCatalogRow | null
 ): IconCatalogKind {
   if (catalogRow) return catalogRow.kind;
-  if (st.isDebuff) return 'debuff';
+  if (st.isDebuff || st.type === 'shield_cracked') return 'debuff';
   return 'normal';
 }
 
@@ -201,6 +204,10 @@ export function formatStatusChipShortValue(
     }
     case 'shield_break':
       return isVi ? 'Khóa Khiên' : 'No Shield';
+    case 'shield_cracked': {
+      const pct = Math.round((st.magnitude ?? 0.3) * 100);
+      return `${pct}%`;
+    }
     case 'silence':
       return isVi ? 'Khóa KN' : 'No Skill';
     case 'stealth':

@@ -3,6 +3,7 @@ import {
   BatteryCharging,
   Castle,
   Shield,
+  ShieldOff,
   Sparkles,
   Sun,
 } from 'lucide-react';
@@ -64,6 +65,8 @@ function renderFallbackLucide(
       return <Castle {...props} />;
     case 'charging':
       return <BatteryCharging {...props} />;
+    case 'shield_cracked':
+      return <ShieldOff {...props} />;
     default:
       return <Shield {...props} />;
   }

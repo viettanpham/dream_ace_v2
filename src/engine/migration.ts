@@ -43,6 +43,7 @@ import {
   sanitizeAutoEquipConfig,
 } from '../data/autoEquipConfig';
 import { cloneFormationConfig, DEFAULT_FORMATION_CONFIG } from '../data/formationConfig';
+import { DEFAULT_SHIELD_REGEN_CONFIG, sanitizeShieldRegenConfig } from './shieldRegen';
 import {
   cloneStarterSetConfig,
   DEFAULT_STARTER_SET_CONFIG,
@@ -121,6 +122,7 @@ export function createDefaultAdminConfig(): AdminConfig {
     autoEquip: cloneAutoEquipConfig(DEFAULT_AUTO_EQUIP_CONFIG),
     starterSet: cloneStarterSetConfig(DEFAULT_STARTER_SET_CONFIG),
     iconCatalogMods: [],
+    shieldRegen: { ...DEFAULT_SHIELD_REGEN_CONFIG },
     showRawI18nKeys: false,
   };
 }
@@ -413,6 +415,7 @@ export function migrateSaveData(
     statusDisplayDefaults: sanitizeStatusDisplayDefaults(
       rawAdmin.statusDisplayDefaults
     ),
+    shieldRegen: sanitizeShieldRegenConfig(rawAdmin.shieldRegen),
     showRawI18nKeys: Boolean(rawAdmin.showRawI18nKeys),
   };
 

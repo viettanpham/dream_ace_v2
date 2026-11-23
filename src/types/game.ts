@@ -38,6 +38,7 @@ export interface DerivedStats {
 export type StatusEffectType =
   | 'burn'
   | 'shield_break'
+  | 'shield_cracked'
   | 'slow'
   | 'silence'
   | 'stealth'
@@ -795,6 +796,7 @@ export interface CombatUnit {
   isDefending: boolean;
   alive: boolean;
   statuses: ActiveStatusEffect[];
+  hitSinceOwnTurn?: boolean;
   animState: UnitAnimState;
 }
 
@@ -840,6 +842,7 @@ export type CombatLogTemplateKey =
   | 'log.statusApplied'
   | 'log.burnTick'
   | 'log.regenTick'
+  | 'log.shieldRegen'
   | 'log.statusCleansed'
   | 'log.splashDamage'
   | 'log.retreat'
@@ -1222,6 +1225,17 @@ export interface StatusDisplaySettings {
 
 export type StatusDisplayDefaults = Partial<StatusDisplaySettings>;
 
+export interface ShieldRegenConfig {
+  enabled: boolean;
+  basePct: number;
+  perPointPct: number;
+  capPct: number;
+  notHitMult: number;
+  hitMult: number;
+  brokenMult: number;
+  brokenTurns: number;
+}
+
 export interface AdminConfig {
   godMode: boolean;
   oneHitKills: boolean;
@@ -1242,6 +1256,7 @@ export interface AdminConfig {
   starterSet?: StarterSetConfig;
   iconCatalogMods?: IconCatalogModRow[];
   statusDisplayDefaults?: StatusDisplayDefaults;
+  shieldRegen?: ShieldRegenConfig;
   showRawI18nKeys: boolean;
 }
 

@@ -42,6 +42,10 @@ import {
   useI18n,
 } from '../i18n';
 import { ENABLE_ADMIN_CP, useGameStore } from '../store/useGameStore';
+import {
+  computeShieldRegenPct,
+  sanitizeShieldRegenConfig,
+} from '../engine/shieldRegen';
 import type {
   BattleSize,
   CombatRow,
@@ -1458,6 +1462,175 @@ export function AdminPanel() {
                   />
                 </label>
               </div>
+
+              {/* Shield Regen ("Hồi khiên") */}
+              {(() => {
+                const srCfg = sanitizeShieldRegenConfig(adminConfig.shieldRegen);
+                const examplePct = Number(
+                  computeShieldRegenPct(25, srCfg).toFixed(2)
+                );
+                const updateSr = (patch: Partial<typeof srCfg>) => {
+                  adminUpdateConfig({
+                    shieldRegen: sanitizeShieldRegenConfig({
+                      ...srCfg,
+                      ...patch,
+                    }),
+                  });
+                };
+                return (
+                  <div
+                    data-testid="admin-shield-regen-section"
+                    className="p-3.5 rounded-lg border border-slate-800 bg-[#0D1422] space-y-3"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-xs font-semibold text-sky-300">
+                        {t('admin.shieldRegenTitle')}
+                      </span>
+                      <span
+                        data-testid="admin-shield-regen-example"
+                        className="text-[11px] font-mono-nums text-sky-200/90"
+                      >
+                        {t('admin.shieldRegenExample', { pct: examplePct })}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                      <label className="flex items-center gap-2 h-9 px-2.5 rounded border border-slate-700 bg-slate-900 text-xs cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={srCfg.enabled}
+                          onChange={(e) =>
+                            updateSr({ enabled: e.target.checked })
+                          }
+                          className="accent-sky-400"
+                        />
+                        <span className="text-slate-200">
+                          {t('admin.shieldRegenEnabled')}
+                        </span>
+                      </label>
+
+                      <label className="space-y-1 block">
+                        <span className="text-[11px] text-slate-400 block">
+                          {t('admin.shieldRegenBasePct')}
+                        </span>
+                        <input
+                          type="number"
+                          min={0}
+                          max={50}
+                          step={0.5}
+                          value={srCfg.basePct}
+                          onChange={(e) =>
+                            updateSr({ basePct: Number(e.target.value) })
+                          }
+                          className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                        />
+                      </label>
+
+                      <label className="space-y-1 block">
+                        <span className="text-[11px] text-slate-400 block">
+                          {t('admin.shieldRegenPerPointPct')}
+                        </span>
+                        <input
+                          type="number"
+                          min={0}
+                          max={50}
+                          step={0.01}
+                          value={srCfg.perPointPct}
+                          onChange={(e) =>
+                            updateSr({ perPointPct: Number(e.target.value) })
+                          }
+                          className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                        />
+                      </label>
+
+                      <label className="space-y-1 block">
+                        <span className="text-[11px] text-slate-400 block">
+                          {t('admin.shieldRegenCapPct')}
+                        </span>
+                        <input
+                          type="number"
+                          min={0}
+                          max={50}
+                          step={0.5}
+                          value={srCfg.capPct}
+                          onChange={(e) =>
+                            updateSr({ capPct: Number(e.target.value) })
+                          }
+                          className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                        />
+                      </label>
+
+                      <label className="space-y-1 block">
+                        <span className="text-[11px] text-slate-400 block">
+                          {t('admin.shieldRegenNotHitMult')}
+                        </span>
+                        <input
+                          type="number"
+                          min={0}
+                          max={200}
+                          step={5}
+                          value={srCfg.notHitMult}
+                          onChange={(e) =>
+                            updateSr({ notHitMult: Number(e.target.value) })
+                          }
+                          className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                        />
+                      </label>
+
+                      <label className="space-y-1 block">
+                        <span className="text-[11px] text-slate-400 block">
+                          {t('admin.shieldRegenHitMult')}
+                        </span>
+                        <input
+                          type="number"
+                          min={0}
+                          max={200}
+                          step={5}
+                          value={srCfg.hitMult}
+                          onChange={(e) =>
+                            updateSr({ hitMult: Number(e.target.value) })
+                          }
+                          className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                        />
+                      </label>
+
+                      <label className="space-y-1 block">
+                        <span className="text-[11px] text-slate-400 block">
+                          {t('admin.shieldRegenBrokenMult')}
+                        </span>
+                        <input
+                          type="number"
+                          min={0}
+                          max={200}
+                          step={5}
+                          value={srCfg.brokenMult}
+                          onChange={(e) =>
+                            updateSr({ brokenMult: Number(e.target.value) })
+                          }
+                          className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                        />
+                      </label>
+
+                      <label className="space-y-1 block">
+                        <span className="text-[11px] text-slate-400 block">
+                          {t('admin.shieldRegenBrokenTurns')}
+                        </span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={10}
+                          step={1}
+                          value={srCfg.brokenTurns}
+                          onChange={(e) =>
+                            updateSr({ brokenTurns: Number(e.target.value) })
+                          }
+                          className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Reward Mult */}
               <div className="p-3.5 rounded-lg border border-slate-800 bg-[#0D1422] space-y-2">

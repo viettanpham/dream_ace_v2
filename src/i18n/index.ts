@@ -192,6 +192,7 @@ const STATUS_SHORT_LABELS: Record<
 > = {
   burn: { en: 'Burn', vi: 'Thiêu' },
   shield_break: { en: 'ShdBrk', vi: 'VỡKhiên' },
+  shield_cracked: { en: 'Cracked', vi: 'KhiênNứt' },
   slow: { en: 'Slow', vi: 'Chậm' },
   silence: { en: 'Silence', vi: 'Câm' },
   stealth: { en: 'Stealth', vi: 'Ẩn' },
@@ -324,6 +325,15 @@ export function formatStatusEffectDetail(
     case 'shield_break': {
       // Exact engine behavior: bypasses shields & blocks shield restore (combat.ts)
       valueText = isVi ? 'Khóa Khiên' : 'Shields off';
+      break;
+    }
+    case 'shield_cracked': {
+      const pct = Math.round((st.magnitude ?? 0.3) * 100);
+      const turns = Math.max(1, st.turnsRemaining || 3);
+      valueText = isVi
+        ? `Hồi khiên chỉ ${pct}% trong ${turns} lượt`
+        : `Shield regen only ${pct}% for ${turns} turns`;
+      includeTurns = false;
       break;
     }
     case 'silence': {
@@ -789,6 +799,22 @@ function formatCombatLogBody(
         target: String(p.target ?? ''),
         amount: Number(p.amount ?? 0),
       });
+
+    case 'log.shieldRegen': {
+      const reason = String(p.reason ?? 'not_hit');
+      const multPct = Number(p.multPct ?? 100);
+      const suffix =
+        reason === 'hit'
+          ? translate(lang, 'log.shieldRegenHitSuffix', { multPct })
+          : reason === 'cracked'
+          ? translate(lang, 'log.shieldRegenCrackedSuffix', { multPct })
+          : '';
+      return translate(lang, 'log.shieldRegen', {
+        target: String(p.target ?? ''),
+        amount: Number(p.amount ?? 0),
+        suffix,
+      });
+    }
 
     case 'log.statusCleansed':
       return translate(lang, 'log.statusCleansed', {
