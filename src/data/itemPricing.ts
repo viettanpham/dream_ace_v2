@@ -1,10 +1,28 @@
 import type { EquipmentSlot, ItemRarity } from '../types/game';
+import rawPricingData from './itemPricing.json';
 
-/**
- * Single centralized item pricing formula parameters (D1-2a).
- * All newly generated item prices derive strictly from these coefficients.
- */
-export const PRICE_FORMULA = {
+export interface PriceFormulaConfig {
+  readonly baseBySlot: Record<EquipmentSlot, number>;
+  readonly tierFactor: readonly number[];
+  readonly rarityFactor: Record<ItemRarity, number>;
+  readonly qualitySlopePerPoint: number;
+  readonly affixPct: number;
+  readonly traitPct: number;
+  readonly minPrice: number;
+}
+
+const SLOTS: readonly EquipmentSlot[] = [
+  'main_weapon',
+  'sub_weapon',
+  'armor',
+  'engine',
+  'cpu',
+  'accessory',
+];
+
+const RARITIES: readonly ItemRarity[] = ['common', 'rare', 'epic', 'legendary'];
+
+export const DEFAULT_PRICE_FORMULA: PriceFormulaConfig = {
   baseBySlot: {
     main_weapon: 184,
     sub_weapon: 173,
@@ -12,16 +30,122 @@ export const PRICE_FORMULA = {
     engine: 189,
     cpu: 179,
     accessory: 173,
-  } as Record<EquipmentSlot, number>,
-  tierFactor: [1, 1.74, 2.54, 3.8] as readonly number[],
+  },
+  tierFactor: [1, 1.74, 2.54, 3.8],
   rarityFactor: {
     common: 1,
     rare: 1.65,
     epic: 2.75,
     legendary: 4.6,
-  } as Record<ItemRarity, number>,
+  },
   qualitySlopePerPoint: 0.0028,
   affixPct: 4,
   traitPct: 6,
   minPrice: 20,
-} as const;
+};
+
+function isPositiveNumber(v: unknown): v is number {
+  return typeof v === 'number' && Number.isFinite(v) && v > 0;
+}
+
+function asPlainObject(v: unknown): Record<string, unknown> | null {
+  return v && typeof v === 'object' && !Array.isArray(v)
+    ? (v as Record<string, unknown>)
+    : null;
+}
+
+/**
+ * Validates raw itemPricing JSON data and falls back per invalid field with console.warn.
+ */
+export function validatePriceFormula(raw: unknown): PriceFormulaConfig {
+  const obj = asPlainObject(raw);
+  const warnings: string[] = [];
+
+  if (!obj) {
+    console.warn('[itemPricing] Invalid itemPricing JSON root; falling back to defaults.');
+    return {
+      baseBySlot: { ...DEFAULT_PRICE_FORMULA.baseBySlot },
+      tierFactor: [...DEFAULT_PRICE_FORMULA.tierFactor],
+      rarityFactor: { ...DEFAULT_PRICE_FORMULA.rarityFactor },
+      qualitySlopePerPoint: DEFAULT_PRICE_FORMULA.qualitySlopePerPoint,
+      affixPct: DEFAULT_PRICE_FORMULA.affixPct,
+      traitPct: DEFAULT_PRICE_FORMULA.traitPct,
+      minPrice: DEFAULT_PRICE_FORMULA.minPrice,
+    };
+  }
+
+  const rawSlots = asPlainObject(obj.baseBySlot);
+  if (!rawSlots) warnings.push('baseBySlot');
+  const baseBySlot = {} as Record<EquipmentSlot, number>;
+  for (const slot of SLOTS) {
+    const val = rawSlots?.[slot];
+    if (isPositiveNumber(val)) {
+      baseBySlot[slot] = val;
+    } else {
+      if (rawSlots) warnings.push(`baseBySlot.${slot}`);
+      baseBySlot[slot] = DEFAULT_PRICE_FORMULA.baseBySlot[slot];
+    }
+  }
+
+  const rawTiers = Array.isArray(obj.tierFactor) ? obj.tierFactor : null;
+  const tierFactor: number[] = [];
+  if (!rawTiers || rawTiers.length !== 4) {
+    warnings.push('tierFactor');
+    tierFactor.push(...DEFAULT_PRICE_FORMULA.tierFactor);
+  } else {
+    for (let i = 0; i < 4; i++) {
+      if (isPositiveNumber(rawTiers[i])) {
+        tierFactor.push(rawTiers[i] as number);
+      } else {
+        warnings.push(`tierFactor[${i}]`);
+        tierFactor.push(DEFAULT_PRICE_FORMULA.tierFactor[i]);
+      }
+    }
+  }
+
+  const rawRarities = asPlainObject(obj.rarityFactor);
+  if (!rawRarities) warnings.push('rarityFactor');
+  const rarityFactor = {} as Record<ItemRarity, number>;
+  for (const rarity of RARITIES) {
+    const val = rawRarities?.[rarity];
+    if (isPositiveNumber(val)) {
+      rarityFactor[rarity] = val;
+    } else {
+      if (rawRarities) warnings.push(`rarityFactor.${rarity}`);
+      rarityFactor[rarity] = DEFAULT_PRICE_FORMULA.rarityFactor[rarity];
+    }
+  }
+
+  const pickPositive = (
+    key: 'qualitySlopePerPoint' | 'affixPct' | 'traitPct' | 'minPrice'
+  ): number => {
+    const val = obj[key];
+    if (isPositiveNumber(val)) return val;
+    warnings.push(key);
+    return DEFAULT_PRICE_FORMULA[key];
+  };
+
+  const result: PriceFormulaConfig = {
+    baseBySlot,
+    tierFactor,
+    rarityFactor,
+    qualitySlopePerPoint: pickPositive('qualitySlopePerPoint'),
+    affixPct: pickPositive('affixPct'),
+    traitPct: pickPositive('traitPct'),
+    minPrice: pickPositive('minPrice'),
+  };
+
+  if (warnings.length > 0) {
+    console.warn(
+      `[itemPricing] Invalid field(s) [${warnings.join(', ')}]; using built-in defaults for those fields.`
+    );
+  }
+
+  return result;
+}
+
+/**
+ * Single centralized item pricing formula parameters (D1-2a / D1-2b).
+ * All newly generated item prices derive strictly from these validated JSON coefficients.
+ */
+export const PRICE_FORMULA: PriceFormulaConfig = validatePriceFormula(rawPricingData);
