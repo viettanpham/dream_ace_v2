@@ -64,6 +64,12 @@ import {
   type PersistedCampaignState,
 } from '../engine/migration';
 import {
+  moveAllUnusedToWarehouse as moveAllUnusedToWarehouseEngine,
+  moveToBox as moveToBoxEngine,
+  moveToWarehouse as moveToWarehouseEngine,
+  type WarehouseTransferResult,
+} from '../engine/warehouse';
+import {
   isValidSavePayloadShape,
   SAVE_IMPORT_BACKUP_STORAGE_KEY,
   validateImportSaveVersion,
@@ -399,6 +405,9 @@ interface GameStoreState {
     soldCount: number;
     creditsEarned: number;
   };
+  moveToWarehouse: (ids: string[]) => WarehouseTransferResult;
+  moveToBox: (ids: string[]) => WarehouseTransferResult;
+  moveAllUnusedToWarehouse: () => WarehouseTransferResult;
   undoQuickSell: () => { ok: boolean; restoredCount: number };
   clearQuickSellUndo: () => void;
   previewAutoEquip: (
@@ -1862,6 +1871,89 @@ export const useGameStore = create<GameStoreState>()(
           hasSaveData: true,
         });
         return { soldCount: soldItems.length, creditsEarned };
+      },
+
+      moveToWarehouse: (ids) => {
+        const state = get();
+        if (isBattleActive(state) || Boolean(state.autoRepeatSession?.active)) {
+          return {
+            moved: 0,
+            skippedEquipped: 0,
+            skippedProtected: 0,
+            skippedFull: 0,
+            reason: 'locked',
+          };
+        }
+        const {
+          pilot,
+          moved,
+          skippedEquipped,
+          skippedProtected,
+          skippedFull,
+        } = moveToWarehouseEngine(
+          state.pilot,
+          ids,
+          state.adminConfig.warehouseCapacity
+        );
+        if (pilot !== state.pilot) {
+          set({ pilot, hasSaveData: true });
+        }
+        return { moved, skippedEquipped, skippedProtected, skippedFull };
+      },
+
+      moveToBox: (ids) => {
+        const state = get();
+        if (isBattleActive(state) || Boolean(state.autoRepeatSession?.active)) {
+          return {
+            moved: 0,
+            skippedEquipped: 0,
+            skippedProtected: 0,
+            skippedFull: 0,
+            reason: 'locked',
+          };
+        }
+        const {
+          pilot,
+          moved,
+          skippedEquipped,
+          skippedProtected,
+          skippedFull,
+        } = moveToBoxEngine(
+          state.pilot,
+          ids,
+          BALANCE_CONFIG.maxInventorySize
+        );
+        if (pilot !== state.pilot) {
+          set({ pilot, hasSaveData: true });
+        }
+        return { moved, skippedEquipped, skippedProtected, skippedFull };
+      },
+
+      moveAllUnusedToWarehouse: () => {
+        const state = get();
+        if (isBattleActive(state) || Boolean(state.autoRepeatSession?.active)) {
+          return {
+            moved: 0,
+            skippedEquipped: 0,
+            skippedProtected: 0,
+            skippedFull: 0,
+            reason: 'locked',
+          };
+        }
+        const {
+          pilot,
+          moved,
+          skippedEquipped,
+          skippedProtected,
+          skippedFull,
+        } = moveAllUnusedToWarehouseEngine(
+          state.pilot,
+          state.adminConfig.warehouseCapacity
+        );
+        if (pilot !== state.pilot) {
+          set({ pilot, hasSaveData: true });
+        }
+        return { moved, skippedEquipped, skippedProtected, skippedFull };
       },
 
       undoQuickSell: () => {
