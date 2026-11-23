@@ -488,6 +488,7 @@ export interface QuickSellUndoState {
   soldItems: ItemInstance[];
   totalCredits: number;
   soldAt: number;
+  soldFromWarehouseIds?: string[];
 }
 
 export type EquippedSlotIds = Record<EquipmentSlot, string | null>;

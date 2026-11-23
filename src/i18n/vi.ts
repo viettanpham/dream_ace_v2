@@ -91,9 +91,9 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'gear.detailHeading': 'Chi tiết & So sánh chỉ số',
   'gear.emptyDetailTitle': 'Chọn linh kiện để xem',
   'gear.emptyDetailDesc':
-    'Nhấn ô trang bị phía trên để Cường hóa hoặc Tháo, hoặc chọn linh kiện trong Kho đồ để so sánh +/- trực tiếp với Gear đang chọn.',
+    'Nhấn ô trang bị phía trên để Cường hóa hoặc Tháo, hoặc chọn linh kiện trong Hòm đồ để so sánh +/- trực tiếp với Gear đang chọn.',
   'gear.currentlyEquipped': 'Đang lắp trên Gear này',
-  'gear.inCargo': 'Trong kho chung',
+  'gear.inCargo': 'Trong Hòm đồ',
   'gear.comparisonHeading': 'So sánh chỉ số (+/- so với đồ đang lắp)',
   'gear.confirmEquip': 'Trang bị cho {gear}',
   'gear.confirmUnequip': 'Xác nhận tháo',
@@ -499,7 +499,7 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'equip.enchantAction': 'Cường hóa +{level} ({cost} CR)',
   'equip.openShop': 'Mở Chợ Linh kiện →',
   'equip.inventoryEmpty':
-    'Kho chung đang trống. Hãy mua linh kiện ngẫu nhiên ở Chợ hoặc hạ địch trong trận.',
+    'Hòm đồ đang trống. Hãy mua linh kiện ngẫu nhiên ở Chợ hoặc hạ địch trong trận.',
   'equip.inventoryEmptyFilter': 'Không có linh kiện nào thuộc ô này.',
   'equip.cannotEquip': 'Không thể lắp: {reason}',
   'enchant.msg.max_level': '{item} đã đạt cấp cường hóa tối đa (+10).',
@@ -516,7 +516,7 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'shop.availableCredits': 'Credits chung',
   'shop.availableWp': 'Điểm Chiến Trận',
   'shop.tabBuy': 'Hàng đang bán ({count})',
-  'shop.tabSell': 'Bán từ Kho ({count})',
+  'shop.tabSell': 'Bán từ Hòm đồ ({count})',
   'shop.tabWarPoints': 'Chợ Điểm Chiến Trận ({owned}/{total})',
   'shop.refreshStock': 'Làm mới ({cost} CR)',
   'shop.refreshedMsg': 'Đã làm mới danh sách linh kiện ngẫu nhiên!',
@@ -532,7 +532,7 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'shop.cannotEquipNow': 'Chưa lắp được trên Gear đang chọn: {reason}',
   'shop.buyBtn': 'Mua linh kiện',
   'shop.insufficientCr': 'Thiếu CR',
-  'shop.boughtMsg': 'Đã mua {item} ({price} CR) và chuyển vào Kho chung.',
+  'shop.boughtMsg': 'Đã mua {item} ({price} CR) và chuyển vào Hòm đồ.',
   'shop.soldMsg': 'Đã bán {item} thu về +{price} CR.',
   'shop.sellEmpty':
     'Không có linh kiện chưa lắp nào để bán. Hãy tháo đồ khỏi Gear trước nếu muốn bán.',
@@ -1147,10 +1147,10 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'shop.soldOut': 'ĐÃ BÁN',
   'shop.stockAvailable': 'Còn {avail}/{total} món',
   'shop.cargoCount': 'Hòm đồ: {count}/{max}',
-  'shop.cargoFullTag': 'Kho đầy ({count}/{max})',
-  'shop.cargoFullBtn': 'Kho đã đầy',
+  'shop.cargoFullTag': 'Hòm đồ đầy ({count}/{max})',
+  'shop.cargoFullBtn': 'Hòm đồ đã đầy',
   'shop.cargoFullHint':
-    'Kho chung đã đầy ({count}/{max}). Hãy bán bớt ở tab Bán từ Kho hoặc dọn đồ tại tab Gear trước khi mua thêm.',
+    'Hòm đồ đã đầy ({count}/{max}). Hãy bán bớt ở tab Bán từ Hòm đồ hoặc dọn đồ tại tab Gear trước khi mua thêm.',
   'shop.tabWpShort': 'WP ({count})',
   'shop.wpRotatingTitle': 'Ưu Đãi Điểm Chiến Công Luân Phiên',
   'shop.wpRotatingDesc': '3–10 rương & vật phẩm tiêu hao ngẫu nhiên. Tự làm mới sau trận, mỗi tháng hoặc dùng WP làm mới.',
@@ -1702,6 +1702,19 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'warehouse.toastSkippedProtected': '{count} khóa/yêu thích',
   'warehouse.toastSkippedFull': '{count} không đủ chỗ',
   'warehouse.toastLocked': 'Chỉ dùng ở căn cứ (đang trong trận hoặc vòng lặp).',
+  'warehouse.selectManyBtn': 'Chọn nhiều',
+  'warehouse.selectedCount': 'Đã chọn {count}',
+  'warehouse.selectAllFilteredBtn': 'Chọn tất cả (đang lọc)',
+  'warehouse.clearSelectBtn': 'Bỏ chọn',
+  'warehouse.equippedCannotTick': 'Đang lắp trên {gear} — không thể chọn.',
+  'qs.sourcesLabel': 'Nguồn vật phẩm',
+  'qs.sourceBox': 'Hòm đồ ({count})',
+  'qs.sourceWarehouse': 'Kho đồ ({count})',
+  'qs.sourceTagBox': 'Hòm đồ',
+  'qs.sourceTagWarehouse': 'Kho đồ',
+  'qs.warehouseBlockedReason':
+    'Đang chiến đấu hoặc chạy lặp trận — không thể bán đồ từ Kho đồ (Chỉ dùng ở căn cứ).',
+  'qs.noSourceHint': 'Hãy chọn ít nhất 1 nguồn vật phẩm (Hòm đồ hoặc Kho đồ).',
 };
 
 

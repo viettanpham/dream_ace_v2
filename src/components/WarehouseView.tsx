@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react';
 import {
   Archive,
   ArrowLeftRight,
+  Check,
+  CheckSquare,
   Lock,
   PackageOpen,
   Star,
@@ -71,7 +73,11 @@ interface WarehouseItemCellProps {
   container: WarehouseContainer;
   equippedBy: MechClassId | null;
   activeGearId: MechClassId;
+  selectionMode: boolean;
+  isSelected: boolean;
   onSelect: (container: WarehouseContainer, item: ItemInstance) => void;
+  onToggleTick: (itemId: string) => void;
+  onBlockedEquippedTap: (gearId: MechClassId) => void;
 }
 
 function WarehouseItemCell({
@@ -79,13 +85,22 @@ function WarehouseItemCell({
   container,
   equippedBy,
   activeGearId,
+  selectionMode,
+  isSelected,
   onSelect,
+  onToggleTick,
+  onBlockedEquippedTap,
 }: WarehouseItemCellProps) {
   const { lang, t } = useI18n();
   const displayName = getItemInstanceName(lang, item);
   const isEquippedSelected = equippedBy === activeGearId;
+  const blockedInSelection = selectionMode && equippedBy !== null;
 
-  const frameClasses = equippedBy
+  const frameClasses = blockedInSelection
+    ? 'border-slate-800 bg-slate-950/60 opacity-45 cursor-not-allowed'
+    : selectionMode && isSelected
+    ? 'border-amber-400 bg-amber-500/15 ring-2 ring-amber-400/70'
+    : equippedBy
     ? isEquippedSelected
       ? 'border-emerald-400 bg-emerald-500/12 ring-1 ring-emerald-400/50'
       : 'border-sky-400/75 bg-sky-500/10'
@@ -93,14 +108,45 @@ function WarehouseItemCell({
         RARITY_META[item.rarity].bgTintClass
       } hover:bg-slate-900/90`;
 
+  const handleClick = () => {
+    if (!selectionMode) {
+      onSelect(container, item);
+      return;
+    }
+    if (equippedBy !== null) {
+      onBlockedEquippedTap(equippedBy);
+      return;
+    }
+    onToggleTick(item.instanceId);
+  };
+
   return (
     <button
       type="button"
       data-testid={`warehouse-cell-${container}-${item.instanceId}`}
+      data-selected={selectionMode && isSelected ? 'true' : 'false'}
+      data-selection-blocked={blockedInSelection ? 'true' : 'false'}
+      aria-pressed={selectionMode && equippedBy === null ? isSelected : undefined}
+      aria-disabled={blockedInSelection ? true : undefined}
       title={displayName}
-      onClick={() => onSelect(container, item)}
+      onClick={handleClick}
       className={`relative h-[128px] overflow-hidden p-2.5 rounded-lg lg:rounded border text-left transition-colors cursor-pointer flex flex-col justify-between ${frameClasses}`}
     >
+      {/* Multi-select checkbox corner indicator */}
+      {selectionMode && equippedBy === null && (
+        <span
+          data-testid={`warehouse-tick-${item.instanceId}`}
+          aria-hidden="true"
+          className={`absolute top-1.5 right-1.5 z-20 w-4 h-4 rounded border flex items-center justify-center ${
+            isSelected
+              ? 'bg-amber-400 border-amber-300 text-slate-950'
+              : 'bg-slate-950/90 border-slate-500 text-transparent'
+          }`}
+        >
+          <Check className="w-3 h-3 stroke-[3]" />
+        </span>
+      )}
+
       {/* Equipped Corner Ribbon */}
       {equippedBy && (
         <div
@@ -142,7 +188,7 @@ function WarehouseItemCell({
 
         <div
           className={`flex items-center gap-1 font-mono-nums text-[11px] shrink-0 ${
-            equippedBy ? 'mt-3' : ''
+            equippedBy || selectionMode ? 'mt-3' : ''
           }`}
         >
           {item.locked && (
@@ -209,6 +255,9 @@ export function WarehouseView() {
   const [slotFilter, setSlotFilter] = useState<SlotFilter>('all');
   const [selected, setSelected] = useState<SelectedWarehouseItem | null>(null);
   const [toastText, setToastText] = useState<string | null>(null);
+  const [selectionContainer, setSelectionContainer] =
+    useState<WarehouseContainer | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   const boxCap = BALANCE_CONFIG.maxInventorySize;
   const warehouseCap = sanitizeWarehouseCapacity(warehouseCapacityRaw);
@@ -247,6 +296,68 @@ export function WarehouseView() {
     setToastText(formatWarehouseTransferToast(res, t));
   };
 
+  const handleToggleSelectionMode = (container: WarehouseContainer) => {
+    setSelectedIds([]);
+    setSelectionContainer((prev) => (prev === container ? null : container));
+  };
+
+  const handleSlotFilterChange = (nextFilter: SlotFilter) => {
+    setSlotFilter(nextFilter);
+    setSelectedIds([]);
+  };
+
+  const handleMobilePanelChange = (nextPanel: WarehouseContainer) => {
+    setMobilePanel(nextPanel);
+    setSelectedIds([]);
+    setSelectionContainer(null);
+  };
+
+  const handleToggleTick = (instanceId: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(instanceId)
+        ? prev.filter((id) => id !== instanceId)
+        : [...prev, instanceId]
+    );
+  };
+
+  const handleSelectAllFiltered = (items: ItemInstance[]) => {
+    const eligibleIds = items
+      .filter((it) => getItemEquippedByGear(pilot.gears, it.instanceId) === null)
+      .map((it) => it.instanceId);
+    setSelectedIds((prev) => {
+      const seen = new Set(prev);
+      const next = [...prev];
+      for (const id of eligibleIds) {
+        if (!seen.has(id)) {
+          seen.add(id);
+          next.push(id);
+        }
+      }
+      return next;
+    });
+  };
+
+  const handleClearSelection = () => {
+    setSelectedIds([]);
+  };
+
+  const handleBlockedEquippedTap = (gearId: MechClassId) => {
+    setToastText(
+      t('warehouse.equippedCannotTick', { gear: getClassName(lang, gearId) })
+    );
+  };
+
+  const handleBulkMoveSelected = (container: WarehouseContainer) => {
+    if (selectedIds.length === 0) return;
+    const res =
+      container === 'box'
+        ? moveToWarehouse(selectedIds)
+        : moveToBox(selectedIds);
+    setToastText(formatWarehouseTransferToast(res, t));
+    setSelectedIds([]);
+    setSelectionContainer(null);
+  };
+
   const handleSingleMove = () => {
     if (!selected) return;
     if (selected.container === 'box') {
@@ -262,6 +373,63 @@ export function WarehouseView() {
     if (res.moved > 0 || res.reason === 'locked') {
       setSelected(null);
     }
+  };
+
+  const renderSelectionBar = (
+    container: WarehouseContainer,
+    filteredItems: ItemInstance[]
+  ) => {
+    if (selectionContainer !== container) return null;
+    const hasEligible = filteredItems.some(
+      (it) => getItemEquippedByGear(pilot.gears, it.instanceId) === null
+    );
+    return (
+      <div
+        data-testid={`warehouse-selection-bar-${container}`}
+        className="rounded border border-amber-500/40 bg-amber-950/20 p-2 flex flex-wrap items-center justify-between gap-2 min-w-0"
+      >
+        <span
+          data-testid={`warehouse-selected-count-${container}`}
+          className="text-xs font-bold text-amber-200 whitespace-nowrap"
+        >
+          {t('warehouse.selectedCount', { count: selectedIds.length })}
+        </span>
+        <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+          <button
+            type="button"
+            data-testid={`warehouse-select-all-btn-${container}`}
+            disabled={!hasEligible}
+            onClick={() => handleSelectAllFiltered(filteredItems)}
+            className="h-8 px-2.5 rounded border border-slate-700 bg-slate-900 hover:border-amber-400/60 disabled:opacity-45 text-[11px] font-medium text-slate-200 cursor-pointer disabled:cursor-not-allowed whitespace-nowrap"
+          >
+            {t('warehouse.selectAllFilteredBtn')}
+          </button>
+          <button
+            type="button"
+            data-testid={`warehouse-clear-select-btn-${container}`}
+            disabled={selectedIds.length === 0}
+            onClick={handleClearSelection}
+            className="h-8 px-2.5 rounded border border-slate-700 bg-slate-900 hover:border-slate-500 disabled:opacity-45 text-[11px] font-medium text-slate-300 cursor-pointer disabled:cursor-not-allowed whitespace-nowrap"
+          >
+            {t('warehouse.clearSelectBtn')}
+          </button>
+          <button
+            type="button"
+            data-testid={`warehouse-bulk-move-btn-${container}`}
+            disabled={selectedIds.length === 0 || transferLocked}
+            onClick={() => handleBulkMoveSelected(container)}
+            className="h-8 px-2.5 rounded bg-amber-500 hover:bg-amber-400 disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 text-[11px] font-bold inline-flex items-center gap-1 cursor-pointer disabled:cursor-not-allowed whitespace-nowrap"
+          >
+            <ArrowLeftRight className="w-3 h-3 shrink-0" />
+            <span>
+              {container === 'box'
+                ? t('warehouse.moveToWarehouseBtn')
+                : t('warehouse.moveToBoxBtn')}
+            </span>
+          </button>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -286,7 +454,9 @@ export function WarehouseView() {
                 data-testid="warehouse-slot-filter"
                 aria-label={t('warehouse.slotAll')}
                 value={slotFilter}
-                onChange={(e) => setSlotFilter(e.target.value as SlotFilter)}
+                onChange={(e) =>
+                  handleSlotFilterChange(e.target.value as SlotFilter)
+                }
                 className="h-9 px-2.5 rounded border border-slate-700 bg-slate-900 text-xs text-slate-100 min-w-0 flex-1 sm:flex-none cursor-pointer"
               >
                 <option value="all">{t('warehouse.slotAll')}</option>
@@ -343,7 +513,7 @@ export function WarehouseView() {
               type="button"
               data-testid="warehouse-switch-box"
               aria-pressed={mobilePanel === 'box'}
-              onClick={() => setMobilePanel('box')}
+              onClick={() => handleMobilePanelChange('box')}
               className={`h-9 px-2 rounded text-xs font-semibold truncate transition-colors cursor-pointer ${
                 mobilePanel === 'box'
                   ? 'bg-amber-500/20 border border-amber-400/70 text-amber-200'
@@ -359,7 +529,7 @@ export function WarehouseView() {
               type="button"
               data-testid="warehouse-switch-warehouse"
               aria-pressed={mobilePanel === 'warehouse'}
-              onClick={() => setMobilePanel('warehouse')}
+              onClick={() => handleMobilePanelChange('warehouse')}
               className={`h-9 px-2 rounded text-xs font-semibold truncate transition-colors cursor-pointer ${
                 mobilePanel === 'warehouse'
                   ? 'bg-amber-500/20 border border-amber-400/70 text-amber-200'
@@ -397,7 +567,23 @@ export function WarehouseView() {
                   })}
                 </span>
               </h3>
+              <button
+                type="button"
+                data-testid="warehouse-multiselect-btn-box"
+                aria-pressed={selectionContainer === 'box'}
+                onClick={() => handleToggleSelectionMode('box')}
+                className={`h-7 px-2 rounded border text-[11px] font-semibold inline-flex items-center gap-1 shrink-0 cursor-pointer transition-colors ${
+                  selectionContainer === 'box'
+                    ? 'border-amber-400 bg-amber-500/20 text-amber-200'
+                    : 'border-slate-700 bg-slate-900 hover:border-slate-500 text-slate-300'
+                }`}
+              >
+                <CheckSquare className="w-3.5 h-3.5 shrink-0" />
+                <span>{t('warehouse.selectManyBtn')}</span>
+              </button>
             </div>
+
+            {renderSelectionBar('box', filteredBoxItems)}
 
             {filteredBoxItems.length === 0 ? (
               <div className="py-6 text-center text-xs text-slate-500">
@@ -415,7 +601,14 @@ export function WarehouseView() {
                       item.instanceId
                     )}
                     activeGearId={pilot.activeGearId}
+                    selectionMode={selectionContainer === 'box'}
+                    isSelected={
+                      selectionContainer === 'box' &&
+                      selectedIds.includes(item.instanceId)
+                    }
                     onSelect={(c, it) => setSelected({ container: c, item: it })}
+                    onToggleTick={handleToggleTick}
+                    onBlockedEquippedTap={handleBlockedEquippedTap}
                   />
                 ))}
               </div>
@@ -443,7 +636,23 @@ export function WarehouseView() {
                   })}
                 </span>
               </h3>
+              <button
+                type="button"
+                data-testid="warehouse-multiselect-btn-warehouse"
+                aria-pressed={selectionContainer === 'warehouse'}
+                onClick={() => handleToggleSelectionMode('warehouse')}
+                className={`h-7 px-2 rounded border text-[11px] font-semibold inline-flex items-center gap-1 shrink-0 cursor-pointer transition-colors ${
+                  selectionContainer === 'warehouse'
+                    ? 'border-amber-400 bg-amber-500/20 text-amber-200'
+                    : 'border-slate-700 bg-slate-900 hover:border-slate-500 text-slate-300'
+                }`}
+              >
+                <CheckSquare className="w-3.5 h-3.5 shrink-0" />
+                <span>{t('warehouse.selectManyBtn')}</span>
+              </button>
             </div>
+
+            {renderSelectionBar('warehouse', filteredWarehouseItems)}
 
             {filteredWarehouseItems.length === 0 ? (
               <div className="py-6 text-center text-xs text-slate-500">
@@ -461,7 +670,14 @@ export function WarehouseView() {
                       item.instanceId
                     )}
                     activeGearId={pilot.activeGearId}
+                    selectionMode={selectionContainer === 'warehouse'}
+                    isSelected={
+                      selectionContainer === 'warehouse' &&
+                      selectedIds.includes(item.instanceId)
+                    }
                     onSelect={(c, it) => setSelected({ container: c, item: it })}
+                    onToggleTick={handleToggleTick}
+                    onBlockedEquippedTap={handleBlockedEquippedTap}
                   />
                 ))}
               </div>

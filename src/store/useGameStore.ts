@@ -1839,7 +1839,14 @@ export const useGameStore = create<GameStoreState>()(
         }
         const idSet = new Set(instanceIds);
         const soldItems: ItemInstance[] = [];
-        const remaining: ItemInstance[] = [];
+        const soldFromWarehouseIds: string[] = [];
+        const remainingInventory: ItemInstance[] = [];
+        const currentWarehouse = Array.isArray(state.pilot.warehouse)
+          ? state.pilot.warehouse
+          : [];
+        const warehouseLocked =
+          isBattleActive(state) || Boolean(state.autoRepeatSession?.active);
+        const remainingWarehouse: ItemInstance[] = [];
         let creditsEarned = 0;
 
         for (const it of state.pilot.inventory) {
@@ -1852,7 +1859,23 @@ export const useGameStore = create<GameStoreState>()(
             soldItems.push(it);
             creditsEarned += getSellPrice(it);
           } else {
-            remaining.push(it);
+            remainingInventory.push(it);
+          }
+        }
+
+        for (const it of currentWarehouse) {
+          if (
+            !warehouseLocked &&
+            idSet.has(it.instanceId) &&
+            !it.locked &&
+            !it.favorited &&
+            getItemEquippedByGear(state.pilot.gears, it.instanceId) === null
+          ) {
+            soldItems.push(it);
+            soldFromWarehouseIds.push(it.instanceId);
+            creditsEarned += getSellPrice(it);
+          } else {
+            remainingWarehouse.push(it);
           }
         }
 
@@ -1865,12 +1888,19 @@ export const useGameStore = create<GameStoreState>()(
           pilot: {
             ...state.pilot,
             credits: state.pilot.credits + creditsEarned,
-            inventory: remaining,
+            inventory: remainingInventory,
+            warehouse:
+              soldFromWarehouseIds.length > 0
+                ? remainingWarehouse
+                : currentWarehouse,
           },
           quickSellUndo: {
             soldItems,
             totalCredits: creditsEarned,
             soldAt: Date.now(),
+            ...(soldFromWarehouseIds.length > 0
+              ? { soldFromWarehouseIds }
+              : {}),
           },
           hasSaveData: true,
         });
@@ -1966,23 +1996,48 @@ export const useGameStore = create<GameStoreState>()(
         if (!undo || undo.soldItems.length === 0) {
           return { ok: false, restoredCount: 0 };
         }
-        const existingIds = new Set(
+        const currentWarehouse = Array.isArray(state.pilot.warehouse)
+          ? state.pilot.warehouse
+          : [];
+        const existingBoxIds = new Set(
           state.pilot.inventory.map((i) => i.instanceId)
         );
-        const toRestore = undo.soldItems.filter(
-          (i) => !existingIds.has(i.instanceId)
+        const existingWarehouseIds = new Set(
+          currentWarehouse.map((i) => i.instanceId)
         );
+        const warehouseOriginSet = new Set(undo.soldFromWarehouseIds ?? []);
+
+        const toRestoreBox: ItemInstance[] = [];
+        const toRestoreWarehouse: ItemInstance[] = [];
+        for (const it of undo.soldItems) {
+          if (
+            existingBoxIds.has(it.instanceId) ||
+            existingWarehouseIds.has(it.instanceId)
+          ) {
+            continue;
+          }
+          if (warehouseOriginSet.has(it.instanceId)) {
+            toRestoreWarehouse.push(it);
+          } else {
+            toRestoreBox.push(it);
+          }
+        }
+
         soundFx.playClick();
         set({
           pilot: {
             ...state.pilot,
             credits: Math.max(0, state.pilot.credits - undo.totalCredits),
-            inventory: [...toRestore, ...state.pilot.inventory],
+            inventory: [...toRestoreBox, ...state.pilot.inventory],
+            warehouse: [...toRestoreWarehouse, ...currentWarehouse],
           },
           quickSellUndo: null,
           hasSaveData: true,
         });
-        return { ok: true, restoredCount: toRestore.length };
+        return {
+          ok: true,
+          restoredCount: toRestoreBox.length + toRestoreWarehouse.length,
+        };
       },
 
       clearQuickSellUndo: () => set({ quickSellUndo: null }),

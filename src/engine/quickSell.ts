@@ -68,6 +68,18 @@ export function buildQuickSellPreset(
   }
 }
 
+export type QuickSellItemSource = 'box' | 'warehouse';
+
+export interface QuickSellSourceFilter {
+  box: boolean;
+  warehouse: boolean;
+}
+
+export interface TaggedQuickSellItem {
+  item: ItemInstance;
+  source: QuickSellItemSource;
+}
+
 export interface QuickSellEvaluationResult {
   matchingItems: ItemInstance[];
   totalCredits: number;
@@ -77,6 +89,11 @@ export interface QuickSellEvaluationResult {
     locked: number;
     favorited: number;
   };
+}
+
+export interface QuickSellMultiSourceEvaluationResult
+  extends QuickSellEvaluationResult {
+  matchingEntries: TaggedQuickSellItem[];
 }
 
 /**
@@ -222,4 +239,122 @@ export function evaluateQuickSellCandidates(
     hasAnyFilterEnabled: true,
     excludedStats,
   };
+}
+
+/**
+ * Evaluates Quick Sell candidates across checked sources ("Hòm đồ" / "Kho đồ")
+ * by delegating to the pure `evaluateQuickSellCandidates` without altering its rules.
+ * - When only `box` is checked, returns `evaluateQuickSellCandidates(boxItems, ...)` verbatim.
+ * - Always passes `boxItems` in the combined pool so `getGearEquippedInstances` can resolve equipped slot gear.
+ */
+export function evaluateQuickSellCandidatesWithSources(
+  boxItems: ItemInstance[],
+  warehouseItems: ItemInstance[],
+  sources: QuickSellSourceFilter,
+  config: QuickSellFilterConfig,
+  activeGear: GearUnit,
+  allGears: Record<MechClassId, GearUnit>
+): QuickSellMultiSourceEvaluationResult {
+  const hasAnyFilterEnabled = hasActiveQuickSellFilter(config);
+
+  if (!sources.box && !sources.warehouse) {
+    return {
+      matchingItems: [],
+      matchingEntries: [],
+      totalCredits: 0,
+      hasAnyFilterEnabled,
+      excludedStats: { equipped: 0, locked: 0, favorited: 0 },
+    };
+  }
+
+  if (sources.box && !sources.warehouse) {
+    const base = evaluateQuickSellCandidates(
+      boxItems,
+      config,
+      activeGear,
+      allGears
+    );
+    return {
+      ...base,
+      matchingEntries: base.matchingItems.map((item) => ({
+        item,
+        source: 'box',
+      })),
+    };
+  }
+
+  const sourceById = new Map<string, QuickSellItemSource>();
+  for (const item of boxItems) {
+    if (!sourceById.has(item.instanceId)) {
+      sourceById.set(item.instanceId, 'box');
+    }
+  }
+  const uniqueWarehouse: ItemInstance[] = [];
+  for (const item of warehouseItems) {
+    if (!sourceById.has(item.instanceId)) {
+      sourceById.set(item.instanceId, 'warehouse');
+      uniqueWarehouse.push(item);
+    }
+  }
+
+  const combined = [...boxItems, ...uniqueWarehouse];
+  const raw = evaluateQuickSellCandidates(
+    combined,
+    config,
+    activeGear,
+    allGears
+  );
+
+  if (!raw.hasAnyFilterEnabled) {
+    return {
+      ...raw,
+      matchingEntries: [],
+      excludedStats: sources.box
+        ? raw.excludedStats
+        : computeExcludedStatsForPool(uniqueWarehouse, allGears),
+    };
+  }
+
+  const matchingEntries: TaggedQuickSellItem[] = [];
+  const matchingItems: ItemInstance[] = [];
+  let totalCredits = 0;
+
+  for (const item of raw.matchingItems) {
+    const source = sourceById.get(item.instanceId) ?? 'box';
+    if (!sources[source]) continue;
+    matchingItems.push(item);
+    matchingEntries.push({ item, source });
+    totalCredits += getSellPrice(item);
+  }
+
+  return {
+    matchingItems,
+    matchingEntries,
+    totalCredits: sources.box && sources.warehouse ? raw.totalCredits : totalCredits,
+    hasAnyFilterEnabled: true,
+    excludedStats: sources.box
+      ? raw.excludedStats
+      : computeExcludedStatsForPool(uniqueWarehouse, allGears),
+  };
+}
+
+function computeExcludedStatsForPool(
+  items: ItemInstance[],
+  allGears: Record<MechClassId, GearUnit>
+): QuickSellEvaluationResult['excludedStats'] {
+  const excludedStats = { equipped: 0, locked: 0, favorited: 0 };
+  for (const item of items) {
+    if (getItemEquippedByGear(allGears, item.instanceId) !== null) {
+      excludedStats.equipped += 1;
+      continue;
+    }
+    if (item.locked) {
+      excludedStats.locked += 1;
+      continue;
+    }
+    if (item.favorited) {
+      excludedStats.favorited += 1;
+    }
+  }
+  return excludedStats;
 }
