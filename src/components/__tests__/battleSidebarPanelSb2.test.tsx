@@ -586,4 +586,41 @@ describe('TASK SB2 — Selected-unit panel fixed height & header slots (>640px)'
     expect(panel.innerHTML).toContain(SP_COLOR_TOKENS.textClass);
     expect(CURRENT_SAVE_VERSION).toBe(9);
   });
+
+  it('5) Exposed radar lane header has no "Lộ diện" and sidebar unit header has no "Bảo vệ"/"Lộ diện"/"Trống"', () => {
+    setViewport(1440, 900);
+    act(() => {
+      useGameStore.getState().setLanguage('vi');
+      useGameStore.setState({
+        battle: makeBattle({ activeTurnIndex: 0, selectedTargetId: 'e_back' }),
+      });
+      root!.render(createElement(BattleScreen));
+    });
+
+    const exposedBand = container!.querySelector(
+      '[data-row-band="enemy-front"]'
+    ) as SVGGElement;
+    const exposedRadarHeader = container!.querySelector(
+      '[data-testid="radar-lane-header-enemy-front"]'
+    ) as HTMLElement;
+    expect(exposedBand.getAttribute('data-row-state')).toBe('exposed');
+    expect(exposedRadarHeader.textContent).toContain(
+      VI_TRANSLATIONS['common.frontRow']
+    );
+    expect(exposedRadarHeader.textContent).not.toContain('Lộ diện');
+
+    const sidebarHeader = container!.querySelector(
+      '[data-testid="sidebar-unit-header"]'
+    ) as HTMLElement;
+    const sidebarLane = container!.querySelector(
+      '[data-testid="sidebar-unit-lane"]'
+    ) as HTMLElement;
+    expect(sidebarLane.textContent).toBe(VI_TRANSLATIONS['common.backRow']);
+    expect(sidebarLane.getAttribute('title')).toBe(
+      VI_TRANSLATIONS['common.backRow']
+    );
+    expect(sidebarHeader.textContent).not.toContain('Bảo vệ');
+    expect(sidebarHeader.textContent).not.toContain('Lộ diện');
+    expect(sidebarHeader.textContent).not.toContain('Trống');
+  });
 });

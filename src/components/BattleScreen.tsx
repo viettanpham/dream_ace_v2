@@ -68,7 +68,6 @@ import {
   SPEECH_BUBBLE_DURATION_MS,
   useBattleLayoutMode,
   writeSpeechBubblesEnabled,
-  type RowExposureState,
 } from '../utils/battleDisplay';
 import {
   computeFxCleanupDelayMs,
@@ -1456,13 +1455,6 @@ export function BattleScreen() {
       ? t('common.middleRow')
       : t('common.backRow');
 
-  const getExposureLabel = (state: RowExposureState) =>
-    state === 'exposed'
-      ? t('battle.rowExposed')
-      : state === 'protected'
-      ? t('battle.rowProtected')
-      : t('battle.rowEmpty');
-
   const getCardInvalidReason = (unit: CombatUnit): string | null => {
     const actor =
       activeUnit?.isPlayer && activeUnit.alive ? activeUnit : playerUnit ?? null;
@@ -1787,8 +1779,6 @@ export function BattleScreen() {
         : hpRatio <= 0.55
         ? 'bg-orange-400'
         : 'bg-emerald-500';
-    const exposure =
-      (isEnemy ? enemyExposure : allyExposure)?.[sidebarUnit.row] ?? 'empty';
     const isBlocked =
       isEnemy && sidebarUnit.alive && !validBasicTargetIds.has(sidebarUnit.id);
     const isStealthed = hasStatus(sidebarUnit, 'stealth');
@@ -1843,11 +1833,9 @@ export function BattleScreen() {
             <span
               data-testid="sidebar-unit-lane"
               className="text-[11px] font-mono-nums text-slate-300 truncate min-w-0 max-w-[48%] shrink"
-              title={`${getRowTitle(sidebarUnit.row)} · ${getExposureLabel(
-                exposure
-              )}`}
+              title={getRowTitle(sidebarUnit.row)}
             >
-              {getRowTitle(sidebarUnit.row)} · {getExposureLabel(exposure)}
+              {getRowTitle(sidebarUnit.row)}
             </span>
           </div>
 

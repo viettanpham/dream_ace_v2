@@ -329,11 +329,11 @@ function formatSignedRowPct(val: number): string {
   return pct > 0 ? `+${pct}` : `${pct}`;
 }
 
-export function formatRadarLaneBuffText(
+export function getRadarLaneBuffParts(
   lang: Language,
   formationConfig: FormationConfig | undefined,
   row: CombatRow
-): string {
+): string[] {
   const mod = getRowModifier(formationConfig, row);
   const parts: string[] = [];
   if (Math.abs(mod.defensePct) >= 0.005) {
@@ -357,7 +357,33 @@ export function formatRadarLaneBuffText(
       })
     );
   }
-  return parts.join(' · ');
+  return parts;
+}
+
+export function formatRadarLaneBuffText(
+  lang: Language,
+  formationConfig: FormationConfig | undefined,
+  row: CombatRow
+): string {
+  return getRadarLaneBuffParts(lang, formationConfig, row).join(' · ');
+}
+
+export function formatRadarLaneHeaderText(
+  rowLabel: string,
+  buffParts: string[],
+  laneWidth: number,
+  isPhoneCollapsed: boolean
+): string {
+  if (isPhoneCollapsed || buffParts.length === 0) {
+    return rowLabel;
+  }
+  const fullHeader = `${rowLabel} · ${buffParts.join(' · ')}`;
+  const usableWidthPx = Math.max(24, laneWidth - 16);
+  const maxChars = Math.floor(usableWidthPx / 6);
+  if (fullHeader.length <= maxChars || buffParts.length <= 1) {
+    return fullHeader;
+  }
+  return `${rowLabel} · ${buffParts[0]} +${buffParts.length - 1}`;
 }
 
 export function computeLaneTokenRadius(
@@ -2046,11 +2072,11 @@ export function BattleRadarView({
       ? t('common.middleRow')
       : t('common.backRow');
 
-  const rowBuffTexts = useMemo<Record<CombatRow, string>>(
+  const rowBuffParts = useMemo<Record<CombatRow, string[]>>(
     () => ({
-      front: formatRadarLaneBuffText(lang, formationConfig, 'front'),
-      middle: formatRadarLaneBuffText(lang, formationConfig, 'middle'),
-      back: formatRadarLaneBuffText(lang, formationConfig, 'back'),
+      front: getRadarLaneBuffParts(lang, formationConfig, 'front'),
+      middle: getRadarLaneBuffParts(lang, formationConfig, 'middle'),
+      back: getRadarLaneBuffParts(lang, formationConfig, 'back'),
     }),
     [lang, formationConfig]
   );
@@ -2114,7 +2140,7 @@ export function BattleRadarView({
           />
         ))}
 
-        {/* 3-ROW LANE BANDS — one muted 20px header line (lane name + Lộ diện only when exposed + buff) */}
+        {/* 3-ROW LANE BANDS — one muted 20px header line (lane name + buff) */}
         {lanes.map((lane) => {
           const exposure: RowExposureState =
             lane.side === 'enemy'
@@ -2142,15 +2168,17 @@ export function BattleRadarView({
             : 'rgba(51, 65, 85, 0.28)';
 
           const rowLabel = getRowLabel(lane.row);
-          const buffText = rowBuffTexts[lane.row];
-          const headerParts = isPhoneCollapsed
-            ? [rowLabel]
-            : [
-                rowLabel,
-                ...(isExposed ? [t('battle.rowExposed')] : []),
-                ...(buffText ? [buffText] : []),
-              ];
-          const headerText = headerParts.join(' · ');
+          const buffParts = rowBuffParts[lane.row];
+          const fullBuffText = buffParts.join(' · ');
+          const fullHeaderText = isPhoneCollapsed
+            ? rowLabel
+            : [rowLabel, ...(fullBuffText ? [fullBuffText] : [])].join(' · ');
+          const headerText = formatRadarLaneHeaderText(
+            rowLabel,
+            buffParts,
+            lane.w,
+            isPhoneCollapsed
+          );
 
           return (
             <g
@@ -2180,7 +2208,7 @@ export function BattleRadarView({
               >
                 <div
                   data-testid={`radar-lane-header-${lane.side}-${lane.row}`}
-                  title={headerText}
+                  title={fullHeaderText}
                   style={{ height: `${PHONE_EMPTY_LANE_HEIGHT_PX}px`, lineHeight: `${PHONE_EMPTY_LANE_HEIGHT_PX}px` }}
                   className={`w-full h-[20px] leading-[20px] px-1 flex items-center text-[10px] font-mono-nums truncate ${
                     isLandscape ? 'justify-center text-center' : 'justify-start text-left'

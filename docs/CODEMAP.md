@@ -25,7 +25,8 @@ src/store/useGameStore.ts 3981; src/engine/combat.ts 3860; src/components/Battle
 - src/components/BattleMoreActionsMenu.tsx + src/components/__tests__/BattleMoreActionsMenu.test.tsx — shared "..." overflow actions BottomSheet (`BattleMoreActionsMenu`) + tests
 - src/components/PhoneSkillsSheet.tsx + src/components/__tests__/PhoneSkillsSheet.test.tsx — phone active skills BottomSheet (`PhoneSkillsSheet`) + tests
 - src/components/FieldSuppliesSheet.tsx + src/components/__tests__/FieldSuppliesSheet.test.tsx — field supplies & tactics BottomSheet wrapped in ErrorBoundary (`FieldSuppliesSheet`) + tests
-- src/components/BattleRadarView.tsx — tactical 3-row SVG radar markers, lanes, floating labels, and lane buff formatting (`BattleRadarView`, `formatRadarLaneBuffText()`, `computeLaneTokenRadius()`)
+- src/components/BattleRadarView.tsx — tactical 3-row SVG radar markers, lanes, floating labels, and lane buff formatting (`BattleRadarView`, `getRadarLaneBuffParts()`, `formatRadarLaneBuffText()`, `formatRadarLaneHeaderText()`, `computeLaneTokenRadius()`)
+- src/components/__tests__/battleRadarDeclutterG4a3a.test.tsx + src/components/__tests__/battleSidebarPanelSb2.test.tsx — radar declutter, lane header labels, and fixed-height sidebar unit panel tests
 - src/components/RadarStatusBoard.tsx — collapsible status board under the radar (`RadarStatusBoard`)
 - src/components/StatusChip.tsx — shared compact status icon chip (`StatusChip`)
 - src/components/FixedStatusArea.tsx — fixed/dynamic height status chip box with row counter & overflow scroll (`FixedStatusArea`, `getFixedStatusAreaHeightPx()`, `countStatusChipRows()`)

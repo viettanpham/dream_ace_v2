@@ -360,7 +360,7 @@ describe('TASK G4a-3a — Radar declutter (markers, floating labels, lanes, dead
     expect(labels2[0].textContent).toBe('+50');
   });
 
-  it('3) Lane header renders one muted 20px line with lane name + Lộ diện only on exposed lane + lane buff text, with zero "Bảo vệ"/"Trống"', () => {
+  it('3) Lane header renders one muted 20px line with lane name + lane buff text (compact +N when overflowing), with zero "Lộ diện"/"Bảo vệ"/"Trống"', () => {
     const p1 = makeUnit('p1', 'ZARA', 'ally', 'front', { isPlayer: true });
     const pBack = makeUnit('p_back', 'Nova', 'ally', 'back');
     const eFront = makeUnit('e_front', 'Raider', 'enemy', 'front');
@@ -385,6 +385,9 @@ describe('TASK G4a-3a — Radar declutter (markers, floating labels, lanes, dead
       );
     });
 
+    const exposedBand = container!.querySelector(
+      '[data-row-band="enemy-front"]'
+    ) as SVGGElement;
     const exposedHeader = container!.querySelector(
       '[data-testid="radar-lane-header-enemy-front"]'
     ) as HTMLElement;
@@ -395,13 +398,15 @@ describe('TASK G4a-3a — Radar declutter (markers, floating labels, lanes, dead
       '[data-testid="radar-lane-header-enemy-middle"]'
     ) as HTMLElement;
 
+    expect(exposedBand.getAttribute('data-row-state')).toBe('exposed');
     expect(exposedHeader.style.height).toBe('20px');
     expect(exposedHeader.textContent).toContain(VI_TRANSLATIONS['common.frontRow']);
-    expect(exposedHeader.textContent).toContain('Lộ diện');
+    expect(exposedHeader.textContent).not.toContain('Lộ diện');
     expect(exposedHeader.textContent).toContain('+10% DEF');
 
     expect(protectedHeader.textContent).toContain(VI_TRANSLATIONS['common.backRow']);
-    expect(protectedHeader.textContent).toContain('-10% DEF');
+    expect(protectedHeader.textContent).toContain('-10% DEF +1');
+    expect(protectedHeader.textContent).not.toContain('ST tầm xa');
     expect(protectedHeader.textContent).not.toContain('Lộ diện');
 
     const allHeaderText = Array.from(
@@ -409,6 +414,8 @@ describe('TASK G4a-3a — Radar declutter (markers, floating labels, lanes, dead
     )
       .map((el) => el.textContent ?? '')
       .join(' | ');
+    expect(allHeaderText).not.toContain('Lộ diện');
+    expect(allHeaderText).not.toContain('Exposed');
     expect(allHeaderText).not.toContain('Bảo vệ');
     expect(allHeaderText).not.toContain('Protected');
     expect(allHeaderText).not.toContain('Trống');
