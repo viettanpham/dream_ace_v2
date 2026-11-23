@@ -730,6 +730,33 @@
   }
 }
 
+@keyframes stage-card-attacker-glow {
+  0% {
+    opacity: 0;
+    box-shadow: 0 0 0 rgba(251, 191, 36, 0);
+  }
+  20% {
+    opacity: 1;
+    box-shadow: 0 0 14px rgba(251, 191, 36, 0.72), inset 0 0 10px rgba(251, 191, 36, 0.25);
+  }
+  100% {
+    opacity: 0;
+    box-shadow: 0 0 0 rgba(251, 191, 36, 0);
+  }
+}
+
+@keyframes stage-card-target-flash {
+  0% {
+    opacity: 0;
+  }
+  18% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
 @keyframes vfx-crit-flash {
   0% {
     opacity: 0;
@@ -947,6 +974,16 @@
   will-change: transform, opacity;
 }
 
+.anim-stage-card-glow {
+  animation: stage-card-attacker-glow 600ms ease-out both;
+  will-change: opacity;
+}
+
+.anim-stage-card-flash {
+  animation: stage-card-target-flash 600ms ease-out both;
+  will-change: opacity;
+}
+
 .vfx-crit-flash {
   animation: vfx-crit-flash var(--vfx-dur, 460ms) cubic-bezier(0.16, 1, 0.3, 1) both;
   will-change: transform, opacity;
@@ -1090,7 +1127,9 @@
 [data-reduced-motion="true"] .vfx-particle-fall,
 [data-reduced-motion="true"] .vfx-debuff-shake,
 [data-reduced-motion="true"] .vfx-dodge-slide,
-[data-reduced-motion="true"] .vfx-stealth-veil {
+[data-reduced-motion="true"] .vfx-stealth-veil,
+[data-reduced-motion="true"] .anim-stage-card-glow,
+[data-reduced-motion="true"] .anim-stage-card-flash {
   animation: vfx-reduced-fade var(--vfx-dur, 260ms) linear both;
 }
 

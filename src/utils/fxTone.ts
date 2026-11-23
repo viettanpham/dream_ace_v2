@@ -16,6 +16,15 @@ export const FX_TONE_COLORS: Record<ResolvedFxTone, string> = {
   damage: DAMAGE_TEAM_ACCENTS.ally,
 };
 
+/** Hit-flash / target card border flash colors per tone (damage red, heal green, shield blue, sp orange, buff yellow). */
+export const STAGE_HIT_FLASH_COLORS: Record<ResolvedFxTone, string> = {
+  damage: '#ef4444',
+  heal: '#22c55e',
+  shield: '#38bdf8',
+  sp: '#f59e0b',
+  buff: '#facc15',
+};
+
 export function resolveFxTone(
   fx: Pick<CombatFxEvent, 'kind' | 'tone'>
 ): ResolvedFxTone {

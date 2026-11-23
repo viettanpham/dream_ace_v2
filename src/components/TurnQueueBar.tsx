@@ -43,6 +43,8 @@ interface TurnQueueBarProps {
   maxUpcoming?: number;
   /** When true in sidebar variant, allows card to absorb freed height in Line log mode */
   fillHeight?: boolean;
+  /** When true in sidebar variant (card mode + ActionStage ON), replaces the 36px acting row */
+  hideActingRow?: boolean;
 }
 
 function getTeamCssVar(role: TeamColorRole): string {
@@ -323,6 +325,7 @@ export function TurnQueueBar({
   onSelectUnit,
   maxUpcoming = 4,
   fillHeight = false,
+  hideActingRow = false,
 }: TurnQueueBarProps) {
   const { lang, t } = useI18n();
   const trackRef = useRef<HTMLDivElement | null>(null);
@@ -746,7 +749,10 @@ export function TurnQueueBar({
     const allUpcoming = upcomingData.upcoming;
     const fixedRowCount = getTurnQueueSidebarRowCount(effectiveUnitsAtStart);
     const listHeightPx = getTurnQueueSidebarListHeightPx(fixedRowCount);
-    const totalHeightPx = getTurnQueueSidebarTotalHeightPx(fixedRowCount);
+    const totalHeightPx = getTurnQueueSidebarTotalHeightPx(
+      fixedRowCount,
+      hideActingRow
+    );
     const sidebarHiddenCount = Math.max(0, allUpcoming.length - fixedRowCount);
     const actingChipTitle = actingEntry
       ? `${getTeamTagLabel(lang, actingEntry.teamRole)} ${actingEntry.name}${
@@ -761,6 +767,7 @@ export function TurnQueueBar({
         data-testid="turn-queue-sidebar"
         data-queue-rows={fixedRowCount}
         data-queue-height-px={totalHeightPx}
+        data-acting-row-hidden={hideActingRow ? 'true' : 'false'}
         style={{
           height: `${totalHeightPx}px`,
           minHeight: `${totalHeightPx}px`,
@@ -819,93 +826,98 @@ export function TurnQueueBar({
           </span>
         </div>
 
-        {/* Acting Unit Highlight (always 36px even when no actor or battle finished) */}
-        {actingEntry ? (
-          <button
-            type="button"
-            data-testid="turn-queue-acting-chip"
-            data-unit-id={actingEntry.unitId}
-            data-full-name={actingEntry.name}
-            data-acting="true"
-            onClick={() => handleChipClick(actingEntry)}
-            title={actingChipTitle}
-            style={{
-              borderColor: 'var(--turn-active)',
-              height: `${TURN_QUEUE_SIDEBAR_HEIGHTS.actingRowPx}px`,
-              minHeight: `${TURN_QUEUE_SIDEBAR_HEIGHTS.actingRowPx}px`,
-            }}
-            className="w-full h-[36px] min-h-[36px] max-h-[36px] shrink-0 px-2.5 rounded-lg border bg-amber-400/15 hover:bg-amber-400/20 flex items-center justify-between gap-2 text-left cursor-pointer transition-colors"
-          >
-            <div className="flex items-center gap-1.5 flex-1 min-w-0">
-              <TeamShapeIcon role={actingEntry.teamRole} />
-              <span
-                className="px-1.5 py-0.5 rounded text-[11px] font-mono-nums font-bold shrink-0"
-                style={{
-                  backgroundColor: 'rgba(15, 23, 42, 0.9)',
-                  color: getTeamCssVar(actingEntry.teamRole),
-                  border: `1px solid ${getTeamCssVar(actingEntry.teamRole)}`,
-                }}
-              >
-                {getTeamTagLabel(lang, actingEntry.teamRole)}
-              </span>
-              <div
-                data-testid="turn-queue-acting-name"
-                className="flex items-center flex-1 min-w-0 text-[13px] font-bold text-amber-100"
-              >
+        {/* Acting Unit Highlight (omitted when hideActingRow=true so ActionStage replaces it) */}
+        {!hideActingRow &&
+          (actingEntry ? (
+            <button
+              type="button"
+              data-testid="turn-queue-acting-chip"
+              data-unit-id={actingEntry.unitId}
+              data-full-name={actingEntry.name}
+              data-acting="true"
+              onClick={() => handleChipClick(actingEntry)}
+              title={actingChipTitle}
+              style={{
+                borderColor: 'var(--turn-active)',
+                height: `${TURN_QUEUE_SIDEBAR_HEIGHTS.actingRowPx}px`,
+                minHeight: `${TURN_QUEUE_SIDEBAR_HEIGHTS.actingRowPx}px`,
+              }}
+              className="w-full h-[36px] min-h-[36px] max-h-[36px] shrink-0 px-2.5 rounded-lg border bg-amber-400/15 hover:bg-amber-400/20 flex items-center justify-between gap-2 text-left cursor-pointer transition-colors"
+            >
+              <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                <TeamShapeIcon role={actingEntry.teamRole} />
                 <span
-                  data-testid="turn-queue-acting-attacker"
-                  title={actingEntry.name}
-                  style={
-                    targetName && actingEntry.name.length > 7
-                      ? { minWidth: `min(${TURN_QUEUE_ACTING_NAME_MIN_PX}px, 42%)` }
-                      : undefined
-                  }
-                  className="min-w-0 truncate"
+                  className="px-1.5 py-0.5 rounded text-[11px] font-mono-nums font-bold shrink-0"
+                  style={{
+                    backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                    color: getTeamCssVar(actingEntry.teamRole),
+                    border: `1px solid ${getTeamCssVar(actingEntry.teamRole)}`,
+                  }}
                 >
-                  {actingEntry.name}
+                  {getTeamTagLabel(lang, actingEntry.teamRole)}
                 </span>
-                {targetName && (
-                  <>
-                    <span
-                      className="shrink-0 px-1 text-amber-200/80"
-                      aria-hidden="true"
-                    >
-                      &gt;
-                    </span>
-                    <span
-                      data-testid="turn-queue-acting-target"
-                      title={targetName}
-                      style={
-                        targetName.length > 7
-                          ? { minWidth: `min(${TURN_QUEUE_ACTING_NAME_MIN_PX}px, 42%)` }
-                          : undefined
-                      }
-                      className="min-w-0 truncate"
-                    >
-                      {targetName}
-                    </span>
-                  </>
-                )}
+                <div
+                  data-testid="turn-queue-acting-name"
+                  className="flex items-center flex-1 min-w-0 text-[13px] font-bold text-amber-100"
+                >
+                  <span
+                    data-testid="turn-queue-acting-attacker"
+                    title={actingEntry.name}
+                    style={
+                      targetName && actingEntry.name.length > 7
+                        ? {
+                            minWidth: `min(${TURN_QUEUE_ACTING_NAME_MIN_PX}px, 42%)`,
+                          }
+                        : undefined
+                    }
+                    className="min-w-0 truncate"
+                  >
+                    {actingEntry.name}
+                  </span>
+                  {targetName && (
+                    <>
+                      <span
+                        className="shrink-0 px-1 text-amber-200/80"
+                        aria-hidden="true"
+                      >
+                        &gt;
+                      </span>
+                      <span
+                        data-testid="turn-queue-acting-target"
+                        title={targetName}
+                        style={
+                          targetName.length > 7
+                            ? {
+                                minWidth: `min(${TURN_QUEUE_ACTING_NAME_MIN_PX}px, 42%)`,
+                              }
+                            : undefined
+                        }
+                        className="min-w-0 truncate"
+                      >
+                        {targetName}
+                      </span>
+                    </>
+                  )}
+                </div>
               </div>
+              <span className="font-mono-nums text-[12px] font-bold text-amber-200 shrink-0">
+                SPD {actingEntry.effectiveSpeed}
+              </span>
+            </button>
+          ) : (
+            <div
+              data-testid="turn-queue-acting-empty"
+              style={{
+                height: `${TURN_QUEUE_SIDEBAR_HEIGHTS.actingRowPx}px`,
+                minHeight: `${TURN_QUEUE_SIDEBAR_HEIGHTS.actingRowPx}px`,
+              }}
+              className="w-full h-[36px] min-h-[36px] max-h-[36px] shrink-0 px-2.5 rounded-lg border border-slate-800/70 bg-slate-900/35 flex items-center text-[12px] text-slate-500"
+            >
+              <span className="min-w-0 truncate">
+                {battle.summary ? t('queue.battleEnded') : t('queue.noActiveActor')}
+              </span>
             </div>
-            <span className="font-mono-nums text-[12px] font-bold text-amber-200 shrink-0">
-              SPD {actingEntry.effectiveSpeed}
-            </span>
-          </button>
-        ) : (
-          <div
-            data-testid="turn-queue-acting-empty"
-            style={{
-              height: `${TURN_QUEUE_SIDEBAR_HEIGHTS.actingRowPx}px`,
-              minHeight: `${TURN_QUEUE_SIDEBAR_HEIGHTS.actingRowPx}px`,
-            }}
-            className="w-full h-[36px] min-h-[36px] max-h-[36px] shrink-0 px-2.5 rounded-lg border border-slate-800/70 bg-slate-900/35 flex items-center text-[12px] text-slate-500"
-          >
-            <span className="min-w-0 truncate">
-              {battle.summary ? t('queue.battleEnded') : t('queue.noActiveActor')}
-            </span>
-          </div>
-        )}
+          ))}
 
         {/* Upcoming List: fixed rows (up to 5) x 26px + gaps, independent of log mode, internal scroll */}
         {fixedRowCount > 0 && (

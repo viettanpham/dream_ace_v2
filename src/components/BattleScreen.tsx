@@ -67,13 +67,18 @@ import {
   SP_COLOR_TOKENS,
   SPEECH_BUBBLE_DURATION_MS,
   useBattleLayoutMode,
+  usePrefersReducedMotion,
   writeSpeechBubblesEnabled,
 } from '../utils/battleDisplay';
 import {
   computeFxCleanupDelayMs,
   POPUP_CLEANUP_DELAY_MS,
+  resolveEffectiveVfxConfig,
+  resolveReducedMotion,
   useFxSettings,
 } from '../utils/battleVfx';
+import { useActionStageEnabled } from '../utils/actionStagePrefs';
+import { resolveFxTone, STAGE_HIT_FLASH_COLORS } from '../utils/fxTone';
 import {
   parseStructuredCombatLogRow,
   readCombatLogExpandAll,
@@ -87,6 +92,7 @@ import {
   type SidebarCombatLogMode,
 } from '../utils/combatLogFormat';
 import { useStatusDisplaySettings } from '../utils/statusDisplayPrefs';
+import { ActionStage, resolveStageFxActorAndTargets } from './ActionStage';
 import {
   AutoRepeatBatchSummaryModal,
   AutoRepeatToast,
@@ -223,6 +229,8 @@ export function BattleScreen() {
     () => readSpeechBubblesEnabled()
   );
   const [fxSettings] = useFxSettings();
+  const [actionStageEnabled] = useActionStageEnabled();
+  const osReducedMotion = usePrefersReducedMotion();
   const [sidebarLogMode, setSidebarLogMode] = useState<SidebarCombatLogMode>(
     () => readSidebarLogMode()
   );
@@ -555,6 +563,16 @@ export function BattleScreen() {
   }, [battle, pilot]);
 
   const bypassFx = skipAnimations;
+  const resolvedReducedMotion = resolveReducedMotion(
+    fxSettings.reducedMotionMode,
+    osReducedMotion
+  );
+  const vfxConfig = resolveEffectiveVfxConfig(
+    fxSettings.effectsMode,
+    battleSpeed,
+    resolvedReducedMotion,
+    bypassFx
+  );
 
   const effectiveViewMode =
     battleViewMode ?? (isPhonePortrait ? 'radar' : 'radar');
@@ -991,6 +1009,24 @@ export function BattleScreen() {
     )[0];
     return firstValidAlly?.name ?? null;
   })();
+
+  const showActionStage = Boolean(
+    actionStageEnabled && effectiveViewMode === 'card' && !battle.summary
+  );
+  const latestCardFx =
+    showActionStage && battle.fxEvents.length > 0
+      ? battle.fxEvents[battle.fxEvents.length - 1]
+      : null;
+  const latestCardFxActors = latestCardFx
+    ? resolveStageFxActorAndTargets(latestCardFx, battle)
+    : null;
+  const latestCardFxActorId = latestCardFxActors?.actor?.id ?? null;
+  const latestCardFxTargetIds = new Set(
+    (latestCardFxActors?.targets ?? []).map((u) => u.id)
+  );
+  const latestCardFxToneColor = latestCardFx
+    ? STAGE_HIT_FLASH_COLORS[resolveFxTone(latestCardFx)]
+    : null;
 
   const sectorLabel = getSectorName(lang, battle.sectorId);
   const enrageBonusPct = getEnemyEnrageBonusPct(
@@ -1475,6 +1511,17 @@ export function BattleScreen() {
     const isEnemy = unit.side === 'enemy';
     const frontBlocked =
       isEnemy && unit.alive && !validBasicTargetIds.has(unit.id);
+    const stageFxRole: 'attacker' | 'target' | null =
+      showActionStage && latestCardFx
+        ? unit.id === latestCardFxActorId &&
+          (latestCardFxTargetIds.size === 0 ||
+            latestCardFxTargetIds.size > 1 ||
+            !latestCardFxTargetIds.has(unit.id))
+          ? 'attacker'
+          : latestCardFxTargetIds.has(unit.id)
+          ? 'target'
+          : null
+        : null;
 
     return (
       <BattleUnitCard
@@ -1502,6 +1549,10 @@ export function BattleScreen() {
         autoActive={unit.isPlayer && autoBattleEnabled}
         showStatusLabels={fxSettings.showStatusLabels}
         popups={battle.popups.filter((p) => p.unitId === unit.id)}
+        suppressPopups={showActionStage}
+        stageFxRole={stageFxRole}
+        stageFxColor={stageFxRole === 'target' ? latestCardFxToneColor : null}
+        stageFxKey={latestCardFx?.id ?? null}
         onSelect={
           isEnemy
             ? () => {
@@ -2421,6 +2472,18 @@ export function BattleScreen() {
             </button>
           </div>
 
+          {/* Phone Card Mode Action Stage strip (0px / null when OFF, radar mode, or summary) */}
+          <ActionStage
+            battle={battle}
+            activeUnit={activeUnit}
+            actingTargetName={actingTargetName}
+            battleSpeed={battleSpeed}
+            vfxConfig={vfxConfig}
+            enabled={actionStageEnabled}
+            viewMode={effectiveViewMode}
+            variant="phone"
+          />
+
           {/* Force-Ratio Strip + 1-Row Collapsed Player Status Bar */}
           <div
             data-testid="battle-force-ratio-bar"
@@ -3113,7 +3176,19 @@ export function BattleScreen() {
               enrageBonusPct={enrageBonusPct}
               variant="sidebar"
               targetName={actingTargetName}
+              hideActingRow={showActionStage}
               onSelectUnit={(id) => setInspectedUnitId(id)}
+            />
+
+            <ActionStage
+              battle={battle}
+              activeUnit={activeUnit}
+              actingTargetName={actingTargetName}
+              battleSpeed={battleSpeed}
+              vfxConfig={vfxConfig}
+              enabled={actionStageEnabled}
+              viewMode={effectiveViewMode}
+              variant="desktop"
             />
 
             {renderSidebarSelectedUnit()}

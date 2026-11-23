@@ -1388,6 +1388,11 @@ export const EN_TRANSLATIONS = {
   'fx.previewAlly': 'ALLY',
   'fx.previewEnemy': 'TARGET',
   'fx.reducedMotionNotice': 'Reduced motion active (fade-only core FX)',
+  'fx.actionStageLabel': 'Action Stage',
+  'fx.actionStageOn': 'ON',
+  'fx.actionStageOff': 'OFF',
+  'actionStage.title': 'Action Stage',
+  'actionStage.usedAction': '{actor} uses {action}',
 
   // G3d: Detailed status values, round-grouped log, player status bar & layout stability
   'battle.playerDestroyed': 'Destroyed',

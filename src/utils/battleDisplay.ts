@@ -161,8 +161,15 @@ export function getTurnQueueSidebarListHeightPx(rowCount: number): number {
   );
 }
 
-export function getTurnQueueSidebarTotalHeightPx(rowCount: number): number {
+export function getTurnQueueSidebarTotalHeightPx(
+  rowCount: number,
+  hideActingRow = false
+): number {
   const listPx = getTurnQueueSidebarListHeightPx(rowCount);
+  const actingRowOverheadPx = hideActingRow
+    ? 0
+    : TURN_QUEUE_SIDEBAR_HEIGHTS.outerGapPx +
+      TURN_QUEUE_SIDEBAR_HEIGHTS.actingRowPx;
   const nextSectionOverheadPx =
     rowCount > 0
       ? TURN_QUEUE_SIDEBAR_HEIGHTS.outerGapPx +
@@ -173,8 +180,7 @@ export function getTurnQueueSidebarTotalHeightPx(rowCount: number): number {
     TURN_QUEUE_SIDEBAR_HEIGHTS.borderPx +
     TURN_QUEUE_SIDEBAR_HEIGHTS.padYPx +
     TURN_QUEUE_SIDEBAR_HEIGHTS.headerPx +
-    TURN_QUEUE_SIDEBAR_HEIGHTS.outerGapPx +
-    TURN_QUEUE_SIDEBAR_HEIGHTS.actingRowPx +
+    actingRowOverheadPx +
     nextSectionOverheadPx +
     listPx
   );

@@ -33,6 +33,7 @@ import {
   STATUS_DISPLAY_STORAGE_KEY,
   writeStatusDisplayOverride,
 } from '../../utils/statusDisplayPrefs';
+import { writeActionStageEnabled } from '../../utils/actionStagePrefs';
 import { AdminPanel } from '../AdminPanel';
 import { BattleRadarView } from '../BattleRadarView';
 import { BattleScreen } from '../BattleScreen';
@@ -515,6 +516,7 @@ describe('Task G4a-1 Part 2 — Icon catalog, status chips, settings, Bảng ico
       },
     ];
     useGameStore.setState({ battle, battleViewMode: 'card' });
+    writeActionStageEnabled(false);
 
     act(() => {
       root!.render(createElement(BattleScreen));

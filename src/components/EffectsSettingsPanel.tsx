@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { Grid, Info, Play, RotateCcw, Sparkles, Tag } from 'lucide-react';
+import { Clapperboard, Grid, Info, Play, RotateCcw, Sparkles, Tag } from 'lucide-react';
 import { useI18n } from '../i18n';
 import { useGameStore } from '../store/useGameStore';
 import type { StatusBadgeLayout } from '../types/game';
+import { useActionStageEnabled } from '../utils/actionStagePrefs';
 import { usePrefersReducedMotion } from '../utils/battleDisplay';
 import {
   resolveEffectiveVfxConfig,
@@ -12,6 +13,7 @@ import {
   type ReducedMotionSetting,
 } from '../utils/battleVfx';
 import { useStatusDisplaySettings } from '../utils/statusDisplayPrefs';
+import { StageProjectile, StageToken } from './ActionStage';
 import { IconCatalogPreviewModal } from './IconCatalogPreviewModal';
 
 interface EffectsSettingsPanelProps {
@@ -27,6 +29,7 @@ interface EffectsSettingsPanelProps {
 export function EffectsSettingsPanel({ compact = false }: EffectsSettingsPanelProps) {
   const { t } = useI18n();
   const [fxSettings, updateFxSettings] = useFxSettings();
+  const [actionStageEnabled, setActionStageEnabled] = useActionStageEnabled();
   const adminStatusDefaults = useGameStore(
     (s) => s.adminConfig.statusDisplayDefaults
   );
@@ -198,6 +201,26 @@ export function EffectsSettingsPanel({ compact = false }: EffectsSettingsPanelPr
           </span>
           <span className="font-mono-nums text-[12px]">
             {fxSettings.effectsDebug ? 'ON' : 'OFF'}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          data-testid="battle-toggle-action-stage"
+          onClick={() => setActionStageEnabled(!actionStageEnabled)}
+          aria-pressed={actionStageEnabled}
+          className={`w-full min-h-[42px] px-3.5 rounded-lg border text-[13px] font-semibold flex items-center justify-between cursor-pointer ${
+            actionStageEnabled
+              ? 'border-emerald-400 bg-emerald-500/20 text-emerald-200'
+              : 'border-slate-700 bg-slate-900 text-slate-300'
+          }`}
+        >
+          <span className="inline-flex items-center gap-2.5">
+            <Clapperboard className="w-4 h-4 text-emerald-400" />
+            <span>{t('fx.actionStageLabel')}</span>
+          </span>
+          <span className="font-mono-nums text-[12px]">
+            {actionStageEnabled ? t('fx.actionStageOn') : t('fx.actionStageOff')}
           </span>
         </button>
       </div>
@@ -372,25 +395,21 @@ export function EffectsSettingsPanel({ compact = false }: EffectsSettingsPanelPr
           data-effects-mode={fxSettings.effectsMode}
           className="relative h-[86px] rounded-lg border border-slate-700/90 bg-[#050912] overflow-hidden select-none"
         >
-          {/* Left Ally preview token */}
-          <div className="absolute left-[18%] top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-1">
-            <div className="w-7 h-7 rounded-full border-2 border-sky-400 bg-sky-500/20 flex items-center justify-center text-[10px] font-bold text-sky-200">
-              A1
-            </div>
-            <span className="text-[10px] font-mono-nums text-sky-300/90">
-              {t('fx.previewAlly')}
-            </span>
-          </div>
+          {/* Left Ally preview token (shared StageToken) */}
+          <StageToken
+            code="A1"
+            label={t('fx.previewAlly')}
+            side="ally"
+            className="absolute left-[18%] top-1/2 -translate-x-1/2 -translate-y-1/2"
+          />
 
-          {/* Right Enemy preview token */}
-          <div className="absolute left-[82%] top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-1">
-            <div className="w-7 h-7 rounded-full border-2 border-red-400 bg-red-500/20 flex items-center justify-center text-[10px] font-bold text-red-200">
-              E1
-            </div>
-            <span className="text-[10px] font-mono-nums text-red-300/90">
-              {t('fx.previewEnemy')}
-            </span>
-          </div>
+          {/* Right Enemy preview token (shared StageToken) */}
+          <StageToken
+            code="E1"
+            label={t('fx.previewEnemy')}
+            side="enemy"
+            className="absolute left-[82%] top-1/2 -translate-x-1/2 -translate-y-1/2"
+          />
 
           {!previewActive && (
             <div className="absolute inset-x-3 bottom-1 text-center text-[11px] text-slate-500 truncate pointer-events-none">
@@ -398,7 +417,7 @@ export function EffectsSettingsPanel({ compact = false }: EffectsSettingsPanelPr
             </div>
           )}
 
-          {/* Active sample effects (uses the same CSS animation classes as BattleRadarView/BattleVfxOverlay) */}
+          {/* Active sample effects (uses shared StageProjectile & the same CSS animation classes as BattleRadarView/BattleVfxOverlay) */}
           {previewActive && (
             <div
               key={previewRunId}
@@ -406,54 +425,18 @@ export function EffectsSettingsPanel({ compact = false }: EffectsSettingsPanelPr
               className="pointer-events-none absolute inset-0"
             >
               {/* Sample Projectile (travel bolt or short fade marker when reducedMotion=true) */}
-              {previewConfig.showProjectiles &&
-                (previewConfig.reducedMotion ? (
-                  <div
-                    data-testid="preview-fx-projectile"
-                    data-reduced-marker="true"
-                    className="vfx-reduced-marker absolute"
-                    style={
-                      {
-                        left: '24%',
-                        top: '50%',
-                        width: '52%',
-                        height: '3px',
-                        marginTop: '-1.5px',
-                        background:
-                          'linear-gradient(90deg, rgba(56,189,248,0.25), #38bdf8, #e0f2fe)',
-                        '--vfx-dur': '340ms',
-                      } as CSSProperties
-                    }
-                  />
-                ) : (
-                  <div
-                    data-testid="preview-fx-projectile"
-                    data-reduced-marker="false"
-                    className="vfx-cannon-fly absolute"
-                    style={
-                      {
-                        left: '22%',
-                        top: '50%',
-                        width: '22px',
-                        height: '5px',
-                        marginLeft: '-11px',
-                        marginTop: '-2.5px',
-                        borderRadius: '2px 9999px 9999px 2px',
-                        background:
-                          'linear-gradient(90deg, transparent 0%, #38bdf8 45%, #e0f2fe 100%)',
-                        boxShadow: '0 0 8px rgba(56, 189, 248, 0.55)',
-                        '--dx1': '24px',
-                        '--dy1': '0px',
-                        '--dx2': '140px',
-                        '--dy2': '0px',
-                        '--dx': '170px',
-                        '--dy': '0px',
-                        '--ang': '0deg',
-                        '--vfx-dur': '460ms',
-                      } as CSSProperties
-                    }
-                  />
-                ))}
+              {previewConfig.showProjectiles && (
+                <StageProjectile
+                  testId="preview-fx-projectile"
+                  reducedMotion={previewConfig.reducedMotion}
+                  color="#38bdf8"
+                  coreColor="#e0f2fe"
+                  durationMs={previewConfig.reducedMotion ? 340 : 460}
+                  left={previewConfig.reducedMotion ? '24%' : '22%'}
+                  reducedWidth="52%"
+                  travelPx={170}
+                />
+              )}
 
               {/* Sample Hit Flash on Enemy */}
               {previewConfig.showMainImpactOrHeal && (

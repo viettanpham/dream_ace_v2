@@ -1390,6 +1390,11 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'fx.previewAlly': 'PHE TA',
   'fx.previewEnemy': 'MỤC TIÊU',
   'fx.reducedMotionNotice': 'Đang bật Giảm chuyển động (chỉ mờ dần hiệu ứng chính)',
+  'fx.actionStageLabel': 'Sân khấu hành động',
+  'fx.actionStageOn': 'Bật',
+  'fx.actionStageOff': 'Tắt',
+  'actionStage.title': 'Sân khấu hành động',
+  'actionStage.usedAction': '{actor} dùng {action}',
 
   // G3d: Trạng thái chi tiết, Nhật ký theo vòng, Thanh trạng thái người chơi & Ổn định bố cục
   'battle.playerDestroyed': 'Đã phát nổ',

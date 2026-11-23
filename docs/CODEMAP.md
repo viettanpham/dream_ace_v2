@@ -39,7 +39,8 @@ src/store/useGameStore.ts 3981; src/engine/combat.ts 3860; src/components/Battle
 - src/utils/scrollStick.ts — pure top/bottom stick scroll predicates & prepend scroll preservation (`computeTopStickScrollState()`, `computeStickScrollState()`, `computePreservedScrollTopOnPrepend()`, `isInlineFlowAtTop()`)
 - src/utils/battleDisplay.ts — UI constants, row exposure states, 3-tier split-ring & thin SP-ring geometry, and target validity helpers (`computeRowExposure()`, `computeUnitRingArcs()`, `computeRingArcSpec()`, `evaluateRadarTargetValidity()`, `formatShortUnitName()`)
 - src/components/__tests__/battleG3b.test.tsx — radar marker ring geometry/render (RM2), status icons, legend, upcoming queue, and Loop popover tests
-- src/components/BattleVfxOverlay.tsx + src/utils/battleVfx.ts + src/utils/fxTone.ts + src/components/__tests__/g4bSupportFx.test.tsx — combat FX overlay, support tone resolution (`resolveFxTone()`, `resolveFxToneColor()`, `FX_TONE_COLORS`), support buff projectiles/carets, and card-contained popups
+- src/components/BattleVfxOverlay.tsx + src/utils/battleVfx.ts + src/utils/fxTone.ts + src/components/__tests__/g4bSupportFx.test.tsx — combat FX overlay, support tone resolution (`resolveFxTone()`, `resolveFxToneColor()`, `FX_TONE_COLORS`, `STAGE_HIT_FLASH_COLORS`), support buff projectiles/carets, and card-contained popups
+- src/components/ActionStage.tsx + src/utils/actionStagePrefs.ts + src/components/__tests__/g4bSActionStage.test.tsx — card-mode Action Stage ("Sân khấu hành động", shared `StageToken`/`StageProjectile`, `ActionStage`, `resolveStageFxActorAndTargets`, `dreamAce.actionStage.v1` pref hook) + G4b-S tests
 
 ## Save and cloud
 - src/engine/migration.ts — save validation and version migration (`CURRENT_SAVE_VERSION = 9`)

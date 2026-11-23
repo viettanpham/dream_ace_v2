@@ -41,6 +41,11 @@ interface BattleUnitCardProps {
   showStatusLabels?: boolean;
   /** Explicit per-lane status row budget (0 = omit status area, 1..2 = fixed rows). Undefined keeps standalone activeUnitRows fallback. */
   statusRows?: number;
+  /** When Action Stage is active in Card mode, card floating popups are suppressed and card highlights glow/flash instead */
+  suppressPopups?: boolean;
+  stageFxRole?: 'attacker' | 'target' | null;
+  stageFxColor?: string | null;
+  stageFxKey?: string | null;
   onSelect?: () => void;
   onInspect?: () => void;
 }
@@ -212,6 +217,10 @@ export const BattleUnitCard = memo(function BattleUnitCard({
   popups,
   showStatusLabels = true,
   statusRows,
+  suppressPopups = false,
+  stageFxRole = null,
+  stageFxColor = null,
+  stageFxKey = null,
   onSelect,
   onInspect,
 }: BattleUnitCardProps) {
@@ -352,6 +361,8 @@ export const BattleUnitCard = memo(function BattleUnitCard({
       data-acting={isActiveTurn ? 'true' : 'false'}
       data-targeted={isTargeted ? 'true' : 'false'}
       data-reduced-motion={resolvedReducedMotion ? 'true' : 'false'}
+      data-stage-fx-role={stageFxRole ?? undefined}
+      data-stage-fx-id={stageFxKey ?? undefined}
       role={isClickable ? 'button' : undefined}
       tabIndex={isClickable ? 0 : undefined}
       onClick={isClickable ? handleRowClick : undefined}
@@ -376,8 +387,31 @@ export const BattleUnitCard = memo(function BattleUnitCard({
         frontBlocked ? 'opacity-65' : ''
       } ${getAnimClass(unit, skipCardMotion)}`}
     >
-      {/* Compact Staggered Floating Popups strictly clipped & contained inside this card */}
-      {!skipAnimations && popups.length > 0 && (
+      {/* Action Stage card highlight: attacker glows ~0.6s, target border flashes in tone color ~0.6s */}
+      {!skipAnimations && stageFxRole && stageFxKey && (
+        <span
+          key={`stage-fx-${stageFxKey}-${stageFxRole}`}
+          data-testid={`card-stage-fx-${stageFxRole}-${unit.id}`}
+          data-fx-id={stageFxKey}
+          data-fx-tone-color={stageFxColor ?? undefined}
+          className={`pointer-events-none absolute inset-0 rounded-lg z-10 ${
+            stageFxRole === 'attacker'
+              ? 'anim-stage-card-glow border border-amber-300/80'
+              : 'anim-stage-card-flash border-2'
+          }`}
+          style={
+            stageFxRole === 'target' && stageFxColor
+              ? {
+                  borderColor: stageFxColor,
+                  boxShadow: `0 0 12px ${stageFxColor}, inset 0 0 8px ${stageFxColor}40`,
+                }
+              : undefined
+          }
+        />
+      )}
+
+      {/* Compact Staggered Floating Popups strictly clipped & contained inside this card (omitted when ActionStage is ON) */}
+      {!suppressPopups && !skipAnimations && popups.length > 0 && (
         <div
           data-testid={`card-popups-container-${unit.id}`}
           className="pointer-events-none absolute inset-0 overflow-hidden z-20"
