@@ -55,3 +55,6 @@ src/store/useGameStore.ts 3981; src/engine/combat.ts 3860; src/components/Battle
 - src/components/__tests__/u1BattleLock.test.tsx — store battle lock (`isBattleActive`) and tab label/i18n parity tests
 - src/i18n/vi.ts + src/i18n/en.ts — bilingual translations (every new string in both)
 - src/types/game.ts — shared domain and battle state types
+- src/data/items.ts + src/data/balance.ts + src/data/shopConfig.ts + src/data/starterConfig.ts — item templates (`ITEM_TEMPLATES`), economy/rarity/tier/drop/enchant tables (`BALANCE_CONFIG`), WP offers (`SHOP_STOCK_CONFIG`), starter gear defaults (`DEFAULT_STARTER_SET_CONFIG`)
+- src/engine/equipment.ts + src/engine/shop.ts + src/engine/quickSell.ts + src/engine/starter.ts — item generation (`generateItemInstance()`), pricing (`getSellPrice()`, `getEnchantMetadata()`), shop stock (`generateCategorizedShopStock()`, `generateWpMarketOffers()`), quick-sell (`evaluateQuickSellCandidates()`), starter gear (`generateStarterItemForSlot()`)
+- docs/audit/D1-items-prices.md — read-only item count & 96-cell shop-buy / quick-sell price audit table
