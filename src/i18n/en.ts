@@ -1315,7 +1315,7 @@ export const EN_TRANSLATIONS = {
   'battle.retreatConfirmBtn': 'Confirm Surrender',
   'battle.retreatCancelBtn': 'Cancel',
   'queue.nextSectionLabel': 'Next',
-  'radar.legendRings': 'Split ring: Left HP (green) · Right Shield (blue) · Inner SP water (orange)',
+  'radar.legendRings': 'Outer split ring: Left HP (green) · Right Shield (blue) · Thin inner ring: SP (orange)',
   'radar.legendLowHp': 'Pulsing red HP half: below 25% HP',
   'radar.legendStatusIcons': 'Status icons: green buff / red debuff (up to 3, +N)',
   'radar.statusRounds': '{turns} round(s) left',

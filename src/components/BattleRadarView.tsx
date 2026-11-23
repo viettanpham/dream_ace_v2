@@ -2,7 +2,6 @@ import {
   memo,
   useCallback,
   useEffect,
-  useId,
   useMemo,
   useRef,
   useState,
@@ -696,10 +695,8 @@ const RadarUnitMarker = memo(function RadarUnitMarker({
   onLongPressStart,
   onLongPressCancel,
 }: RadarUnitMarkerProps) {
-  const markerUid = useId().replace(/:/g, '');
   if (!unit.alive) return null;
 
-  const spClipId = `radar-sp-clip-${markerUid}`;
   const isEnemy = unit.side === 'enemy';
   const role = getTeamColorRole(unit);
   const teamHex = getTeamHex(role);
@@ -863,50 +860,45 @@ const RadarUnitMarker = memo(function RadarUnitMarker({
               />
             )}
 
-          {/* Inner Circle Base + Static Orange SP Water Fill (hidden at 0 SP and in hpOnlyMode) */}
+          {/* Inner Disc Base + Thin Inner SP Ring (R >= 30 only; hidden in tier 2 & hpOnlyMode) */}
           {unit.alive && !ringResult.hpOnlyMode && (
-            <g>
+            <circle
+              cx="0"
+              cy="0"
+              r={ringResult.innerCircleRadius}
+              fill="#070d17"
+            />
+          )}
+          {unit.alive && ringResult.spArc && (
+            <g data-testid={`radar-ring-sp-group-${unit.id}`}>
               <circle
+                data-testid={`radar-ring-track-sp-${unit.id}`}
                 cx="0"
                 cy="0"
-                r={ringResult.innerCircleRadius}
-                fill="#070d17"
+                r={ringResult.spArc.radius}
+                fill="none"
+                stroke={ringResult.spArc.trackColor}
+                strokeWidth={ringResult.spArc.strokeWidth}
               />
-              {ringResult.spRatio > 0 && ringResult.spWaterHeight > 0 && (
-                <g
-                  data-testid={`radar-ring-sp-${unit.id}`}
-                  data-ring-kind="sp"
-                  data-ratio={ringResult.spRatio}
-                  data-water-height={ringResult.spWaterHeight}
-                >
-                  <defs>
-                    <clipPath id={spClipId}>
-                      <circle cx="0" cy="0" r={ringResult.innerCircleRadius} />
-                    </clipPath>
-                  </defs>
-                  <g clipPath={`url(#${spClipId})`}>
-                    <rect
-                      data-testid={`radar-ring-sp-fill-${unit.id}`}
-                      x={-ringResult.innerCircleRadius}
-                      y={ringResult.spWaterTopY}
-                      width={ringResult.innerCircleRadius * 2}
-                      height={ringResult.spWaterHeight}
-                      fill="#f59e0b"
-                      fillOpacity="0.45"
-                    />
-                    <line
-                      data-testid={`radar-ring-sp-surface-${unit.id}`}
-                      x1={-ringResult.innerCircleRadius}
-                      y1={ringResult.spWaterTopY}
-                      x2={ringResult.innerCircleRadius}
-                      y2={ringResult.spWaterTopY}
-                      stroke="#fcd34d"
-                      strokeOpacity="0.88"
-                      strokeWidth="1"
-                    />
-                  </g>
-                </g>
-              )}
+              <circle
+                data-testid={`radar-ring-sp-${unit.id}`}
+                data-ring-kind="sp"
+                data-ratio={ringResult.spArc.ratio}
+                data-stroke-width={ringResult.spArc.strokeWidth}
+                data-has-capacity={
+                  ringResult.spArc.hasCapacity ? 'true' : 'false'
+                }
+                cx="0"
+                cy="0"
+                r={ringResult.spArc.radius}
+                fill="none"
+                stroke={ringResult.spArc.color}
+                strokeWidth={ringResult.spArc.strokeWidth}
+                strokeDasharray={ringResult.spArc.strokeDasharray}
+                strokeDashoffset={ringResult.spArc.strokeDashoffset}
+                strokeLinecap="butt"
+                transform={ringResult.spArc.transform}
+              />
             </g>
           )}
 
@@ -1038,13 +1030,12 @@ const RadarUnitMarker = memo(function RadarUnitMarker({
             </g>
           )}
 
-          {/* Color-blind readable team shape + outline (semi-transparent interior over SP water) */}
+          {/* Color-blind readable team shape + outline */}
           {shape === 'player-hex' && (
             <g>
               <polygon
                 points={hexOuter}
                 fill={unit.alive ? '#0a1622' : '#0b1019'}
-                fillOpacity={unit.alive && !ringResult.hpOnlyMode ? 0.25 : 1}
                 stroke={isActive ? '#fef08a' : teamHex}
                 strokeWidth={isActive ? '2.1' : unit.alive ? '1.8' : '1.2'}
                 strokeLinejoin="round"
@@ -1068,7 +1059,6 @@ const RadarUnitMarker = memo(function RadarUnitMarker({
               cy="0"
               r={shapeRadius}
               fill={unit.alive ? '#0b1320' : '#0b1019'}
-              fillOpacity={unit.alive && !ringResult.hpOnlyMode ? 0.25 : 1}
               stroke={isActive ? '#fef08a' : teamHex}
               strokeWidth={isActive ? '2' : unit.alive ? '1.6' : '1.2'}
               strokeDasharray={isStealthed ? '3 2' : undefined}
@@ -1080,7 +1070,6 @@ const RadarUnitMarker = memo(function RadarUnitMarker({
               <polygon
                 points={diamondOuter}
                 fill={unit.alive ? '#140b12' : '#0b1019'}
-                fillOpacity={unit.alive && !ringResult.hpOnlyMode ? 0.25 : 1}
                 stroke={isActive ? '#fef08a' : teamHex}
                 strokeWidth={isActive ? '2' : unit.alive ? '1.7' : '1.2'}
                 strokeDasharray={isStealthed ? '3 2' : undefined}
@@ -1104,7 +1093,6 @@ const RadarUnitMarker = memo(function RadarUnitMarker({
               <polygon
                 points={fortressOuter}
                 fill={unit.alive ? '#170f0c' : '#0b1019'}
-                fillOpacity={unit.alive && !ringResult.hpOnlyMode ? 0.25 : 1}
                 stroke={isActive ? '#fef08a' : teamHex}
                 strokeWidth={isActive ? '2.1' : unit.alive ? '1.9' : '1.2'}
                 strokeLinejoin="miter"
@@ -2435,22 +2423,32 @@ export function BattleRadarView({
                 className="flex items-center gap-2 pt-0.5 border-t border-slate-800/90"
               >
                 <svg width="20" height="20" viewBox="0 0 20 20" className="shrink-0">
-                  <defs>
-                    <clipPath id="legend-sp-water-clip">
-                      <circle cx="10" cy="10" r="5.5" />
-                    </clipPath>
-                  </defs>
-                  <circle cx="10" cy="10" r="5.5" fill="#070d17" />
-                  <g clipPath="url(#legend-sp-water-clip)">
-                    <rect x="4" y="10.5" width="12" height="6" fill="#f59e0b" fillOpacity="0.45" />
-                    <line x1="4" y1="10.5" x2="16" y2="10.5" stroke="#fcd34d" strokeWidth="0.9" />
-                  </g>
-                  <path d="M 10 17.5 A 7.5 7.5 0 0 1 10 2.5" fill="none" stroke="rgba(26,46,36,0.85)" strokeWidth="2.6" />
-                  <path d="M 10 17.5 A 7.5 7.5 0 0 1 5.1 4.3" fill="none" stroke="#22c55e" strokeWidth="2.6" />
-                  <path d="M 10 17.5 A 7.5 7.5 0 0 0 10 2.5" fill="none" stroke="rgba(20,44,72,0.85)" strokeWidth="2.6" />
-                  <path d="M 10 17.5 A 7.5 7.5 0 0 0 16.5 6.3" fill="none" stroke="#38bdf8" strokeWidth="2.6" />
-                  <line x1="10" y1="1.2" x2="10" y2="4.2" stroke="#f8fafc" strokeWidth="1" />
-                  <line x1="10" y1="15.8" x2="10" y2="18.8" stroke="#f8fafc" strokeWidth="1" />
+                  <circle cx="10" cy="10" r="4.6" fill="#070d17" />
+                  <circle
+                    data-testid="radar-legend-sp-ring"
+                    cx="10"
+                    cy="10"
+                    r="5.2"
+                    fill="none"
+                    stroke="#3a2a0c"
+                    strokeWidth="1.2"
+                  />
+                  <circle
+                    cx="10"
+                    cy="10"
+                    r="5.2"
+                    fill="none"
+                    stroke="#f59e0b"
+                    strokeWidth="1.2"
+                    strokeDasharray="24.5 32.7"
+                    transform="rotate(-90 10 10)"
+                  />
+                  <path d="M 10 17.8 A 7.8 7.8 0 0 1 10 2.2" fill="none" stroke="rgba(26,46,36,0.85)" strokeWidth="2.1" />
+                  <path d="M 10 17.8 A 7.8 7.8 0 0 1 4.8 4.2" fill="none" stroke="#22c55e" strokeWidth="2.1" />
+                  <path d="M 10 17.8 A 7.8 7.8 0 0 0 10 2.2" fill="none" stroke="rgba(20,44,72,0.85)" strokeWidth="2.1" />
+                  <path d="M 10 17.8 A 7.8 7.8 0 0 0 16.8 6.1" fill="none" stroke="#38bdf8" strokeWidth="2.1" />
+                  <line x1="10" y1="1.1" x2="10" y2="3.7" stroke="#f8fafc" strokeWidth="1" />
+                  <line x1="10" y1="16.3" x2="10" y2="18.9" stroke="#f8fafc" strokeWidth="1" />
                 </svg>
                 <span>{t('radar.legendRings')}</span>
               </div>

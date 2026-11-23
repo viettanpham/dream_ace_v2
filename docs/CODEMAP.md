@@ -37,7 +37,8 @@ src/store/useGameStore.ts 3981; src/engine/combat.ts 3860; src/components/Battle
 - src/components/CombatLogList.tsx + src/components/__tests__/combatLogG4a2d.test.tsx — structured, round-grouped combat log (newest-first default, 3 newest rounds open, jump pill, compact Row 2) + G4a-2d tests
 - src/utils/combatLogFormat.ts — combat log formatting, log order/mode prefs (`LOG_MODE_STORAGE_KEY`, `LOG_ORDER_STORAGE_KEY`, `COMBAT_LOG_CHROME_HEIGHTS`, `groupCombatLogEntriesByRound()`)
 - src/utils/scrollStick.ts — pure top/bottom stick scroll predicates & prepend scroll preservation (`computeTopStickScrollState()`, `computeStickScrollState()`, `computePreservedScrollTopOnPrepend()`, `isInlineFlowAtTop()`)
-- src/utils/battleDisplay.ts — UI constants, row exposure states, split-ring/SP-water geometry, and target validity helpers (`computeRowExposure()`, `computeUnitRingArcs()`, `computeRingArcSpec()`, `evaluateRadarTargetValidity()`, `formatShortUnitName()`)
+- src/utils/battleDisplay.ts — UI constants, row exposure states, 3-tier split-ring & thin SP-ring geometry, and target validity helpers (`computeRowExposure()`, `computeUnitRingArcs()`, `computeRingArcSpec()`, `evaluateRadarTargetValidity()`, `formatShortUnitName()`)
+- src/components/__tests__/battleG3b.test.tsx — radar marker ring geometry/render (RM2), status icons, legend, upcoming queue, and Loop popover tests
 - src/components/BattleVfxOverlay.tsx + src/utils/battleVfx.ts — combat FX overlay and VFX config (do not touch unless the task is FX)
 
 ## Save and cloud

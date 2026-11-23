@@ -19,6 +19,8 @@ import {
   RADAR_LOW_HP_THRESHOLD,
   RADAR_RING_DEFAULT_STROKE_WIDTH,
   RADAR_RING_MIN_MARKER_RADIUS,
+  RADAR_SP_RING_MIN_MARKER_RADIUS,
+  RADAR_SP_RING_STROKE_WIDTH,
   RADAR_SPLIT_RING_STROKE_WIDTH,
 } from '../../utils/battleDisplay';
 import { EN_TRANSLATIONS } from '../../i18n/en';
@@ -178,8 +180,8 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('G3b + RM1 Pure Functions — split ring (HP left, Shield right), SP water, low HP red, HP-only fallback, status overflow & upcoming list', () => {
-  it('computes arc filled length, clamping, rounding, and half-sweep orientation accurately', () => {
+describe('G3b + RM2 Pure Functions — size-aware split ring, thin inner SP ring, 3 size tiers, low HP red, status overflow & upcoming list', () => {
+  it('computes arc filled length, clamping, rounding, half-sweep orientation, and optional SP stroke clamp override accurately', () => {
     const spec = computeRingArcSpec(
       'hp',
       20,
@@ -200,11 +202,40 @@ describe('G3b + RM1 Pure Functions — split ring (HP left, Shield right), SP wa
     expect(spec.strokeDasharray).toContain(spec.filledLength.toFixed(2));
     expect(spec.transform).toBe('rotate(-90)');
 
+    // Default callers still clamp stroke to RADAR_RING_DEFAULT_STROKE_WIDTH (3)
+    const clampedDefault = computeRingArcSpec(
+      'hp',
+      20,
+      2,
+      500,
+      1000,
+      '#22c55e',
+      'rgba(26,46,36,0.85)'
+    );
+    expect(clampedDefault.strokeWidth).toBe(RADAR_RING_DEFAULT_STROKE_WIDTH);
+
+    // SP uses explicit minStrokeWidth = 2 -> strokeWidth 2, starts at 12 o'clock clockwise
+    const spSpec = computeRingArcSpec(
+      'sp',
+      34,
+      RADAR_SP_RING_STROKE_WIDTH,
+      60,
+      100,
+      '#f59e0b',
+      '#3a2a0c',
+      false,
+      1,
+      RADAR_SP_RING_STROKE_WIDTH
+    );
+    expect(spSpec.strokeWidth).toBe(2);
+    expect(spSpec.transform).toBe('rotate(-90)');
+    expect(spSpec.ratio).toBeCloseTo(0.6, 4);
+
     // Split-ring left HP & right Shield transforms and ratio clamping
     const leftHp = computeRingArcSpec(
       'hp',
-      36,
-      8,
+      38,
+      4,
       1500,
       1000,
       '#22c55e',
@@ -213,14 +244,14 @@ describe('G3b + RM1 Pure Functions — split ring (HP left, Shield right), SP wa
       0.5
     );
     expect(leftHp.ratio).toBe(1);
-    expect(leftHp.arcLength).toBeCloseTo(Math.PI * 36, 1);
-    expect(leftHp.filledLength).toBeCloseTo(Math.PI * 36, 1);
+    expect(leftHp.arcLength).toBeCloseTo(Math.PI * 38, 1);
+    expect(leftHp.filledLength).toBeCloseTo(Math.PI * 38, 1);
     expect(leftHp.transform).toBe('rotate(90)');
 
     const rightShieldNegative = computeRingArcSpec(
       'shield',
-      36,
-      8,
+      38,
+      4,
       -50,
       400,
       '#38bdf8',
@@ -233,7 +264,7 @@ describe('G3b + RM1 Pure Functions — split ring (HP left, Shield right), SP wa
     expect(rightShieldNegative.transform).toBe('scale(-1, 1) rotate(90)');
   });
 
-  it('returns 1 split ring (left HP green/red, right Shield blue, 8px stroke, outerRadius 40 at 41) + SP water geometry, and flags low HP red strictly below 25%', () => {
+  it('computes 3 markerRadius tiers: R >= 30 full (stroke 4 + thin SP ring at 41), 17 <= R < 30 split only, R < 17 HP-only, plus size-aware stroke & low HP red', () => {
     const healthyUnit = makeUnit('u1', 'Sora', 'ally', 'front', {
       hp: 250,
       shield: 200,
@@ -254,27 +285,60 @@ describe('G3b + RM1 Pure Functions — split ring (HP left, Shield right), SP wa
         passiveSkillDmgPct: 0,
       },
     });
+
+    // Tier 1: R = 41 (>= 30) -> outerRadius 40, split stroke 4, SP ring stroke 2 at radius 34, inner disc 32
     const healthyRes = computeUnitRingArcs(healthyUnit, 41);
     expect(healthyRes.hpOnlyMode).toBe(false);
     expect(healthyRes.isLowHp).toBe(false); // 25% is NOT below 25%
     expect(healthyRes.outerRadius).toBe(40);
+    expect(healthyRes.ringRadius).toBe(38);
     expect(healthyRes.innerCircleRadius).toBe(32);
-    expect(healthyRes.innerShapeRadius).toBeGreaterThan(28);
+    expect(healthyRes.innerShapeRadius).toBe(30);
     expect(healthyRes.arcs.map((a) => a.kind)).toEqual(['hp', 'shield']);
     expect(healthyRes.arcs[0].radius).toBe(healthyRes.arcs[1].radius);
+    expect(healthyRes.arcs[0].strokeWidth).toBe(4);
+    expect(healthyRes.arcs[1].strokeWidth).toBe(4);
     expect(healthyRes.arcs[0].strokeWidth).toBe(RADAR_SPLIT_RING_STROKE_WIDTH);
-    expect(healthyRes.arcs[1].strokeWidth).toBe(RADAR_SPLIT_RING_STROKE_WIDTH);
     expect(healthyRes.arcs[0].color).toBe('#22c55e');
     expect(healthyRes.arcs[0].transform).toBe('rotate(90)');
     expect(healthyRes.arcs[1].color).toBe('#38bdf8');
     expect(healthyRes.arcs[1].transform).toBe('scale(-1, 1) rotate(90)');
-    expect(healthyRes.spRatio).toBeCloseTo(0.6, 4);
-    expect(healthyRes.spWaterHeight).toBeCloseTo(0.6 * (32 * 2), 2);
-    expect(healthyRes.spWaterTopY).toBeCloseTo(
-      32 - healthyRes.spWaterHeight,
-      2
-    );
+    expect(healthyRes.spArc).not.toBeNull();
+    expect(healthyRes.spArc!.radius).toBe(34);
+    expect(healthyRes.spArc!.strokeWidth).toBe(2);
+    expect(healthyRes.spArc!.color).toBe('#f59e0b');
+    expect(healthyRes.spArc!.trackColor).toBe('#3a2a0c');
+    expect(healthyRes.spArc!.transform).toBe('rotate(-90)');
+    expect(healthyRes.spArc!.ratio).toBeCloseTo(0.6, 4);
 
+    // Tier 2: R = 22 (17 <= R < 30) -> split ring only, size-aware stroke (3), NO SP ring, larger inner disc
+    const tier2Res = computeUnitRingArcs(healthyUnit, 22);
+    expect(tier2Res.hpOnlyMode).toBe(false);
+    expect(tier2Res.outerRadius).toBe(27);
+    expect(tier2Res.arcs).toHaveLength(2);
+    expect(tier2Res.arcs[0].strokeWidth).toBe(3); // round(27 * 0.09) = 2 -> clamped [3, 5]
+    expect(tier2Res.spArc).toBeNull();
+    expect(tier2Res.innerCircleRadius).toBe(23); // 27 - 3 - 1 (bigger without SP ring)
+    expect(tier2Res.innerShapeRadius).toBe(21);
+
+    // Size-aware stroke clamps up to 5 at larger radius (R = 56 -> outerRadius = 50 -> round(4.5) = 5)
+    const largeRes = computeUnitRingArcs(healthyUnit, 56);
+    expect(largeRes.arcs[0].strokeWidth).toBe(5);
+    expect(largeRes.spArc).not.toBeNull();
+    expect(largeRes.spArc!.strokeWidth).toBe(2);
+
+    // maxSp = 0 -> SP arc has ratio 0, hasCapacity false (track only)
+    const zeroMaxSpUnit = makeUnit('u_nosp', 'Drone', 'enemy', 'front', {
+      sp: 0,
+      derived: { ...healthyUnit.derived, maxSp: 0 },
+    });
+    const zeroMaxSpRes = computeUnitRingArcs(zeroMaxSpUnit, 41);
+    expect(zeroMaxSpRes.spArc).not.toBeNull();
+    expect(zeroMaxSpRes.spArc!.hasCapacity).toBe(false);
+    expect(zeroMaxSpRes.spArc!.ratio).toBe(0);
+    expect(zeroMaxSpRes.spArc!.filledLength).toBe(0);
+
+    // Low HP strictly below 25% -> red + pulse
     const lowHpUnit = makeUnit('u2', 'Vex', 'ally', 'front', {
       hp: Math.floor(1000 * RADAR_LOW_HP_THRESHOLD) - 1, // 249 / 1000 = 24.9%
       derived: healthyUnit.derived,
@@ -286,19 +350,21 @@ describe('G3b + RM1 Pure Functions — split ring (HP left, Shield right), SP wa
     expect(hpArc.color).toBe('#ef4444');
   });
 
-  it('falls back to HP arc only below the minimum marker radius (unchanged)', () => {
+  it('falls back to HP arc only below the minimum marker radius (R < 17, e.g. R = 14)', () => {
+    expect(RADAR_SP_RING_MIN_MARKER_RADIUS).toBe(30);
     const unit = makeUnit('u_small', 'Scout', 'enemy', 'back', {
       hp: 500,
       shield: 300,
       sp: 80,
     });
-    const res = computeUnitRingArcs(unit, RADAR_RING_MIN_MARKER_RADIUS - 1);
+    const res = computeUnitRingArcs(unit, 14);
+    expect(RADAR_RING_MIN_MARKER_RADIUS).toBe(17);
     expect(res.hpOnlyMode).toBe(true);
     expect(res.arcs).toHaveLength(1);
     expect(res.arcs[0].kind).toBe('hp');
     expect(res.arcs[0].transform).toBe('rotate(-90)');
     expect(res.arcs[0].strokeWidth).toBe(RADAR_RING_DEFAULT_STROKE_WIDTH);
-    expect(res.spWaterHeight).toBe(0);
+    expect(res.spArc).toBeNull();
   });
 
   it('caps status icons at 3 with +N overflow and never produces an unexplained "!" badge across all status types', () => {
@@ -388,8 +454,8 @@ describe('G3b + RM1 Pure Functions — split ring (HP left, Shield right), SP wa
   });
 });
 
-describe('G3b + RM1 Components — Split radar ring, SP water, zero "!" badges, TurnQueueBar & Loop button', () => {
-  it('renders split ring (left HP, right Shield, 12/6 o-clock ticks), clipped SP water, zero "!" badges, and static SVG', () => {
+describe('G3b + RM2 Components — Split ring (stroke 4), thin inner SP ring, 3 tiers, zero water/animation, legend & Loop button', () => {
+  it('renders 4px split ring (left HP, right Shield, 12/6 ticks), 2px thin inner SP ring (no water), zero "!" badges, and static SVG', () => {
     const p1 = makeUnit('p1', 'Sora', 'ally', 'front', {
       isPlayer: true,
       hp: 200, // 20% -> low HP red!
@@ -427,36 +493,41 @@ describe('G3b + RM1 Components — Split radar ring, SP water, zero "!" badges, 
       );
     });
 
-    // Split ring arcs exist on alive marker with left/right bottom-up transforms
+    // Split ring arcs exist on alive marker with left/right bottom-up transforms & stroke 4
     const hpRing = container!.querySelector('[data-testid="radar-ring-hp-p1"]');
     const shieldRing = container!.querySelector('[data-testid="radar-ring-shield-p1"]');
-    const spWater = container!.querySelector('[data-testid="radar-ring-sp-p1"]');
+    const spTrack = container!.querySelector('[data-testid="radar-ring-track-sp-p1"]');
+    const spRing = container!.querySelector('[data-testid="radar-ring-sp-p1"]');
     expect(hpRing).not.toBeNull();
     expect(shieldRing).not.toBeNull();
-    expect(spWater).not.toBeNull();
+    expect(spTrack).not.toBeNull();
+    expect(spRing).not.toBeNull();
 
     expect(hpRing!.getAttribute('transform')).toBe('rotate(90)');
     expect(shieldRing!.getAttribute('transform')).toBe('scale(-1, 1) rotate(90)');
     expect(hpRing!.getAttribute('stroke')).toBe('#ef4444');
     expect(hpRing!.getAttribute('data-low-hp')).toBe('true');
     expect(hpRing!.getAttribute('class')).toContain('vfx-low-hp-pulse');
-    expect(Number(hpRing!.getAttribute('data-stroke-width'))).toBe(
-      RADAR_SPLIT_RING_STROKE_WIDTH
-    );
+    expect(Number(hpRing!.getAttribute('data-stroke-width'))).toBe(4);
+    expect(Number(shieldRing!.getAttribute('data-stroke-width'))).toBe(4);
     expect(shieldRing!.getAttribute('stroke')).toBe('#38bdf8');
     expect(shieldRing!.getAttribute('data-ratio')).toBe('0.5');
 
-    // SP water height scales by spRatio * innerDiameter inside clipPath with 1px surface line
-    expect(spWater!.getAttribute('data-ratio')).toBe('0.75');
-    const spFill = container!.querySelector('[data-testid="radar-ring-sp-fill-p1"]');
-    const spSurface = container!.querySelector('[data-testid="radar-ring-sp-surface-p1"]');
-    expect(spFill).not.toBeNull();
-    expect(spFill!.getAttribute('fill')).toBe('#f59e0b');
-    expect(spFill!.getAttribute('fill-opacity')).toBe('0.45');
-    expect(Number(spFill!.getAttribute('height'))).toBeCloseTo(0.75 * 64, 1);
-    expect(spSurface).not.toBeNull();
-    expect(spSurface!.getAttribute('stroke-width')).toBe('1');
-    expect(spWater!.querySelector('clipPath')).not.toBeNull();
+    // SP is a 2px thin inner ring starting at 12 o'clock clockwise, zero water fill/surface
+    expect(spRing!.tagName.toLowerCase()).toBe('circle');
+    expect(spRing!.getAttribute('data-ratio')).toBe('0.75');
+    expect(spRing!.getAttribute('data-stroke-width')).toBe('2');
+    expect(spRing!.getAttribute('stroke')).toBe('#f59e0b');
+    expect(spRing!.getAttribute('transform')).toBe('rotate(-90)');
+    expect(spTrack!.getAttribute('stroke')).toBe('#3a2a0c');
+    expect(spTrack!.getAttribute('stroke-width')).toBe('2');
+    expect(
+      container!.querySelectorAll('[data-testid^="radar-ring-sp-fill-"]')
+    ).toHaveLength(0);
+    expect(
+      container!.querySelectorAll('[data-testid^="radar-ring-sp-surface-"]')
+    ).toHaveLength(0);
+    expect(container!.querySelectorAll('clipPath')).toHaveLength(0);
 
     // 6px ticks at 12 and 6 o'clock mark the split
     const topTick = container!.querySelector('[data-testid="radar-ring-tick-top-p1"]');
@@ -500,12 +571,16 @@ describe('G3b + RM1 Components — Split radar ring, SP water, zero "!" badges, 
     expect(p1Marker?.getAttribute('aria-label')).toContain('SP 75/100');
   });
 
-  it('RM1 edge cases: shield=0 vs maxShield=0 dashed track, SP=0 hides water, dead unit has no ring, and legend renders split-ring + vi/en labels', () => {
+  it('RM2 edge cases & tiers: maxSp=0 track-only, shield=0 vs maxShield=0 dashed track, dead ringless, tier 2 (R=22 split only), tier 3 (phone crowded HP-only), and legend', () => {
     const brokenShieldUnit = makeUnit('u_broken', 'Broken', 'ally', 'front', {
       isPlayer: true,
       hp: 800,
       shield: 0,
       sp: 0,
+      derived: {
+        ...makeUnit('t', 't', 'ally', 'front').derived,
+        maxSp: 0,
+      },
     });
     const noShieldCapUnit = makeUnit('u_nocap', 'Turret', 'enemy', 'front', {
       hp: 600,
@@ -552,10 +627,18 @@ describe('G3b + RM1 Components — Split radar ring, SP water, zero "!" badges, 
       container!.querySelector('[data-testid="radar-ring-shield-empty-track-u_broken"]')
     ).toBeNull();
 
-    // SP=0 -> no SP water rendered
-    expect(
-      container!.querySelector('[data-testid="radar-ring-sp-u_broken"]')
-    ).toBeNull();
+    // maxSp=0 -> track rendered, SP arc ratio 0 with zero filled dash (track only)
+    const zeroMaxSpTrack = container!.querySelector(
+      '[data-testid="radar-ring-track-sp-u_broken"]'
+    );
+    const zeroMaxSpRing = container!.querySelector(
+      '[data-testid="radar-ring-sp-u_broken"]'
+    );
+    expect(zeroMaxSpTrack).not.toBeNull();
+    expect(zeroMaxSpRing).not.toBeNull();
+    expect(zeroMaxSpRing!.getAttribute('data-ratio')).toBe('0');
+    expect(zeroMaxSpRing!.getAttribute('data-has-capacity')).toBe('false');
+    expect(zeroMaxSpRing!.getAttribute('stroke-dasharray')).toMatch(/^0\.00 /);
 
     // maxShield=0 -> faint dashed track on right half, nothing filled
     const noCapShieldRing = container!.querySelector('[data-testid="radar-ring-shield-u_nocap"]');
@@ -570,7 +653,88 @@ describe('G3b + RM1 Components — Split radar ring, SP water, zero "!" badges, 
     // Dead unit -> no ring
     expect(container!.querySelector('[data-testid="radar-rings-u_dead"]')).toBeNull();
 
-    // Open Legend ("Chú giải") and verify updated split-ring + water glyphs and vi/en keys
+    // Phone Tier 2 (R = 22: all 3 enemy rows occupied, 2 units in row, squadSize = 4 -> split ring, NO radar-ring-sp)
+    const tier2Units = [
+      makeUnit('p_t2', 'Sora', 'ally', 'front', { isPlayer: true }),
+      makeUnit('e_f1', 'F1', 'enemy', 'front'),
+      makeUnit('e_f2', 'F2', 'enemy', 'front'),
+      makeUnit('e_m1', 'M1', 'enemy', 'middle'),
+      makeUnit('e_b1', 'B1', 'enemy', 'back'),
+    ];
+    act(() => {
+      root!.render(
+        createElement(BattleRadarView, {
+          battle: makeBattle(tier2Units),
+          activeUnitId: 'p_t2',
+          validBasicTargetIds: new Set(['e_f1', 'e_f2']),
+          canPlayerManualAct: true,
+          hasSingleAllySkill: false,
+          autoBattleEnabled: false,
+          skipAnimations: true,
+          layoutMode: 'phone-portrait',
+          onSelectEnemy: vi.fn(),
+          onSelectAlly: vi.fn(),
+          onInspectUnit: vi.fn(),
+        })
+      );
+    });
+    const tier2EnemyMarker = container!.querySelector('[data-testid="radar-unit-e_f1"]');
+    expect(tier2EnemyMarker?.getAttribute('data-ring-mode')).toBe('split-ring');
+    expect(container!.querySelector('[data-testid="radar-ring-hp-e_f1"]')).not.toBeNull();
+    expect(container!.querySelector('[data-testid="radar-ring-shield-e_f1"]')).not.toBeNull();
+    expect(container!.querySelector('[data-testid="radar-ring-sp-e_f1"]')).toBeNull();
+
+    // Phone Tier 3 (R = 16 < 17: crowded row -> HP-only fallback, no shield/sp ring)
+    const tier3Units = [
+      makeUnit('p_t3', 'Sora', 'ally', 'front', { isPlayer: true }),
+      makeUnit('e3_f1', 'F1', 'enemy', 'front'),
+      makeUnit('e3_f2', 'F2', 'enemy', 'front'),
+      makeUnit('e3_f3', 'F3', 'enemy', 'front'),
+      makeUnit('e3_f4', 'F4', 'enemy', 'front'),
+      makeUnit('e3_m1', 'M1', 'enemy', 'middle'),
+      makeUnit('e3_b1', 'B1', 'enemy', 'back'),
+    ];
+    act(() => {
+      root!.render(
+        createElement(BattleRadarView, {
+          battle: makeBattle(tier3Units),
+          activeUnitId: 'p_t3',
+          validBasicTargetIds: new Set(['e3_f1']),
+          canPlayerManualAct: true,
+          hasSingleAllySkill: false,
+          autoBattleEnabled: false,
+          skipAnimations: true,
+          layoutMode: 'phone-portrait',
+          onSelectEnemy: vi.fn(),
+          onSelectAlly: vi.fn(),
+          onInspectUnit: vi.fn(),
+        })
+      );
+    });
+    const tier3EnemyMarker = container!.querySelector('[data-testid="radar-unit-e3_f1"]');
+    expect(tier3EnemyMarker?.getAttribute('data-ring-mode')).toBe('hp-only');
+    expect(container!.querySelector('[data-testid="radar-ring-hp-e3_f1"]')).not.toBeNull();
+    expect(container!.querySelector('[data-testid="radar-ring-shield-e3_f1"]')).toBeNull();
+    expect(container!.querySelector('[data-testid="radar-ring-sp-e3_f1"]')).toBeNull();
+
+    // Open Legend ("Chú giải") on desktop and verify split-ring + thin SP ring glyph and vi/en labels (no water wording)
+    act(() => {
+      root!.render(
+        createElement(BattleRadarView, {
+          battle,
+          activeUnitId: 'u_broken',
+          validBasicTargetIds: new Set(['u_nocap']),
+          canPlayerManualAct: true,
+          hasSingleAllySkill: false,
+          autoBattleEnabled: false,
+          skipAnimations: false,
+          layoutMode: 'pc',
+          onSelectEnemy: vi.fn(),
+          onSelectAlly: vi.fn(),
+          onInspectUnit: vi.fn(),
+        })
+      );
+    });
     const legendBtn = container!.querySelector(
       '[data-testid="radar-legend-toggle"]'
     ) as HTMLButtonElement;
@@ -578,16 +742,24 @@ describe('G3b + RM1 Components — Split radar ring, SP water, zero "!" badges, 
     act(() => {
       legendBtn.click();
     });
+    const legendSplitRing = container!.querySelector(
+      '[data-testid="radar-legend-split-ring"]'
+    );
+    expect(legendSplitRing).not.toBeNull();
     expect(
-      container!.querySelector('[data-testid="radar-legend-split-ring"]')
+      legendSplitRing!.querySelector('[data-testid="radar-legend-sp-ring"]')
     ).not.toBeNull();
+    expect(legendSplitRing!.querySelector('clipPath')).toBeNull();
     expect(
       container!.querySelector('[data-testid="radar-legend-low-hp"]')
     ).not.toBeNull();
     expect(VI_TRANSLATIONS['radar.legendRings']).toContain('SP');
     expect(EN_TRANSLATIONS['radar.legendRings']).toContain('SP');
+    expect(VI_TRANSLATIONS['radar.legendRings'].toLowerCase()).not.toContain('nước');
+    expect(EN_TRANSLATIONS['radar.legendRings'].toLowerCase()).not.toContain('water');
     expect(VI_TRANSLATIONS['radar.legendLowHp']).toContain('đỏ');
     expect(EN_TRANSLATIONS['radar.legendLowHp']).toContain('red');
+    expect(container!.querySelectorAll('animate, animateTransform')).toHaveLength(0);
   });
 
   it('renders Loop popover (1/5/10/20/infinite + Start), switches to active progress chip (2/10 + Stop), stops loop without ending battle, and keeps "..." menu free of loop controls', () => {

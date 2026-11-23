@@ -1317,7 +1317,7 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'battle.retreatConfirmBtn': 'Xác nhận đầu hàng',
   'battle.retreatCancelBtn': 'Hủy',
   'queue.nextSectionLabel': 'Tiếp theo',
-  'radar.legendRings': 'Vòng đôi: Trái HP (lục) · Phải Khiên (lam) · Nước trong SP (cam)',
+  'radar.legendRings': 'Vòng ngoài: Trái HP (lục) · Phải Khiên (lam) · Vòng mảnh trong: SP (cam)',
   'radar.legendLowHp': 'Nửa HP đỏ nhấp nháy: HP dưới 25%',
   'radar.legendStatusIcons': 'Hiệu ứng: viền lục buff / đỏ debuff (tối đa 3, +N)',
   'radar.statusRounds': 'Còn {turns} vòng',

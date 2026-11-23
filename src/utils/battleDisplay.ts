@@ -81,8 +81,10 @@ export const RADAR_MIN_HIT_AREA_PX = 44;
 export const SPEECH_BUBBLE_MAX_CHARS = 28;
 export const SPEECH_BUBBLE_DURATION_MS = 1500;
 export const RADAR_RING_MIN_MARKER_RADIUS = 17;
+export const RADAR_SP_RING_MIN_MARKER_RADIUS = 30;
 export const RADAR_RING_DEFAULT_STROKE_WIDTH = 3;
-export const RADAR_SPLIT_RING_STROKE_WIDTH = 8;
+export const RADAR_SPLIT_RING_STROKE_WIDTH = 4;
+export const RADAR_SP_RING_STROKE_WIDTH = 2;
 export const RADAR_LOW_HP_THRESHOLD = 0.25;
 export const RADAR_STATUS_MAX_VISIBLE = 3;
 export const QUEUE_VISIBLE_ROWS = 5;
@@ -753,11 +755,9 @@ export interface UnitRingArcsResult {
   innerCircleRadius: number;
   innerShapeRadius: number;
   ringRadius: number;
-  spRatio: number;
-  spWaterHeight: number;
-  spWaterTopY: number;
   hasShield: boolean;
   arcs: RadarRingArcSpec[];
+  spArc: RadarRingArcSpec | null;
 }
 
 export interface StatusIconLayoutResult {
@@ -812,10 +812,11 @@ export function computeRingArcSpec(
   color: string,
   trackColor: string,
   isLowHp = false,
-  sweepFraction = 1
+  sweepFraction = 1,
+  minStrokeWidth = RADAR_RING_DEFAULT_STROKE_WIDTH
 ): RadarRingArcSpec {
   const safeRadius = Math.max(1, radius);
-  const safeStroke = Math.max(RADAR_RING_DEFAULT_STROKE_WIDTH, strokeWidth);
+  const safeStroke = Math.max(minStrokeWidth, strokeWidth);
   const safeSweep = Number.isFinite(sweepFraction)
     ? Math.max(0.05, Math.min(1, sweepFraction))
     : 1;
@@ -859,10 +860,12 @@ export function computeRingArcSpec(
 }
 
 /**
- * Computes the RM1 split ring (left half HP, right half Shield, ~8px stroke) and
- * inner SP water level for a radar unit marker, keeping outerRadius unchanged (40 at 80px).
- * Falls back to HP-only full ring when markerRadius < RADAR_RING_MIN_MARKER_RADIUS.
- * Marks low HP strictly below 25% (hp / maxHp < 0.25) with red (#ef4444) & pulse flag.
+ * Computes radar marker ring geometry across 3 markerRadius tiers:
+ * - R >= 30: full mode — size-aware split ring (HP left, Shield right, stroke 3..5px, 4px at 80px)
+ *   + thin 2px full-circle inner SP ring (#f59e0b, track #3a2a0c, 1px inner gap).
+ * - 17 <= R < 30: split ring only (no SP ring), larger inner disc accordingly.
+ * - R < 17: HP-only full ring (3px stroke).
+ * Keeps desktop outerRadius = 40 (80px diameter at markerRadius = 41) unchanged.
  */
 export function computeUnitRingArcs(
   unit: CombatUnit,
@@ -907,21 +910,25 @@ export function computeUnitRingArcs(
       innerCircleRadius,
       innerShapeRadius,
       ringRadius: hpR,
-      spRatio: 0,
-      spWaterHeight: 0,
-      spWaterTopY: innerCircleRadius,
       hasShield: false,
       arcs: [hpArc],
+      spArc: null,
     };
   }
 
   const outerRadius = Number(
     (Math.max(10, Math.round(safeMarkerRadius * 0.68)) + 12).toFixed(2)
   );
-  const strokeWidth = RADAR_SPLIT_RING_STROKE_WIDTH;
+  const strokeWidth = Math.max(3, Math.min(5, Math.round(outerRadius * 0.09)));
   const ringRadius = Number((outerRadius - strokeWidth / 2).toFixed(2));
+  const showSpRing = safeMarkerRadius >= RADAR_SP_RING_MIN_MARKER_RADIUS;
   const innerCircleRadius = Number(
-    Math.max(6, outerRadius - strokeWidth).toFixed(2)
+    Math.max(
+      6,
+      showSpRing
+        ? outerRadius - strokeWidth - 1 - RADAR_SP_RING_STROKE_WIDTH - 1
+        : outerRadius - strokeWidth - 1
+    ).toFixed(2)
   );
   const innerShapeRadius = Math.max(10, Math.round(innerCircleRadius - 2));
 
@@ -954,19 +961,23 @@ export function computeUnitRingArcs(
     0.5
   );
 
-  const safeMaxSp =
-    Number.isFinite(unit.derived.maxSp) && unit.derived.maxSp > 0
-      ? unit.derived.maxSp
-      : 0;
-  const safeSp = Number.isFinite(unit.sp) ? Math.max(0, unit.sp) : 0;
-  const spRatio = Number(
-    (safeMaxSp > 0 ? Math.max(0, Math.min(1, safeSp / safeMaxSp)) : 0).toFixed(
-      4
-    )
+  const spRingRadius = Number(
+    Math.max(4, outerRadius - strokeWidth - 2).toFixed(2)
   );
-  const innerDiameter = innerCircleRadius * 2;
-  const spWaterHeight = Number((spRatio * innerDiameter).toFixed(2));
-  const spWaterTopY = Number((innerCircleRadius - spWaterHeight).toFixed(2));
+  const spArc = showSpRing
+    ? computeRingArcSpec(
+        'sp',
+        spRingRadius,
+        RADAR_SP_RING_STROKE_WIDTH,
+        unit.sp,
+        unit.derived.maxSp,
+        '#f59e0b',
+        '#3a2a0c',
+        false,
+        1,
+        RADAR_SP_RING_STROKE_WIDTH
+      )
+    : null;
 
   return {
     hpOnlyMode: false,
@@ -975,11 +986,9 @@ export function computeUnitRingArcs(
     innerCircleRadius,
     innerShapeRadius,
     ringRadius,
-    spRatio,
-    spWaterHeight,
-    spWaterTopY,
     hasShield,
     arcs: [hpArc, shieldArc],
+    spArc,
   };
 }
 
