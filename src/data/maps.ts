@@ -283,6 +283,10 @@ export function getSectorById(sectorId: string): SectorDefinition {
   return SECTORS_CATALOG.find((s) => s.id === sectorId) ?? SECTORS_CATALOG[0];
 }
 
+/**
+ * @deprecated Replaced by cumulative visible-node frontline tracking in `src/engine/frontline.ts`.
+ * Kept exported for backwards-compatibility only.
+ */
 export function getNextSectorId(currentSectorId: string): string | null {
   const campaignChain = [
     'border_outpost',

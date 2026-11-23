@@ -4,7 +4,7 @@ import { BALANCE_CONFIG, getGarageUnlockCost } from '../data/balance';
 import { sanitizeAutoEquipConfig } from '../data/autoEquipConfig';
 import { EMPTY_STAT_BLOCK, MECH_CLASS_LIST } from '../data/classes';
 import { EQUIPMENT_SLOTS } from '../data/items';
-import { getNextSectorId, SECTORS_CATALOG } from '../data/maps';
+import { SECTORS_CATALOG } from '../data/maps';
 import { WINGMAN_CHAT_KEYS } from '../data/pilots';
 import { SHOP_STOCK_CONFIG } from '../data/shopConfig';
 import { sanitizeStarterSetConfig } from '../data/starterConfig';
@@ -42,6 +42,13 @@ import {
   moveUnitToRow,
   sanitizeFormationConfig,
 } from '../engine/formation';
+import {
+  type BattleOptionReasonKey,
+  getBattleOptions,
+  isVisible,
+  mergeVisibleUnlockedSectors,
+  pickDefaultBattle,
+} from '../engine/frontline';
 import {
   getDefaultInventoryFilterState,
   RARITY_RANK,
@@ -311,6 +318,11 @@ interface GameStoreState {
   autoRepeatStopOnDefeat: boolean;
   autoRepeatSession: AutoRepeatSession | null;
   autoRepeatToast: AutoRepeatRunToast | null;
+  battleLaunchToast: {
+    id: string;
+    reasonKey: BattleOptionReasonKey;
+    sectorId: string;
+  } | null;
   quickSellUndo: QuickSellUndoState | null;
   autoEquipUndo: AutoEquipUndoSnapshot | null;
   hasImportBackup: boolean;
@@ -388,6 +400,7 @@ interface GameStoreState {
   stopAutoRepeat: (reason?: AutoStopReason) => void;
   clearAutoRepeatSummary: () => void;
   clearAutoRepeatToast: () => void;
+  clearBattleLaunchToast: () => void;
 
   // Equipment, Inventory, Quick Sell, Shop, WP Market & Consumables actions
   setInventoryFilterState: (patch: Partial<InventoryFilterState>) => void;
@@ -653,19 +666,10 @@ function finalizeBattleOutcome(
     rewards.fullVictoryExp
   );
 
-  // Unlock next campaign sector & record base capture on victory
-  let unlockedSectorId: string | null = null;
-  let nextUnlockedSectors = state.pilot.unlockedSectorIds;
+  // Record base capture on victory; unlockedSectorIds is cumulative visibility history (never shrinks)
   let nextCapturedSectors = state.pilot.capturedSectorIds;
-  if (won) {
-    if (!alreadyCaptured) {
-      nextCapturedSectors = [...state.pilot.capturedSectorIds, battle.sectorId];
-    }
-    const candidateNext = getNextSectorId(battle.sectorId);
-    if (candidateNext && !state.pilot.unlockedSectorIds.includes(candidateNext)) {
-      unlockedSectorId = candidateNext;
-      nextUnlockedSectors = [...state.pilot.unlockedSectorIds, candidateNext];
-    }
+  if (won && !alreadyCaptured) {
+    nextCapturedSectors = [...state.pilot.capturedSectorIds, battle.sectorId];
   }
 
   const basePilotBeforeConsequences: PilotAccount = {
@@ -677,7 +681,7 @@ function finalizeBattleOutcome(
       ...state.pilot.gears,
       [deployedGearId]: levelResult.updatedGear,
     },
-    unlockedSectorIds: nextUnlockedSectors,
+    unlockedSectorIds: state.pilot.unlockedSectorIds,
     capturedSectorIds: nextCapturedSectors,
     activeExpBoostBattles: expBoostActive
       ? Math.max(0, (state.pilot.activeExpBoostBattles ?? 1) - 1)
@@ -694,7 +698,15 @@ function finalizeBattleOutcome(
   const monthStep = retreated
     ? { pilot: baseConseq.pilot }
     : advanceCampaignMonth(baseConseq.pilot);
-  const nextPilot: PilotAccount = monthStep.pilot;
+  const nextUnlockedSectors = mergeVisibleUnlockedSectors(monthStep.pilot);
+  const nextPilot: PilotAccount = {
+    ...monthStep.pilot,
+    unlockedSectorIds: nextUnlockedSectors,
+  };
+  const unlockedSectorId =
+    nextUnlockedSectors.find(
+      (id) => !state.pilot.unlockedSectorIds.includes(id)
+    ) ?? null;
 
   // Auto-restock Credits Shop & WP Market based on restockEveryNBattles cadence
   const nextBattlesUntilRestock = Math.max(0, (state.battlesUntilRestock || 1) - 1);
@@ -752,8 +764,20 @@ function finalizeBattleOutcome(
         state.autoRepeatDefeatRule,
         streakLimit
       );
-      if (stopCheck.stop) {
-        const finalReason = updatedSession.stopReason ?? stopCheck.reason;
+      const nextBattleAllowed =
+        !stopCheck.stop &&
+        pickDefaultBattle(
+          getBattleOptions(
+            nextPilot,
+            updatedSession.sectorId,
+            state.adminConfig
+          )
+        ) !== null;
+      const shouldStopNow = stopCheck.stop || !nextBattleAllowed;
+      if (shouldStopNow) {
+        const finalReason: AutoStopReason | null =
+          updatedSession.stopReason ??
+          (stopCheck.stop ? stopCheck.reason : 'node_not_contested');
         nextAutoRepeat = {
           ...updatedSession,
           active: false,
@@ -853,10 +877,60 @@ function launchBattleForSector(
   set: (partial: Partial<GameStoreState>) => void,
   sectorId?: string
 ): void {
-  const requestedSector = sectorId ?? state.selectedSectorId;
-  const targetSectorId = state.pilot.unlockedSectorIds.includes(requestedSector)
-    ? requestedSector
-    : state.pilot.unlockedSectorIds[0] ?? SECTORS_CATALOG[0].id;
+  const targetSectorId = sectorId ?? state.selectedSectorId;
+  const battleOptions = getBattleOptions(
+    state.pilot,
+    targetSectorId,
+    state.adminConfig
+  );
+  const defaultBattle = pickDefaultBattle(battleOptions);
+  if (defaultBattle === null) {
+    const reasonKey: BattleOptionReasonKey =
+      battleOptions.find((opt) => !opt.allowed && opt.reasonKey)?.reasonKey ??
+      'map.reason.notFrontline';
+    const patch: Partial<GameStoreState> = {
+      battleLaunchToast: {
+        id: `launch_toast_${Date.now()}`,
+        reasonKey,
+        sectorId: targetSectorId,
+      },
+    };
+    if (state.autoRepeatSession?.active) {
+      const stopReason: AutoStopReason =
+        state.autoRepeatSession.stopReason ?? 'node_not_contested';
+      const streakLimit = clampDefeatStreakLimit(
+        state.autoRepeatSession.defeatStreakLimit ??
+          state.autoRepeatDefeatStreakLimit
+      );
+      patch.autoRepeatSession = {
+        ...state.autoRepeatSession,
+        active: false,
+        stopReason,
+      };
+      patch.autoRepeatToast = null;
+      if (state.battle) {
+        patch.battle = {
+          ...state.battle,
+          log: [
+            ...state.battle.log,
+            {
+              id: `log_repeat_stop_${Date.now()}_${state.battle.turnCounter}`,
+              round: state.battle.round,
+              actorName: 'SYSTEM',
+              tag: 'SYSTEM' as const,
+              templateKey: 'log.autoRepeatStopped' as const,
+              params: {
+                reason: stopReason,
+                streak: streakLimit,
+              },
+            },
+          ],
+        };
+      }
+    }
+    set(patch);
+    return;
+  }
 
   const battleState = createInitialBattleState(
     state.pilot,
@@ -890,6 +964,7 @@ function launchBattleForSector(
       ...outcomePatch,
       selectedSectorId: targetSectorId,
       screen: 'BATTLE',
+      battleLaunchToast: null,
       ...(!state.autoRepeatSession?.active
         ? { autoRepeatSession: null, autoRepeatToast: null }
         : {}),
@@ -902,6 +977,7 @@ function launchBattleForSector(
     battle: battleState,
     screen: 'BATTLE',
     hasSaveData: true,
+    battleLaunchToast: null,
     ...(!state.autoRepeatSession?.active
       ? { autoRepeatSession: null, autoRepeatToast: null }
       : {}),
@@ -937,6 +1013,7 @@ export const useGameStore = create<GameStoreState>()(
         initialDeviceLoopPrefs.defeatRule === 'stop_immediately',
       autoRepeatSession: null,
       autoRepeatToast: null,
+      battleLaunchToast: null,
       quickSellUndo: null,
       autoEquipUndo: null,
       hasImportBackup: hasPersistedImportBackup(),
@@ -1003,15 +1080,16 @@ export const useGameStore = create<GameStoreState>()(
             screen: 'HANGAR',
             activeTab: 'gear',
             battle: null,
+            battleLaunchToast: null,
           });
         } else {
-          set({ screen: 'HANGAR', activeTab: 'gear' });
+          set({ screen: 'HANGAR', activeTab: 'gear', battleLaunchToast: null });
         }
       },
 
       continueCampaign: () => {
         soundFx.playConfirm();
-        set({ screen: 'HANGAR', activeTab: 'gear' });
+        set({ screen: 'HANGAR', activeTab: 'gear', battleLaunchToast: null });
       },
 
       resetCampaign: () => {
@@ -1035,6 +1113,7 @@ export const useGameStore = create<GameStoreState>()(
           shopSubTab: 'buy',
           autoRepeatSession: null,
           autoRepeatToast: null,
+          battleLaunchToast: null,
           autoRepeatDefeatRule: deviceLoopPrefs.defeatRule,
           autoRepeatDefeatStreakLimit: deviceLoopPrefs.defeatStreakLimit,
           autoRepeatStopOnDefeat:
@@ -1568,6 +1647,47 @@ export const useGameStore = create<GameStoreState>()(
           return;
         }
 
+        const isNextBattleIdle = !state.battle || Boolean(state.battle.summary);
+        if (
+          isNextBattleIdle &&
+          pickDefaultBattle(
+            getBattleOptions(state.pilot, chosenSector, state.adminConfig)
+          ) === null
+        ) {
+          const opts = getBattleOptions(
+            state.pilot,
+            chosenSector,
+            state.adminConfig
+          );
+          const reasonKey: BattleOptionReasonKey =
+            opts.find((opt) => !opt.allowed && opt.reasonKey)?.reasonKey ??
+            'map.reason.notFrontline';
+          set({
+            autoRepeatLimit: chosenLimit,
+            autoRepeatToast: null,
+            battleLaunchToast: {
+              id: `launch_toast_${Date.now()}`,
+              reasonKey,
+              sectorId: chosenSector,
+            },
+            autoRepeatSession: {
+              active: false,
+              limit: chosenLimit,
+              sectorId: chosenSector,
+              completedRuns: 0,
+              wins: 0,
+              consecutiveDefeats: 0,
+              defeatStreakLimit: streakLimit,
+              totalExp: 0,
+              totalCredits: 0,
+              totalWarPoints: 0,
+              totalDrops: [],
+              stopReason: 'node_not_contested',
+            },
+          });
+          return;
+        }
+
         soundFx.playConfirm();
         set({
           autoRepeatLimit: chosenLimit,
@@ -1639,9 +1759,11 @@ export const useGameStore = create<GameStoreState>()(
 
       clearAutoRepeatToast: () => set({ autoRepeatToast: null }),
 
+      clearBattleLaunchToast: () => set({ battleLaunchToast: null }),
+
       selectSector: (sectorId) => {
         const state = get();
-        if (!state.pilot.unlockedSectorIds.includes(sectorId)) return;
+        if (!isVisible(state.pilot, sectorId)) return;
         soundFx.playClick();
         set({ selectedSectorId: sectorId, hasSaveData: true });
       },
@@ -3891,6 +4013,7 @@ export const useGameStore = create<GameStoreState>()(
           autoBattleEnabled: false,
           autoRepeatSession: null,
           autoRepeatToast: null,
+          battleLaunchToast: null,
           quickSellUndo: null,
           autoEquipUndo: null,
           tacticsModalOpen: false,
@@ -3951,6 +4074,7 @@ export const useGameStore = create<GameStoreState>()(
             autoBattleEnabled: false,
             autoRepeatSession: null,
             autoRepeatToast: null,
+            battleLaunchToast: null,
             quickSellUndo: null,
             autoEquipUndo: null,
             tacticsModalOpen: false,
@@ -4139,6 +4263,7 @@ export const useGameStore = create<GameStoreState>()(
           state.autoRepeatStopOnDefeat =
             resolvedLoopPrefs.defeatRule === 'stop_immediately';
           state.autoRepeatToast = null;
+          state.battleLaunchToast = null;
           soundFx.setMuted(state.muted);
         }
       },

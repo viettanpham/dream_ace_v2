@@ -101,6 +101,18 @@ export function visibleNodeIds(pilot: FrontlinePilotSlice): string[] {
 }
 
 /**
+ * Cumulative visibility history: appends every currently visible node without ever removing existing entries.
+ */
+export function mergeVisibleUnlockedSectors(
+  pilot: FrontlinePilotSlice
+): string[] {
+  const existing = Array.isArray(pilot.unlockedSectorIds)
+    ? pilot.unlockedSectorIds
+    : [];
+  return Array.from(new Set([...existing, ...visibleNodeIds(pilot)]));
+}
+
+/**
  * True when no hostile or neutral node remains anywhere on the map.
  */
 export function noEnemyLeft(pilot: Pick<PilotAccount, 'baseStates'>): boolean {

@@ -45,6 +45,7 @@ import {
   sanitizeAutoEquipConfig,
 } from '../data/autoEquipConfig';
 import { cloneFormationConfig, DEFAULT_FORMATION_CONFIG } from '../data/formationConfig';
+import { mergeVisibleUnlockedSectors } from './frontline';
 import { DEFAULT_SHIELD_REGEN_CONFIG, sanitizeShieldRegenConfig } from './shieldRegen';
 import {
   cloneStarterSetConfig,
@@ -730,9 +731,13 @@ export function migrateSaveData(
       }
     }
 
-    const finalUnlockedSectors = Array.from(
+    const seededUnlockedSectors = Array.from(
       new Set([...unlockedSectorIds, 'aegis_relay', 'veridian_colony'])
     );
+    const finalUnlockedSectors = mergeVisibleUnlockedSectors({
+      baseStates: cleanBaseStates,
+      unlockedSectorIds: seededUnlockedSectors,
+    });
 
     const rawConsumables: ConsumableItem[] = Array.isArray(rawPilot.consumables)
       ? rawPilot.consumables.filter(

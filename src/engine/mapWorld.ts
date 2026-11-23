@@ -4,6 +4,11 @@ import {
   MAP_LANES,
   SECTORS_CATALOG,
 } from '../data/maps';
+import {
+  isContested,
+  mergeVisibleUnlockedSectors,
+  neighbours,
+} from './frontline';
 import type {
   BaseRuntimeState,
   BonusMissionState,
@@ -286,15 +291,30 @@ export function acceptBaseBonusMission(
     return { ok: false, reason: 'already_active', pilot };
   }
 
-  // Prefer an unlocked non-allied sector, else any unlocked sector
+  // BFS shortest lane-hop distance from the source base
+  const hopDist = new Map<string, number>();
+  hopDist.set(sector.id, 0);
+  const queue: string[] = [sector.id];
+  for (let head = 0; head < queue.length; head++) {
+    const cur = queue[head];
+    const dist = hopDist.get(cur) ?? 0;
+    for (const nb of neighbours(cur)) {
+      if (!hopDist.has(nb)) {
+        hopDist.set(nb, dist + 1);
+        queue.push(nb);
+      }
+    }
+  }
+
+  // Target a CONTESTED node only: fewest lane hops from source base, ties broken by lower baseLevel
   const targetSector =
-    SECTORS_CATALOG.find(
-      (s) =>
-        pilot.unlockedSectorIds.includes(s.id) &&
-        getBaseState(pilot, s.id).faction !== 'allied'
-    ) ??
-    SECTORS_CATALOG.find((s) => pilot.unlockedSectorIds.includes(s.id)) ??
-    SECTORS_CATALOG[0];
+    SECTORS_CATALOG.filter((s) => isContested(pilot, s.id) && hopDist.has(s.id))
+      .sort((a, b) => {
+        const da = hopDist.get(a.id) ?? Number.MAX_SAFE_INTEGER;
+        const db = hopDist.get(b.id) ?? Number.MAX_SAFE_INTEGER;
+        if (da !== db) return da - db;
+        return a.baseLevel - b.baseLevel;
+      })[0] ?? null;
 
   if (!targetSector) {
     return { ok: false, reason: 'no_target_sector', pilot };
@@ -391,16 +411,11 @@ export function applyBattleBaseConsequences(
     }
   }
 
-  // Unlock adjacent sectors connected by star lanes when capturing a base
-  let nextUnlocked = pilot.unlockedSectorIds;
-  if (won) {
-    const connected = MAP_LANES.filter(
-      (l) => l.from === sectorId || l.to === sectorId
-    ).map((l) => (l.from === sectorId ? l.to : l.from));
-    if (connected.length > 0) {
-      nextUnlocked = Array.from(new Set([...nextUnlocked, ...connected]));
-    }
-  }
+  // Cumulative visibility history: add every visible node, never remove one
+  const nextUnlocked = mergeVisibleUnlockedSectors({
+    baseStates: nextBaseStates,
+    unlockedSectorIds: pilot.unlockedSectorIds,
+  });
 
   // Check Bonus Mission completion
   let bonusMissionCredits = 0;

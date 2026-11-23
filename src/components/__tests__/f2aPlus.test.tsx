@@ -99,7 +99,7 @@ describe('Task F2a+: Selling Protections, Battle Loop Toast/Stop-on-Defeat & Log
 
   describe('2. Battle Loop UI: Defeat rule radios, per-battle toast & batch summary', () => {
     it('keeps loop button outside "..." menu, defaults Stop immediately ON, shows toast mid-loop, and shows summary on completion', () => {
-      useGameStore.getState().startBattle('debris_belt');
+      useGameStore.getState().startBattle('border_outpost');
 
       act(() => {
         root.render(createElement(BattleScreen));
@@ -137,7 +137,7 @@ describe('Task F2a+: Selling Protections, Battle Loop Toast/Stop-on-Defeat & Log
 
       // Start 5x auto-repeat, force win Run #1 -> toast appears, blocking outcome dialog does NOT
       act(() => {
-        useGameStore.getState().startAutoRepeat(5, 'debris_belt');
+        useGameStore.getState().startAutoRepeat(5, 'border_outpost');
       });
       act(() => {
         useGameStore.getState().forceWinBattle();
@@ -158,7 +158,7 @@ describe('Task F2a+: Selling Protections, Battle Loop Toast/Stop-on-Defeat & Log
 
       // Run #2 ends in defeat while never_stop -> still continues
       act(() => {
-        useGameStore.getState().startBattle('debris_belt');
+        useGameStore.getState().startBattle('border_outpost');
       });
       act(() => {
         useGameStore.setState((s) => ({
@@ -188,7 +188,7 @@ describe('Task F2a+: Selling Protections, Battle Loop Toast/Stop-on-Defeat & Log
       useGameStore
         .getState()
         .adminFillInventory(BALANCE_CONFIG.maxInventorySize);
-      useGameStore.getState().startBattle('debris_belt');
+      useGameStore.getState().startBattle('border_outpost');
       useGameStore.getState().setAutoRepeatDefeatRule('never_stop');
 
       act(() => {
@@ -196,7 +196,7 @@ describe('Task F2a+: Selling Protections, Battle Loop Toast/Stop-on-Defeat & Log
       });
 
       act(() => {
-        useGameStore.getState().startAutoRepeat(10, 'debris_belt');
+        useGameStore.getState().startAutoRepeat(10, 'border_outpost');
       });
       act(() => {
         useGameStore.getState().forceWinBattle();

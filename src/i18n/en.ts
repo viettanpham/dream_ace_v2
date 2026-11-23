@@ -714,6 +714,7 @@ export const EN_TRANSLATIONS = {
   'auto.repeatReason.boss_present': 'Stopped: Boss detected',
   'auto.repeatReason.auto_retreat': 'Auto-retreated on critical HP',
   'auto.repeatReason.inventory_full': 'Stopped: Cargo box full ({max} items)',
+  'auto.repeatReason.node_not_contested': 'Stopped: node is no longer contested',
   'auto.repeatReason.manual_stop': 'Stopped by pilot',
   'auto.cond.always': 'Always',
   'auto.cond.my_hp_below': 'My HP < {value}%',

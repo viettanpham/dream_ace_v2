@@ -638,6 +638,7 @@ export type AutoStopReason =
   | 'boss_present'
   | 'auto_retreat'
   | 'inventory_full'
+  | 'node_not_contested'
   | 'manual_stop';
 
 export type AutoRepeatDefeatRule =

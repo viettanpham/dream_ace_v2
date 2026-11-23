@@ -35,6 +35,11 @@ import {
 } from '../data/maps';
 import { calculateSingleEnemyReward } from '../engine/combat';
 import {
+  getBattleOptions,
+  isVisible,
+  pickDefaultBattle,
+} from '../engine/frontline';
+import {
   ENGINEER_OVERCHARGE_COST,
   getBaseMonthlyIncome,
   getBaseState,
@@ -418,7 +423,7 @@ export function MapView() {
 
   const handleSelectSector = (sectorId: string) => {
     if (dragOriginRef.current?.moved) return;
-    if (!pilot.unlockedSectorIds.includes(sectorId)) return;
+    if (!isVisible(pilot, sectorId)) return;
     soundFx.playClick();
     selectSector(sectorId);
     setPreBattleDetailsOpen(false);
@@ -662,11 +667,27 @@ export function MapView() {
     const isDamaged = selectedBaseState.status === 'damaged';
     const isRepairing = selectedBaseState.status === 'repairing';
 
-    const deployCtaLabel = selectedBaseState.underAttack
-      ? t('map.defendBtn', { size: effectiveSquadSize })
-      : isAllied
-      ? t('map.patrolBtn', { size: effectiveSquadSize })
-      : t('map.assaultBtn', { size: effectiveSquadSize });
+    const battleOptions = getBattleOptions(
+      pilot,
+      selectedSector.id,
+      adminConfig
+    );
+    const defaultBattleKind = pickDefaultBattle(battleOptions);
+    const canDeploy = defaultBattleKind !== null;
+    const blockedReasonKey = !canDeploy
+      ? battleOptions.find((opt) => !opt.allowed && opt.reasonKey)?.reasonKey ??
+        'map.reason.notFrontline'
+      : null;
+    const blockedReasonText = blockedReasonKey ? t(blockedReasonKey) : undefined;
+
+    const deployCtaLabel =
+      defaultBattleKind === 'defend' ||
+      (defaultBattleKind === null && selectedBaseState.underAttack)
+        ? t('map.defendBtn', { size: effectiveSquadSize })
+        : defaultBattleKind === 'patrol' ||
+          (defaultBattleKind === null && isAllied)
+        ? t('map.patrolBtn', { size: effectiveSquadSize })
+        : t('map.assaultBtn', { size: effectiveSquadSize });
 
     return (
       <div className="space-y-4">
@@ -934,19 +955,33 @@ export function MapView() {
         {/* Deploy Button */}
         <button
           type="button"
+          data-testid="map-deploy-btn"
+          disabled={!canDeploy}
+          title={blockedReasonText}
           onClick={() => {
+            if (!defaultBattleKind) return;
             setMobileBriefingOpen(false);
             startBattle(selectedSector.id);
           }}
-          className={`w-full min-h-[48px] px-4 inline-flex items-center justify-center gap-2 rounded-lg font-bold text-sm transition-colors cursor-pointer ${
-            selectedBaseState.underAttack
-              ? 'bg-red-500 hover:bg-red-400 text-white'
-              : 'bg-amber-500 hover:bg-amber-400 text-slate-950'
+          className={`w-full min-h-[48px] px-4 inline-flex items-center justify-center gap-2 rounded-lg font-bold text-sm transition-colors disabled:opacity-45 disabled:cursor-not-allowed ${
+            !canDeploy
+              ? 'bg-slate-800 text-slate-400 border border-slate-700'
+              : selectedBaseState.underAttack
+              ? 'bg-red-500 hover:bg-red-400 text-white cursor-pointer'
+              : 'bg-amber-500 hover:bg-amber-400 text-slate-950 cursor-pointer'
           }`}
         >
           <Rocket className="w-4 h-4" />
           <span>{deployCtaLabel}</span>
         </button>
+        {!canDeploy && blockedReasonText && (
+          <p
+            data-testid="map-deploy-blocked-reason"
+            className="text-xs text-slate-400 text-center"
+          >
+            {blockedReasonText}
+          </p>
+        )}
       </div>
     );
   };

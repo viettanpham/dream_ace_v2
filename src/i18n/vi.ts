@@ -716,6 +716,7 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'auto.repeatReason.boss_present': 'Dừng: Phát hiện BOSS',
   'auto.repeatReason.auto_retreat': 'Tự động rút lui do HP nguy kịch',
   'auto.repeatReason.inventory_full': 'Dừng: Hòm đồ đã đầy ({max} món)',
+  'auto.repeatReason.node_not_contested': 'Dừng: căn cứ không còn giao tranh',
   'auto.repeatReason.manual_stop': 'Đã dừng theo lệnh phi công',
   'auto.cond.always': 'Luôn luôn',
   'auto.cond.my_hp_below': 'HP của tôi < {value}%',

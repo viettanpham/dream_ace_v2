@@ -120,7 +120,7 @@ describe('TASK LP1 — Loop (Lặp) Unclip, Honest State, Defeat Streak & Counte
   });
 
   it('auto-starts battles 2 and 3 without clicking when loop is active for 3 runs with forced victory', () => {
-    useGameStore.getState().startBattle('debris_belt');
+    useGameStore.getState().startBattle('border_outpost');
 
     act(() => {
       root.render(createElement(BattleScreen));
@@ -129,7 +129,7 @@ describe('TASK LP1 — Loop (Lặp) Unclip, Honest State, Defeat Streak & Counte
     act(() => {
       useGameStore
         .getState()
-        .startAutoRepeat(3 as unknown as AutoRepeatLimit, 'debris_belt');
+        .startAutoRepeat(3 as unknown as AutoRepeatLimit, 'border_outpost');
     });
 
     const battle1 = useGameStore.getState().battle;
@@ -199,7 +199,7 @@ describe('TASK LP1 — Loop (Lặp) Unclip, Honest State, Defeat Streak & Counte
         await useCloudSaveStore.getState().createCloudSave('1234', false);
       });
 
-      useGameStore.getState().startBattle('debris_belt');
+      useGameStore.getState().startBattle('border_outpost');
 
       act(() => {
         root.render(createElement(BattleScreen));
@@ -209,7 +209,7 @@ describe('TASK LP1 — Loop (Lặp) Unclip, Honest State, Defeat Streak & Counte
         useCloudSaveStore.setState({ deferredUploadPending: true });
         useGameStore
           .getState()
-          .startAutoRepeat(3 as unknown as AutoRepeatLimit, 'debris_belt');
+          .startAutoRepeat(3 as unknown as AutoRepeatLimit, 'border_outpost');
       });
 
       act(() => {
@@ -242,7 +242,7 @@ describe('TASK LP1 — Loop (Lặp) Unclip, Honest State, Defeat Streak & Counte
 
   it('portals desktop "Lặp" popover into document.body with fixed viewport-clamped position outside overflow-hidden/max-h ancestors', () => {
     setViewport(1280, 800);
-    useGameStore.getState().startBattle('debris_belt');
+    useGameStore.getState().startBattle('border_outpost');
 
     act(() => {
       root.render(createElement(BattleScreen));
@@ -361,7 +361,7 @@ describe('TASK LP1 — Loop (Lặp) Unclip, Honest State, Defeat Streak & Counte
 
   it('uses honest non-emerald button state while popover is open on desktop and launches battles 2 and 3 via Lặp -> Bắt đầu', () => {
     setViewport(1280, 800);
-    useGameStore.getState().startBattle('debris_belt');
+    useGameStore.getState().startBattle('border_outpost');
 
     act(() => {
       root.render(createElement(BattleScreen));
@@ -448,7 +448,7 @@ describe('TASK LP1 — Loop (Lặp) Unclip, Honest State, Defeat Streak & Counte
 
   it('displays N/M and N/∞ counters accurately on the running chip', () => {
     setViewport(1280, 800);
-    useGameStore.getState().startBattle('debris_belt');
+    useGameStore.getState().startBattle('border_outpost');
 
     act(() => {
       root.render(createElement(BattleScreen));
@@ -551,7 +551,7 @@ describe('TASK LP1 — Loop (Lặp) Unclip, Honest State, Defeat Streak & Counte
 
     // End-to-end store + UI flow with 3 radio options + N input
     setViewport(1280, 800);
-    useGameStore.getState().startBattle('debris_belt');
+    useGameStore.getState().startBattle('border_outpost');
 
     act(() => {
       root.render(createElement(BattleScreen));
@@ -677,7 +677,7 @@ describe('TASK LP1 — Loop (Lặp) Unclip, Honest State, Defeat Streak & Counte
     expect(EN_TRANSLATIONS['battle.speedPopoverTitle']).toBeTruthy();
 
     setViewport(390, 844);
-    useGameStore.getState().startBattle('debris_belt');
+    useGameStore.getState().startBattle('border_outpost');
 
     act(() => {
       root.render(createElement(BattleScreen));
