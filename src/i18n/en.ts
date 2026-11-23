@@ -1712,6 +1712,10 @@ export const EN_TRANSLATIONS = {
   'qs.warehouseBlockedReason':
     'Battle or auto-repeat loop is active — cannot sell from Warehouse (Base only).',
   'qs.noSourceHint': 'Select at least one item source (Cargo box or Warehouse).',
+  'map.reason.notFrontline': 'Not adjacent to allied territory',
+  'map.reason.rearBase': 'Rear base, no active frontline',
+  'map.reason.hidden': 'Undiscovered',
+  'admin.campaignIgnoreFrontline': 'Ignore frontline rule (test)',
 } as const;
 
 export type TranslationKey = keyof typeof EN_TRANSLATIONS;

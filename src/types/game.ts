@@ -1271,6 +1271,7 @@ export interface AdminConfig {
   statusDisplayDefaults?: StatusDisplayDefaults;
   shieldRegen?: ShieldRegenConfig;
   warehouseCapacity: number;
+  ignoreFrontline?: boolean;
   showRawI18nKeys: boolean;
 }
 

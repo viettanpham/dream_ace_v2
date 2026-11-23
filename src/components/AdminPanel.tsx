@@ -1900,8 +1900,23 @@ export function AdminPanel() {
               </div>
 
               <div className="p-3.5 rounded-lg border border-slate-800 bg-[#0D1422] space-y-2">
-                <div className="text-xs font-bold text-amber-300">
-                  {t('admin.campaignBasesTitle')}
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-xs font-bold text-amber-300">
+                    {t('admin.campaignBasesTitle')}
+                  </div>
+                  <label className="inline-flex items-center gap-2 text-xs text-slate-200 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      data-testid="admin-ignore-frontline"
+                      checked={Boolean(adminConfig.ignoreFrontline)}
+                      onChange={(e) => {
+                        adminUpdateConfig({ ignoreFrontline: e.target.checked });
+                        flash(t('admin.campaignIgnoreFrontline'));
+                      }}
+                      className="w-4 h-4 accent-amber-400"
+                    />
+                    <span>{t('admin.campaignIgnoreFrontline')}</span>
+                  </label>
                 </div>
                 <div className="divide-y divide-slate-800/80">
                   {SECTORS_CATALOG.map((sec) => {

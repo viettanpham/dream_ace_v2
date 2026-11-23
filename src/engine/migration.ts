@@ -213,6 +213,7 @@ export function createDefaultAdminConfig(): AdminConfig {
     iconCatalogMods: [],
     shieldRegen: { ...DEFAULT_SHIELD_REGEN_CONFIG },
     warehouseCapacity: DEFAULT_WAREHOUSE_CAPACITY,
+    ignoreFrontline: false,
     showRawI18nKeys: false,
   };
 }
@@ -510,6 +511,10 @@ export function migrateSaveData(
       version < CURRENT_SAVE_VERSION
         ? DEFAULT_WAREHOUSE_CAPACITY
         : sanitizeWarehouseCapacity(rawAdmin.warehouseCapacity),
+    ignoreFrontline:
+      typeof rawAdmin.ignoreFrontline === 'boolean'
+        ? rawAdmin.ignoreFrontline
+        : false,
     showRawI18nKeys: Boolean(rawAdmin.showRawI18nKeys),
   };
 

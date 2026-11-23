@@ -1715,6 +1715,10 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'qs.warehouseBlockedReason':
     'Đang chiến đấu hoặc chạy lặp trận — không thể bán đồ từ Kho đồ (Chỉ dùng ở căn cứ).',
   'qs.noSourceHint': 'Hãy chọn ít nhất 1 nguồn vật phẩm (Hòm đồ hoặc Kho đồ).',
+  'map.reason.notFrontline': 'Chưa tiếp giáp lãnh thổ ta',
+  'map.reason.rearBase': 'Căn cứ hậu phương, không có giao tranh',
+  'map.reason.hidden': 'Chưa phát hiện',
+  'admin.campaignIgnoreFrontline': 'Bỏ qua luật tiền tuyến (test)',
 };
 
 
