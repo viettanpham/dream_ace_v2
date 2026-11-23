@@ -33,7 +33,9 @@ src/store/useGameStore.ts 3981; src/engine/combat.ts 3860; src/components/Battle
 - src/components/__tests__/battleCardG4a2c.test.tsx — card mode lane grid, headers, running per-lane status rows & compact card tests
 - src/components/TurnQueueBar.tsx — turn order conveyor strip and sidebar queue (`TurnQueueBar`)
 - src/components/BattleStatsModal.tsx — post-battle and live combat statistics modal (`BattleStatsModal`)
-- src/utils/combatLogFormat.ts — combat log formatting and sidebar log mode prefs (`LOG_MODE_STORAGE_KEY`)
+- src/components/CombatLogList.tsx + src/components/__tests__/combatLogG4a2d.test.tsx — structured, round-grouped combat log (newest-first default, 3 newest rounds open, jump pill, compact Row 2) + G4a-2d tests
+- src/utils/combatLogFormat.ts — combat log formatting, log order/mode prefs (`LOG_MODE_STORAGE_KEY`, `LOG_ORDER_STORAGE_KEY`, `COMBAT_LOG_CHROME_HEIGHTS`, `groupCombatLogEntriesByRound()`)
+- src/utils/scrollStick.ts — pure top/bottom stick scroll predicates & prepend scroll preservation (`computeTopStickScrollState()`, `computeStickScrollState()`, `computePreservedScrollTopOnPrepend()`, `isInlineFlowAtTop()`)
 - src/utils/battleDisplay.ts — UI constants, row exposure states, and target validity helpers (`computeRowExposure()`, `evaluateRadarTargetValidity()`, `formatShortUnitName()`)
 - src/components/BattleVfxOverlay.tsx + src/utils/battleVfx.ts — combat FX overlay and VFX config (do not touch unless the task is FX)
 

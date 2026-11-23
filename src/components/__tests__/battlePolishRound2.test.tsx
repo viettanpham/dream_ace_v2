@@ -609,6 +609,7 @@ describe('5) Combat log auto-scroll pause & Jump to latest button', () => {
           entries: initial,
           active: true,
           density: 'compact',
+          order: 'oldest',
         })
       );
     });
@@ -635,6 +636,7 @@ describe('5) Combat log auto-scroll pause & Jump to latest button', () => {
           entries: makeLogEntries(12),
           active: true,
           density: 'compact',
+          order: 'oldest',
         })
       );
     });
@@ -662,6 +664,7 @@ describe('5) Combat log auto-scroll pause & Jump to latest button', () => {
           entries: makeLogEntries(14),
           active: true,
           density: 'compact',
+          order: 'oldest',
         })
       );
     });

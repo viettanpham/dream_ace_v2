@@ -508,21 +508,30 @@ describe('Task G3d — i18n audit, detailed status chips, readable combat log, p
     expect(round1Header.textContent).toContain('Vòng 1');
     expect(round2Header.textContent).toContain('Vòng 2');
 
-    // Newest round (Vòng 2) open by default, older round (Vòng 1) collapsed
-    expect(round1Header.getAttribute('aria-expanded')).toBe('false');
+    // Both Vòng 1 & Vòng 2 are within the 3 newest rounds -> open by default (G4a-2d)
+    expect(round1Header.getAttribute('aria-expanded')).toBe('true');
     expect(round2Header.getAttribute('aria-expanded')).toBe('true');
     expect(
       container!
         .querySelector('[data-testid="combat-log-round-body-1"]')
         ?.className.includes('hidden')
-    ).toBe(true);
+    ).toBe(false);
     expect(
       container!
         .querySelector('[data-testid="combat-log-round-body-2"]')
         ?.className.includes('hidden')
     ).toBe(false);
 
-    // Clicking Vòng 1 expands it
+    // Clicking Vòng 1 toggles it collapsed, clicking again expands it
+    act(() => {
+      round1Header.click();
+    });
+    expect(round1Header.getAttribute('aria-expanded')).toBe('false');
+    expect(
+      container!
+        .querySelector('[data-testid="combat-log-round-body-1"]')
+        ?.className.includes('hidden')
+    ).toBe(true);
     act(() => {
       round1Header.click();
     });

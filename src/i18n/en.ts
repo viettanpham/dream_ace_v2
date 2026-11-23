@@ -1324,7 +1324,9 @@ export const EN_TRANSLATIONS = {
   // Structured Combat Log, Live Progress & Report Cleanup (G3c)
   'log.filter.all': 'All',
   'log.filter.ally': 'Allies',
+  'log.filter.allyShort': 'Allies',
   'log.filter.enemy': 'Enemies',
+  'log.filter.enemyShort': 'Foes',
   'log.filter.system': 'System',
   'log.modeDocked': 'Docked',
   'log.modePopup': 'Popup',

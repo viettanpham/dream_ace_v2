@@ -78,10 +78,13 @@ import {
 import {
   parseStructuredCombatLogRow,
   readCombatLogExpandAll,
+  readCombatLogOrder,
   readSidebarLogMode,
   writeCombatLogExpandAll,
+  writeCombatLogOrder,
   writeSidebarLogMode,
   type CombatLogChannel,
+  type CombatLogOrder,
   type SidebarCombatLogMode,
 } from '../utils/combatLogFormat';
 import { useStatusDisplaySettings } from '../utils/statusDisplayPrefs';
@@ -224,6 +227,9 @@ export function BattleScreen() {
     () => readSidebarLogMode()
   );
   const [logChannel, setLogChannel] = useState<CombatLogChannel>('all');
+  const [logOrder, setLogOrder] = useState<CombatLogOrder>(() =>
+    readCombatLogOrder()
+  );
   const [logExpandAll, setLogExpandAll] = useState<boolean>(() =>
     readCombatLogExpandAll()
   );
@@ -447,6 +453,11 @@ export function BattleScreen() {
     setLogExpandAll(false);
     writeCombatLogExpandAll(false);
     setLogExpandNonce((n) => n + 1);
+  };
+
+  const handleSetLogOrder = (nextOrder: CombatLogOrder) => {
+    setLogOrder(nextOrder);
+    writeCombatLogOrder(nextOrder);
   };
 
   const handleToggleStatusBoard = () => {
@@ -2505,20 +2516,27 @@ export function BattleScreen() {
               data-testid="battle-phone-docked-log"
               className="rounded-lg border border-slate-800 bg-[#070A10] flex flex-col"
             >
-              <div className="shrink-0 px-2 py-1 border-b border-slate-800/90 flex flex-wrap items-center justify-between gap-1.5 text-[11px] text-slate-400">
-                <div className="inline-flex items-center gap-1.5 shrink-0">
+              <div
+                data-testid="combat-log-header-row-1"
+                className="shrink-0 h-[36px] min-h-[36px] max-h-[36px] px-2 border-b border-slate-800/90 flex items-center justify-between gap-1.5 flex-nowrap text-[11px] text-slate-400"
+              >
+                <div className="inline-flex items-center gap-1 min-w-0 shrink">
                   <ScrollText className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-                  <span className="font-semibold text-slate-200 whitespace-nowrap">
+                  <span
+                    data-testid="combat-log-header-title"
+                    className="font-semibold text-slate-200 whitespace-nowrap text-[11px]"
+                  >
                     {t('battle.combatLog')}
                   </span>
-                  <span className="font-mono-nums text-slate-400 whitespace-nowrap">
+                  <span
+                    data-testid="combat-log-header-count"
+                    className="font-mono-nums text-[10px] text-slate-400 whitespace-nowrap"
+                  >
                     ({battle.log.length})
                   </span>
                 </div>
-                <div className="flex items-center gap-1 flex-wrap shrink-0">
+                <div className="flex items-center gap-1 flex-nowrap shrink-0">
                   {renderLogModeSegmented()}
-                  {sidebarLogMode === 'expanded' &&
-                    renderCombatLogExpandButtons(true)}
                   <button
                     type="button"
                     data-testid="combat-log-mode-toggle"
@@ -2526,7 +2544,7 @@ export function BattleScreen() {
                     onClick={handleOpenCombatLogPopup}
                     title={t('log.modePopup')}
                     aria-label={t('log.modePopup')}
-                    className="min-h-[24px] px-1.5 rounded border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200 text-[10px] font-semibold inline-flex items-center gap-1 cursor-pointer shrink-0 whitespace-nowrap"
+                    className="min-h-[24px] h-[24px] px-1.5 rounded border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200 text-[10px] font-semibold inline-flex items-center gap-1 cursor-pointer shrink-0 whitespace-nowrap"
                   >
                     <Maximize2 className="w-3 h-3 text-sky-400 shrink-0" />
                     <span>{t('log.modePopup')}</span>
@@ -2552,8 +2570,12 @@ export function BattleScreen() {
                   mode="docked"
                   channel={logChannel}
                   onChannelChange={setLogChannel}
+                  order={logOrder}
+                  onOrderChange={handleSetLogOrder}
                   expandAll={logExpandAll}
                   expandNonce={logExpandNonce}
+                  onExpandAll={handleExpandAllLogs}
+                  onCollapseAll={handleCollapseAllLogs}
                   inlineFlow
                 />
               )}
@@ -3116,25 +3138,26 @@ export function BattleScreen() {
                   : 'shrink-0'
               } rounded-lg border border-slate-800 bg-[#070A10] flex flex-col overflow-hidden`}
             >
-              <div className="shrink-0 px-2.5 py-1.5 border-b border-slate-800/90 flex flex-wrap items-center justify-between gap-1.5 text-[12px] text-slate-400">
-                <div className="flex items-center gap-1.5 shrink-0">
+              <div
+                data-testid="combat-log-header-row-1"
+                className="shrink-0 h-[36px] min-h-[36px] max-h-[36px] px-2 border-b border-slate-800/90 flex items-center justify-between gap-1.5 flex-nowrap text-[11px] text-slate-400"
+              >
+                <div className="flex items-center gap-1 min-w-0 shrink">
                   <span
                     data-testid="combat-log-header-title"
-                    className="font-semibold text-slate-200 whitespace-nowrap"
+                    className="font-semibold text-slate-200 whitespace-nowrap text-[11px]"
                   >
                     {t('battle.combatLog')}
                   </span>
                   <span
                     data-testid="combat-log-header-count"
-                    className="font-mono-nums text-[11px] text-slate-400 whitespace-nowrap"
+                    className="font-mono-nums text-[10px] text-slate-400 whitespace-nowrap"
                   >
                     {t('battle.eventsCount', { count: battle.log.length })}
                   </span>
                 </div>
-                <div className="flex items-center gap-1 shrink-0">
+                <div className="flex items-center gap-1 shrink-0 flex-nowrap">
                   {renderLogModeSegmented()}
-                  {sidebarLogMode === 'expanded' &&
-                    renderCombatLogExpandButtons(true)}
                   <button
                     type="button"
                     data-testid="combat-log-mode-toggle"
@@ -3142,7 +3165,7 @@ export function BattleScreen() {
                     onClick={handleOpenCombatLogPopup}
                     title={t('log.modePopup')}
                     aria-label={t('log.modePopup')}
-                    className="min-h-[24px] px-1.5 rounded border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200 text-[10px] font-semibold inline-flex items-center gap-1 cursor-pointer shrink-0 whitespace-nowrap"
+                    className="min-h-[24px] h-[24px] px-1.5 rounded border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200 text-[10px] font-semibold inline-flex items-center gap-1 cursor-pointer shrink-0 whitespace-nowrap"
                   >
                     <Maximize2 className="w-3 h-3 text-sky-400 shrink-0" />
                     <span>{t('log.modePopup')}</span>
@@ -3158,8 +3181,12 @@ export function BattleScreen() {
                   mode="docked"
                   channel={logChannel}
                   onChannelChange={setLogChannel}
+                  order={logOrder}
+                  onOrderChange={handleSetLogOrder}
                   expandAll={logExpandAll}
                   expandNonce={logExpandNonce}
+                  onExpandAll={handleExpandAllLogs}
+                  onCollapseAll={handleCollapseAllLogs}
                 />
               ) : (
                 <div
@@ -3307,12 +3334,14 @@ export function BattleScreen() {
             entries={battle.log}
             units={battle.units}
             channel={logChannel}
+            order={logOrder}
             expandAll={logExpandAll}
             expandNonce={logExpandNonce}
             expandButtons={renderCombatLogExpandButtons(false)}
             t={t}
             onClose={() => setLogSheetOpen(false)}
             onChannelChange={setLogChannel}
+            onOrderChange={handleSetLogOrder}
           />
         )}
       </ErrorBoundary>

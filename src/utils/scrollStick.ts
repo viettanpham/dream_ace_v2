@@ -101,3 +101,54 @@ export function getNextScrollTopOnAppend(
     : 0;
   return isAtBottom ? safeHeight : safeCurrent;
 }
+
+/**
+ * Preserves the reader's viewport offset when newer log rows are prepended above in newest-first order.
+ */
+export function computePreservedScrollTopOnPrepend(
+  prevScrollTop: number,
+  prevScrollHeight: number,
+  nextScrollHeight: number
+): number {
+  const safeTop = Number.isFinite(prevScrollTop) ? Math.max(0, prevScrollTop) : 0;
+  if (!Number.isFinite(prevScrollHeight) || prevScrollHeight <= 0) {
+    return safeTop;
+  }
+  const safePrevH = Math.max(0, prevScrollHeight);
+  const safeNextH = Number.isFinite(nextScrollHeight)
+    ? Math.max(safePrevH, nextScrollHeight)
+    : safePrevH;
+  return safeTop + (safeNextH - safePrevH);
+}
+
+/**
+ * Pure predicate for phone inlineFlow (page-level scroll without nested scroll container):
+ * returns true unless the user has scrolled past the top of the inline combat log.
+ */
+export function isInlineFlowAtTop(
+  elementTopPx: number,
+  elementHeightPx: number,
+  windowScrollY: number,
+  stickyHeaderPx = 48,
+  threshold = DEFAULT_TOP_THRESHOLD_PX
+): boolean {
+  const safeTop = Number.isFinite(elementTopPx) ? elementTopPx : 0;
+  const safeHeight = Number.isFinite(elementHeightPx)
+    ? Math.max(0, elementHeightPx)
+    : 0;
+  const safeScrollY = Number.isFinite(windowScrollY)
+    ? Math.max(0, windowScrollY)
+    : 0;
+  const safeSticky = Number.isFinite(stickyHeaderPx)
+    ? Math.max(0, stickyHeaderPx)
+    : 48;
+  const safeThreshold = Number.isFinite(threshold)
+    ? Math.max(0, threshold)
+    : DEFAULT_TOP_THRESHOLD_PX;
+
+  if (safeScrollY <= 0 && safeTop >= 0) return true;
+  if (safeHeight > 0) {
+    return safeTop >= safeSticky - safeThreshold;
+  }
+  return safeScrollY <= safeThreshold;
+}

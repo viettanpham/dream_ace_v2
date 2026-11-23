@@ -55,6 +55,12 @@ export const COMBAT_LOG_MODE_STORAGE_KEY = 'starfront_combat_log_mode_v1';
 export const COMBAT_LOG_EXPAND_ALL_STORAGE_KEY =
   'starfront_combat_log_expand_all_v1';
 export const SHOW_STATUS_LABELS_STORAGE_KEY = FX_SETTINGS_STORAGE_KEY;
+export const COMBAT_LOG_CHROME_HEIGHTS = {
+  row1Px: 36,
+  row2Px: 36,
+  totalPx: 72,
+  maxTotalPx: 76,
+} as const;
 
 const DEBUFF_STATUS_TYPES = new Set<StatusEffectType>([
   'burn',

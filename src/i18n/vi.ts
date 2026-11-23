@@ -1326,7 +1326,9 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   // Nhật ký cấu trúc, Diễn biến trực tiếp & Báo cáo cuối trận (G3c)
   'log.filter.all': 'Tất cả',
   'log.filter.ally': 'Phe ta',
+  'log.filter.allyShort': 'Ta',
   'log.filter.enemy': 'Phe địch',
+  'log.filter.enemyShort': 'Địch',
   'log.filter.system': 'Hệ thống',
   'log.modeDocked': 'Gắn khung',
   'log.modePopup': 'Cửa sổ',

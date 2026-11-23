@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { Minimize2, ScrollText, X } from 'lucide-react';
 import type { TranslationKey } from '../i18n/en';
 import type { CombatLogEntry, CombatUnit } from '../types/game';
-import type { CombatLogChannel } from '../utils/combatLogFormat';
+import type { CombatLogChannel, CombatLogOrder } from '../utils/combatLogFormat';
 import { CombatLogList } from './CombatLogList';
 import { ErrorBoundary } from './ErrorBoundary';
 import { UnitDetailSheet } from './UnitDetailSheet';
@@ -62,12 +62,14 @@ export interface CombatLogPopupSheetProps {
   entries: CombatLogEntry[];
   units: CombatUnit[];
   channel: CombatLogChannel;
+  order?: CombatLogOrder;
   expandAll: boolean;
   expandNonce: number;
   expandButtons: ReactNode;
   t: TranslateFn;
   onClose: () => void;
   onChannelChange: (channel: CombatLogChannel) => void;
+  onOrderChange?: (order: CombatLogOrder) => void;
 }
 
 export function CombatLogPopupSheet({
@@ -75,12 +77,14 @@ export function CombatLogPopupSheet({
   entries,
   units,
   channel,
+  order,
   expandAll,
   expandNonce,
   expandButtons,
   t,
   onClose,
   onChannelChange,
+  onOrderChange,
 }: CombatLogPopupSheetProps) {
   if (!open) return null;
 
@@ -144,6 +148,8 @@ export function CombatLogPopupSheet({
             mode="popup"
             channel={channel}
             onChannelChange={onChannelChange}
+            order={order}
+            onOrderChange={onOrderChange}
             expandAll={expandAll}
             expandNonce={expandNonce}
           />
@@ -168,12 +174,14 @@ export interface BattleSheetsProps {
   entries: CombatLogEntry[];
   units: CombatUnit[];
   logChannel: CombatLogChannel;
+  logOrder?: CombatLogOrder;
   logExpandAll: boolean;
   logExpandNonce: number;
   expandButtons: ReactNode;
   t: TranslateFn;
   onCloseLogSheet: () => void;
   onLogChannelChange: (channel: CombatLogChannel) => void;
+  onLogOrderChange?: (order: CombatLogOrder) => void;
   onReloadBattle: () => void;
 }
 
@@ -192,12 +200,14 @@ export function BattleSheets({
   entries,
   units,
   logChannel,
+  logOrder,
   logExpandAll,
   logExpandNonce,
   expandButtons,
   t,
   onCloseLogSheet,
   onLogChannelChange,
+  onLogOrderChange,
   onReloadBattle,
 }: BattleSheetsProps) {
   return (
@@ -245,12 +255,14 @@ export function BattleSheets({
             entries={entries}
             units={units}
             channel={logChannel}
+            order={logOrder}
             expandAll={logExpandAll}
             expandNonce={logExpandNonce}
             expandButtons={expandButtons}
             t={t}
             onClose={onCloseLogSheet}
             onChannelChange={onLogChannelChange}
+            onOrderChange={onLogOrderChange}
           />
         )}
       </ErrorBoundary>

@@ -538,9 +538,9 @@ describe('G3c-1: Structured Combat Log rows, action icons, channels & modes', ()
       '[data-testid="combat-log-faction-dot"]'
     );
     expect(dots).toHaveLength(5);
-    expect(dots[0].getAttribute('data-faction')).toBe('system');
-    expect(dots[1].getAttribute('data-faction')).toBe('ally');
-    expect(dots[3].getAttribute('data-faction')).toBe('enemy');
+    expect(
+      Array.from(dots).map((d) => d.getAttribute('data-faction'))
+    ).toEqual(['ally', 'enemy', 'ally', 'ally', 'system']);
   });
 
   it('caps docked mode to last 200 entries and allows loading older entries in popup mode', () => {

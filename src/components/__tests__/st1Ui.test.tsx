@@ -382,7 +382,7 @@ describe('ST1 UI: AdminPanel Starter tab, GearView Starter badge, Destroyed stat
   it('4) Combat log "Mở hết" / "Thu hết" works in docked & popup headers, auto-expands new rounds, persists in localStorage, and translates vi/en', () => {
     setViewport(1280, 820);
     const battle = makeBattle({
-      log: makeMultiRoundLogs([1, 2]),
+      log: makeMultiRoundLogs([1, 2, 3, 4]),
     });
     useGameStore.setState({ screen: 'BATTLE', language: 'vi', battle });
 
@@ -398,10 +398,12 @@ describe('ST1 UI: AdminPanel Starter tab, GearView Starter badge, Destroyed stat
     ) as HTMLButtonElement;
     expect(expandBtn).not.toBeNull();
     expect(collapseBtn).not.toBeNull();
-    expect(expandBtn.textContent).toContain('Mở hết');
-    expect(collapseBtn.textContent).toContain('Thu hết');
+    expect(expandBtn.getAttribute('aria-label')).toBe('Mở hết');
+    expect(expandBtn.getAttribute('title')).toBe('Mở hết');
+    expect(collapseBtn.getAttribute('aria-label')).toBe('Thu hết');
+    expect(collapseBtn.getAttribute('title')).toBe('Thu hết');
 
-    // Default: only newest round (2) is expanded
+    // Default (G4a-2d): only the 3 newest rounds (2, 3, 4) are expanded; older round (1) is collapsed
     expect(
       container!
         .querySelector('[data-testid="combat-log-round-header-1"]')
@@ -412,8 +414,13 @@ describe('ST1 UI: AdminPanel Starter tab, GearView Starter badge, Destroyed stat
         .querySelector('[data-testid="combat-log-round-header-2"]')
         ?.getAttribute('aria-expanded')
     ).toBe('true');
+    expect(
+      container!
+        .querySelector('[data-testid="combat-log-round-header-4"]')
+        ?.getAttribute('aria-expanded')
+    ).toBe('true');
 
-    // Click "Mở hết" -> both rounds expand & choice saved to localStorage
+    // Click "Mở hết" -> all rounds expand & choice saved to localStorage
     act(() => {
       expandBtn.click();
     });
@@ -426,19 +433,19 @@ describe('ST1 UI: AdminPanel Starter tab, GearView Starter badge, Destroyed stat
     ).toBe('true');
     expect(
       container!
-        .querySelector('[data-testid="combat-log-round-header-2"]')
+        .querySelector('[data-testid="combat-log-round-header-4"]')
         ?.getAttribute('aria-expanded')
     ).toBe('true');
 
-    // Newly created Round 3 arrives -> auto-expands!
+    // Newly created Round 5 arrives -> auto-expands!
     act(() => {
       useGameStore.setState({
-        battle: makeBattle({ log: makeMultiRoundLogs([1, 2, 3]) }),
+        battle: makeBattle({ log: makeMultiRoundLogs([1, 2, 3, 4, 5]) }),
       });
     });
     expect(
       container!
-        .querySelector('[data-testid="combat-log-round-header-3"]')
+        .querySelector('[data-testid="combat-log-round-header-5"]')
         ?.getAttribute('aria-expanded')
     ).toBe('true');
 
@@ -469,7 +476,7 @@ describe('ST1 UI: AdminPanel Starter tab, GearView Starter badge, Destroyed stat
         ?.getAttribute('aria-expanded')
     ).toBe('true');
 
-    // Click "Collapse All" -> returns to default (only newest round 3 open) & clears expandAll flag
+    // Click "Collapse All" -> returns to default (3 newest rounds 3, 4, 5 open; 1, 2 closed) & clears expandAll flag
     act(() => {
       popupCollapse.click();
     });
@@ -489,13 +496,18 @@ describe('ST1 UI: AdminPanel Starter tab, GearView Starter badge, Destroyed stat
         .querySelector('[data-testid="combat-log-round-header-3"]')
         ?.getAttribute('aria-expanded')
     ).toBe('true');
+    expect(
+      popup
+        .querySelector('[data-testid="combat-log-round-header-5"]')
+        ?.getAttribute('aria-expanded')
+    ).toBe('true');
 
     // Direct CombatLogList standalone mount remembers localStorage preference when expandAll=true
     localStorage.setItem(COMBAT_LOG_EXPAND_ALL_STORAGE_KEY, '1');
     act(() => {
       root!.render(
         createElement(CombatLogList, {
-          entries: makeMultiRoundLogs([1, 2, 3]),
+          entries: makeMultiRoundLogs([1, 2, 3, 4]),
           active: true,
           mode: 'docked',
         })
@@ -513,7 +525,7 @@ describe('ST1 UI: AdminPanel Starter tab, GearView Starter badge, Destroyed stat
     ).toBe('true');
     expect(
       container!
-        .querySelector('[data-testid="combat-log-round-header-3"]')
+        .querySelector('[data-testid="combat-log-round-header-4"]')
         ?.getAttribute('aria-expanded')
     ).toBe('true');
   });
