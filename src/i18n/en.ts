@@ -979,6 +979,9 @@ export const EN_TRANSLATIONS = {
   'map.legendRound': 'Round: Outpost / Colony / Relay (4v4)',
   'map.legendSquare': 'Square: Fortress / Shipyard (6v6) · Capital (8v8)',
   'map.legendIncoming': 'Animated lane: Incoming raid',
+  'map.legendContested': 'Contested',
+  'map.legendLocked': 'Not adjacent',
+  'map.nodeChipContested': 'Contested',
   'map.garrisonTitle': 'Stationed Fleet (Garrison)',
   'map.incomeTitle': 'Monthly Income & Status',
   'map.incomeZeroDamaged': '0 CR / 0 WP — Base is Damaged. Repair required.',
@@ -1008,6 +1011,16 @@ export const EN_TRANSLATIONS = {
   'map.defendBtn': 'Defend Base ({size}v{size})',
   'map.assaultBtn': 'Assault Base ({size}v{size})',
   'map.patrolBtn': 'Patrol Sortie ({size}v{size})',
+  'map.briefingOptionsTitle': 'Available Battles',
+  'map.optionLabel.assault': 'Assault {size}v{size}',
+  'map.optionLabel.defend': 'Defend {size}v{size}',
+  'map.optionLabel.patrol': 'Patrol {size}v{size}',
+  'map.briefingReason.notFrontline':
+    'Not adjacent to allied territory — capture an adjacent base first',
+  'map.briefingReason.rearBase':
+    'Rear base — no active frontline nearby',
+  'map.briefingReason.hidden':
+    'Undiscovered — capture an adjacent base to reveal',
 
   // Battle Screen Fixes: Empty Charts, Combat Log Stick-to-Bottom, Turn Queue Enrage, Error Boundaries
   'stats.noData': 'No data yet',

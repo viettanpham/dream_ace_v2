@@ -11,6 +11,7 @@ import {
   ChevronDown,
   ChevronUp,
   Coins,
+  Compass,
   FastForward,
   Info,
   Lock,
@@ -20,6 +21,7 @@ import {
   Shield,
   ShoppingBag,
   Skull,
+  Swords,
   UserPlus,
   Wrench,
   ZoomIn,
@@ -36,6 +38,8 @@ import {
 import { calculateSingleEnemyReward } from '../engine/combat';
 import {
   getBattleOptions,
+  isAlliedFrontline,
+  isContested,
   isVisible,
   pickDefaultBattle,
 } from '../engine/frontline';
@@ -55,12 +59,14 @@ import {
   getSectorRegion,
   useI18n,
 } from '../i18n';
+import type { TranslationKey } from '../i18n/en';
 import { useGameStore } from '../store/useGameStore';
 import type {
   BaseFaction,
   BaseNpcRole,
   BaseType,
   MechClassId,
+  PilotAccount,
   SectorDifficulty,
 } from '../types/game';
 import { useBattleLayoutMode } from '../utils/battleDisplay';
@@ -74,6 +80,49 @@ export const MAP_SVG_LABEL_FONT_SIZE = 11.5;
 export const MAP_MIN_PHONE_LABEL_PX = 11;
 export const MAP_MIN_ZOOM = 0.75;
 export const MAP_MAX_ZOOM = 3.2;
+
+export type MapNodeVisualState =
+  | 'allied'
+  | 'allied-frontline'
+  | 'contested'
+  | 'locked'
+  | 'hidden';
+
+export type MapLaneVisualKind = 'allied-to-contested' | 'allied-allied' | 'other';
+
+export function getMapNodeVisualState(
+  pilot: PilotAccount,
+  sectorId: string
+): MapNodeVisualState {
+  if (!isVisible(pilot, sectorId)) {
+    return 'hidden';
+  }
+  const faction = getBaseState(pilot, sectorId).faction;
+  if (faction === 'allied') {
+    return isAlliedFrontline(pilot, sectorId) ? 'allied-frontline' : 'allied';
+  }
+  return isContested(pilot, sectorId) ? 'contested' : 'locked';
+}
+
+export function getMapLaneVisualKind(
+  pilot: PilotAccount,
+  lane: { from: string; to: string }
+): MapLaneVisualKind | 'hidden' {
+  const fromState = getMapNodeVisualState(pilot, lane.from);
+  const toState = getMapNodeVisualState(pilot, lane.to);
+  if (fromState === 'hidden' || toState === 'hidden') {
+    return 'hidden';
+  }
+  const fromAllied = fromState === 'allied' || fromState === 'allied-frontline';
+  const toAllied = toState === 'allied' || toState === 'allied-frontline';
+  if (fromAllied && toAllied) {
+    return 'allied-allied';
+  }
+  if ((fromAllied && toState === 'contested') || (toAllied && fromState === 'contested')) {
+    return 'allied-to-contested';
+  }
+  return 'other';
+}
 
 export function clampMapZoom(z: number): number {
   return Math.max(MAP_MIN_ZOOM, Math.min(MAP_MAX_ZOOM, z));
@@ -293,6 +342,34 @@ export function MapView() {
   );
   const servicesAvailable = isBaseServicesAvailable(selectedBaseState);
   const totalIncome = getTotalMonthlyIncome(pilot);
+
+  const selectedBattleOptions = getBattleOptions(
+    pilot,
+    selectedSector.id,
+    adminConfig
+  );
+  const selectedAllowedMapOptions = selectedBattleOptions.filter(
+    (opt) =>
+      opt.allowed &&
+      (opt.kind === 'assault' || opt.kind === 'defend' || opt.kind === 'patrol')
+  );
+  const selectedDefaultBattleKind = pickDefaultBattle(selectedBattleOptions);
+  const selectedCanDeploy = selectedDefaultBattleKind !== null;
+  const selectedBlockedReasonKey = !selectedCanDeploy
+    ? selectedBattleOptions.find((opt) => !opt.allowed && opt.reasonKey)
+        ?.reasonKey ?? 'map.reason.notFrontline'
+    : null;
+  const selectedBlockedReasonText = selectedBlockedReasonKey
+    ? t(selectedBlockedReasonKey)
+    : undefined;
+  const selectedBriefingBlockedReasonText =
+    selectedBlockedReasonKey === 'map.reason.notFrontline'
+      ? t('map.briefingReason.notFrontline')
+      : selectedBlockedReasonKey === 'map.reason.rearBase'
+      ? t('map.briefingReason.rearBase')
+      : selectedBlockedReasonKey === 'map.reason.hidden'
+      ? t('map.briefingReason.hidden')
+      : selectedBlockedReasonText;
 
   const effectiveSquadSize =
     adminConfig.battleSizeOverride ?? selectedSector.squadSize;
@@ -667,18 +744,9 @@ export function MapView() {
     const isDamaged = selectedBaseState.status === 'damaged';
     const isRepairing = selectedBaseState.status === 'repairing';
 
-    const battleOptions = getBattleOptions(
-      pilot,
-      selectedSector.id,
-      adminConfig
-    );
-    const defaultBattleKind = pickDefaultBattle(battleOptions);
-    const canDeploy = defaultBattleKind !== null;
-    const blockedReasonKey = !canDeploy
-      ? battleOptions.find((opt) => !opt.allowed && opt.reasonKey)?.reasonKey ??
-        'map.reason.notFrontline'
-      : null;
-    const blockedReasonText = blockedReasonKey ? t(blockedReasonKey) : undefined;
+    const defaultBattleKind = selectedDefaultBattleKind;
+    const canDeploy = selectedCanDeploy;
+    const blockedReasonText = selectedBlockedReasonText;
 
     const deployCtaLabel =
       defaultBattleKind === 'defend' ||
@@ -952,6 +1020,69 @@ export function MapView() {
           </div>
         </div>
 
+        {/* Available Battle Options ("Trận có thể đánh") */}
+        <div
+          data-testid="map-briefing-options"
+          className="rounded-lg border border-slate-800 bg-[#080C15] p-3 space-y-2"
+        >
+          <div className="text-xs font-semibold text-slate-200">
+            {t('map.briefingOptionsTitle')}
+          </div>
+          {selectedAllowedMapOptions.length > 0 ? (
+            <div className="space-y-1.5">
+              {selectedAllowedMapOptions.map((opt) => {
+                const OptionIcon =
+                  opt.kind === 'defend'
+                    ? Shield
+                    : opt.kind === 'patrol'
+                    ? Compass
+                    : Swords;
+                const iconColor =
+                  opt.kind === 'defend'
+                    ? 'text-red-400'
+                    : opt.kind === 'patrol'
+                    ? 'text-emerald-400'
+                    : 'text-amber-400';
+                const rowLabel = t(
+                  `map.optionLabel.${opt.kind}` as TranslationKey,
+                  { size: effectiveSquadSize }
+                );
+                return (
+                  <div
+                    key={opt.kind}
+                    data-testid={`map-option-row-${opt.kind}`}
+                    className="flex items-center justify-between gap-2 rounded border border-slate-800/90 bg-slate-950/80 px-2.5 py-2"
+                  >
+                    <div className="flex items-center gap-2 min-w-0 text-xs font-semibold text-slate-100">
+                      <OptionIcon className={`w-4 h-4 shrink-0 ${iconColor}`} />
+                      <span className="truncate">{rowLabel}</span>
+                    </div>
+                    <button
+                      type="button"
+                      data-testid={`map-option-deploy-${opt.kind}`}
+                      onClick={() => {
+                        setMobileBriefingOpen(false);
+                        startBattle(selectedSector.id, { kind: opt.kind });
+                      }}
+                      className="min-h-[36px] px-3 rounded-md bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs inline-flex items-center gap-1 shrink-0 cursor-pointer whitespace-nowrap"
+                    >
+                      <Rocket className="w-3.5 h-3.5 shrink-0" />
+                      <span>{t('map.deployShort')}</span>
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p
+              data-testid="map-briefing-options-blocked"
+              className="text-xs text-slate-400 leading-relaxed"
+            >
+              {selectedBriefingBlockedReasonText}
+            </p>
+          )}
+        </div>
+
         {/* Deploy Button */}
         <button
           type="button"
@@ -1070,8 +1201,13 @@ export function MapView() {
 
             <button
               type="button"
-              onClick={() => startBattle(selectedSector.id)}
-              className="flex-1 sm:flex-none min-h-[44px] px-4 inline-flex items-center justify-center gap-2 rounded-lg bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-slate-950 font-semibold text-xs sm:text-sm transition-colors cursor-pointer whitespace-nowrap"
+              disabled={!selectedCanDeploy}
+              title={selectedBlockedReasonText}
+              onClick={() => {
+                if (!selectedDefaultBattleKind) return;
+                startBattle(selectedSector.id);
+              }}
+              className="flex-1 sm:flex-none min-h-[44px] px-4 inline-flex items-center justify-center gap-2 rounded-lg bg-amber-500 hover:bg-amber-400 active:bg-amber-600 disabled:opacity-45 disabled:cursor-not-allowed text-slate-950 font-semibold text-xs sm:text-sm transition-colors cursor-pointer whitespace-nowrap"
             >
               <Rocket className="w-4 h-4" />
               <span>
@@ -1238,6 +1374,9 @@ export function MapView() {
 
             {/* Star Lanes + Animated Incoming Raid Dots */}
             {MAP_LANES.map((lane) => {
+              const laneKind = getMapLaneVisualKind(pilot, lane);
+              if (laneKind === 'hidden') return null;
+
               const sFrom = getSectorById(lane.from);
               const sTo = getSectorById(lane.to);
               const stFrom = getBaseState(pilot, lane.from);
@@ -1254,17 +1393,42 @@ export function MapView() {
               const pathId = `lane-${lane.from}-${lane.to}`;
               const pathD = `M ${startPos.x} ${startPos.y} L ${endPos.x} ${endPos.y}`;
 
+              const stroke = isIncomingLane
+                ? '#EF4444'
+                : laneKind === 'allied-to-contested'
+                ? '#F59E0B'
+                : '#334155';
+              const strokeWidth = isIncomingLane
+                ? '2.6'
+                : laneKind === 'allied-to-contested'
+                ? '2'
+                : '1.8';
+              const strokeDasharray = isIncomingLane
+                ? '6 6'
+                : laneKind === 'allied-to-contested'
+                ? '6 4'
+                : '5 5';
+              const opacity = isIncomingLane
+                ? 0.92
+                : laneKind === 'allied-to-contested'
+                ? 0.9
+                : laneKind === 'allied-allied'
+                ? 0.72
+                : 0.35;
+
               return (
                 <g key={pathId}>
                   <path
                     id={pathId}
+                    data-testid={`map-lane-${lane.id}`}
+                    data-kind={laneKind}
                     d={pathD}
                     fill="none"
-                    stroke={isIncomingLane ? '#EF4444' : '#334155'}
-                    strokeWidth={isIncomingLane ? '2.6' : '1.8'}
-                    strokeDasharray={isIncomingLane ? '6 6' : '5 5'}
+                    stroke={stroke}
+                    strokeWidth={strokeWidth}
+                    strokeDasharray={strokeDasharray}
                     className={isIncomingLane ? 'anim-lane-flow' : undefined}
-                    opacity={isIncomingLane ? 0.92 : 0.72}
+                    opacity={opacity}
                   />
                   {isIncomingLane && (
                     <>
@@ -1292,13 +1456,13 @@ export function MapView() {
 
             {/* Base Nodes (Round = Outpost/Colony/Relay, Square = Fortress/Shipyard/Capital) */}
             {SECTORS_CATALOG.map((sector) => {
+              const nodeState = getMapNodeVisualState(pilot, sector.id);
+              if (nodeState === 'hidden') return null;
+
               const pos = sector.mapPos;
-              const unlocked = pilot.unlockedSectorIds.includes(sector.id);
               const isSelected = sector.id === selectedSector.id;
               const baseState = getBaseState(pilot, sector.id);
-              const ringHex = unlocked
-                ? FACTION_RING_HEX[baseState.faction]
-                : '#475569';
+              const ringHex = FACTION_RING_HEX[baseState.faction];
               const tokenShape = getTokenShapeForBaseType(sector.baseType);
               const isSquare = tokenShape === 'square';
               const scale = adminConfig.battleSizeOverride ?? sector.squadSize;
@@ -1306,12 +1470,47 @@ export function MapView() {
               return (
                 <g
                   key={sector.id}
+                  data-testid={`map-node-${sector.id}`}
+                  data-state={nodeState}
+                  opacity={nodeState === 'locked' ? 0.45 : undefined}
                   onClick={() => handleSelectSector(sector.id)}
-                  className={unlocked ? 'cursor-pointer' : 'opacity-45'}
+                  className={
+                    nodeState === 'locked'
+                      ? 'cursor-pointer opacity-45'
+                      : 'cursor-pointer'
+                  }
                 >
+                  {/* Contested Node Orange 2px Slow Pulse Ring */}
+                  {nodeState === 'contested' &&
+                    (isSquare ? (
+                      <rect
+                        data-testid={`map-node-contested-ring-${sector.id}`}
+                        x={pos.x - 24}
+                        y={pos.y - 24}
+                        width="48"
+                        height="48"
+                        rx="8"
+                        fill="none"
+                        stroke="#F59E0B"
+                        strokeWidth="2"
+                        className="anim-contested-pulse"
+                      />
+                    ) : (
+                      <circle
+                        data-testid={`map-node-contested-ring-${sector.id}`}
+                        cx={pos.x}
+                        cy={pos.y}
+                        r="25"
+                        fill="none"
+                        stroke="#F59E0B"
+                        strokeWidth="2"
+                        className="anim-contested-pulse"
+                      />
+                    ))}
+
                   {/* Pulsing Under Attack Warning Halo */}
-                  {baseState.underAttack && unlocked && (
-                    isSquare ? (
+                  {baseState.underAttack &&
+                    (isSquare ? (
                       <rect
                         x={pos.x - 28}
                         y={pos.y - 28}
@@ -1335,12 +1534,11 @@ export function MapView() {
                         strokeWidth="2.2"
                         className="anim-raid-pulse"
                       />
-                    )
-                  )}
+                    ))}
 
                   {/* Selected Outer Highlight Ring */}
-                  {isSelected && unlocked && (
-                    isSquare ? (
+                  {isSelected &&
+                    (isSquare ? (
                       <rect
                         x={pos.x - 26}
                         y={pos.y - 26}
@@ -1364,8 +1562,7 @@ export function MapView() {
                         strokeWidth="1.8"
                         strokeDasharray="4 3"
                       />
-                    )
-                  )}
+                    ))}
 
                   {/* Enlarged >= 44px transparent hit target */}
                   <circle cx={pos.x} cy={pos.y} r="32" fill="transparent" />
@@ -1401,6 +1598,48 @@ export function MapView() {
                     color={ringHex}
                   />
 
+                  {/* Allied Frontline Orange Top-Right Dot */}
+                  {nodeState === 'allied-frontline' && (
+                    <circle
+                      data-testid={`map-node-frontline-dot-${sector.id}`}
+                      cx={pos.x + 17}
+                      cy={baseState.underAttack ? pos.y - 10 : pos.y - 17}
+                      r="4.5"
+                      fill="#f59e0b"
+                      stroke="#0D131D"
+                      strokeWidth="1.5"
+                    />
+                  )}
+
+                  {/* Locked Visible Node Small Padlock Badge */}
+                  {nodeState === 'locked' && (
+                    <g
+                      data-testid={`map-node-lock-${sector.id}`}
+                      transform={`translate(${pos.x + 16}, ${pos.y - 16})`}
+                    >
+                      <circle
+                        r="8"
+                        fill="#0F172A"
+                        stroke="#64748B"
+                        strokeWidth="1.2"
+                      />
+                      <path
+                        d="M -2.5 -1 V -2.8 A 2.5 2.5 0 0 1 2.5 -2.8 V -1"
+                        fill="none"
+                        stroke="#CBD5E1"
+                        strokeWidth="1.3"
+                      />
+                      <rect
+                        x="-3.8"
+                        y="-1"
+                        width="7.6"
+                        height="5.2"
+                        rx="1.2"
+                        fill="#CBD5E1"
+                      />
+                    </g>
+                  )}
+
                   {/* Level Badge (Bottom-Right) */}
                   <g transform={`translate(${pos.x + 15}, ${pos.y + 13})`}>
                     <rect
@@ -1426,7 +1665,7 @@ export function MapView() {
                   </g>
 
                   {/* Under Attack Countdown Pill (Top-Right) */}
-                  {baseState.underAttack && unlocked && (
+                  {baseState.underAttack && (
                     <g transform={`translate(${pos.x + 18}, ${pos.y - 22})`}>
                       <rect
                         x="-18"
@@ -1493,17 +1732,45 @@ export function MapView() {
                   >
                     {getSectorName(lang, sector.id)}
                   </text>
+
+                  {/* Contested Chip Under Name */}
+                  {nodeState === 'contested' && (
+                    <g
+                      data-testid={`map-node-contested-chip-${sector.id}`}
+                      transform={`translate(${pos.x}, ${pos.y + 50})`}
+                    >
+                      <rect
+                        x="-31"
+                        y="-7"
+                        width="62"
+                        height="14"
+                        rx="7"
+                        fill="#451A03"
+                        stroke="#F59E0B"
+                        strokeWidth="1"
+                      />
+                      <text
+                        x="0"
+                        y="3"
+                        textAnchor="middle"
+                        fill="#FDE68A"
+                        fontSize="8.5"
+                        fontWeight="700"
+                      >
+                        {t('map.nodeChipContested')}
+                      </text>
+                    </g>
+                  )}
+
                   <text
                     x={pos.x}
-                    y={pos.y + 52}
+                    y={nodeState === 'contested' ? pos.y + 66 : pos.y + 52}
                     textAnchor="middle"
                     fill={ringHex}
                     fontSize="10"
                     fontWeight="600"
                   >
-                    {unlocked
-                      ? `${scale}v${scale}${sector.hasBoss ? ' · BOSS' : ''}`
-                      : t('common.locked')}
+                    {`${scale}v${scale}${sector.hasBoss ? ' · BOSS' : ''}`}
                   </text>
                 </g>
               );
@@ -1535,6 +1802,20 @@ export function MapView() {
           <span className="inline-flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" />
             <span>{t('map.faction.neutral')}</span>
+          </span>
+          <span
+            data-testid="map-legend-contested"
+            className="inline-flex items-center gap-1.5 text-amber-300"
+          >
+            <span className="w-3 h-3 rounded-full border-2 border-amber-500 inline-block" />
+            <span>{t('map.legendContested')}</span>
+          </span>
+          <span
+            data-testid="map-legend-locked"
+            className="inline-flex items-center gap-1.5 text-slate-400 opacity-75"
+          >
+            <Lock className="w-3 h-3 shrink-0" />
+            <span>{t('map.legendLocked')}</span>
           </span>
           <span className="inline-flex items-center gap-1.5 text-orange-300">
             <span className="w-4 border-t-2 border-dashed border-red-500 inline-block" />
@@ -1695,20 +1976,41 @@ export function MapView() {
           <button
             type="button"
             data-testid="map-phone-deploy-btn"
-            title={`${t('hangar.deploySquad')} (${getClassName(
-              lang,
-              activeGear.classId
-            )} Lv.${activeGear.level})`}
-            onClick={() => startBattle(selectedSector.id)}
-            className="flex-1 min-h-[44px] h-[44px] px-2.5 inline-flex flex-col items-center justify-center leading-tight rounded-lg bg-amber-500 active:bg-amber-600 text-slate-950 font-semibold transition-colors cursor-pointer whitespace-nowrap"
+            disabled={!selectedCanDeploy}
+            title={
+              selectedCanDeploy
+                ? `${t('hangar.deploySquad')} (${getClassName(
+                    lang,
+                    activeGear.classId
+                  )} Lv.${activeGear.level})`
+                : selectedBlockedReasonText
+            }
+            onClick={() => {
+              if (!selectedDefaultBattleKind) return;
+              startBattle(selectedSector.id);
+            }}
+            className={`flex-1 min-w-0 min-h-[44px] h-[44px] px-2.5 inline-flex flex-col items-center justify-center leading-tight rounded-lg font-semibold transition-colors whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed ${
+              selectedCanDeploy
+                ? 'bg-amber-500 active:bg-amber-600 text-slate-950 cursor-pointer'
+                : 'bg-slate-800 text-slate-400 border border-slate-700'
+            }`}
           >
             <span className="inline-flex items-center gap-1 text-xs font-bold">
               <Rocket className="w-3.5 h-3.5 shrink-0" />
               <span>{t('map.deployShort')}</span>
             </span>
-            <span className="text-[10px] font-mono-nums font-bold opacity-85">
-              Lv.{activeGear.level}
-            </span>
+            {selectedCanDeploy ? (
+              <span className="text-[10px] font-mono-nums font-bold opacity-85">
+                Lv.{activeGear.level}
+              </span>
+            ) : (
+              <span
+                data-testid="map-phone-deploy-sublabel"
+                className="text-[10px] font-medium truncate max-w-full opacity-90"
+              >
+                {selectedBlockedReasonText}
+              </span>
+            )}
           </button>
         </div>
       )}

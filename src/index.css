@@ -588,6 +588,23 @@
   transform-origin: center;
 }
 
+@keyframes contested-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.92;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.45;
+  }
+}
+
+.anim-contested-pulse {
+  animation: contested-pulse 2.4s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
 @keyframes lane-flow {
   from {
     stroke-dashoffset: 36;
@@ -1092,6 +1109,7 @@
 [data-reduced-motion="true"] .anim-turn-arrow,
 [data-reduced-motion="true"] .anim-conveyor-shift,
 [data-reduced-motion="true"] .anim-raid-pulse,
+[data-reduced-motion="true"] .anim-contested-pulse,
 [data-reduced-motion="true"] .anim-lane-flow,
 [data-reduced-motion="true"] .vfx-smoke-puff,
 [data-reduced-motion="true"] .vfx-shield-shard-left,
@@ -1100,6 +1118,14 @@
 [data-reduced-motion="true"] .vfx-html-sweep,
 [data-reduced-motion="true"] .vfx-low-hp-pulse {
   animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .anim-contested-pulse,
+  .anim-raid-pulse,
+  .anim-lane-flow {
+    animation: none;
+  }
 }
 
 [data-reduced-motion="true"] .meter-fill,

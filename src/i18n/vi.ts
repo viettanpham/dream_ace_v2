@@ -981,6 +981,9 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'map.legendRound': 'Tròn: Tiền đồn / Thuộc địa / Tiếp sóng (4v4)',
   'map.legendSquare': 'Vuông: Pháo đài / Xưởng tàu (6v6) · Thủ phủ (8v8)',
   'map.legendIncoming': 'Tuyến chấm động: Địch đang tiến đánh',
+  'map.legendContested': 'Giao tranh',
+  'map.legendLocked': 'Chưa tiếp giáp',
+  'map.nodeChipContested': 'Giao tranh',
   'map.garrisonTitle': 'Hạm đội đồn trú (Garrison)',
   'map.incomeTitle': 'Thu nhập hàng tháng & Trạng thái',
   'map.incomeZeroDamaged': '0 CR / 0 WP — Căn cứ đang hư hại, cần sửa chữa.',
@@ -1010,6 +1013,16 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'map.defendBtn': 'Phòng thủ căn cứ ({size}v{size})',
   'map.assaultBtn': 'Tấn công căn cứ ({size}v{size})',
   'map.patrolBtn': 'Xuất kích tuần tra ({size}v{size})',
+  'map.briefingOptionsTitle': 'Trận có thể đánh',
+  'map.optionLabel.assault': 'Tấn công {size}v{size}',
+  'map.optionLabel.defend': 'Phòng thủ {size}v{size}',
+  'map.optionLabel.patrol': 'Tuần tra {size}v{size}',
+  'map.briefingReason.notFrontline':
+    'Chưa tiếp giáp lãnh thổ ta — chiếm một căn cứ kề bên trước',
+  'map.briefingReason.rearBase':
+    'Căn cứ hậu phương — không có giao tranh trực tiếp',
+  'map.briefingReason.hidden':
+    'Chưa phát hiện — chiếm căn cứ lân cận để mở tuyến',
 
   // Sửa lỗi màn hình chiến đấu: Biểu đồ trống, Nhật ký bám đáy, Cuồng nộ gọn, Error Boundaries
   'stats.noData': 'Chưa có dữ liệu',
