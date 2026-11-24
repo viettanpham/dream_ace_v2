@@ -1,7 +1,9 @@
-import { BALANCE_CONFIG } from '../data/balance';
 import type { ItemInstance, PilotAccount } from '../types/game';
 import { getItemEquippedByGear } from './equipment';
-import { sanitizeWarehouseCapacity } from './migration';
+import {
+  DEFAULT_BOX_CAPACITY,
+  sanitizeWarehouseCapacity,
+} from './migration';
 
 export interface WarehouseTransferResult {
   moved: number;
@@ -226,15 +228,15 @@ export function moveAllUnusedToWarehouse(
 
 /**
  * Moves selected items from `pilot.warehouse` back into the shared box (`pilot.inventory`)
- * in the caller-supplied `ids` order until `BALANCE_CONFIG.maxInventorySize` is reached.
- * - Box never grows beyond its cap (`BALANCE_CONFIG.maxInventorySize`).
+ * in the caller-supplied `ids` order until `boxCapacity` is reached.
+ * - Box never grows beyond `boxCapacity`.
  * - Locked/favorited items move freely when picked by id.
  * - `pilot.consumables` is untouched; credits are never spent.
  */
 export function moveToBox(
   pilot: PilotAccount,
   ids: readonly string[],
-  boxCapacity: number = BALANCE_CONFIG.maxInventorySize
+  boxCapacity: number = DEFAULT_BOX_CAPACITY
 ): WarehouseTransferEngineResult {
   const orderedIds = dedupeOrderedIds(ids);
   const currentInventory = pilot.inventory;
@@ -242,7 +244,7 @@ export function moveToBox(
   const cap =
     typeof boxCapacity === 'number' && Number.isFinite(boxCapacity) && boxCapacity >= 0
       ? Math.floor(boxCapacity)
-      : BALANCE_CONFIG.maxInventorySize;
+      : DEFAULT_BOX_CAPACITY;
 
   const whById = new Map<string, ItemInstance>();
   for (const item of currentWarehouse) {

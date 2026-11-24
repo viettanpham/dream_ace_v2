@@ -69,6 +69,7 @@ import {
   createDefaultAdminConfig,
   createFreshCampaignState,
   CURRENT_SAVE_VERSION,
+  getBoxCapacity,
   migrateSaveData,
   type PersistedCampaignState,
 } from '../engine/migration';
@@ -779,12 +780,13 @@ function finalizeBattleOutcome(
       totalDrops: [...state.autoRepeatSession.totalDrops, ...droppedItems],
     };
     if (state.autoRepeatSession.active) {
+      const boxCap = getBoxCapacity(state.adminConfig);
       const stopCheck = shouldStopAutoRepeat(
         updatedSession,
         won ? 'victory' : 'defeat',
         retreated,
         nextPilot.inventory.length,
-        BALANCE_CONFIG.maxInventorySize,
+        boxCap,
         state.autoRepeatDefeatRule,
         streakLimit
       );
@@ -831,6 +833,7 @@ function finalizeBattleOutcome(
               params: {
                 reason: finalReason,
                 streak: streakLimit,
+                max: boxCap,
               },
             },
           ];
@@ -1726,7 +1729,8 @@ export const useGameStore = create<GameStoreState>()(
             ? ongoingBattle.sourceId ?? null
             : null;
 
-        if (state.pilot.inventory.length >= BALANCE_CONFIG.maxInventorySize) {
+        const boxCap = getBoxCapacity(state.adminConfig);
+        if (state.pilot.inventory.length >= boxCap) {
           set({
             autoRepeatLimit: chosenLimit,
             autoRepeatToast: null,
@@ -2229,7 +2233,7 @@ export const useGameStore = create<GameStoreState>()(
         } = moveToBoxEngine(
           state.pilot,
           ids,
-          BALANCE_CONFIG.maxInventorySize
+          getBoxCapacity(state.adminConfig)
         );
         if (pilot !== state.pilot) {
           set({ pilot, hasSaveData: true });
@@ -2407,6 +2411,9 @@ export const useGameStore = create<GameStoreState>()(
         if (idx === -1) return { ok: false };
         const listing = state.shopStock[idx];
         if (listing.soldOut) return { ok: false };
+        if (state.pilot.inventory.length >= getBoxCapacity(state.adminConfig)) {
+          return { ok: false };
+        }
         if (state.pilot.credits < listing.price) return { ok: false };
 
         // Mark listing as SOLD OUT instead of removing so shop never appears empty/0

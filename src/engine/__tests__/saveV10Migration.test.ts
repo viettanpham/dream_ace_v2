@@ -78,7 +78,7 @@ describe('W1a-1 — Save v10 (warehouse, warehouseCapacity, worldClock + migrati
     });
 
     const defaultAdmin = createDefaultAdminConfig();
-    expect(defaultAdmin.warehouseCapacity).toBe(300);
+    expect(defaultAdmin.warehouseCapacity).toBe(500);
     expect(defaultAdmin.warehouseCapacity).toBe(DEFAULT_WAREHOUSE_CAPACITY);
 
     const fresh = createFreshCampaignState(
@@ -88,7 +88,7 @@ describe('W1a-1 — Save v10 (warehouse, warehouseCapacity, worldClock + migrati
     );
     expect(fresh.pilot.warehouse).toEqual([]);
     expect(fresh.pilot.worldClock).toEqual(createDefaultWorldClock());
-    expect(fresh.adminConfig.warehouseCapacity).toBe(300);
+    expect(fresh.adminConfig.warehouseCapacity).toBe(500);
   });
 
   it('2) migrates older saves (v9 and v8) to v10 with defaults and keeps v9 pilot.inventory identical', () => {
@@ -130,7 +130,7 @@ describe('W1a-1 — Save v10 (warehouse, warehouseCapacity, worldClock + migrati
       secondsPerDay: 180,
       paused: false,
     });
-    expect(migratedV9.adminConfig.warehouseCapacity).toBe(300);
+    expect(migratedV9.adminConfig.warehouseCapacity).toBe(500);
 
     // Even if an older save version had junk values for v10 fields, older version gets clean defaults
     const migratedV8 = migrateSaveData(
@@ -159,7 +159,7 @@ describe('W1a-1 — Save v10 (warehouse, warehouseCapacity, worldClock + migrati
     expect(migratedV8.pilot.inventory).toEqual([invItemA, invItemB]);
     expect(migratedV8.pilot.warehouse).toEqual([]);
     expect(migratedV8.pilot.worldClock).toEqual(createDefaultWorldClock());
-    expect(migratedV8.adminConfig.warehouseCapacity).toBe(300);
+    expect(migratedV8.adminConfig.warehouseCapacity).toBe(500);
   });
 
   it('3) roundtrips v10 saves preserving warehouse items, worldClock (fractional day, custom speed, paused), and warehouseCapacity', () => {
@@ -298,7 +298,7 @@ describe('W1a-1 — Save v10 (warehouse, warehouseCapacity, worldClock + migrati
     expect(afterV9.pilot.inventory).toEqual([v9Item]);
     expect(afterV9.pilot.warehouse).toEqual([]);
     expect(afterV9.pilot.worldClock).toEqual(createDefaultWorldClock());
-    expect(afterV9.adminConfig.warehouseCapacity).toBe(300);
+    expect(afterV9.adminConfig.warehouseCapacity).toBe(500);
 
     // Newer-than-current (v12) is refused
     const v11Check = validateImportSaveVersion(12, CURRENT_SAVE_VERSION);

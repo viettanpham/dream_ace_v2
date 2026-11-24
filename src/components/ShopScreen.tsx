@@ -15,9 +15,9 @@ import {
   Sparkles,
   Unlock,
 } from 'lucide-react';
-import { BALANCE_CONFIG } from '../data/balance';
 import { MECH_CLASS_LIST, STAT_KEYS } from '../data/classes';
 import { EQUIPMENT_SLOTS, RARITY_META, SHOP_CONFIG } from '../data/items';
+import { getBoxCapacity } from '../engine/migration';
 import { SHOP_STOCK_CONFIG } from '../data/shopConfig';
 import { getSkillById, OPENING_CARDS_LIST } from '../data/skills';
 import {
@@ -105,6 +105,7 @@ function getWpOfferText(
 export function ShopScreen() {
   const { lang, t } = useI18n();
   const pilot = useGameStore((s) => s.pilot);
+  const adminBoxCapacity = useGameStore((s) => s.adminConfig.boxCapacity);
   const shopStock = useGameStore((s) => s.shopStock);
   const wpMarketOffers = useGameStore((s) => s.wpMarketOffers);
   const battlesUntilRestock = useGameStore((s) => s.battlesUntilRestock);
@@ -139,8 +140,8 @@ export function ShopScreen() {
   );
 
   const shipyardActive = useMemo(() => hasOperationalShipyard(pilot), [pilot]);
-  const isInventoryFull =
-    pilot.inventory.length >= BALANCE_CONFIG.maxInventorySize;
+  const boxCap = getBoxCapacity({ boxCapacity: adminBoxCapacity });
+  const isInventoryFull = pilot.inventory.length >= boxCap;
 
   const availableShopCount = useMemo(
     () => shopStock.filter((item) => !item.soldOut).length,
@@ -387,11 +388,11 @@ export function ShopScreen() {
                     {isInventoryFull
                       ? t('shop.cargoFullTag', {
                           count: pilot.inventory.length,
-                          max: BALANCE_CONFIG.maxInventorySize,
+                          max: boxCap,
                         })
                       : t('shop.cargoCount', {
                           count: pilot.inventory.length,
-                          max: BALANCE_CONFIG.maxInventorySize,
+                          max: boxCap,
                         })}
                   </span>
                 </span>
@@ -514,7 +515,7 @@ export function ShopScreen() {
               <span>
                 {t('shop.cargoFullHint', {
                   count: pilot.inventory.length,
-                  max: BALANCE_CONFIG.maxInventorySize,
+                  max: boxCap,
                 })}
               </span>
             </div>
@@ -1738,7 +1739,7 @@ export function ShopScreen() {
                       <span>
                         {t('shop.cargoFullTag', {
                           count: pilot.inventory.length,
-                          max: BALANCE_CONFIG.maxInventorySize,
+                          max: boxCap,
                         })}
                       </span>
                     </div>

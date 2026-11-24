@@ -681,7 +681,12 @@ describe('W1b-2 — Warehouse multi-select bulk move, Quick Sell sources & undo,
 
     // No stale shared-cargo terms left anywhere in user-facing translations (outside warehouse.* / qs.*Warehouse*)
     for (const [key, val] of Object.entries(VI_TRANSLATIONS)) {
-      if (key.startsWith('warehouse.') || key.startsWith('sidebar.warehouse') || key.startsWith('qs.')) {
+      if (
+        key.startsWith('warehouse.') ||
+        key.startsWith('sidebar.warehouse') ||
+        key.startsWith('qs.') ||
+        key === 'admin.warehouseCapacity'
+      ) {
         continue;
       }
       expect(val).not.toMatch(/Kho chung|kho chung|Kho đồ chung|Bán từ Kho|Kho đầy|Kho đã đầy/);

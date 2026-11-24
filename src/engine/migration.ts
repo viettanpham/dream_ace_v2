@@ -100,7 +100,11 @@ export { createDefaultWorldClock };
 
 export const CURRENT_SAVE_VERSION = 11;
 
-export const DEFAULT_WAREHOUSE_CAPACITY = 300;
+export const DEFAULT_BOX_CAPACITY = 100;
+export const MIN_BOX_CAPACITY = 20;
+export const MAX_BOX_CAPACITY = 1000;
+
+export const DEFAULT_WAREHOUSE_CAPACITY = 500;
 export const MIN_WAREHOUSE_CAPACITY = 50;
 export const MAX_WAREHOUSE_CAPACITY = 2000;
 
@@ -114,6 +118,22 @@ export const WORLD_CLOCK_SPEED_PRESETS: Record<
 };
 export const MIN_WORLD_CLOCK_SECONDS_PER_DAY = 10;
 export const MAX_WORLD_CLOCK_SECONDS_PER_DAY = 86400;
+
+export function sanitizeBoxCapacity(raw: unknown): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) {
+    return DEFAULT_BOX_CAPACITY;
+  }
+  return Math.max(
+    MIN_BOX_CAPACITY,
+    Math.min(MAX_BOX_CAPACITY, Math.round(raw))
+  );
+}
+
+export function getBoxCapacity(
+  adminConfig?: Pick<AdminConfig, 'boxCapacity'> | null
+): number {
+  return sanitizeBoxCapacity(adminConfig?.boxCapacity);
+}
 
 export function sanitizeWarehouseCapacity(raw: unknown): number {
   if (typeof raw !== 'number' || !Number.isFinite(raw)) {
@@ -241,6 +261,7 @@ export function createDefaultAdminConfig(): AdminConfig {
     shieldCrackedMult: DEFAULT_SHIELD_CRACKED_MULT,
     shieldCrackedTurns: DEFAULT_SHIELD_CRACKED_TURNS,
     shieldDamageOverrides: {},
+    boxCapacity: DEFAULT_BOX_CAPACITY,
     warehouseCapacity: DEFAULT_WAREHOUSE_CAPACITY,
     ignoreFrontline: false,
     noticeDurationSec: DEFAULT_NOTICE_DURATION_SEC,
@@ -544,8 +565,9 @@ export function migrateSaveData(
     shieldDamageOverrides: sanitizeShieldDamageOverrides(
       rawAdmin.shieldDamageOverrides
     ),
+    boxCapacity: sanitizeBoxCapacity(rawAdmin.boxCapacity),
     warehouseCapacity:
-      version < CURRENT_SAVE_VERSION
+      version < 10
         ? DEFAULT_WAREHOUSE_CAPACITY
         : sanitizeWarehouseCapacity(rawAdmin.warehouseCapacity),
     ignoreFrontline:

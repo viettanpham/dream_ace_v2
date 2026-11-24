@@ -1329,6 +1329,7 @@ export interface AdminConfig {
   shieldCrackedMult?: number;
   shieldCrackedTurns?: number;
   shieldDamageOverrides?: Record<string, number>;
+  boxCapacity?: number;
   warehouseCapacity: number;
   ignoreFrontline?: boolean;
   noticeDurationSec?: number;

@@ -28,6 +28,7 @@ import type {
   TeamColorRole,
 } from '../types/game';
 import { BALANCE_CONFIG } from '../data/balance';
+import { getBoxCapacity } from '../engine/migration';
 import {
   clampDefeatStreakLimit,
   DEFAULT_DEFEAT_STREAK_LIMIT,
@@ -435,10 +436,15 @@ export function getTeamTagLabel(lang: Language, role: TeamColorRole): string {
 export function getAutoStopReasonLabel(
   lang: Language,
   reason: AutoStopReason,
-  streakLimit: number = DEFAULT_DEFEAT_STREAK_LIMIT
+  streakLimit: number = DEFAULT_DEFEAT_STREAK_LIMIT,
+  boxCapacity?: number
 ): string {
+  const max =
+    typeof boxCapacity === 'number' && Number.isFinite(boxCapacity)
+      ? Math.max(1, Math.round(boxCapacity))
+      : getBoxCapacity(useGameStore.getState()?.adminConfig);
   return translate(lang, `auto.repeatReason.${reason}` as TranslationKey, {
-    max: BALANCE_CONFIG.maxInventorySize,
+    max,
     streak: clampDefeatStreakLimit(streakLimit),
   });
 }
@@ -940,8 +946,9 @@ function formatCombatLogBody(
         typeof p.streak === 'number'
           ? p.streak
           : DEFAULT_DEFEAT_STREAK_LIMIT;
+      const maxCap = typeof p.max === 'number' ? p.max : undefined;
       return translate(lang, 'log.autoRepeatStopped', {
-        reason: getAutoStopReasonLabel(lang, stopReason, streak),
+        reason: getAutoStopReasonLabel(lang, stopReason, streak, maxCap),
       });
     }
 

@@ -53,7 +53,7 @@ export const BALANCE_CONFIG = {
   shopStockSize: 12,
   shopRefreshCost: 120,
   shopSellRatio: 0.4,
-  maxInventorySize: 60,
+  maxInventorySize: 100, // default, use getBoxCapacity
 
   // ---- Auto Battle Tactics ----
   maxTacticsRules: 12,

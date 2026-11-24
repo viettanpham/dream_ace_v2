@@ -9,11 +9,13 @@ import {
   Star,
   X,
 } from 'lucide-react';
-import { BALANCE_CONFIG } from '../data/balance';
 import { STAT_KEYS } from '../data/classes';
 import { EQUIPMENT_SLOTS, RARITY_META } from '../data/items';
 import { getEffectiveItemStats, getItemEquippedByGear } from '../engine/equipment';
-import { sanitizeWarehouseCapacity } from '../engine/migration';
+import {
+  getBoxCapacity,
+  sanitizeWarehouseCapacity,
+} from '../engine/migration';
 import type { WarehouseTransferResult } from '../engine/warehouse';
 import {
   formatItemTraitsList,
@@ -237,6 +239,7 @@ function WarehouseItemCell({
 export function WarehouseView() {
   const { lang, t } = useI18n();
   const pilot = useGameStore((s) => s.pilot);
+  const boxCapacityRaw = useGameStore((s) => s.adminConfig.boxCapacity);
   const warehouseCapacityRaw = useGameStore(
     (s) => s.adminConfig.warehouseCapacity
   );
@@ -259,10 +262,11 @@ export function WarehouseView() {
     useState<WarehouseContainer | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
-  const boxCap = BALANCE_CONFIG.maxInventorySize;
+  const boxCap = getBoxCapacity({ boxCapacity: boxCapacityRaw });
   const warehouseCap = sanitizeWarehouseCapacity(warehouseCapacityRaw);
   const boxItems = pilot.inventory;
   const warehouseItems = Array.isArray(pilot.warehouse) ? pilot.warehouse : [];
+  const isBoxOverCap = boxItems.length > boxCap;
   const transferLocked =
     isBattleActive({ screen, battle }) || autoRepeatActive;
 
@@ -515,7 +519,11 @@ export function WarehouseView() {
               aria-pressed={mobilePanel === 'box'}
               onClick={() => handleMobilePanelChange('box')}
               className={`h-9 px-2 rounded text-xs font-semibold truncate transition-colors cursor-pointer ${
-                mobilePanel === 'box'
+                isBoxOverCap
+                  ? mobilePanel === 'box'
+                    ? 'bg-rose-500/20 border border-rose-400/70 text-rose-300'
+                    : 'border border-transparent text-rose-400'
+                  : mobilePanel === 'box'
                   ? 'bg-amber-500/20 border border-amber-400/70 text-amber-200'
                   : 'border border-transparent text-slate-400'
               }`}
@@ -557,9 +565,16 @@ export function WarehouseView() {
             <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-slate-800/80">
               <h3
                 data-testid="warehouse-box-heading"
-                className="text-xs md:text-sm font-bold text-slate-100 inline-flex items-center gap-1.5 truncate"
+                data-over-cap={isBoxOverCap ? 'true' : 'false'}
+                className={`text-xs md:text-sm font-bold inline-flex items-center gap-1.5 truncate ${
+                  isBoxOverCap ? 'text-rose-400' : 'text-slate-100'
+                }`}
               >
-                <PackageOpen className="w-4 h-4 text-sky-400 shrink-0" />
+                <PackageOpen
+                  className={`w-4 h-4 shrink-0 ${
+                    isBoxOverCap ? 'text-rose-400' : 'text-sky-400'
+                  }`}
+                />
                 <span className="truncate">
                   {t('warehouse.boxHeading', {
                     count: boxItems.length,

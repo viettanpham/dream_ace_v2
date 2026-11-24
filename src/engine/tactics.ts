@@ -1146,7 +1146,7 @@ export function shouldStopAutoRepeat(
   outcome: 'victory' | 'defeat',
   retreated: boolean,
   inventoryCount: number,
-  maxInventorySize: number = BALANCE_CONFIG.maxInventorySize,
+  maxInventorySize: number = 100,
   defeatRule: AutoRepeatDefeatRule | boolean = 'stop_immediately',
   defeatStreakLimit: number = DEFAULT_DEFEAT_STREAK_LIMIT
 ): { stop: boolean; reason: AutoStopReason | null } {
