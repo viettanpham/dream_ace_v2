@@ -9,6 +9,7 @@ import { SECTORS_CATALOG } from '../data/maps';
 import { WINGMAN_CHAT_KEYS } from '../data/pilots';
 import { SHOP_STOCK_CONFIG } from '../data/shopConfig';
 import { sanitizeStarterSetConfig } from '../data/starterConfig';
+import { getSupplyTemplateById } from '../data/consumables';
 import { getSkillById, OPENING_CARDS_LIST } from '../data/skills';
 import {
   calculateBattleRewards,
@@ -80,7 +81,12 @@ import {
   type WarehouseTransferResult,
 } from '../engine/warehouse';
 import {
+  applyBattleSupplyUse,
+  getSupplyStockCount,
+  sanitizeSupplyLoadout,
+  sanitizeSupplyLoadoutSlots,
   setSupplyLoadout as setSupplyLoadoutEngine,
+  tickBattleSupplyForUnit,
   type SupplyLoadoutReject,
 } from '../engine/supplies';
 import {
@@ -156,6 +162,8 @@ import type {
   BattleSpeed,
   BattleState,
   BattleViewMode,
+  CombatFxEvent,
+  CombatFxTone,
   CombatLogEntry,
   CombatRow,
   CombatUnit,
@@ -163,6 +171,7 @@ import type {
   EnchantAttemptResult,
   EquipmentSlot,
   EquipValidationResult,
+  FloatingPopup,
   GearTacticsProfile,
   InventoryFilterState,
   ItemInstance,
@@ -474,6 +483,7 @@ interface GameStoreState {
   selectAllyTarget: (unitId: string) => void;
   logRadarInvalidTarget: (targetName: string, reasonKey: string) => void;
   performPlayerAction: (action: ActionType, skillId?: string) => void;
+  useBattleSupply: (templateId: string) => void;
   performAutoPlayerTurn: () => void;
   performAiTurn: () => void;
   retreatBattle: () => void;
@@ -2773,6 +2783,156 @@ export const useGameStore = create<GameStoreState>()(
         });
       },
 
+      useBattleSupply: (templateId) => {
+        const state = get();
+        const { battle } = state;
+        if (!battle || battle.summary || battle.isResolving) return;
+
+        const activeUnitId = battle.turnOrder[battle.activeTurnIndex];
+        const activeUnit = battle.units.find((u) => u.id === activeUnitId);
+        if (!activeUnit || !activeUnit.isPlayer || !activeUnit.alive) return;
+
+        const activeGear = state.pilot.gears[battle.deployedGearId];
+        const maxSlots = sanitizeSupplyLoadoutSlots(
+          state.adminConfig?.supplyLoadoutSlots
+        );
+        const cleanLoadout = sanitizeSupplyLoadout(
+          activeGear?.supplyLoadout,
+          maxSlots
+        );
+        if (!cleanLoadout.includes(templateId)) return;
+
+        const template = getSupplyTemplateById(templateId);
+        if (!template) return;
+
+        const stock = getSupplyStockCount(state.pilot.consumables, template.id);
+        const res = applyBattleSupplyUse({
+          units: battle.units,
+          supplyByUnit: battle.supplyByUnit,
+          unitId: activeUnit.id,
+          template,
+          stock,
+          isOwnTurn: true,
+          cfg: state.adminConfig,
+        });
+        if (!res.ok) return;
+
+        let decremented = false;
+        const nextConsumables = (state.pilot.consumables ?? [])
+          .map((c) => {
+            if (
+              !decremented &&
+              c.kind === 'battle_supply' &&
+              c.templateId === template.id
+            ) {
+              decremented = true;
+              return { ...c, quantity: c.quantity - 1 };
+            }
+            return c;
+          })
+          .filter((c) => c.quantity > 0);
+
+        const skipVisualFx = state.skipAnimations;
+        const muteSound = state.skipAnimations || state.battleSpeed >= 10;
+        const cue: 'heal' | 'shield' =
+          res.gains.shield > 0 && res.gains.hp === 0 ? 'shield' : 'heal';
+        playCue(cue, muteSound);
+
+        const uidSuffix = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+        const newPopups: FloatingPopup[] = [];
+        if (res.gains.hp > 0) {
+          newPopups.push({
+            id: `pop_sup_hp_${uidSuffix}`,
+            unitId: activeUnit.id,
+            text: `+${res.gains.hp} HP`,
+            tone: 'heal',
+          });
+        }
+        if (res.gains.shield > 0) {
+          newPopups.push({
+            id: `pop_sup_shd_${uidSuffix}`,
+            unitId: activeUnit.id,
+            text: `+${res.gains.shield} SHD`,
+            tone: 'shield',
+          });
+        }
+        if (res.gains.sp > 0) {
+          newPopups.push({
+            id: `pop_sup_sp_${uidSuffix}`,
+            unitId: activeUnit.id,
+            text: `+${res.gains.sp} SP`,
+            tone: 'buff',
+          });
+        }
+
+        const allyUnits = battle.units.filter((u) => u.side === activeUnit.side);
+        const slotIdx = Math.max(
+          0,
+          allyUnits.findIndex((u) => u.id === activeUnit.id)
+        );
+        const fxTone: CombatFxTone =
+          res.gains.hp > 0 || template.family === 'hp_kit'
+            ? 'heal'
+            : res.gains.shield > 0 || template.family === 'shield_kit'
+            ? 'shield'
+            : 'sp';
+        const fxAccentHex =
+          fxTone === 'heal' ? '#10B981' : '#38BDF8';
+        const supplyFx: CombatFxEvent = {
+          id: `fx_sup_${uidSuffix}`,
+          kind: 'heal',
+          tone: fxTone,
+          fromSide: activeUnit.side,
+          fromSlotIndex: slotIdx,
+          fromUnitId: activeUnit.id,
+          toSide: activeUnit.side,
+          toSlotIndices: [slotIdx],
+          toUnitIds: [activeUnit.id],
+          accentHex: fxAccentHex,
+        };
+
+        const supplyLog = enrichLogEntries(
+          [
+            {
+              id: `log_sup_${uidSuffix}`,
+              round: battle.round,
+              actorName: activeUnit.name,
+              actorSide: activeUnit.side,
+              tag: fxTone === 'shield' ? 'SHIELD' : 'HEAL',
+              templateKey: 'log.useSupply',
+              params: {
+                actor: activeUnit.name,
+                templateId: template.id,
+                hp: res.gains.hp,
+                shield: res.gains.shield,
+                sp: res.gains.sp,
+              },
+            },
+          ],
+          activeUnit
+        );
+
+        set({
+          battle: {
+            ...battle,
+            units: res.units,
+            supplyByUnit: res.supplyByUnit,
+            log: [...battle.log, ...supplyLog],
+            popups: skipVisualFx
+              ? []
+              : [...battle.popups, ...newPopups].slice(-18),
+            fxEvents: skipVisualFx
+              ? []
+              : [...battle.fxEvents, supplyFx].slice(-12),
+          },
+          pilot: {
+            ...state.pilot,
+            consumables: nextConsumables,
+          },
+          hasSaveData: true,
+        });
+      },
+
       performPlayerAction: (action, skillId) => {
         const state = get();
         const { battle } = state;
@@ -2902,10 +3062,16 @@ export const useGameStore = create<GameStoreState>()(
           (a) => a.id === battle.selectedAllyTargetId
         );
 
+        const nextSupplyByUnit = tickBattleSupplyForUnit(
+          battle.supplyByUnit,
+          activeUnit.id
+        );
+
         set({
           battle: {
             ...battle,
             units: resolution.updatedUnits,
+            supplyByUnit: nextSupplyByUnit,
             turnCounter: nextTurnCounter,
             log: nextLog,
             events: nextEvents,
@@ -3114,10 +3280,16 @@ export const useGameStore = create<GameStoreState>()(
           (a) => a.id === battle.selectedAllyTargetId
         );
 
+        const nextSupplyByUnit = tickBattleSupplyForUnit(
+          battle.supplyByUnit,
+          activeUnit.id
+        );
+
         set({
           battle: {
             ...battle,
             units: resolution.updatedUnits,
+            supplyByUnit: nextSupplyByUnit,
             turnCounter: nextTurnCounter,
             log: nextLog,
             events: nextEvents,

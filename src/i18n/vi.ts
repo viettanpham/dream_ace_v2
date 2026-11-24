@@ -651,6 +651,7 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
     '{actor} dùng {skill} sửa chữa {target} hồi +{amount} HP.',
   'log.energize':
     '{actor} dùng {skill} tiếp +{amount} SP cho {target}.',
+  'log.useSupply': '{actor} dùng {supply}: {gains}',
   'log.evade': '{target} lộn vòng né gọn đòn {action} từ {actor}!',
   'log.damage':
     '{actor} dùng {action} bắn trúng {target} gây {breakdown}{shieldMultTag}{critTag}{defendTag}.',
@@ -1191,6 +1192,11 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'supply.effect.healHp': 'HP +{pct}%',
   'supply.effect.restoreShield': 'Khiên +{pct}%',
   'supply.effect.restoreSp': 'SP +{pct}%',
+  'supply.sheetUsedTurn': 'Dùng {n}/{max} lượt này',
+  'supply.useBtn': 'Dùng',
+  'supply.usesCount': '{n}/{max} trận',
+  'supply.emptySlotHint': 'Ô trống — chọn ở GEAR > Túi vật tư',
+  'supply.emptyLoadout': 'Chưa mang vật tư',
 
   // Bán nhanh (Quick Sell)
   'qs.btn': 'Bán nhanh',

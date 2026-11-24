@@ -811,6 +811,7 @@ export function createInitialBattleState(
     popups: [],
     fxEvents: [],
     explodedUnitIds: [],
+    supplyByUnit: {},
     isResolving: false,
     summary: null,
   };

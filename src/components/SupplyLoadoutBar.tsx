@@ -12,7 +12,7 @@ import {
 } from '../engine/supplies';
 import { useI18n } from '../i18n';
 import { isBattleActive, useGameStore } from '../store/useGameStore';
-import type { GearUnit, SupplyTemplate } from '../types/game';
+import type { GearUnit, SupplyEffect, SupplyTemplate } from '../types/game';
 import { BottomSheet } from './BottomSheet';
 import { CatalogIcon } from './CatalogIcon';
 
@@ -40,11 +40,11 @@ export function formatSupplyShortName(fullName: string): string {
 type TranslateFn = ReturnType<typeof useI18n>['t'];
 type SupplyTranslationKey = Parameters<TranslateFn>[0];
 
-export function formatSupplyEffectSummary(
-  tpl: SupplyTemplate,
+export function formatSupplyEffects(
+  effects: readonly SupplyEffect[],
   t: TranslateFn
 ): string {
-  return tpl.effects
+  return effects
     .map((eff) => {
       if (eff.kind === 'heal_hp_pct') {
         return t('supply.effect.healHp', { pct: eff.value });
@@ -57,7 +57,14 @@ export function formatSupplyEffectSummary(
     .join(', ');
 }
 
-function getSupplyName(tplId: string, t: TranslateFn): string {
+export function formatSupplyEffectSummary(
+  tpl: SupplyTemplate,
+  t: TranslateFn
+): string {
+  return formatSupplyEffects(tpl.effects, t);
+}
+
+export function getSupplyName(tplId: string, t: TranslateFn): string {
   const key = `supply.${tplId}.name` as SupplyTranslationKey;
   const label = t(key);
   return label === key ? tplId : label;

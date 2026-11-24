@@ -32,6 +32,7 @@ import {
   isLongRangeAction,
 } from '../engine/combat';
 import { canUnitUseSkill } from '../engine/skills';
+import { getBattleSupplyRows } from '../engine/supplies';
 import {
   getAutoStopReasonLabel,
   getBattleSkillReason,
@@ -152,6 +153,7 @@ export function BattleScreen() {
   const selectTarget = useGameStore((s) => s.selectTarget);
   const selectAllyTarget = useGameStore((s) => s.selectAllyTarget);
   const performPlayerAction = useGameStore((s) => s.performPlayerAction);
+  const useBattleSupply = useGameStore((s) => s.useBattleSupply);
   const performAutoPlayerTurn = useGameStore((s) => s.performAutoPlayerTurn);
   const performAiTurn = useGameStore((s) => s.performAiTurn);
   const logRadarInvalidTarget = useGameStore((s) => s.logRadarInvalidTarget);
@@ -590,6 +592,12 @@ export function BattleScreen() {
       activeUnit.alive &&
       !isPlayerCharging
   );
+
+  const battleSupplyView = useMemo(
+    () => getBattleSupplyRows(battle, pilot, adminConfig),
+    [battle, pilot, adminConfig]
+  );
+  const usableSupplyCount = battleSupplyView.usableCount;
 
   const currentBattleMeta = useMemo(() => {
     if (!battle) return null;
@@ -2691,6 +2699,14 @@ export function BattleScreen() {
                 >
                   <Backpack className="w-4 h-4 text-amber-400 shrink-0" />
                   <span className="truncate">{t('battle.actionItem')}</span>
+                  {usableSupplyCount > 0 && (
+                    <span
+                      data-testid="battle-action-item-badge"
+                      className="min-w-[18px] h-[18px] px-1 rounded bg-amber-400 text-slate-950 font-mono-nums text-[11px] font-bold leading-none inline-flex items-center justify-center shrink-0"
+                    >
+                      {usableSupplyCount}
+                    </span>
+                  )}
                 </button>
               </div>
             </div>
@@ -3064,6 +3080,14 @@ export function BattleScreen() {
                         <span className="hidden xl:inline">
                           {t('battle.actionItem')}
                         </span>
+                        {usableSupplyCount > 0 && (
+                          <span
+                            data-testid="battle-action-item-badge"
+                            className="min-w-[18px] h-[18px] px-1 rounded bg-amber-400 text-slate-950 font-mono-nums text-[11px] font-bold leading-none inline-flex items-center justify-center shrink-0"
+                          >
+                            {usableSupplyCount}
+                          </span>
+                        )}
                       </button>
                     </div>
 
@@ -3427,6 +3451,12 @@ export function BattleScreen() {
         onClose={() => setSuppliesSheetOpen(false)}
         onOpenTactics={() => setTacticsModalOpen(true)}
         onReloadBattle={() => reloadBattle(battle.sectorId)}
+        rows={battleSupplyView.rows}
+        usedThisTurn={battleSupplyView.usedThisTurn}
+        usesPerTurn={battleSupplyView.usesPerTurn}
+        hasLoadout={battleSupplyView.hasLoadout}
+        iconCatalogMods={adminConfig.iconCatalogMods}
+        onUseSupply={useBattleSupply}
       />
 
       {/* ==================== LIVE PROGRESS / END-OF-BATTLE REPORT MODAL ==================== */}

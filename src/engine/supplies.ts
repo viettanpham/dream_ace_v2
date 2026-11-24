@@ -1,13 +1,19 @@
 import { getSupplyTemplateById } from '../data/consumables';
 import type {
   AdminConfig,
+  BattleState,
   BattleSupplyUnitState,
   CombatUnit,
   ConsumableItem,
   GearUnit,
+  PilotAccount,
   SupplyEffect,
   SupplyTemplate,
 } from '../types/game';
+import {
+  applySupplyEffects,
+  type SupplyEffectGains,
+} from './supplyEffects';
 
 export const SUPPLY_STACK_CAP = 99;
 
@@ -306,5 +312,302 @@ export function canUseSupply({
     ok: true,
     reason: null,
     reasonKey: null,
+  };
+}
+
+export interface ApplyBattleSupplyUseInput {
+  units: readonly CombatUnit[];
+  supplyByUnit?: Record<string, BattleSupplyUnitState>;
+  unitId: string;
+  template: SupplyTemplate;
+  stock: number;
+  isOwnTurn: boolean;
+  cfg?: Pick<AdminConfig, 'supplyUsesPerTurn'> | null;
+}
+
+export type ApplyBattleSupplyUseResult =
+  | {
+      ok: false;
+      reason: SupplyUseFailureReason;
+      reasonKey: string;
+      params?: Record<string, number>;
+    }
+  | {
+      ok: true;
+      units: CombatUnit[];
+      supplyByUnit: Record<string, BattleSupplyUnitState>;
+      gains: SupplyEffectGains;
+    };
+
+export function tickSupplyState(
+  state?: Partial<BattleSupplyUnitState> | null
+): BattleSupplyUnitState {
+  const nextCooldowns: Record<string, number> = {};
+  for (const [tplId, rawLeft] of Object.entries(
+    state?.cooldownsByTemplate ?? {}
+  )) {
+    const left =
+      typeof rawLeft === 'number' && Number.isFinite(rawLeft)
+        ? Math.max(0, Math.floor(rawLeft) - 1)
+        : 0;
+    if (left > 0) {
+      nextCooldowns[tplId] = left;
+    }
+  }
+  return {
+    usedCountsByTemplate: { ...(state?.usedCountsByTemplate ?? {}) },
+    cooldownsByTemplate: nextCooldowns,
+    usedThisTurn: 0,
+  };
+}
+
+export function tickBattleSupplyForUnit(
+  supplyByUnit: Record<string, BattleSupplyUnitState> | undefined,
+  unitId: string
+): Record<string, BattleSupplyUnitState> | undefined {
+  if (!supplyByUnit || !supplyByUnit[unitId]) {
+    return supplyByUnit;
+  }
+  return {
+    ...supplyByUnit,
+    [unitId]: tickSupplyState(supplyByUnit[unitId]),
+  };
+}
+
+export function applyBattleSupplyUse({
+  units,
+  supplyByUnit,
+  unitId,
+  template,
+  stock,
+  isOwnTurn,
+  cfg,
+}: ApplyBattleSupplyUseInput): ApplyBattleSupplyUseResult {
+  const unitIdx = units.findIndex((u) => u.id === unitId);
+  const unit = unitIdx >= 0 ? units[unitIdx] : undefined;
+  if (!unit || !unit.alive) {
+    return {
+      ok: false,
+      reason: 'not_your_turn',
+      reasonKey: 'supply.reason.not_your_turn',
+    };
+  }
+
+  const prevState = supplyByUnit?.[unitId];
+  const check = canUseSupply({
+    template,
+    stock,
+    unit,
+    supplyState: prevState,
+    isOwnTurn,
+    cfg,
+  });
+
+  if (!check.ok) {
+    return {
+      ok: false,
+      reason: check.reason ?? 'not_your_turn',
+      reasonKey: check.reasonKey ?? 'supply.reason.not_your_turn',
+      ...(check.params ? { params: check.params } : {}),
+    };
+  }
+
+  const { unit: nextUnit, gains } = applySupplyEffects(unit, template.effects);
+  const nextUnits = units.map((u, idx) => (idx === unitIdx ? nextUnit : u));
+
+  const prevCounts = prevState?.usedCountsByTemplate ?? {};
+  const prevCooldowns = prevState?.cooldownsByTemplate ?? {};
+  const nextUnitState: BattleSupplyUnitState = {
+    usedCountsByTemplate: {
+      ...prevCounts,
+      [template.id]: Math.max(0, prevCounts[template.id] ?? 0) + 1,
+    },
+    cooldownsByTemplate: {
+      ...prevCooldowns,
+      [template.id]: Math.max(0, Math.floor(template.cooldownTurns)) + 1,
+    },
+    usedThisTurn: Math.max(0, prevState?.usedThisTurn ?? 0) + 1,
+  };
+
+  return {
+    ok: true,
+    units: nextUnits,
+    supplyByUnit: {
+      ...(supplyByUnit ?? {}),
+      [unitId]: nextUnitState,
+    },
+    gains,
+  };
+}
+
+export interface BattleSupplyRow {
+  slotIndex: number;
+  templateId: string | null;
+  iconId: string | null;
+  name: string;
+  nameKey: string | null;
+  effectSummary: string;
+  effects: SupplyEffect[];
+  stock: number;
+  usedCount: number;
+  limit: number;
+  ok: boolean;
+  reason: SupplyUseFailureReason | null;
+  reasonKey: string | null;
+  params?: Record<string, number>;
+}
+
+export interface BattleSupplyRowsSummary {
+  rows: BattleSupplyRow[];
+  hasLoadout: boolean;
+  usedThisTurn: number;
+  usesPerTurn: number;
+  usableCount: number;
+  isPlayerTurn: boolean;
+}
+
+function formatRawEffects(effects: readonly SupplyEffect[]): string {
+  return effects
+    .map((eff) => {
+      if (eff.kind === 'heal_hp_pct') return `HP +${eff.value}%`;
+      if (eff.kind === 'restore_shield_pct') return `SHD +${eff.value}%`;
+      return `SP +${eff.value}%`;
+    })
+    .join(', ');
+}
+
+export function getSupplyStockCount(
+  consumables: readonly ConsumableItem[] | undefined,
+  templateId: string
+): number {
+  let total = 0;
+  for (const c of consumables ?? []) {
+    if (c.kind === 'battle_supply' && c.templateId === templateId && c.quantity > 0) {
+      total += Math.floor(c.quantity);
+    }
+  }
+  return total;
+}
+
+export function getBattleSupplyRows(
+  battle: Pick<
+    BattleState,
+    'deployedGearId' | 'units' | 'turnOrder' | 'activeTurnIndex' | 'supplyByUnit' | 'summary' | 'isResolving'
+  > | null | undefined,
+  pilot: Pick<PilotAccount, 'gears' | 'consumables'> | null | undefined,
+  cfg?: Pick<AdminConfig, 'supplyLoadoutSlots' | 'supplyUsesPerTurn'> | null
+): BattleSupplyRowsSummary {
+  const maxSlots = sanitizeSupplyLoadoutSlots(cfg?.supplyLoadoutSlots);
+  const usesPerTurn = sanitizeSupplyUsesPerTurn(cfg?.supplyUsesPerTurn);
+  if (!battle || !pilot) {
+    return {
+      rows: [],
+      hasLoadout: false,
+      usedThisTurn: 0,
+      usesPerTurn,
+      usableCount: 0,
+      isPlayerTurn: false,
+    };
+  }
+
+  const deployedGear = pilot.gears?.[battle.deployedGearId];
+  const loadoutIds = sanitizeSupplyLoadout(deployedGear?.supplyLoadout, maxSlots);
+  const hasLoadout = loadoutIds.length > 0;
+
+  const playerUnit = battle.units.find((u) => u.isPlayer) ?? null;
+  const activeUnitId = battle.turnOrder[battle.activeTurnIndex];
+  const isPlayerCharging = Boolean(
+    playerUnit?.statuses.some(
+      (s) => s.type === 'charging' && s.turnsRemaining > 0
+    )
+  );
+  const isPlayerTurn = Boolean(
+    !battle.summary &&
+      !battle.isResolving &&
+      playerUnit &&
+      playerUnit.alive &&
+      activeUnitId === playerUnit.id &&
+      !isPlayerCharging
+  );
+
+  const supplyState = playerUnit
+    ? battle.supplyByUnit?.[playerUnit.id]
+    : undefined;
+  const usedThisTurn = Math.max(0, supplyState?.usedThisTurn ?? 0);
+
+  let usableCount = 0;
+  const rows: BattleSupplyRow[] = [];
+
+  for (let slotIndex = 0; slotIndex < maxSlots; slotIndex++) {
+    const tplId = loadoutIds[slotIndex] ?? null;
+    const tpl = tplId ? getSupplyTemplateById(tplId) : undefined;
+    if (!tpl) {
+      rows.push({
+        slotIndex,
+        templateId: null,
+        iconId: null,
+        name: '',
+        nameKey: null,
+        effectSummary: '',
+        effects: [],
+        stock: 0,
+        usedCount: 0,
+        limit: 0,
+        ok: false,
+        reason: null,
+        reasonKey: null,
+      });
+      continue;
+    }
+
+    const stock = getSupplyStockCount(pilot.consumables, tpl.id);
+    const usedCount = Math.max(
+      0,
+      supplyState?.usedCountsByTemplate?.[tpl.id] ?? 0
+    );
+    const check: CanUseSupplyResult = playerUnit
+      ? canUseSupply({
+          template: tpl,
+          stock,
+          unit: playerUnit,
+          supplyState,
+          isOwnTurn: isPlayerTurn,
+          cfg,
+        })
+      : {
+          ok: false,
+          reason: 'not_your_turn',
+          reasonKey: 'supply.reason.not_your_turn',
+        };
+
+    if (check.ok) {
+      usableCount += 1;
+    }
+
+    rows.push({
+      slotIndex,
+      templateId: tpl.id,
+      iconId: tpl.iconId,
+      name: tpl.id,
+      nameKey: `supply.${tpl.id}.name`,
+      effectSummary: formatRawEffects(tpl.effects),
+      effects: tpl.effects,
+      stock,
+      usedCount,
+      limit: tpl.perBattleLimit,
+      ok: check.ok,
+      reason: check.reason,
+      reasonKey: check.reasonKey,
+      ...(check.params ? { params: check.params } : {}),
+    });
+  }
+
+  return {
+    rows,
+    hasLoadout,
+    usedThisTurn,
+    usesPerTurn,
+    usableCount,
+    isPlayerTurn,
   };
 }

@@ -649,6 +649,7 @@ export const EN_TRANSLATIONS = {
     '{actor} repairs {target} with {skill} for +{amount} HP.',
   'log.energize':
     '{actor} transfers +{amount} SP to {target} via {skill}.',
+  'log.useSupply': '{actor} uses {supply}: {gains}',
   'log.evade': '{target} barrel-rolls and evades {action} from {actor}!',
   'log.damage':
     '{actor} hits {target} with {action} for {breakdown}{shieldMultTag}{critTag}{defendTag}.',
@@ -1189,6 +1190,11 @@ export const EN_TRANSLATIONS = {
   'supply.effect.healHp': 'HP +{pct}%',
   'supply.effect.restoreShield': 'Shield +{pct}%',
   'supply.effect.restoreSp': 'SP +{pct}%',
+  'supply.sheetUsedTurn': 'Used {n}/{max} this turn',
+  'supply.useBtn': 'Use',
+  'supply.usesCount': '{n}/{max} battle',
+  'supply.emptySlotHint': 'Empty slot — equip in GEAR > Supply Bag',
+  'supply.emptyLoadout': 'No supplies equipped',
 
   // Quick Sell
   'qs.btn': 'Quick Sell',

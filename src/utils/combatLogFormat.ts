@@ -794,6 +794,41 @@ export function parseStructuredCombatLogRow(
       };
     }
 
+    case 'log.useSupply': {
+      const tplId = String(p.templateId ?? '');
+      const supplyKey = `supply.${tplId}.name` as Parameters<typeof translate>[1];
+      const supplyLabelRaw = translate(lang, supplyKey);
+      const supplyName =
+        supplyLabelRaw === supplyKey ? tplId : supplyLabelRaw;
+      const hp = Math.max(0, Number(p.hp ?? 0));
+      const shield = Math.max(0, Number(p.shield ?? 0));
+      const sp = Math.max(0, Number(p.sp ?? 0));
+      const parts: string[] = [];
+      if (hp > 0) parts.push(`HP +${hp}`);
+      if (shield > 0) parts.push(`SHD +${shield}`);
+      if (sp > 0) parts.push(`SP +${sp}`);
+      const valueText = parts.length > 0 ? parts.join(', ') : 'HP +0';
+      return {
+        id: entry.id,
+        round,
+        turnLabel,
+        faction,
+        actorName: actorFromParams,
+        autoBadge,
+        actionKind: hp > 0 ? 'heal' : 'shield',
+        actionLabel: supplyName,
+        targetName: null,
+        valueText,
+        valueTone: hp > 0 ? 'heal' : shield > 0 ? 'shield' : 'buff',
+        fallbackText,
+        sentence: fallbackText,
+        spCost: null,
+        isStrong: false,
+        strongTone: null,
+        ...avatarMeta,
+      };
+    }
+
     case 'log.buffApplied': {
       const usedSkill = skillLabel || translate(lang, 'log.actionStatus');
       const sentence = isVi

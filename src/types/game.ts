@@ -927,7 +927,8 @@ export type CombatLogTemplateKey =
   | 'log.wingmanChat'
   | 'log.unitMovesRow'
   | 'log.invalidTarget'
-  | 'log.autoRepeatStopped';
+  | 'log.autoRepeatStopped'
+  | 'log.useSupply';
 
 export interface CombatLogEntry {
   id: string;
@@ -1157,6 +1158,7 @@ export interface BattleState {
   popups: FloatingPopup[];
   fxEvents: CombatFxEvent[];
   explodedUnitIds: string[];
+  supplyByUnit?: Record<string, BattleSupplyUnitState>;
   isResolving: boolean;
   summary: BattleSummary | null;
 }

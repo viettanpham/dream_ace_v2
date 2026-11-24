@@ -750,6 +750,27 @@ function formatCombatLogBody(
       });
     }
 
+    case 'log.useSupply': {
+      const tplId = String(p.templateId ?? '');
+      const supplyKey = `supply.${tplId}.name` as TranslationKey;
+      const resolvedSupply = translate(lang, supplyKey);
+      const supplyName =
+        resolvedSupply === supplyKey ? tplId : resolvedSupply;
+      const hp = Math.max(0, Number(p.hp ?? 0));
+      const shield = Math.max(0, Number(p.shield ?? 0));
+      const sp = Math.max(0, Number(p.sp ?? 0));
+      const parts: string[] = [];
+      if (hp > 0) parts.push(`HP +${hp}`);
+      if (shield > 0) parts.push(`SHD +${shield}`);
+      if (sp > 0) parts.push(`SP +${sp}`);
+      const gains = parts.length > 0 ? parts.join(', ') : 'HP +0';
+      return translate(lang, 'log.useSupply', {
+        actor: String(p.actor ?? ''),
+        supply: supplyName,
+        gains,
+      });
+    }
+
     case 'log.evade': {
       const actionText = formatActionParam(lang, p);
       return translate(lang, 'log.evade', {
