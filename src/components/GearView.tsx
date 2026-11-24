@@ -95,6 +95,7 @@ import {
   type GearPaperDollSlotKey,
 } from './GearSlotTile';
 import { QuickSellModal } from './QuickSellModal';
+import { SupplyLoadoutBar } from './SupplyLoadoutBar';
 
 type GearSelection =
   | { kind: 'slot'; slot: EquipmentSlot }
@@ -1323,43 +1324,47 @@ export function GearView() {
     <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-5 space-y-3.5 sm:space-y-4">
       {/* ==================== TOP ROW: Paper-Doll (Ship + 12 Slots, lg:col-span-9) | Live Stats (lg:col-span-3) ==================== */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 sm:gap-4 items-stretch">
-        <section className="lg:col-span-9 rounded-lg border border-slate-800/90 bg-[#0C121D]/95 p-3.5 flex flex-col lg:grid lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:items-center gap-3 relative overflow-hidden">
-          <svg
-            viewBox="0 0 360 280"
-            className="pointer-events-none absolute inset-0 w-full h-full opacity-25"
+        <section className="lg:col-span-9 rounded-lg border border-slate-800/90 bg-[#0C121D]/95 p-3.5 flex flex-col lg:grid lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:items-center gap-3 relative">
+          <div
+            className="pointer-events-none absolute inset-0 overflow-hidden rounded-lg"
             aria-hidden="true"
           >
-            <circle
-              cx="180"
-              cy="128"
-              r="88"
-              stroke="#334155"
-              strokeWidth="1"
-              strokeDasharray="5 5"
-              fill="none"
-            />
-            <circle
-              cx="180"
-              cy="128"
-              r="120"
-              stroke="#1E293B"
-              strokeWidth="1"
-              fill="none"
-            />
-            <line
-              x1="30"
-              y1="128"
-              x2="330"
-              y2="128"
-              stroke="#1E293B"
-              strokeWidth="1"
-            />
-          </svg>
+            <svg
+              viewBox="0 0 360 280"
+              className="pointer-events-none absolute inset-0 w-full h-full opacity-25"
+            >
+              <circle
+                cx="180"
+                cy="128"
+                r="88"
+                stroke="#334155"
+                strokeWidth="1"
+                strokeDasharray="5 5"
+                fill="none"
+              />
+              <circle
+                cx="180"
+                cy="128"
+                r="120"
+                stroke="#1E293B"
+                strokeWidth="1"
+                fill="none"
+              />
+              <line
+                x1="30"
+                y1="128"
+                x2="330"
+                y2="128"
+                stroke="#1E293B"
+                strokeWidth="1"
+              />
+            </svg>
 
-          <div
-            className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-52 h-52 rounded-full blur-3xl opacity-20"
-            style={{ backgroundColor: activeClass.accentHex }}
-          />
+            <div
+              className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-52 h-52 rounded-full blur-3xl opacity-20"
+              style={{ backgroundColor: activeClass.accentHex }}
+            />
+          </div>
 
           {/* Desktop Left Slot Rail (>= lg) */}
           <div
@@ -1547,6 +1552,11 @@ export function GearView() {
                 </button>
               )}
             </div>
+
+            {/* Desktop Supply Loadout Row (>= lg) */}
+            <div className="hidden lg:block w-full">
+              <SupplyLoadoutBar variant="desktop" gear={activeGear} />
+            </div>
           </div>
 
           {/* Desktop Right Slot Rail (>= lg) */}
@@ -1591,6 +1601,11 @@ export function GearView() {
                 )}
               </div>
             </div>
+          </div>
+
+          {/* Phone Supply Loadout Row (< lg) */}
+          <div className="lg:hidden relative z-10 w-full pt-2 border-t border-slate-800/80">
+            <SupplyLoadoutBar variant="phone" gear={activeGear} />
           </div>
         </section>
 

@@ -1176,6 +1176,15 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'supply.reason.sp_full': 'SP đã đầy',
   'supply.reason.shield_broken': 'Khiên bị phá',
   'supply.reason.not_your_turn': 'Chưa tới lượt',
+  'supply.bagTitle': 'Túi vật tư',
+  'supply.pickerTitle': 'Chọn vật tư chiến đấu',
+  'supply.clearSlot': 'Trống / Gỡ',
+  'supply.alreadyEquipped': 'Đã mang',
+  'supply.lockedHint': 'Không đổi được khi đang đánh',
+  'supply.emptyOwned': 'Chưa có vật tư phù hợp trong túi',
+  'supply.effect.healHp': 'HP +{pct}%',
+  'supply.effect.restoreShield': 'Khiên +{pct}%',
+  'supply.effect.restoreSp': 'SP +{pct}%',
 
   // Bán nhanh (Quick Sell)
   'qs.btn': 'Bán nhanh',

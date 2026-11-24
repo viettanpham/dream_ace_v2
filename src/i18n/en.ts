@@ -1174,6 +1174,15 @@ export const EN_TRANSLATIONS = {
   'supply.reason.sp_full': 'SP already full',
   'supply.reason.shield_broken': 'Shield broken',
   'supply.reason.not_your_turn': 'Not your turn',
+  'supply.bagTitle': 'Supply Bag',
+  'supply.pickerTitle': 'Select Battle Supply',
+  'supply.clearSlot': 'Empty / Remove',
+  'supply.alreadyEquipped': 'Equipped',
+  'supply.lockedHint': 'Cannot change during battle',
+  'supply.emptyOwned': 'No matching supplies owned',
+  'supply.effect.healHp': 'HP +{pct}%',
+  'supply.effect.restoreShield': 'Shield +{pct}%',
+  'supply.effect.restoreSp': 'SP +{pct}%',
 
   // Quick Sell
   'qs.btn': 'Quick Sell',
