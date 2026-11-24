@@ -72,6 +72,14 @@ import {
   grantStarterSetToGear,
 } from './starter';
 import {
+  DEFAULT_SUPPLY_LOADOUT_SLOTS,
+  DEFAULT_SUPPLY_USES_PER_TURN,
+  sanitizeConsumables,
+  sanitizeSupplyLoadout,
+  sanitizeSupplyLoadoutSlots,
+  sanitizeSupplyUsesPerTurn,
+} from './supplies';
+import {
   createDefaultGearUnit,
   createDefaultPilotAccount,
   createDefaultWorldClock,
@@ -82,7 +90,7 @@ import { sanitizeStatusDisplayDefaults } from '../utils/statusDisplayPrefs';
 
 export { createDefaultWorldClock };
 
-export const CURRENT_SAVE_VERSION = 10;
+export const CURRENT_SAVE_VERSION = 11;
 
 export const DEFAULT_WAREHOUSE_CAPACITY = 300;
 export const MIN_WAREHOUSE_CAPACITY = 50;
@@ -225,6 +233,8 @@ export function createDefaultAdminConfig(): AdminConfig {
     warehouseCapacity: DEFAULT_WAREHOUSE_CAPACITY,
     ignoreFrontline: false,
     noticeDurationSec: DEFAULT_NOTICE_DURATION_SEC,
+    supplyLoadoutSlots: DEFAULT_SUPPLY_LOADOUT_SLOTS,
+    supplyUsesPerTurn: DEFAULT_SUPPLY_USES_PER_TURN,
     showRawI18nKeys: false,
   };
 }
@@ -527,6 +537,8 @@ export function migrateSaveData(
         ? rawAdmin.ignoreFrontline
         : false,
     noticeDurationSec: sanitizeNoticeDurationSec(rawAdmin.noticeDurationSec),
+    supplyLoadoutSlots: sanitizeSupplyLoadoutSlots(rawAdmin.supplyLoadoutSlots),
+    supplyUsesPerTurn: sanitizeSupplyUsesPerTurn(rawAdmin.supplyUsesPerTurn),
     showRawI18nKeys: Boolean(rawAdmin.showRawI18nKeys),
   };
 
@@ -639,6 +651,10 @@ export function migrateSaveData(
           equipped: cleanEquipped,
           skillLevels,
           equippedSkillBar,
+          supplyLoadout: sanitizeSupplyLoadout(
+            rawGear.supplyLoadout,
+            adminConfig.supplyLoadoutSlots ?? DEFAULT_SUPPLY_LOADOUT_SLOTS
+          ),
           tactics: sanitizeGearTactics(cls.id, rawGear.tactics),
           battlesWon: Math.max(0, Number(rawGear.battlesWon) || 0),
           battlesFought: Math.max(0, Number(rawGear.battlesFought) || 0),
@@ -750,12 +766,9 @@ export function migrateSaveData(
       unlockedSectorIds: seededUnlockedSectors,
     });
 
-    const rawConsumables: ConsumableItem[] = Array.isArray(rawPilot.consumables)
-      ? rawPilot.consumables.filter(
-          (c): c is ConsumableItem =>
-            Boolean(c && typeof c === 'object' && typeof c.id === 'string' && c.quantity > 0)
-        )
-      : [];
+    const rawConsumables: ConsumableItem[] = sanitizeConsumables(
+      rawPilot.consumables
+    );
 
     const pilotNameClean =
       typeof rawPilot.name === 'string' && rawPilot.name.trim().length > 0
@@ -916,6 +929,7 @@ export function migrateSaveData(
         equipped: equippedIds,
         skillLevels,
         equippedSkillBar,
+        supplyLoadout: [],
         tactics: createDefaultTacticsForClass(cls.id),
         battlesWon: Math.max(0, Number(legacyPlayer.battlesWon) || 0),
         battlesFought: Math.max(0, Number(legacyPlayer.battlesFought) || 0),

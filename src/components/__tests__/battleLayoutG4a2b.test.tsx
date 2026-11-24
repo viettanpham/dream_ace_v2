@@ -285,7 +285,7 @@ describe('TASK G4a-2b — Right sidebar heights, [Dòng | Mở rộng] log modes
     ).toBe('true');
 
     // Verify dreamAce.logMode.v1 is NOT in SV1a or SV1b exports and CURRENT_SAVE_VERSION stays 9
-    expect(CURRENT_SAVE_VERSION).toBe(10);
+    expect(CURRENT_SAVE_VERSION).toBe(11);
     const snapshot = useGameStore.getState().exportSaveStateSnapshot();
     const snapshotJson = JSON.stringify(snapshot);
     expect(snapshotJson).not.toContain('dreamAce.logMode.v1');

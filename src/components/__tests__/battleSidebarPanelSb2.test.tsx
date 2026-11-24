@@ -584,7 +584,7 @@ describe('TASK SB2 — Selected-unit panel fixed height & header slots (>640px)'
     ) as HTMLElement;
     expect(panel.innerHTML).toContain(SP_COLOR_TOKENS.barFillClass);
     expect(panel.innerHTML).toContain(SP_COLOR_TOKENS.textClass);
-    expect(CURRENT_SAVE_VERSION).toBe(10);
+    expect(CURRENT_SAVE_VERSION).toBe(11);
   });
 
   it('5) Exposed radar lane header has no "Lộ diện" and sidebar unit header has no "Bảo vệ"/"Lộ diện"/"Trống"', () => {

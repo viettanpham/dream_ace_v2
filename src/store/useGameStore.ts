@@ -79,6 +79,10 @@ import {
   type WarehouseTransferResult,
 } from '../engine/warehouse';
 import {
+  setSupplyLoadout as setSupplyLoadoutEngine,
+  type SupplyLoadoutReject,
+} from '../engine/supplies';
+import {
   isValidSavePayloadShape,
   SAVE_IMPORT_BACKUP_STORAGE_KEY,
   validateImportSaveVersion,
@@ -429,6 +433,10 @@ interface GameStoreState {
   moveToWarehouse: (ids: string[]) => WarehouseTransferResult;
   moveToBox: (ids: string[]) => WarehouseTransferResult;
   moveAllUnusedToWarehouse: () => WarehouseTransferResult;
+  setSupplyLoadout: (
+    gearId: MechClassId,
+    ids: string[]
+  ) => { ok: boolean; rejected: SupplyLoadoutReject[]; reason?: 'locked' };
   undoQuickSell: () => { ok: boolean; restoredCount: number };
   clearQuickSellUndo: () => void;
   previewAutoEquip: (
@@ -2172,6 +2180,33 @@ export const useGameStore = create<GameStoreState>()(
           set({ pilot, hasSaveData: true });
         }
         return { moved, skippedEquipped, skippedProtected, skippedFull };
+      },
+
+      setSupplyLoadout: (gearId, ids) => {
+        const state = get();
+        if (isBattleActive(state) || Boolean(state.autoRepeatSession?.active)) {
+          return { ok: false, rejected: [], reason: 'locked' };
+        }
+        const gear = state.pilot.gears[gearId];
+        if (!gear) {
+          return { ok: false, rejected: [] };
+        }
+        const { gear: nextGear, rejected } = setSupplyLoadoutEngine(
+          gear,
+          ids,
+          state.adminConfig
+        );
+        set({
+          pilot: {
+            ...state.pilot,
+            gears: {
+              ...state.pilot.gears,
+              [gearId]: nextGear,
+            },
+          },
+          hasSaveData: true,
+        });
+        return { ok: true, rejected };
       },
 
       moveToBox: (ids) => {

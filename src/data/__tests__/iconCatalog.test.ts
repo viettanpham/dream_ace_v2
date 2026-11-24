@@ -167,7 +167,7 @@ describe('iconCatalog data & loader (G4a-1 part 1)', () => {
   });
 
   it('keeps CURRENT_SAVE_VERSION = 9 and loads old AdminConfig without iconCatalogMods', () => {
-    expect(CURRENT_SAVE_VERSION).toBe(10);
+    expect(CURRENT_SAVE_VERSION).toBe(11);
 
     const oldAdmin = { ...createDefaultAdminConfig() } as Partial<AdminConfig>;
     delete oldAdmin.iconCatalogMods;

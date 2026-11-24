@@ -17,5 +17,11 @@
   "qualitySlopePerPoint": 0.0028,
   "affixPct": 4,
   "traitPct": 6,
-  "minPrice": 20
+  "minPrice": 20,
+  "consumableBase": {
+    "hp_kit": 30,
+    "shield_kit": 30,
+    "sp_kit": 36,
+    "buff": 60
+  }
 }

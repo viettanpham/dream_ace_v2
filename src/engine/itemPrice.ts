@@ -1,5 +1,10 @@
 import { PRICE_FORMULA } from '../data/itemPricing';
-import type { EquipmentSlot, ItemRarity, ItemSpecialTraits } from '../types/game';
+import type {
+  EquipmentSlot,
+  ItemRarity,
+  ItemSpecialTraits,
+  SupplyTemplate,
+} from '../types/game';
 
 export interface ComputeItemPriceInput {
   slot: EquipmentSlot;
@@ -57,4 +62,27 @@ export function computeItemPrice(input: ComputeItemPriceInput): number {
     PRICE_FORMULA.minPrice,
     Math.round(base * tierFactor * rarityFactor * qualityMult * affixAndTraitMult)
   );
+}
+
+/**
+ * Single unified price formula for battle supply templates.
+ * priceOverride wins if present and positive; otherwise max(minPrice, round(base * tierFactor[tier - 1])).
+ */
+export function computeSupplyPrice(
+  template: Pick<SupplyTemplate, 'family' | 'tier' | 'priceOverride'>
+): number {
+  if (
+    typeof template.priceOverride === 'number' &&
+    Number.isFinite(template.priceOverride) &&
+    template.priceOverride > 0
+  ) {
+    return Math.round(template.priceOverride);
+  }
+  const base = PRICE_FORMULA.consumableBase[template.family];
+  const tierIdx = Math.max(
+    0,
+    Math.min(PRICE_FORMULA.tierFactor.length - 1, Math.round(template.tier) - 1)
+  );
+  const tierFactor = PRICE_FORMULA.tierFactor[tierIdx] ?? 1;
+  return Math.max(PRICE_FORMULA.minPrice, Math.round(base * tierFactor));
 }

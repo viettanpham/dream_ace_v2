@@ -222,6 +222,7 @@ export function createDefaultGearUnit(
     equipped: { ...EMPTY_EQUIPPED_SLOT_IDS },
     skillLevels,
     equippedSkillBar: [...starterSkills],
+    supplyLoadout: [],
     tactics: createDefaultTacticsForClass(classId),
     battlesWon: 0,
     battlesFought: 0,

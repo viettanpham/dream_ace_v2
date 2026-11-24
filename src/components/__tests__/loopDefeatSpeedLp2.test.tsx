@@ -283,7 +283,7 @@ describe('TASK LP2 — Loop defeat rule + extra speeds + high speed safety', () 
   });
 
   it('1) Renders 3 defeat-rule radio options, clamps N to 1-99, and persists per device outside save', () => {
-    expect(CURRENT_SAVE_VERSION).toBe(10);
+    expect(CURRENT_SAVE_VERSION).toBe(11);
     expect(clampDefeatStreakLimit(0)).toBe(1);
     expect(clampDefeatStreakLimit(-7)).toBe(1);
     expect(clampDefeatStreakLimit(100)).toBe(99);

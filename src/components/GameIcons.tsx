@@ -106,6 +106,8 @@ export function ConsumableIcon({
       return <RotateCcw className={className} aria-hidden="true" />;
     case 'exp_boost':
       return <Zap className={className} aria-hidden="true" />;
+    case 'battle_supply':
+      return <Sparkles className={className} aria-hidden="true" />;
   }
 }
 

@@ -651,7 +651,7 @@ describe('Task G4a-1 Part 2 — Icon catalog, status chips, settings, Bảng ico
     ).toEqual(adminDef);
 
     // Built-in defaults & old saves without statusDisplayDefaults + CURRENT_SAVE_VERSION=9
-    expect(CURRENT_SAVE_VERSION).toBe(10);
+    expect(CURRENT_SAVE_VERSION).toBe(11);
     const migrated = migrateSaveData({ credits: 500 }, 8);
     expect(
       resolveEffectiveStatusDisplaySettings(
@@ -663,7 +663,7 @@ describe('Task G4a-1 Part 2 — Icon catalog, status chips, settings, Bảng ico
     // SV1a save export does NOT include dreamAce.status.v1
     writeStatusDisplayOverride({ phoneRows: 4, badgeLayout: 'A' });
     const env = await buildExportEnvelope(useGameStore.getState());
-    expect(env.saveVersion).toBe(10);
+    expect(env.saveVersion).toBe(11);
     expect(JSON.stringify(env)).not.toContain('dreamAce.status.v1');
   });
 

@@ -411,12 +411,45 @@ export type ConsumableKind =
   | 'equipment_crate'
   | 'enchant_stone'
   | 'respec_token'
-  | 'exp_boost';
+  | 'exp_boost'
+  | 'battle_supply';
+
+export type SupplyFamily = 'hp_kit' | 'shield_kit' | 'sp_kit' | 'buff';
+
+export type SupplyEffectKind =
+  | 'heal_hp_pct'
+  | 'restore_shield_pct'
+  | 'restore_sp_pct';
+
+export interface SupplyEffect {
+  kind: SupplyEffectKind;
+  value: number;
+}
+
+export interface SupplyTemplate {
+  id: string;
+  family: SupplyFamily;
+  tier: 1 | 2 | 3 | 4;
+  unlockLevel: number;
+  iconId: string;
+  effects: SupplyEffect[];
+  cooldownTurns: number;
+  perBattleLimit: number;
+  priceOverride?: number;
+  registryTag: 'sys' | 'mods';
+}
+
+export interface BattleSupplyUnitState {
+  usedThisTurn: number;
+  usedCountsByTemplate: Record<string, number>;
+  cooldownsByTemplate: Record<string, number>;
+}
 
 export interface ConsumableItem {
   id: string;
   kind: ConsumableKind;
   quantity: number;
+  templateId?: string;
   slot?: EquipmentSlot;
   minRarity?: ItemRarity;
   bonusPct?: number;
@@ -719,6 +752,7 @@ export interface GearUnit {
   equipped: EquippedSlotIds;
   skillLevels: Record<string, number>; // learned skillId -> 1..5
   equippedSkillBar: string[]; // up to 6 active skills (class + general only)
+  supplyLoadout: string[]; // battle supply templateIds equipped for battle
   tactics: GearTacticsProfile;
   battlesWon: number;
   battlesFought: number;
@@ -1293,6 +1327,8 @@ export interface AdminConfig {
   warehouseCapacity: number;
   ignoreFrontline?: boolean;
   noticeDurationSec?: number;
+  supplyLoadoutSlots?: number;
+  supplyUsesPerTurn?: number;
   showRawI18nKeys: boolean;
 }
 
