@@ -11,6 +11,8 @@ interface BottomSheetProps {
   footer?: ReactNode;
   maxHeightClass?: string;
   bodyScrollable?: boolean;
+  zIndexClass?: string;
+  testId?: string;
 }
 
 export function BottomSheet({
@@ -22,6 +24,8 @@ export function BottomSheet({
   footer,
   maxHeightClass = 'max-h-[86dvh]',
   bodyScrollable = true,
+  zIndexClass = 'z-50',
+  testId,
 }: BottomSheetProps) {
   const { t } = useI18n();
 
@@ -41,7 +45,8 @@ export function BottomSheet({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-slate-950/75 backdrop-blur-sm"
+      data-testid={testId}
+      className={`fixed inset-0 ${zIndexClass} flex items-end md:items-center justify-center bg-slate-950/75 backdrop-blur-sm`}
       role="dialog"
       aria-modal="true"
       onClick={(e) => {

@@ -94,6 +94,7 @@ import {
   PAPER_DOLL_RIGHT_SLOTS,
   type GearPaperDollSlotKey,
 } from './GearSlotTile';
+import { GearSwapPicker } from './GearSwapPicker';
 import { QuickSellModal } from './QuickSellModal';
 import { SupplyLoadoutBar } from './SupplyLoadoutBar';
 
@@ -193,6 +194,7 @@ export function GearView() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmBulkRare, setConfirmBulkRare] = useState(false);
   const [quickSellOpen, setQuickSellOpen] = useState(false);
+  const [swapPickerSlot, setSwapPickerSlot] = useState<EquipmentSlot | null>(null);
   const [autoEquipPlan, setAutoEquipPlan] = useState<AutoEquipPlan | null>(
     null
   );
@@ -482,12 +484,9 @@ export function GearView() {
     setEnchantFeedback(null);
     setConfirmingUnequipSlot(null);
     setConfirmingSellId(null);
-    if (equippedMap[slot]) {
-      setSelection({ kind: 'slot', slot });
-      setMobileDetailOpen(true);
-    } else {
-      setSelection(null);
-      setMobileDetailOpen(false);
+    setSelection({ kind: 'slot', slot });
+    setMobileDetailOpen(true);
+    if (!equippedMap[slot]) {
       setInventoryFilterState({ slot });
     }
   };
@@ -810,7 +809,30 @@ export function GearView() {
       : null;
 
   const renderDetailContent = () => {
-    if (!activeDetailInstance || !activeDetailStats) return null;
+    if (!activeDetailInstance || !activeDetailStats) {
+      const emptySlot = selection?.kind === 'slot' ? selection.slot : null;
+      const slotLabel = emptySlot ? getSlotLabel(lang, emptySlot) : '';
+      return (
+        <div className="flex-1 min-h-[180px] rounded border border-slate-800/80 bg-[#080C14] p-5 flex flex-col items-center justify-center text-center space-y-2.5">
+          <div className="font-display text-lg font-semibold text-slate-300">
+            {emptySlot ? t('gear.emptySlotDetailTitle', { slot: slotLabel }) : t('gear.emptyDetailTitle')}
+          </div>
+          <p className="text-xs text-slate-500 max-w-xs leading-relaxed">
+            {emptySlot ? t('gear.emptySlotDetailDesc', { slot: slotLabel }) : t('gear.emptyDetailDesc')}
+          </p>
+          {emptySlot && (
+            <button
+              type="button"
+              data-testid="detail-pick-btn"
+              onClick={() => setSwapPickerSlot(emptySlot)}
+              className="min-h-[40px] px-4 rounded-lg border border-emerald-500/60 bg-emerald-500/20 hover:bg-emerald-500/30 text-xs font-bold text-emerald-200 transition-colors cursor-pointer"
+            >
+              {t('gear.pickBtn')}
+            </button>
+          )}
+        </div>
+      );
+    }
     const sellPrice = getSellPrice(activeDetailInstance);
     const isLocked = Boolean(activeDetailInstance.locked);
     const isFavorited = Boolean(activeDetailInstance.favorited);
@@ -980,6 +1002,14 @@ export function GearView() {
                       className="px-2 py-0.5 rounded bg-sky-500/25 hover:bg-sky-500/40 text-sky-100 font-bold cursor-pointer"
                     >
                       {t('shop.unequipShortcut')}
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="detail-swap-btn"
+                      onClick={() => setSwapPickerSlot(activeDetailInstance.slot)}
+                      className="px-2 py-0.5 rounded bg-emerald-500/25 hover:bg-emerald-500/40 text-emerald-100 font-bold cursor-pointer"
+                    >
+                      {t('gear.swapBtn')}
                     </button>
                   </span>
                 )}
@@ -2854,25 +2884,17 @@ export function GearView() {
             )}
           </div>
 
-          {!activeDetailInstance || !activeDetailStats ? (
-            <div className="flex-1 min-h-[180px] rounded border border-slate-800/80 bg-[#080C14] p-5 flex flex-col items-center justify-center text-center space-y-1.5">
-              <div className="font-display text-lg font-semibold text-slate-300">
-                {t('gear.emptyDetailTitle')}
-              </div>
-              <p className="text-xs text-slate-500 max-w-xs leading-relaxed">
-                {t('gear.emptyDetailDesc')}
-              </p>
-            </div>
-          ) : (
-            renderDetailContent()
-          )}
+          {renderDetailContent()}
         </section>
       </div>
 
       {/* Mobile Bottom Sheet for Item Detail / Compare / Enchant (< lg) */}
       <div className="lg:hidden">
         <BottomSheet
-          open={mobileDetailOpen && Boolean(activeDetailInstance)}
+          open={
+            mobileDetailOpen &&
+            (Boolean(activeDetailInstance) || selection?.kind === 'slot')
+          }
           onClose={() => {
             setMobileDetailOpen(false);
             setConfirmingUnequipSlot(null);
@@ -2881,6 +2903,8 @@ export function GearView() {
           title={
             activeDetailInstance
               ? getItemInstanceName(lang, activeDetailInstance, true)
+              : selection?.kind === 'slot'
+              ? getSlotLabel(lang, selection.slot)
               : t('gear.detailHeading')
           }
           subtitle={
@@ -2917,6 +2941,14 @@ export function GearView() {
         open={quickSellOpen}
         onClose={() => setQuickSellOpen(false)}
         onSold={() => {}}
+      />
+
+      {/* Quick Swap / Pick Modal */}
+      <GearSwapPicker
+        open={swapPickerSlot !== null}
+        slot={swapPickerSlot}
+        onClose={() => setSwapPickerSlot(null)}
+        onEquipped={(equippedSlot) => { setSelection({ kind: 'slot', slot: equippedSlot }); setConfirmingSellId(null); }}
       />
     </div>
   );

@@ -123,6 +123,14 @@ export const EN_TRANSLATIONS = {
   'gear.traitsHeading': 'Module Traits',
   'gear.affixesHeading': 'Rolled Affixes',
   'gear.baseStatsHeading': 'Base Roll',
+  'gear.swapTitle': 'Swap Equipment',
+  'gear.pickTitle': 'Choose Equipment',
+  'gear.swapBtn': 'Swap',
+  'gear.pickBtn': 'Choose Equipment',
+  'gear.equipActionBtn': 'Equip',
+  'gear.swapEmptyList': 'No matching equipment in cargo',
+  'gear.emptySlotDetailTitle': 'Empty Slot: {slot}',
+  'gear.emptySlotDetailDesc': 'Pick a matching module from cargo to equip in {slot}.',
 
   // Item Traits
   'trait.crit': '+{val}% Crit',

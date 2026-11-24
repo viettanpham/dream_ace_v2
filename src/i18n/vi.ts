@@ -125,6 +125,14 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'gear.traitsHeading': 'Đặc tính linh kiện',
   'gear.affixesHeading': 'Dòng phụ ngẫu nhiên',
   'gear.baseStatsHeading': 'Chỉ số nền đã roll',
+  'gear.swapTitle': 'Thay trang bị',
+  'gear.pickTitle': 'Chọn trang bị',
+  'gear.swapBtn': 'Thay',
+  'gear.pickBtn': 'Chọn trang bị',
+  'gear.equipActionBtn': 'Trang bị',
+  'gear.swapEmptyList': 'Không có trang bị phù hợp trong kho',
+  'gear.emptySlotDetailTitle': 'Slot trống: {slot}',
+  'gear.emptySlotDetailDesc': 'Chọn một linh kiện phù hợp trong kho để lắp vào ô {slot}.',
 
   // Item Traits
   'trait.crit': '+{val}% Chí mạng',
