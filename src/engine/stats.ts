@@ -140,6 +140,10 @@ export function calculateDerivedStats(
     critChance,
     skillPower,
     armorPiercePct: Math.min(50, specialTraits?.armorPiercePct ?? 0),
+    accuracyPct: Math.min(
+      BALANCE_CONFIG.maxAccuracyPct,
+      Math.max(0, specialTraits?.accuracyPct ?? 0)
+    ),
     splashPct: Math.min(40, specialTraits?.splashPct ?? 0),
     spRegenPerTurn:
       (specialTraits?.spRegenPerTurn ?? 0) + (passives?.spRegenPerTurn ?? 0),

@@ -30,6 +30,7 @@ export interface DerivedStats {
   critChance: number; // 5 to 65 (%)
   skillPower: number;
   armorPiercePct: number; // from equipped weapon/item traits (0 to 50)
+  accuracyPct?: number; // from equipped radar/item traits (0 to 30)
   splashPct: number; // splash damage % on basic attacks (0 to 40)
   spRegenPerTurn: number; // bonus SP regen per turn from item traits + passives
   passiveSkillDmgPct: number; // from Striker passive
@@ -844,6 +845,8 @@ export interface CombatUnit {
   row: CombatRow;
   formationCol?: number; // 0..(cols-1) within its row for adjacent splash & grid/radar layout
   hasLongRangeWeapon?: boolean;
+  accuracyPct?: number;
+  detectsStealth?: boolean;
   isPlayer: boolean;
   classId: MechClassId;
   archetype?: EnemyArchetype;
@@ -1172,7 +1175,9 @@ export interface AutoEquipClassWeights {
   splashPct: number;
   spRegenPerTurn: number;
   evasionMod: number;
+  accuracyPct: number;
   longRangeBonus: number;
+  detectStealthBonus: number;
   tierBonus: number;
   qualityWeight: number;
 }
@@ -1188,7 +1193,9 @@ export interface AutoEquipTraitDeltas {
   splashPct: number;
   spRegenPerTurn: number;
   evasionMod: number;
+  accuracyPct: number;
   longRangeDelta: -1 | 0 | 1;
+  detectStealthDelta: -1 | 0 | 1;
 }
 
 export interface AutoEquipSlotPlan {

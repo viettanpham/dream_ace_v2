@@ -44,8 +44,12 @@ export function scoreItemForClass(
     raw += (tr.splashPct ?? 0) * weights.splashPct;
     raw += (tr.spRegenPerTurn ?? 0) * weights.spRegenPerTurn;
     raw += (tr.evasionMod ?? 0) * weights.evasionMod;
+    raw += (tr.accuracyPct ?? 0) * weights.accuracyPct;
     if (tr.longRange) {
       raw += weights.longRangeBonus;
+    }
+    if (tr.detectStealth) {
+      raw += weights.detectStealthBonus;
     }
   }
 
@@ -79,13 +83,17 @@ function computeSlotTraitDeltas(
   const nt = nextItem?.specialTraits;
   const curRange = ct?.longRange ? 1 : 0;
   const nextRange = nt?.longRange ? 1 : 0;
+  const curDetect = ct?.detectStealth ? 1 : 0;
+  const nextDetect = nt?.detectStealth ? 1 : 0;
   return {
     critBonusPct: (nt?.critBonusPct ?? 0) - (ct?.critBonusPct ?? 0),
     armorPiercePct: (nt?.armorPiercePct ?? 0) - (ct?.armorPiercePct ?? 0),
     splashPct: (nt?.splashPct ?? 0) - (ct?.splashPct ?? 0),
     spRegenPerTurn: (nt?.spRegenPerTurn ?? 0) - (ct?.spRegenPerTurn ?? 0),
     evasionMod: (nt?.evasionMod ?? 0) - (ct?.evasionMod ?? 0),
+    accuracyPct: (nt?.accuracyPct ?? 0) - (ct?.accuracyPct ?? 0),
     longRangeDelta: (nextRange - curRange) as -1 | 0 | 1,
+    detectStealthDelta: (nextDetect - curDetect) as -1 | 0 | 1,
   };
 }
 

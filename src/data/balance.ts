@@ -161,6 +161,7 @@ export const BALANCE_CONFIG = {
   enrageStartRound: 20,
   enrageStepPct: 0.1,
   enrageMaxBonusPct: 2.0,
+  maxAccuracyPct: 30,
 } as const;
 
 export const COMBAT_FORMULAS = {

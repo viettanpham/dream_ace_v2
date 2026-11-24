@@ -232,6 +232,8 @@ function buildCombatUnit(params: {
   row: CombatRow;
   formationCol?: number;
   hasLongRangeWeapon?: boolean;
+  accuracyPct?: number;
+  detectsStealth?: boolean;
   isPlayer: boolean;
   classId: MechClassId;
   archetype?: EnemyArchetype;
@@ -303,6 +305,11 @@ function buildCombatUnit(params: {
         params.specialTraits?.longRange ||
         params.archetype === 'sniper'
     ),
+    accuracyPct: Math.min(
+      BALANCE_CONFIG.maxAccuracyPct,
+      Math.max(0, params.accuracyPct ?? 0)
+    ),
+    detectsStealth: Boolean(params.detectsStealth),
     isPlayer: params.isPlayer,
     classId: params.classId,
     archetype: params.archetype,
@@ -566,6 +573,11 @@ export function createInitialBattleState(
     row: savedPlayerSlot?.row ?? 'front',
     formationCol: 0,
     hasLongRangeWeapon: Boolean(playerTraits.longRange),
+    accuracyPct: Math.min(
+      BALANCE_CONFIG.maxAccuracyPct,
+      Math.max(0, playerTraits.accuracyPct ?? 0)
+    ),
+    detectsStealth: Boolean(playerTraits.detectStealth),
     isPlayer: true,
     classId: activeGear.classId,
     level: activeGear.level,
@@ -836,9 +848,11 @@ const LONG_RANGE_SKILL_EFFECTS = new Set<SkillDefinition['effectKind']>([
 
 function getTargetableOpponents(
   units: CombatUnit[],
-  actorSide: CombatSide
+  actorSide: CombatSide,
+  detectsStealth?: boolean
 ): CombatUnit[] {
   const aliveOpp = units.filter((u) => u.side !== actorSide && u.alive);
+  if (detectsStealth) return aliveOpp;
   const nonStealth = aliveOpp.filter((u) => !isUnitStealthed(u));
   return nonStealth.length > 0 ? nonStealth : aliveOpp;
 }
@@ -894,7 +908,7 @@ export function getValidEnemyTargets(
   action: ActionType = 'attack',
   skillId?: string
 ): CombatUnit[] {
-  const basePool = getTargetableOpponents(units, actor.side);
+  const basePool = getTargetableOpponents(units, actor.side, actor.detectsStealth);
   if (isLongRangeAction(actor, action, skillId)) {
     return basePool;
   }
@@ -1224,7 +1238,10 @@ function applyDamageToUnit(
 
   // Check Barrel Roll (evade_all) or standard Dodge
   const forceDodge = !isOneHit && !hasSureHit && hasStatus(curTarget, 'evade_all');
-  const effectiveDodge = getEffectiveUnitDodge(curTarget);
+  const effectiveDodge = Math.max(
+    0,
+    getEffectiveUnitDodge(curTarget) - (curAttacker.accuracyPct ?? 0)
+  );
   if (forceDodge || (!isOneHit && !hasSureHit && rng() * 100 < effectiveDodge)) {
     popups.push({
       id: nextId('pop'),
@@ -2034,7 +2051,7 @@ function resolveUnitActionCore(
       ? getScaledSkillStats(chargedSkill, skillLv)
       : { powerMultiplier: 3.2 };
 
-    const opponents = getTargetableOpponents(nextUnits, actor.side);
+    const opponents = getTargetableOpponents(nextUnits, actor.side, actor.detectsStealth);
     const chosenTarget =
       opponents.find((u) => u.id === chargingSt.targetId) ?? opponents[0];
 
@@ -2781,7 +2798,7 @@ function resolveUnitActionCore(
 
         // ---- CHARGE SHOT (2-turn striker skill) ----
         case 'charge_attack': {
-          const opp = getTargetableOpponents(nextUnits, act.side);
+          const opp = getTargetableOpponents(nextUnits, act.side, act.detectsStealth);
           const lockedTarget = opp.find((u) => u.id === targetId) ?? opp[0];
           nextUnits[actorIdx] = {
             ...act,
@@ -2820,7 +2837,7 @@ function resolveUnitActionCore(
 
         // ---- OFFENSIVE MULTI / SPLASH / AOE / SINGLE SKILLS ----
         case 'multi_attack': {
-          const opp = getTargetableOpponents(nextUnits, act.side);
+          const opp = getTargetableOpponents(nextUnits, act.side, act.detectsStealth);
           const targets = opp.slice(0, skill.maxTargets ?? 3);
           const dmgMult = getEffectiveAttackDamageMult(act, true);
           const rawPower = act.derived.attackPower * 2.15 * scaled.powerMultiplier * dmgMult;
@@ -2871,7 +2888,7 @@ function resolveUnitActionCore(
         }
 
         case 'splash_attack': {
-          const opp = getTargetableOpponents(nextUnits, act.side);
+          const opp = getTargetableOpponents(nextUnits, act.side, act.detectsStealth);
           const chosen = opp.find((u) => u.id === targetId) ?? opp[0];
           const targetSlotIndices: number[] = [];
           if (chosen) {
@@ -3005,7 +3022,7 @@ function resolveUnitActionCore(
         case 'attack_shield_break':
         case 'attack_pierce':
         case 'pierce_all_elite': {
-          const opp = getTargetableOpponents(nextUnits, act.side);
+          const opp = getTargetableOpponents(nextUnits, act.side, act.detectsStealth);
           const chosen = opp.find((u) => u.id === targetId) ?? opp[0];
           if (chosen) {
             const cIdx = nextUnits.findIndex((u) => u.id === chosen.id);
@@ -3103,7 +3120,7 @@ function resolveUnitActionCore(
         }
 
         case 'silence_target': {
-          const opp = getTargetableOpponents(nextUnits, act.side);
+          const opp = getTargetableOpponents(nextUnits, act.side, act.detectsStealth);
           const chosen = opp.find((u) => u.id === targetId) ?? opp[0];
           if (chosen) {
             const cIdx = nextUnits.findIndex((u) => u.id === chosen.id);
