@@ -37,7 +37,6 @@ export function TopHud() {
   const pilot = useGameStore((s) => s.pilot);
   const muted = useGameStore((s) => s.muted);
   const battleViewMode = useGameStore((s) => s.battleViewMode);
-  const adminUnlocked = useGameStore((s) => s.adminUnlocked);
   const adminConfig = useGameStore((s) => s.adminConfig);
   const setScreen = useGameStore((s) => s.setScreen);
   const returnToHangar = useGameStore((s) => s.returnToHangar);
@@ -101,7 +100,7 @@ export function TopHud() {
   const activeGear = pilot.gears[pilot.activeGearId];
   const expNeeded = getExpForNextLevel(activeGear.level);
   const cheatsActive = isAnyCheatActive(adminConfig);
-  const showAdminBtn = ENABLE_ADMIN_CP && adminUnlocked;
+  const showAdminBtn = ENABLE_ADMIN_CP;
   const effectiveDefaultMode =
     battleViewMode ?? (layoutMode === 'phone-portrait' ? 'radar' : 'card');
 
@@ -264,15 +263,13 @@ export function TopHud() {
                 type="button"
                 data-testid="tophud-admin-btn"
                 onClick={toggleAdminPanel}
-                className="min-h-[40px] md:min-h-0 md:h-9 px-2.5 inline-flex items-center gap-1.5 rounded border border-amber-500/60 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 font-bold text-[12px] tracking-wider cursor-pointer shrink-0"
+                aria-label={t('admin.title')}
                 title={t('admin.title')}
+                className="hidden md:flex md:h-9 md:w-9 items-center justify-center rounded border border-amber-500/60 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 cursor-pointer shrink-0 transition-colors"
               >
-                <Sliders className="w-3.5 h-3.5" />
-                <span>{t('admin.btnLabel')}</span>
+                <Sliders className="w-4 h-4" />
               </button>
             )}
-
-            <LanguageToggle />
 
             <button
               type="button"

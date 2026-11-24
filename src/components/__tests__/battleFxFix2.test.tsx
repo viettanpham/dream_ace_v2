@@ -416,7 +416,7 @@ describe('Task FX-fix2: Firefox reduced-motion resilience, dreamAce.fx.v2 storag
     expect(settingsBtn).not.toBeNull();
     expect(
       container!.querySelector('[data-testid="tophud-admin-btn"]')
-    ).toBeNull();
+    ).not.toBeNull();
 
     act(() => {
       settingsBtn.click();
