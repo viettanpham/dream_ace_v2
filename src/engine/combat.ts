@@ -65,7 +65,11 @@ import {
   calculateEffectiveStats,
   generateNpcAllocations,
 } from './stats';
-import { computeShieldRegen, sanitizeShieldRegenConfig } from './shieldRegen';
+import {
+  computeShieldRegen,
+  getUnitHitsSinceOwnTurn,
+  sanitizeShieldRegenConfig,
+} from './shieldRegen';
 
 let uidCounter = 1;
 function nextId(prefix: string): string {
@@ -954,6 +958,49 @@ function hydrateFxUnits(
   };
 }
 
+export interface ApplyShieldThenHullOptions {
+  ignoreShield?: boolean;
+}
+
+export interface ShieldThenHullResult {
+  shieldLost: number;
+  hullDamage: number;
+  nextShield: number;
+  nextHp: number;
+  brokeNow: boolean;
+}
+
+export function applyShieldThenHull(
+  target: Pick<CombatUnit, 'hp' | 'shield'>,
+  damage: number,
+  opts: ApplyShieldThenHullOptions = {}
+): ShieldThenHullResult {
+  const safeDamage = Math.max(0, Number.isFinite(damage) ? damage : 0);
+  const startShield = Math.max(0, Number.isFinite(target.shield) ? target.shield : 0);
+  const startHp = Math.max(0, Number.isFinite(target.hp) ? target.hp : 0);
+
+  let shieldLost = 0;
+  let nextShield = startShield;
+  let hullDamage = safeDamage;
+
+  if (!opts.ignoreShield && startShield > 0 && safeDamage > 0) {
+    shieldLost = Math.min(startShield, safeDamage);
+    nextShield = startShield - shieldLost;
+    hullDamage = safeDamage - shieldLost;
+  }
+
+  const nextHp = Math.max(0, startHp - hullDamage);
+  const brokeNow = startShield > 0 && nextShield === 0 && !opts.ignoreShield;
+
+  return {
+    shieldLost,
+    hullDamage,
+    nextShield,
+    nextHp,
+    brokeNow,
+  };
+}
+
 function applyDamageToUnit(
   unitsContext: CombatUnit[],
   attacker: CombatUnit,
@@ -1284,23 +1331,15 @@ function applyDamageToUnit(
   }
   finalDamage = Math.max(6, finalDamage);
 
-  // Shield Break OR Hyper Shot (ignoreDefAndShield) bypasses shields completely!
-  const shieldDisabled =
-    ignoreDef || hasStatus(curTarget, 'shield_break');
-  let nextShield = curTarget.shield;
-  let nextHp = curTarget.hp;
-  let shieldAbsorbed = 0;
-  let hullDamage = 0;
-
-  if (!shieldDisabled && nextShield > 0) {
-    shieldAbsorbed = Math.min(nextShield, finalDamage);
-    nextShield -= shieldAbsorbed;
-    hullDamage = finalDamage - shieldAbsorbed;
-  } else {
-    hullDamage = finalDamage;
-  }
-
-  nextHp = Math.max(0, nextHp - hullDamage);
+  // Shield ALWAYS absorbs first unless ignoreDefAndShield (SH2b handles skill shield-ignore)
+  const shieldDisabled = ignoreDef;
+  const dmgRes = applyShieldThenHull(curTarget, finalDamage, {
+    ignoreShield: shieldDisabled,
+  });
+  const nextShield = dmgRes.nextShield;
+  const nextHp = dmgRes.nextHp;
+  const shieldAbsorbed = dmgRes.shieldLost;
+  const hullDamage = dmgRes.hullDamage;
   const destroyed = nextHp <= 0;
   const hitShieldOnly = shieldAbsorbed > 0 && hullDamage === 0;
 
@@ -1393,17 +1432,16 @@ function applyDamageToUnit(
 
   const shieldRegenCfg = sanitizeShieldRegenConfig(options.adminConfig?.shieldRegen);
   let nextStatuses = destroyed ? [] : curTarget.statuses;
-  let nextHitSinceOwnTurn = curTarget.hitSinceOwnTurn;
+  let nextHitsSinceOwnTurn = curTarget.hitsSinceOwnTurn;
 
   if (shieldRegenCfg.enabled) {
-    if (shieldAbsorbed > 0 || hullDamage > 0) {
-      nextHitSinceOwnTurn = true;
+    if (curAttacker.side !== curTarget.side && (shieldAbsorbed > 0 || hullDamage > 0)) {
+      nextHitsSinceOwnTurn = getUnitHitsSinceOwnTurn(curTarget) + 1;
     }
-    if (!destroyed && curTarget.shield > 0 && nextShield === 0) {
+    if (!destroyed && dmgRes.brokeNow) {
       nextStatuses = addOrRefreshStatus(nextStatuses, {
-        type: 'shield_cracked',
-        turnsRemaining: shieldRegenCfg.brokenTurns,
-        magnitude: shieldRegenCfg.brokenMult / 100,
+        type: 'shield_break',
+        turnsRemaining: shieldRegenCfg.restartTurns,
         isDebuff: true,
         sourceName: curAttacker.name,
       });
@@ -1414,7 +1452,7 @@ function applyDamageToUnit(
         actorId: curAttacker.id,
         targetId: curTarget.id,
         type: 'status_applied',
-        statusId: 'shield_cracked',
+        statusId: 'shield_break',
         skillId: options.actionMeta.skillId || undefined,
         flags: { isDebuff: true },
       });
@@ -1430,8 +1468,8 @@ function applyDamageToUnit(
       alive: !destroyed,
       isDefending: destroyed ? false : curTarget.isDefending,
       statuses: nextStatuses,
-      ...(nextHitSinceOwnTurn !== undefined
-        ? { hitSinceOwnTurn: nextHitSinceOwnTurn }
+      ...(nextHitsSinceOwnTurn !== undefined
+        ? { hitsSinceOwnTurn: nextHitsSinceOwnTurn }
         : {}),
       animState: anim,
     },
@@ -1648,6 +1686,9 @@ function resolveUnitActionCore(
     };
   }
 
+  // Capture whether shield_break is active on this own turn before status tick decrements it
+  const shieldBreakAtTurnStart = hasStatus(actor, 'shield_break');
+
   // Passive per-turn Shield Regeneration (next to SP regen, before status tick)
   const shieldRegenCfg = sanitizeShieldRegenConfig(adminConfig?.shieldRegen);
   if (shieldRegenCfg.enabled) {
@@ -1693,12 +1734,13 @@ function resolveUnitActionCore(
           amount: shieldRegen.amount,
           reason: shieldRegen.reason,
           multPct: shieldRegen.multPct,
+          hits: shieldRegen.hits,
           classId: actor.classId,
         },
       });
     }
-    if (actor.hitSinceOwnTurn) {
-      actor = { ...actor, hitSinceOwnTurn: false };
+    if (getUnitHitsSinceOwnTurn(actor) > 0) {
+      actor = { ...actor, hitsSinceOwnTurn: 0 };
     }
   }
 
@@ -1918,7 +1960,7 @@ function resolveUnitActionCore(
       actor.derived.maxSp - actor.sp,
       COMBAT_FORMULAS.defendSpGain
     );
-    const shieldBlocked = hasStatus(actor, 'shield_break');
+    const shieldBlocked = shieldBreakAtTurnStart || hasStatus(actor, 'shield_break');
     const shieldRecovered = shieldBlocked
       ? 0
       : Math.min(
@@ -2337,9 +2379,13 @@ function resolveUnitActionCore(
               magnitude: scaled.buffMagnitude,
               sourceSkillId: skill.id,
             });
-            const shieldBoost = Math.round(
-              act.derived.maxShield * (scaled.secondaryMagnitude || 0.3)
-            );
+            const shieldBlocked =
+              shieldBreakAtTurnStart || hasStatus(act, 'shield_break');
+            const shieldBoost = shieldBlocked
+              ? 0
+              : Math.round(
+                  act.derived.maxShield * (scaled.secondaryMagnitude || 0.3)
+                );
             nextShield = Math.min(act.derived.maxShield, act.shield + shieldBoost);
           }
           nextUnits[actorIdx] = {
@@ -3210,10 +3256,15 @@ function resolveUnitActionCore(
               ally.derived.maxSp - ally.sp,
               scaled.spAmount || 10
             );
-            const shdGain = Math.min(
-              ally.derived.maxShield - ally.shield,
-              Math.round(ally.derived.maxShield * (scaled.buffMagnitude || 0.25))
-            );
+            const shieldBlocked =
+              (ally.id === act.id && shieldBreakAtTurnStart) ||
+              hasStatus(ally, 'shield_break');
+            const shdGain = shieldBlocked
+              ? 0
+              : Math.min(
+                  ally.derived.maxShield - ally.shield,
+                  Math.round(ally.derived.maxShield * (scaled.buffMagnitude || 0.25))
+                );
             totalRestored += spGain + shdGain;
             nextUnits[i] = {
               ...ally,
@@ -3453,14 +3504,17 @@ function resolveUnitActionCore(
             const ally = nextUnits[i];
             if (ally.side !== act.side || !ally.alive) continue;
             slotIndices.push(getSlotIndex(units, ally.id));
+            const shieldBlocked =
+              (ally.id === act.id && shieldBreakAtTurnStart) ||
+              hasStatus(ally, 'shield_break');
             const hpGain = ally.derived.maxHp - ally.hp;
-            const shdGain = ally.derived.maxShield - ally.shield;
+            const shdGain = shieldBlocked ? 0 : ally.derived.maxShield - ally.shield;
             const hadDebuff = ally.statuses.some((s) => DEBUFF_TYPES.has(s.type));
             totalRestored += hpGain + shdGain;
             nextUnits[i] = {
               ...ally,
               hp: ally.derived.maxHp,
-              shield: ally.derived.maxShield,
+              shield: ally.shield + shdGain,
               statuses: ally.statuses.filter((s) => !DEBUFF_TYPES.has(s.type)),
               animState: ally.id === act.id ? 'casting' : 'shielded',
             };
@@ -3648,31 +3702,53 @@ function resolveUnitActionCore(
       if (!otherOpponent.alive) continue;
       const oIdx = nextUnits.findIndex((u) => u.id === otherOpponent.id);
       fxTargetSlots.push(getSlotIndex(units, otherOpponent.id));
-      const shieldDisabled = hasStatus(otherOpponent, 'shield_break');
       const actualSplash =
         (adminConfig?.godMode && otherOpponent.isPlayer) ||
         hasStatus(otherOpponent, 'invincible')
           ? 0
           : splashDmg;
-      let nextShd = otherOpponent.shield;
-      let nextHp = otherOpponent.hp;
-      let splashAbsorbed = 0;
-      let splashHpDmg = 0;
-      if (!shieldDisabled && nextShd > 0) {
-        splashAbsorbed = Math.min(nextShd, actualSplash);
-        nextShd -= splashAbsorbed;
-        splashHpDmg = actualSplash - splashAbsorbed;
-        nextHp = Math.max(0, nextHp - splashHpDmg);
-      } else {
-        splashHpDmg = actualSplash;
-        nextHp = Math.max(0, nextHp - splashHpDmg);
-      }
+      const splashDmgRes = applyShieldThenHull(otherOpponent, actualSplash);
+      const nextShd = splashDmgRes.nextShield;
+      const nextHp = splashDmgRes.nextHp;
+      const splashAbsorbed = splashDmgRes.shieldLost;
+      const splashHpDmg = splashDmgRes.hullDamage;
       const splashKo = nextHp <= 0;
+
+      let nextSplashStatuses = splashKo ? [] : otherOpponent.statuses;
+      let nextSplashHits = otherOpponent.hitsSinceOwnTurn;
+      if (shieldRegenCfg.enabled) {
+        if (actor.side !== otherOpponent.side && (splashAbsorbed > 0 || splashHpDmg > 0)) {
+          nextSplashHits = getUnitHitsSinceOwnTurn(otherOpponent) + 1;
+        }
+        if (!splashKo && splashDmgRes.brokeNow) {
+          nextSplashStatuses = addOrRefreshStatus(nextSplashStatuses, {
+            type: 'shield_break',
+            turnsRemaining: shieldRegenCfg.restartTurns,
+            isDebuff: true,
+            sourceName: actor.name,
+          });
+          events.push({
+            id: nextId('ev'),
+            round,
+            turn: 0,
+            actorId: actor.id,
+            targetId: otherOpponent.id,
+            type: 'status_applied',
+            statusId: 'shield_break',
+            flags: { isDebuff: true },
+          });
+        }
+      }
+
       nextUnits[oIdx] = {
         ...otherOpponent,
         shield: nextShd,
         hp: nextHp,
         alive: !splashKo,
+        statuses: nextSplashStatuses,
+        ...(nextSplashHits !== undefined
+          ? { hitsSinceOwnTurn: nextSplashHits }
+          : {}),
         animState: splashKo ? 'destroyed' : 'hit',
       };
       if (actualSplash > 0) {

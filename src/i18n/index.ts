@@ -181,9 +181,12 @@ export function getStatusLabel(
 
 export function getStatusDesc(
   lang: Language,
-  status: StatusEffectType
+  status: StatusEffectType,
+  turns?: number
 ): string {
-  return translate(lang, `status.${status}.desc` as TranslationKey);
+  return translate(lang, `status.${status}.desc` as TranslationKey, {
+    n: Math.max(1, turns ?? 1),
+  });
 }
 
 const STATUS_SHORT_LABELS: Record<
@@ -191,7 +194,7 @@ const STATUS_SHORT_LABELS: Record<
   { en: string; vi: string }
 > = {
   burn: { en: 'Burn', vi: 'Thiêu' },
-  shield_break: { en: 'ShdBrk', vi: 'VỡKhiên' },
+  shield_break: { en: 'ShdDown', vi: 'KhiênVỡ' },
   shield_cracked: { en: 'Cracked', vi: 'KhiênNứt' },
   slow: { en: 'Slow', vi: 'Chậm' },
   silence: { en: 'Silence', vi: 'Câm' },
@@ -323,8 +326,11 @@ export function formatStatusEffectDetail(
       break;
     }
     case 'shield_break': {
-      // Exact engine behavior: bypasses shields & blocks shield restore (combat.ts)
-      valueText = isVi ? 'Khóa Khiên' : 'Shields off';
+      const turns = Math.max(1, st.turnsRemaining || 1);
+      valueText = isVi
+        ? `Khởi động lại ${turns} lượt`
+        : `Restarting ${turns} turn(s)`;
+      includeTurns = false;
       break;
     }
     case 'shield_cracked': {
@@ -803,9 +809,10 @@ function formatCombatLogBody(
     case 'log.shieldRegen': {
       const reason = String(p.reason ?? 'not_hit');
       const multPct = Number(p.multPct ?? 100);
+      const hits = Number(p.hits ?? 0);
       const suffix =
         reason === 'hit'
-          ? translate(lang, 'log.shieldRegenHitSuffix', { multPct })
+          ? translate(lang, 'log.shieldRegenHitSuffix', { hits, multPct })
           : reason === 'cracked'
           ? translate(lang, 'log.shieldRegenCrackedSuffix', { multPct })
           : '';

@@ -597,7 +597,7 @@ describe('6. Save Migration (v1 / v2 / v3 / v4 / Corrupt -> v5 Skill System)', (
 });
 
 describe('7. Combat Depth (Status Effects & Enemy Archetypes)', () => {
-  it('applies Burn DoT at turn start, Slow reduces speed by 30%, and Shield Break bypasses shields', () => {
+  it('applies Burn DoT at turn start, Slow reduces speed by 30%, and Shield Break no longer bypasses shields', () => {
     const pilot = createDefaultPilotAccount('Vance', 'striker');
     const battle = createInitialBattleState(
       pilot,
@@ -640,8 +640,9 @@ describe('7. Combat Depth (Status Effects & Enemy Archetypes)', () => {
       () => 0.99
     );
     const enemyAfter = attackRes.updatedUnits.find((u) => u.id === enemy.id)!;
-    expect(enemyAfter.shield).toBe(200);
-    expect(enemyAfter.hp).toBeLessThan(300);
+    // SH2a: shield ALWAYS absorbs first even when shield_break is active
+    expect(enemyAfter.shield).toBeLessThan(200);
+    expect(enemyAfter.hp).toBe(300);
 
     const burnedPlayer: CombatUnit = {
       ...player,

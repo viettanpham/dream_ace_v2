@@ -203,7 +203,7 @@ export function formatStatusChipShortValue(
       return isVi ? `+${pct}% ST nhận` : `+${pct}% DMG`;
     }
     case 'shield_break':
-      return isVi ? 'Khóa Khiên' : 'No Shield';
+      return isVi ? 'KhiênVỡ' : 'ShdDown';
     case 'shield_cracked': {
       const pct = Math.round((st.magnitude ?? 0.3) * 100);
       return `${pct}%`;

@@ -4,7 +4,7 @@ import {
   getFirstExpiringTurns,
   getStatusVisualKind,
 } from '../data/statusIconMap';
-import { formatStatusEffectDetail, translate } from '../i18n';
+import { formatStatusEffectDetail, getStatusDesc, translate } from '../i18n';
 import type {
   ActiveStatusEffect,
   CombatUnit,
@@ -83,7 +83,11 @@ export function StatusChip({
   const nameAndValue = fullDetail.valueText
     ? `${fullDetail.label}: ${fullDetail.valueText}`
     : fullDetail.label;
-  const accessibleSummary = `${nameAndValue} · ${turnsText} · ${stacksText}`;
+  const extraDesc =
+    status.type === 'shield_break'
+      ? ` · ${getStatusDesc(lang, 'shield_break', turnsLeft ?? 1)}`
+      : '';
+  const accessibleSummary = `${nameAndValue} · ${turnsText} · ${stacksText}${extraDesc}`;
 
   const isMini = size === 'xs';
   const framePx = STATUS_ICON_SIZE_SPECS[size].boxPx;

@@ -6,21 +6,21 @@ export const DEFAULT_SHIELD_REGEN_CONFIG: ShieldRegenConfig = {
   perPointPct: 0.08,
   capPct: 12,
   notHitMult: 100,
-  hitMult: 75,
-  brokenMult: 30,
-  brokenTurns: 3,
+  hitPenaltyPct: 20,
+  minHitMultPct: 0,
+  restartTurns: 1,
 };
 
 export type ShieldRegenReason =
   | 'not_hit'
   | 'hit'
-  | 'cracked'
-  | 'blocked'
+  | 'restarting'
   | 'none';
 
 export interface ShieldRegenResult {
   amount: number;
   multPct: number;
+  hits: number;
   reason: ShieldRegenReason;
 }
 
@@ -30,22 +30,35 @@ function clampFinite(value: unknown, min: number, max: number, fallback: number)
 }
 
 export function sanitizeShieldRegenConfig(
-  raw?: Partial<ShieldRegenConfig> | null
+  raw?: Partial<ShieldRegenConfig> | Record<string, unknown> | null
 ): ShieldRegenConfig {
   const def = DEFAULT_SHIELD_REGEN_CONFIG;
   if (!raw || typeof raw !== 'object') {
     return { ...def };
   }
+  const src = raw as Record<string, unknown>;
   return {
-    enabled: typeof raw.enabled === 'boolean' ? raw.enabled : def.enabled,
-    basePct: clampFinite(raw.basePct, 0, 50, def.basePct),
-    perPointPct: clampFinite(raw.perPointPct, 0, 50, def.perPointPct),
-    capPct: clampFinite(raw.capPct, 0, 50, def.capPct),
-    notHitMult: clampFinite(raw.notHitMult, 0, 200, def.notHitMult),
-    hitMult: clampFinite(raw.hitMult, 0, 200, def.hitMult),
-    brokenMult: clampFinite(raw.brokenMult, 0, 200, def.brokenMult),
-    brokenTurns: Math.round(clampFinite(raw.brokenTurns, 1, 10, def.brokenTurns)),
+    enabled: typeof src.enabled === 'boolean' ? src.enabled : def.enabled,
+    basePct: clampFinite(src.basePct, 0, 50, def.basePct),
+    perPointPct: clampFinite(src.perPointPct, 0, 50, def.perPointPct),
+    capPct: clampFinite(src.capPct, 0, 50, def.capPct),
+    notHitMult: clampFinite(src.notHitMult, 0, 200, def.notHitMult),
+    hitPenaltyPct: clampFinite(src.hitPenaltyPct, 0, 100, def.hitPenaltyPct),
+    minHitMultPct: clampFinite(src.minHitMultPct, 0, 100, def.minHitMultPct),
+    restartTurns: Math.round(clampFinite(src.restartTurns, 1, 3, def.restartTurns)),
   };
+}
+
+export function getUnitHitsSinceOwnTurn(unit: CombatUnit): number {
+  if (typeof unit.hitsSinceOwnTurn === 'number' && Number.isFinite(unit.hitsSinceOwnTurn)) {
+    return Math.max(0, Math.floor(unit.hitsSinceOwnTurn));
+  }
+  const legacyHit = (unit as CombatUnit & { hitSinceOwnTurn?: unknown }).hitSinceOwnTurn;
+  if (legacyHit === true) return 1;
+  if (typeof legacyHit === 'number' && Number.isFinite(legacyHit)) {
+    return Math.max(0, Math.floor(legacyHit));
+  }
+  return 0;
 }
 
 function unitHasActiveStatus(unit: CombatUnit, type: StatusEffectType): boolean {
@@ -70,20 +83,21 @@ export function computeShieldRegen(
   const maxShield = unit.derived?.maxShield ?? 0;
 
   if (!resolved.enabled || !unit.alive || maxShield <= 0) {
-    return { amount: 0, multPct: 0, reason: 'none' };
+    return { amount: 0, multPct: 0, hits: 0, reason: 'none' };
   }
 
+  const hits = getUnitHitsSinceOwnTurn(unit);
   let multPct: number;
   let reason: ShieldRegenReason;
 
   if (unitHasActiveStatus(unit, 'shield_break')) {
     multPct = 0;
-    reason = 'blocked';
-  } else if (unitHasActiveStatus(unit, 'shield_cracked')) {
-    multPct = resolved.brokenMult;
-    reason = 'cracked';
-  } else if (unit.hitSinceOwnTurn) {
-    multPct = resolved.hitMult;
+    reason = 'restarting';
+  } else if (hits > 0) {
+    multPct = Math.max(
+      resolved.minHitMultPct,
+      resolved.notHitMult - resolved.hitPenaltyPct * hits
+    );
     reason = 'hit';
   } else {
     multPct = resolved.notHitMult;
@@ -95,5 +109,5 @@ export function computeShieldRegen(
   const room = Math.max(0, maxShield - Math.max(0, unit.shield));
   const amount = Math.min(room, Math.max(0, Math.round((base * multPct) / 100)));
 
-  return { amount, multPct, reason };
+  return { amount, multPct, hits, reason };
 }

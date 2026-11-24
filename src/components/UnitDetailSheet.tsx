@@ -369,7 +369,7 @@ export function UnitDetailSheet({
                         {detail.fullText}
                       </div>
                       <div className="text-xs text-slate-300 mt-0.5 leading-snug">
-                        {getStatusDesc(lang, st.type)}
+                        {getStatusDesc(lang, st.type, st.turnsRemaining)}
                       </div>
                     </div>
                     <span className="font-mono-nums text-xs font-bold px-1.5 py-0.5 rounded bg-slate-950/70 text-slate-200 shrink-0">

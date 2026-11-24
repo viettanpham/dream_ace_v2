@@ -1492,6 +1492,11 @@ export function AdminPanel() {
                 const examplePct = Number(
                   computeShieldRegenPct(25, srCfg).toFixed(2)
                 );
+                const hit2Mult = Math.max(
+                  srCfg.minHitMultPct,
+                  srCfg.notHitMult - srCfg.hitPenaltyPct * 2
+                );
+                const hit2Pct = Number(((examplePct * hit2Mult) / 100).toFixed(2));
                 const updateSr = (patch: Partial<typeof srCfg>) => {
                   adminUpdateConfig({
                     shieldRegen: sanitizeShieldRegenConfig({
@@ -1513,7 +1518,7 @@ export function AdminPanel() {
                         data-testid="admin-shield-regen-example"
                         className="text-[11px] font-mono-nums text-sky-200/90"
                       >
-                        {t('admin.shieldRegenExample', { pct: examplePct })}
+                        {t('admin.shieldRegenExample', { pct: examplePct, hit2Pct })}
                       </span>
                     </div>
 
@@ -1602,16 +1607,16 @@ export function AdminPanel() {
 
                       <label className="space-y-1 block">
                         <span className="text-[11px] text-slate-400 block">
-                          {t('admin.shieldRegenHitMult')}
+                          {t('admin.shieldRegenHitPenaltyPct')}
                         </span>
                         <input
                           type="number"
                           min={0}
-                          max={200}
+                          max={100}
                           step={5}
-                          value={srCfg.hitMult}
+                          value={srCfg.hitPenaltyPct}
                           onChange={(e) =>
-                            updateSr({ hitMult: Number(e.target.value) })
+                            updateSr({ hitPenaltyPct: Number(e.target.value) })
                           }
                           className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
                         />
@@ -1619,16 +1624,16 @@ export function AdminPanel() {
 
                       <label className="space-y-1 block">
                         <span className="text-[11px] text-slate-400 block">
-                          {t('admin.shieldRegenBrokenMult')}
+                          {t('admin.shieldRegenMinHitMultPct')}
                         </span>
                         <input
                           type="number"
                           min={0}
-                          max={200}
+                          max={100}
                           step={5}
-                          value={srCfg.brokenMult}
+                          value={srCfg.minHitMultPct}
                           onChange={(e) =>
-                            updateSr({ brokenMult: Number(e.target.value) })
+                            updateSr({ minHitMultPct: Number(e.target.value) })
                           }
                           className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
                         />
@@ -1636,16 +1641,16 @@ export function AdminPanel() {
 
                       <label className="space-y-1 block">
                         <span className="text-[11px] text-slate-400 block">
-                          {t('admin.shieldRegenBrokenTurns')}
+                          {t('admin.shieldRegenRestartTurns')}
                         </span>
                         <input
                           type="number"
                           min={1}
-                          max={10}
+                          max={3}
                           step={1}
-                          value={srCfg.brokenTurns}
+                          value={srCfg.restartTurns}
                           onChange={(e) =>
-                            updateSr({ brokenTurns: Number(e.target.value) })
+                            updateSr({ restartTurns: Number(e.target.value) })
                           }
                           className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
                         />

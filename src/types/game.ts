@@ -859,7 +859,7 @@ export interface CombatUnit {
   isDefending: boolean;
   alive: boolean;
   statuses: ActiveStatusEffect[];
-  hitSinceOwnTurn?: boolean;
+  hitsSinceOwnTurn?: number;
   animState: UnitAnimState;
 }
 
@@ -1298,9 +1298,9 @@ export interface ShieldRegenConfig {
   perPointPct: number;
   capPct: number;
   notHitMult: number;
-  hitMult: number;
-  brokenMult: number;
-  brokenTurns: number;
+  hitPenaltyPct: number;
+  minHitMultPct: number;
+  restartTurns: number;
 }
 
 export interface AdminConfig {
