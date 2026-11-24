@@ -46,6 +46,7 @@ import {
   computeShieldRegenPct,
   sanitizeShieldRegenConfig,
 } from '../engine/shieldRegen';
+import { sanitizeNoticeDurationSec } from '../engine/migration';
 import type {
   BattleSize,
   CombatRow,
@@ -1458,6 +1459,28 @@ export function AdminPanel() {
                           Math.max(0, Number(e.target.value) || 0) / 100,
                       })
                     }
+                    className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                  />
+                </label>
+
+                {/* Notice Banner Auto-Close Duration */}
+                <label className="space-y-1 block sm:col-span-2 lg:col-span-1">
+                  <span className="text-[11px] text-slate-400 block">
+                    {t('admin.noticeDurationSec')}
+                  </span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={120}
+                    data-testid="admin-notice-duration-input"
+                    value={sanitizeNoticeDurationSec(adminConfig.noticeDurationSec)}
+                    onChange={(e) => {
+                      const raw =
+                        e.target.value === '' ? 0 : Number(e.target.value);
+                      adminUpdateConfig({
+                        noticeDurationSec: sanitizeNoticeDurationSec(raw),
+                      });
+                    }}
                     className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
                   />
                 </label>

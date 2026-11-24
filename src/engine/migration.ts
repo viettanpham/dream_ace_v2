@@ -192,6 +192,15 @@ const VALID_CLASSES = new Set<MechClassId>([
 const VALID_SPEEDS = new Set<BattleSpeed>(ALLOWED_BATTLE_SPEEDS);
 const VALID_BATTLE_SIZES = new Set<BattleSize>([4, 6, 8]);
 
+export const DEFAULT_NOTICE_DURATION_SEC = 10;
+
+export function sanitizeNoticeDurationSec(raw: unknown): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) {
+    return DEFAULT_NOTICE_DURATION_SEC;
+  }
+  return Math.max(0, Math.min(120, Math.round(raw)));
+}
+
 export function createDefaultAdminConfig(): AdminConfig {
   return {
     godMode: false,
@@ -215,6 +224,7 @@ export function createDefaultAdminConfig(): AdminConfig {
     shieldRegen: { ...DEFAULT_SHIELD_REGEN_CONFIG },
     warehouseCapacity: DEFAULT_WAREHOUSE_CAPACITY,
     ignoreFrontline: false,
+    noticeDurationSec: DEFAULT_NOTICE_DURATION_SEC,
     showRawI18nKeys: false,
   };
 }
@@ -516,6 +526,7 @@ export function migrateSaveData(
       typeof rawAdmin.ignoreFrontline === 'boolean'
         ? rawAdmin.ignoreFrontline
         : false,
+    noticeDurationSec: sanitizeNoticeDurationSec(rawAdmin.noticeDurationSec),
     showRawI18nKeys: Boolean(rawAdmin.showRawI18nKeys),
   };
 

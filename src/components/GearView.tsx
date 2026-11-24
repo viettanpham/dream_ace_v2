@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDownWideNarrow,
   ArrowUp,
@@ -49,6 +49,7 @@ import {
   filterAndSortInventory,
   type InventoryEntryView,
 } from '../engine/inventory';
+import { sanitizeNoticeDurationSec } from '../engine/migration';
 import { getGearPassiveBonuses } from '../engine/skills';
 import {
   calculateDerivedStats,
@@ -83,6 +84,7 @@ import type {
 } from '../types/game';
 import { soundFx } from '../utils/sound';
 import { AutoEquipModal } from './AutoEquipModal';
+import { Notice } from './Notice';
 import { BottomSheet } from './BottomSheet';
 import { FighterSvg } from './FighterSvg';
 import { ClassIcon, ConsumableIcon, SlotIcon } from './GameIcons';
@@ -186,8 +188,19 @@ export function GearView() {
   const [autoEquipPlan, setAutoEquipPlan] = useState<AutoEquipPlan | null>(
     null
   );
-  const [inventoryNotice, setInventoryNotice] = useState<string | null>(null);
-  const [undoSecondsLeft, setUndoSecondsLeft] = useState(0);
+  type ActiveGearBanner =
+    | { id: number; kind: 'quicksell' }
+    | { id: number; kind: 'autoequip' }
+    | { id: number; kind: 'notice'; text: string };
+
+  const [activeBanner, setActiveBanner] = useState<ActiveGearBanner | null>(() => {
+    if (quickSellUndo) return { id: 1, kind: 'quicksell' };
+    if (autoEquipUndo) return { id: 1, kind: 'autoequip' };
+    return null;
+  });
+  const bannerSeqRef = useRef(2);
+  const prevQuickSellUndoRef = useRef(quickSellUndo);
+  const prevAutoEquipUndoRef = useRef(autoEquipUndo);
 
   // Virtualized grid measurement state
   const gridContainerRef = useRef<HTMLDivElement | null>(null);
@@ -201,26 +214,35 @@ export function GearView() {
   const activeClass = MECH_CLASSES[activeGear.classId];
   const ownedGears = MECH_CLASS_LIST.filter((c) => pilot.gears[c.id].owned);
 
-  // Manage 5-second Quick Sell Undo timer
-  useEffect(() => {
-    if (!quickSellUndo) {
-      setUndoSecondsLeft(0);
+  const setInventoryNotice = useCallback((text: string | null) => {
+    if (!text) {
+      setActiveBanner(null);
       return;
     }
-    const updateTimer = () => {
-      const elapsed = Date.now() - quickSellUndo.soldAt;
-      const remaining = Math.max(0, 5000 - elapsed);
-      if (remaining <= 0) {
-        clearQuickSellUndo();
-        setUndoSecondsLeft(0);
-      } else {
-        setUndoSecondsLeft(Math.ceil(remaining / 1000));
-      }
-    };
-    updateTimer();
-    const interval = setInterval(updateTimer, 250);
-    return () => clearInterval(interval);
-  }, [quickSellUndo, clearQuickSellUndo]);
+    setActiveBanner({
+      id: bannerSeqRef.current++,
+      kind: 'notice',
+      text,
+    });
+  }, []);
+
+  useEffect(() => {
+    if (quickSellUndo && quickSellUndo !== prevQuickSellUndoRef.current) {
+      setActiveBanner({ id: bannerSeqRef.current++, kind: 'quicksell' });
+    } else if (!quickSellUndo && prevQuickSellUndoRef.current) {
+      setActiveBanner((prev) => (prev?.kind === 'quicksell' ? null : prev));
+    }
+    prevQuickSellUndoRef.current = quickSellUndo;
+  }, [quickSellUndo]);
+
+  useEffect(() => {
+    if (autoEquipUndo && autoEquipUndo !== prevAutoEquipUndoRef.current) {
+      setActiveBanner({ id: bannerSeqRef.current++, kind: 'autoequip' });
+    } else if (!autoEquipUndo && prevAutoEquipUndoRef.current) {
+      setActiveBanner((prev) => (prev?.kind === 'autoequip' ? null : prev));
+    }
+    prevAutoEquipUndoRef.current = autoEquipUndo;
+  }, [autoEquipUndo]);
 
   // Measure virtualized grid container
   useEffect(() => {
@@ -1712,97 +1734,87 @@ export function GearView() {
             </div>
           </div>
 
-          {/* 5-second Quick Sell Undo Toast */}
-          {quickSellUndo && undoSecondsLeft > 0 && (
-            <div
-              data-testid="quicksell-undo-toast"
-              className="rounded-lg border border-amber-400/60 bg-amber-500/15 px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-xs text-amber-100"
-            >
-              <span className="font-medium">
-                {t('qs.undoToast', {
-                  count: quickSellUndo.soldItems.length,
-                  credits: quickSellUndo.totalCredits.toLocaleString(),
-                })}{' '}
-                <span className="font-mono-nums text-amber-300">
-                  ({undoSecondsLeft}s)
-                </span>
-              </span>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  data-testid="quicksell-undo-btn"
-                  onClick={() => {
-                    const res = undoQuickSell();
-                    if (res.ok) {
-                      setInventoryNotice(
-                        t('qs.undoneFeedback', { count: res.restoredCount })
-                      );
-                    }
-                  }}
-                  className="min-h-[34px] px-3 rounded bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs cursor-pointer"
-                >
-                  {t('qs.undoBtn')}
-                </button>
-                <button
-                  type="button"
-                  onClick={clearQuickSellUndo}
-                  aria-label={t('error.closeBtn')}
-                  className="p-1 text-amber-300 hover:text-white cursor-pointer"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-          )}
+          {/* Shared Single-Slot Notice Banner above item grid */}
+          {(() => {
+            if (!activeBanner) return null;
+            const durationSec = sanitizeNoticeDurationSec(
+              adminConfig.noticeDurationSec
+            );
 
-          {/* Auto-Equip Undo Toast (kept until next auto-equip or undo) */}
-          {autoEquipUndo && (
-            <div
-              data-testid="autoequip-undo-toast"
-              className="rounded-lg border border-sky-400/60 bg-sky-500/15 px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-xs text-sky-100"
-            >
-              <span className="font-medium">
-                {t('ae.undoToast', { count: autoEquipUndo.changedSlotsCount })}
-              </span>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  data-testid="autoequip-undo-btn"
-                  onClick={() => {
-                    const res = undoAutoEquip();
-                    if (res.ok) {
-                      setInventoryNotice(t('ae.undoneFeedback'));
-                    }
+            if (activeBanner.kind === 'quicksell' && quickSellUndo) {
+              return (
+                <Notice
+                  key={activeBanner.id}
+                  testId="quicksell-undo-toast"
+                  tone="warning"
+                  text={t('qs.undoToast', {
+                    count: quickSellUndo.soldItems.length,
+                    credits: quickSellUndo.totalCredits.toLocaleString(),
+                  })}
+                  action={{
+                    label: t('qs.undoBtn'),
+                    testId: 'quicksell-undo-btn',
+                    onClick: () => {
+                      const res = undoQuickSell();
+                      if (res.ok) {
+                        setInventoryNotice(
+                          t('qs.undoneFeedback', { count: res.restoredCount })
+                        );
+                      }
+                    },
                   }}
-                  className="min-h-[34px] px-3 rounded bg-sky-400 hover:bg-sky-300 text-slate-950 font-bold text-xs cursor-pointer"
-                >
-                  {t('ae.undoBtn')}
-                </button>
-                <button
-                  type="button"
-                  onClick={clearAutoEquipUndo}
-                  aria-label={t('error.closeBtn')}
-                  className="p-1 text-sky-300 hover:text-white cursor-pointer"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-          )}
+                  durationSec={durationSec}
+                  onClose={() => {
+                    clearQuickSellUndo();
+                    setActiveBanner(null);
+                  }}
+                />
+              );
+            }
 
-          {/* Inline Action Notice */}
-          {inventoryNotice && (
-            <div className="rounded border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 flex items-center justify-between gap-2 text-xs text-emerald-200">
-              <span>{inventoryNotice}</span>
-              <button
-                type="button"
-                onClick={() => setInventoryNotice(null)}
-                className="text-emerald-300 hover:text-white cursor-pointer"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          )}
+            if (activeBanner.kind === 'autoequip' && autoEquipUndo) {
+              return (
+                <Notice
+                  key={activeBanner.id}
+                  testId="autoequip-undo-toast"
+                  tone="info"
+                  text={t('ae.undoToast', {
+                    count: autoEquipUndo.changedSlotsCount,
+                  })}
+                  action={{
+                    label: t('ae.undoBtn'),
+                    testId: 'autoequip-undo-btn',
+                    onClick: () => {
+                      const res = undoAutoEquip();
+                      if (res.ok) {
+                        setInventoryNotice(t('ae.undoneFeedback'));
+                      }
+                    },
+                  }}
+                  durationSec={durationSec}
+                  onClose={() => {
+                    clearAutoEquipUndo();
+                    setActiveBanner(null);
+                  }}
+                />
+              );
+            }
+
+            if (activeBanner.kind === 'notice') {
+              return (
+                <Notice
+                  key={activeBanner.id}
+                  testId="gear-inventory-notice"
+                  tone="success"
+                  text={activeBanner.text}
+                  durationSec={durationSec}
+                  onClose={() => setActiveBanner(null)}
+                />
+              );
+            }
+
+            return null;
+          })()}
 
           {/* Wrapped Slot Tabs WITH Shared Icons & Per-Slot Counts (NO horizontal scrollbar) */}
           <div
@@ -2795,13 +2807,8 @@ export function GearView() {
         onClose={() => setAutoEquipPlan(null)}
         onApply={() => {
           if (!autoEquipPlan) return;
-          const res = applyAutoEquip(autoEquipPlan);
+          applyAutoEquip(autoEquipPlan);
           setAutoEquipPlan(null);
-          if (res.ok) {
-            setInventoryNotice(
-              t('ae.appliedFeedback', { count: res.changedSlotsCount })
-            );
-          }
         }}
       />
 
@@ -2809,20 +2816,7 @@ export function GearView() {
       <QuickSellModal
         open={quickSellOpen}
         onClose={() => setQuickSellOpen(false)}
-        onSold={(count, credits, skipped) => {
-          setInventoryNotice(
-            skipped > 0
-              ? t('qs.soldWithSkippedNotice', {
-                  count,
-                  credits: credits.toLocaleString(),
-                  skipped,
-                })
-              : t('inv.bulkSoldFeedback', {
-                  count,
-                  credits: credits.toLocaleString(),
-                })
-          );
-        }}
+        onSold={() => {}}
       />
     </div>
   );

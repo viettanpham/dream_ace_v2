@@ -1292,6 +1292,7 @@ export interface AdminConfig {
   shieldRegen?: ShieldRegenConfig;
   warehouseCapacity: number;
   ignoreFrontline?: boolean;
+  noticeDurationSec?: number;
   showRawI18nKeys: boolean;
 }
 

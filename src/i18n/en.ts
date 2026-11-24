@@ -1171,7 +1171,7 @@ export const EN_TRANSLATIONS = {
   'qs.confirmPrompt': 'Sell {count} selected items for +{credits} CR? You will have 5 seconds to undo.',
   'qs.confirmExecute': 'Confirm Sell',
   'qs.cancelBtn': 'Cancel',
-  'qs.undoToast': 'Sold {count} items for +{credits} CR.',
+  'qs.undoToast': 'Quick-sold {count} parts (+{credits} CR).',
   'qs.undoBtn': 'Undo',
   'qs.undoneFeedback': 'Restored {count} sold items.',
 
@@ -1230,6 +1230,7 @@ export const EN_TRANSLATIONS = {
   'admin.skillsResetCd': 'Reset Battle Cooldowns & SP',
   'admin.battleEnrageStart': 'Enrage Start Round',
   'admin.battleEnrageStep': 'Enrage Step (% / rnd)',
+  'admin.noticeDurationSec': 'Banner auto-close duration (sec, 0 = stay open)',
   'admin.shieldRegenTitle': 'Shield Regen',
   'admin.shieldRegenEnabled': 'Enable per-turn shield regen',
   'admin.shieldRegenBasePct': 'Base (% maxShield)',

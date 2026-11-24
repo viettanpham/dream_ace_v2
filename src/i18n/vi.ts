@@ -1173,7 +1173,7 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'qs.confirmPrompt': 'Bán {count} vật phẩm đã chọn để nhận +{credits} CR? Bạn có 5 giây để hoàn tác.',
   'qs.confirmExecute': 'Xác nhận bán',
   'qs.cancelBtn': 'Hủy',
-  'qs.undoToast': 'Đã bán {count} món (+{credits} CR).',
+  'qs.undoToast': 'Đã bán nhanh {count} linh kiện (+{credits} CR).',
   'qs.undoBtn': 'Hoàn tác',
   'qs.undoneFeedback': 'Đã khôi phục {count} vật phẩm vừa bán.',
 
@@ -1232,6 +1232,7 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'admin.skillsResetCd': 'Hồi ngay Cooldown & SP trận',
   'admin.battleEnrageStart': 'Vòng bắt đầu Cuồng nộ',
   'admin.battleEnrageStep': 'Tăng Cuồng nộ (% / vòng)',
+  'admin.noticeDurationSec': 'Thời gian tự đóng banner (giây, 0 = không tự đóng)',
   'admin.shieldRegenTitle': 'Hồi khiên',
   'admin.shieldRegenEnabled': 'Bật hồi khiên mỗi lượt',
   'admin.shieldRegenBasePct': 'Cơ bản (% maxShield)',
