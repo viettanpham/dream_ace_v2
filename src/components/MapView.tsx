@@ -1958,7 +1958,7 @@ export function MapView() {
       {isPhone && (
         <div
           data-testid="map-phone-action-bar"
-          className="sticky bottom-0 z-20 -mx-3 px-3 py-2 border-t border-slate-800/95 bg-[#080C15]/95 backdrop-blur-md flex items-center gap-2"
+          className="sticky bottom-0 z-20 -mx-3 px-3 py-2 border-t border-slate-800/95 bg-slate-900/95 flex items-center gap-2"
         >
           <button
             type="button"

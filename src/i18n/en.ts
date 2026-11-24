@@ -1783,6 +1783,13 @@ export const EN_TRANSLATIONS = {
   'battle.kind.event': 'Event',
   'summary.battleKindLine': 'Battle type: {kind}',
   'admin.campaignIgnoreFrontline': 'Ignore frontline rule (test)',
+  'perf.label': 'Effects',
+  'perf.modeAuto': 'Auto',
+  'perf.modeFull': 'Full',
+  'perf.modeLow': 'Low',
+  'perf.activeFull': 'Active: Full',
+  'perf.activeLow': 'Active: Low',
+  'perf.toggleTitle': 'Effects mode: {mode} (click to cycle)',
 } as const;
 
 export type TranslationKey = keyof typeof EN_TRANSLATIONS;

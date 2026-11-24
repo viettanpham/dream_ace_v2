@@ -135,8 +135,8 @@
 }
 
 @keyframes thruster-flicker {
-  0%, 100% { opacity: 0.72; transform: scaleX(0.92); }
-  50% { opacity: 1; transform: scaleX(1.18); }
+  0%, 100% { opacity: 0.68; }
+  50% { opacity: 1; }
 }
 
 @keyframes shield-bubble-pulse {
@@ -324,8 +324,6 @@
 
 .anim-thruster {
   animation: thruster-flicker 260ms ease-in-out infinite;
-  transform-box: fill-box;
-  transform-origin: right center;
 }
 
 .anim-shield-bubble {
@@ -1172,6 +1170,54 @@
 
 .vfx-low-hp-pulse {
   animation: vfx-low-hp-opacity 1.15s ease-in-out infinite;
+}
+
+/* Pause all animations when the tab is hidden or window loses focus */
+html[data-paused="true"] *,
+html[data-paused="true"] *::before,
+html[data-paused="true"] *::after {
+  animation-play-state: paused !important;
+}
+
+/* Low-effects mode ("Tiết kiệm"): disable infinite animations, blurs, drop-shadow glows & shield pulse */
+html[data-perf="low"] .anim-turn-active,
+html[data-perf="low"] .anim-turn-arrow,
+html[data-perf="low"] .anim-ship-hover,
+html[data-perf="low"] .anim-ship-hover-hero,
+html[data-perf="low"] .anim-thruster,
+html[data-perf="low"] .anim-shield-bubble,
+html[data-perf="low"] .anim-radar,
+html[data-perf="low"] .anim-radar-sweep,
+html[data-perf="low"] .anim-radar-star,
+html[data-perf="low"] .anim-token-hover,
+html[data-perf="low"] .anim-reticle-pulse,
+html[data-perf="low"] .anim-raid-pulse,
+html[data-perf="low"] .anim-contested-pulse,
+html[data-perf="low"] .anim-lane-flow,
+html[data-perf="low"] .vfx-html-sweep,
+html[data-perf="low"] .vfx-low-hp-pulse,
+html[data-perf="low"] .animate-pulse {
+  animation: none !important;
+}
+
+html[data-perf="low"] .anim-turn-active {
+  box-shadow: 0 0 0 1px var(--turn-active) !important;
+}
+
+html[data-perf="low"] .anim-shield-bubble {
+  opacity: 0.72;
+}
+
+html[data-perf="low"] *,
+html[data-perf="low"] *::before,
+html[data-perf="low"] *::after {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+html[data-perf="low"] .blur-3xl,
+html[data-perf="low"] [class*="drop-shadow"] {
+  filter: none !important;
 }
 
 /* Horizontal strip scrollbar (phone turn queue inner scroll only) */

@@ -13,8 +13,15 @@ import {
   type ReducedMotionSetting,
 } from '../utils/battleVfx';
 import { useStatusDisplaySettings } from '../utils/statusDisplayPrefs';
+import { getNextPerfMode, usePerfMode, type PerfMode } from '../utils/perfPrefs';
 import { StageProjectile, StageToken } from './ActionStage';
 import { IconCatalogPreviewModal } from './IconCatalogPreviewModal';
+
+function getPerfModeLabelKey(mode: PerfMode) {
+  if (mode === 'low') return 'perf.modeLow' as const;
+  if (mode === 'full') return 'perf.modeFull' as const;
+  return 'perf.modeAuto' as const;
+}
 
 interface EffectsSettingsPanelProps {
   /** Compact variant for embedding inside battle "..." sheet or TopHud settings */
@@ -30,6 +37,8 @@ export function EffectsSettingsPanel({ compact = false }: EffectsSettingsPanelPr
   const { t } = useI18n();
   const [fxSettings, updateFxSettings] = useFxSettings();
   const [actionStageEnabled, setActionStageEnabled] = useActionStageEnabled();
+  const [perfMode, setPerfMode, resolvedPerf] = usePerfMode();
+  const perfModeLabel = t(getPerfModeLabelKey(perfMode));
   const adminStatusDefaults = useGameStore(
     (s) => s.adminConfig.statusDisplayDefaults
   );
@@ -102,6 +111,28 @@ export function EffectsSettingsPanel({ compact = false }: EffectsSettingsPanelPr
           : 'p-3 rounded-lg border border-slate-800 bg-slate-900/50 space-y-3'
       }
     >
+      {/* 0. Global Performance / Effects Mode (Auto / Đầy đủ / Tiết kiệm) */}
+      <button
+        type="button"
+        data-testid="settings-perf-mode-btn"
+        onClick={() => setPerfMode(getNextPerfMode(perfMode))}
+        title={t('perf.toggleTitle', { mode: perfModeLabel })}
+        className="w-full min-h-[42px] px-3.5 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-[13px] font-semibold text-slate-200 flex items-center justify-between gap-2 cursor-pointer transition-colors"
+      >
+        <span className="inline-flex items-center gap-2 min-w-0">
+          <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+          <span>{t('perf.label')}</span>
+          {perfMode === 'auto' && (
+            <span className="text-[11px] font-normal text-slate-400 truncate">
+              ({resolvedPerf === 'low' ? t('perf.activeLow') : t('perf.activeFull')})
+            </span>
+          )}
+        </span>
+        <span className="font-mono-nums text-[12px] font-bold text-amber-300 shrink-0">
+          {perfModeLabel}
+        </span>
+      </button>
+
       {/* 1. Effects Mode (Full / Compact / Off) */}
       <div className="space-y-1.5">
         <div className="flex items-center justify-between gap-2">

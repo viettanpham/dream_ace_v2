@@ -15,6 +15,7 @@ import { ENABLE_ADMIN_CP, useGameStore } from './store/useGameStore';
 import { useI18n } from './i18n';
 import { useBattleLayoutMode } from './utils/battleDisplay';
 import { installGlobalErrorCapture } from './utils/errorLog';
+import { attachPerfDocumentListeners } from './utils/perfPrefs';
 
 function AppShell() {
   const { t } = useI18n();
@@ -63,6 +64,11 @@ function AppShell() {
   // Cloud save autosave (after every battle + when repeat loop ends, max 1/30s, auto-retry on online)
   useEffect(() => {
     return attachCloudAutosaveListeners();
+  }, []);
+
+  // Performance mode + hidden/unfocused animation pause attribute sync on <html>
+  useEffect(() => {
+    return attachPerfDocumentListeners();
   }, []);
 
   if (screen === 'TITLE') {

@@ -112,7 +112,7 @@ export function SidebarNav() {
       {/* Mobile Fixed Bottom Tab Bar (< 768px) */}
       <nav
         aria-label="Mobile navigation"
-        className="md:hidden fixed bottom-0 inset-x-0 z-30 border-t border-slate-800/95 bg-[#090E18]/98 backdrop-blur-md pb-safe"
+        className="md:hidden fixed bottom-0 inset-x-0 z-30 border-t border-slate-800/95 bg-slate-900/95 pb-safe"
       >
         <div className="grid grid-cols-6">
           {SIDEBAR_ITEMS.map((item) => {

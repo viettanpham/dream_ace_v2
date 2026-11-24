@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { CloudDownload, HardDrive, Sliders, Volume2, VolumeX } from 'lucide-react';
+import { CloudDownload, HardDrive, Sliders, Sparkles, Volume2, VolumeX } from 'lucide-react';
 import { MECH_CLASS_LIST } from '../data/classes';
 import {
   getClassCode,
@@ -11,12 +11,19 @@ import {
 import { useCloudSaveStore } from '../store/useCloudSaveStore';
 import { ENABLE_ADMIN_CP, useGameStore } from '../store/useGameStore';
 import type { MechClassId } from '../types/game';
+import { getNextPerfMode, usePerfMode, type PerfMode } from '../utils/perfPrefs';
 import { BottomSheet } from './BottomSheet';
 import { OpenRemoteSaveDialog } from './CloudSaveDialogs';
 import { CloudSaveSection } from './CloudSaveSection';
 import { FighterSvg } from './FighterSvg';
 import { LanguageToggle } from './LanguageToggle';
 import { SaveTransferSection } from './SaveTransferSection';
+
+function getPerfModeLabelKey(mode: PerfMode) {
+  if (mode === 'low') return 'perf.modeLow' as const;
+  if (mode === 'full') return 'perf.modeFull' as const;
+  return 'perf.modeAuto' as const;
+}
 
 export function TitleScreen() {
   const { lang, t } = useI18n();
@@ -34,6 +41,8 @@ export function TitleScreen() {
   const [confirmReset, setConfirmReset] = useState(false);
   const [saveSheetOpen, setSaveSheetOpen] = useState(false);
   const [openRemoteModalOpen, setOpenRemoteModalOpen] = useState(false);
+  const [perfMode, setPerfMode] = usePerfMode();
+  const perfModeLabel = t(getPerfModeLabelKey(perfMode));
   const cloudConfigured = useCloudSaveStore((s) => s.isConfigured)();
   const [newPilotName, setNewPilotName] = useState(pilot.name || 'Kira');
   const [starterClass, setStarterClass] = useState<MechClassId>(
@@ -82,7 +91,7 @@ export function TitleScreen() {
 
   return (
     <div className="relative h-full w-full overflow-y-auto bg-tactical-grid flex flex-col justify-between">
-      {/* Deep-Space Orbital Radar SVG Backdrop */}
+      {/* Deep-Space Orbital Radar Static SVG Backdrop */}
       <svg
         viewBox="0 0 1200 720"
         className="pointer-events-none fixed inset-0 h-full w-full object-cover opacity-35"
@@ -100,20 +109,23 @@ export function TitleScreen() {
           <circle r="335" stroke="#1E293B" strokeWidth="1" fill="none" />
           <line x1="-380" y1="0" x2="380" y2="0" stroke="#1E293B" strokeWidth="1" />
           <line x1="0" y1="-380" x2="0" y2="380" stroke="#1E293B" strokeWidth="1" />
-          <g className="anim-radar">
-            <path
-              d="M0 0 L335 0 A335 335 0 0 0 290 -168 Z"
-              fill="url(#radarGrad)"
-            />
-          </g>
         </g>
-        <defs>
-          <linearGradient id="radarGrad" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor="#38BDF8" stopOpacity="0.18" />
-            <stop offset="100%" stopColor="#38BDF8" stopOpacity="0" />
-          </linearGradient>
-        </defs>
       </svg>
+
+      {/* CSS-only Orbital Radar Sweep (compositor layer, no SVG transform) */}
+      <div
+        className="pointer-events-none fixed inset-0 overflow-hidden opacity-35"
+        aria-hidden="true"
+      >
+        <div
+          className="absolute left-[71.67%] top-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(56vw,93dvh)] aspect-square rounded-full anim-radar"
+          style={{
+            willChange: 'transform',
+            background:
+              'conic-gradient(from 60deg, transparent 0deg, transparent 330deg, rgba(56, 189, 248, 0.18) 360deg)',
+          }}
+        />
+      </div>
 
       {/* Top Controls */}
       <div className="relative z-10 flex items-center justify-end gap-2 px-4 sm:px-6 pt-4 pt-safe">
@@ -137,6 +149,19 @@ export function TitleScreen() {
           <span>{t('save.titleManageBtn')}</span>
         </button>
         <LanguageToggle />
+        <button
+          type="button"
+          data-testid="title-perf-mode-btn"
+          onClick={() => setPerfMode(getNextPerfMode(perfMode))}
+          title={t('perf.toggleTitle', { mode: perfModeLabel })}
+          aria-label={t('perf.toggleTitle', { mode: perfModeLabel })}
+          className="min-h-[44px] sm:min-h-0 sm:h-9 px-3 inline-flex items-center gap-1.5 rounded-lg sm:rounded border border-slate-800 bg-[#0E1520]/90 hover:bg-slate-800 text-xs font-medium text-slate-300 transition-colors cursor-pointer whitespace-nowrap"
+        >
+          <Sparkles className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+          <span>
+            {t('perf.label')}: <strong className="text-slate-100">{perfModeLabel}</strong>
+          </span>
+        </button>
         <button
           type="button"
           onClick={toggleMute}
@@ -379,7 +404,13 @@ export function TitleScreen() {
         {/* Right: Hovering Hero Fighter */}
         <div className="lg:col-span-5 flex flex-col items-center justify-center">
           <div className="relative flex flex-col items-center justify-center p-6">
-            <div className="absolute inset-4 rounded-full bg-sky-500/10 blur-3xl pointer-events-none" />
+            <div
+              className="absolute inset-4 rounded-full pointer-events-none"
+              style={{
+                background:
+                  'radial-gradient(circle, rgba(56, 189, 248, 0.16) 0%, rgba(56, 189, 248, 0.05) 48%, transparent 74%)',
+              }}
+            />
             <FighterSvg
               classId={heroClassId}
               side="ally"

@@ -2387,7 +2387,7 @@ export function BattleScreen() {
           {/* 3) Sticky compact control row (max 48px): Auto, Speed Cycle, View Switch (icon-only), Loop (icon+num / running chip), "..." More */}
           <div
             data-testid="battle-phone-controls"
-            className="sticky top-0 z-30 h-12 max-h-[48px] shrink-0 border-b border-slate-800/80 bg-[#080D16]/95 backdrop-blur-sm px-1.5 flex items-center justify-between gap-1 flex-nowrap overflow-x-hidden"
+            className="sticky top-0 z-30 h-12 max-h-[48px] shrink-0 border-b border-slate-800/80 bg-slate-900/95 px-1.5 flex items-center justify-between gap-1 flex-nowrap overflow-x-hidden"
           >
             <button
               type="button"

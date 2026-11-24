@@ -1786,6 +1786,13 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'battle.kind.event': 'Sự kiện',
   'summary.battleKindLine': 'Loại trận: {kind}',
   'admin.campaignIgnoreFrontline': 'Bỏ qua luật tiền tuyến (test)',
+  'perf.label': 'Hiệu ứng',
+  'perf.modeAuto': 'Auto',
+  'perf.modeFull': 'Đầy đủ',
+  'perf.modeLow': 'Tiết kiệm',
+  'perf.activeFull': 'Đang chạy: Đầy đủ',
+  'perf.activeLow': 'Đang chạy: Tiết kiệm',
+  'perf.toggleTitle': 'Chế độ hiệu ứng: {mode} (bấm để đổi)',
 };
 
 
