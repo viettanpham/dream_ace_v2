@@ -172,7 +172,7 @@ export function GearSlotTile({
       data-testid={`gear-slot-tile-desktop-${slotKey}`}
       data-slot-key={slotKey}
       data-locked={locked ? 'true' : 'false'}
-      className={`w-[66px] h-[66px] p-1 rounded-lg border text-center transition-colors flex flex-col items-center justify-between gap-0.5 relative shrink-0 ${stateClass}`}
+      className={`w-[58px] h-[62px] xl:w-[66px] xl:h-[66px] p-1 rounded-lg border text-center transition-colors flex flex-col items-center justify-between gap-0.5 relative shrink-0 ${stateClass}`}
     >
       {(classLocked && !locked) || activeInst?.locked ? (
         <span className="absolute top-1 left-1 flex items-center gap-0.5">

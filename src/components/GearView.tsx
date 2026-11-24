@@ -180,6 +180,7 @@ export function GearView() {
   const [selection, setSelection] = useState<GearSelection>(null);
   const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
   const [mobileStatsExpanded, setMobileStatsExpanded] = useState(false);
+  const [desktopStatsExpanded, setDesktopStatsExpanded] = useState(false);
   const [confirmingUnequipSlot, setConfirmingUnequipSlot] =
     useState<EquipmentSlot | null>(null);
   const [confirmingSellId, setConfirmingSellId] = useState<string | null>(null);
@@ -1335,9 +1336,10 @@ export function GearView() {
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-5 space-y-3.5 sm:space-y-4">
-      {/* ==================== TOP ROW: Paper-Doll (Ship + 12 Slots, lg:col-span-9) | Live Stats (lg:col-span-3) ==================== */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 sm:gap-4 items-stretch">
-        <section className="lg:col-span-9 rounded-lg border border-slate-800/90 bg-[#0C121D]/95 p-3.5 flex flex-col lg:grid lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:items-center gap-3 relative">
+      {/* ==================== DESKTOP 2-COL: Left (Paper-Doll + Stats Bar + Inventory, 7) | Right (Sticky Detail, 5) ==================== */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 sm:gap-4 items-start">
+        <div className="lg:col-span-7 flex flex-col gap-3.5 sm:gap-4 min-w-0">
+          <section className="rounded-lg border border-slate-800/90 bg-[#0C121D]/95 p-3.5 flex flex-col lg:grid lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:items-center gap-2.5 xl:gap-3 relative">
           <div
             className="pointer-events-none absolute inset-0 overflow-hidden rounded-lg"
             aria-hidden="true"
@@ -1433,7 +1435,7 @@ export function GearView() {
                 facing="right"
                 size="lg"
                 heroHover
-                className="w-32 h-32 sm:w-40 sm:h-40 lg:w-52 lg:h-52 shrink-0"
+                className="w-32 h-32 sm:w-40 sm:h-40 lg:w-44 lg:h-44 xl:w-52 xl:h-52 shrink-0"
               />
 
               {/* Key stats strip shown only on < lg */}
@@ -1646,112 +1648,121 @@ export function GearView() {
           </div>
         </section>
 
-        {/* COL 3 (Desktop only >= lg): Live Combat Stats Readout with +/- Preview */}
-        <section className="hidden lg:flex lg:col-span-3 rounded-lg border border-slate-800/90 bg-[#0C121D]/95 p-3.5 flex-col justify-between gap-3">
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="font-display text-lg font-bold tracking-wide text-slate-100">
-              {t('gear.statsHeading')}
-            </h2>
-            {isPreviewActive && (
-              <span className="text-[11px] font-semibold text-amber-300">
-                +/-
-              </span>
-            )}
-          </div>
+        {/* Collapsible Desktop Stats Bar (>= lg) */}
+        <section
+          data-testid="gear-stats-bar"
+          className="hidden lg:flex flex-col gap-2 rounded-lg border border-slate-800/90 bg-[#0C121D]/95 p-3.5"
+        >
+          <button
+            type="button"
+            data-testid="gear-stats-toggle"
+            aria-expanded={desktopStatsExpanded}
+            onClick={() => setDesktopStatsExpanded((v) => !v)}
+            className="w-full flex items-center justify-between gap-2 text-left cursor-pointer"
+          >
+            <div className="flex items-center gap-2">
+              <h2 className="font-display text-lg font-bold tracking-wide text-slate-100">
+                {t('gear.statsHeading')}
+              </h2>
+              {isPreviewActive && (
+                <span className="text-[11px] font-semibold text-amber-300">+/-</span>
+              )}
+            </div>
+            <span className="inline-flex items-center gap-1 text-xs font-medium text-slate-400 hover:text-slate-200">
+              <span>{desktopStatsExpanded ? t('mobile.hideStats') : t('mobile.fullStats')}</span>
+              {desktopStatsExpanded ? (
+                <ChevronUp className="w-4 h-4 text-amber-400" />
+              ) : (
+                <ChevronDown className="w-4 h-4 text-slate-400" />
+              )}
+            </span>
+          </button>
 
-          <div className="divide-y divide-slate-800/80 border-y border-slate-800/80">
-            {STAT_KEYS.map((key) => {
-              const prevVal = previewStats[key];
-              const delta = statDeltas[key];
-              return (
+          {!desktopStatsExpanded ? (
+            <div className="flex flex-wrap items-center gap-1.5 font-mono-nums text-xs">
+              {[
+                { key: 'hp', label: 'HP', val: previewDerived.maxHp, delta: previewDerived.maxHp - currentDerived.maxHp, color: 'text-emerald-400', suffix: '' },
+                { key: 'shd', label: 'SHD', val: previewDerived.maxShield, delta: previewDerived.maxShield - currentDerived.maxShield, color: 'text-sky-400', suffix: '' },
+                { key: 'atk', label: getStatShort(lang, 'attack'), val: previewStats.attack, delta: statDeltas.attack, color: 'text-slate-100', suffix: '' },
+                { key: 'def', label: getStatShort(lang, 'defense'), val: previewStats.defense, delta: statDeltas.defense, color: 'text-slate-100', suffix: '' },
+                { key: 'spd', label: 'SPD', val: previewDerived.speed, delta: previewDerived.speed - currentDerived.speed, color: 'text-amber-300', suffix: '' },
+                { key: 'sp', label: 'SP', val: previewDerived.maxSp, delta: previewDerived.maxSp - currentDerived.maxSp, color: 'text-amber-400', suffix: '' },
+                ...(curAcc > 0 || prevAcc > 0
+                  ? [{ key: 'accuracy', label: t('derived.accuracy'), val: prevAcc, delta: prevAcc - curAcc, color: 'text-teal-300', suffix: '%', title: t('derived.accuracyHint', { val: prevAcc }) }]
+                  : []),
+              ].map((item) => (
                 <div
-                  key={key}
-                  className="py-1.5 flex items-center justify-between gap-2 text-xs"
+                  key={item.key}
+                  data-testid={item.key === 'accuracy' ? 'gear-derived-accuracy' : undefined}
+                  title={'title' in item ? item.title : undefined}
+                  className="rounded border border-slate-800/80 bg-[#080C14] px-2 py-1 inline-flex items-baseline gap-1.5"
                 >
-                  <span className="font-mono-nums font-semibold text-slate-400">
-                    {getStatShort(lang, key)}
+                  <span className="text-[11px] font-semibold text-slate-400">{item.label}</span>
+                  <span className={`font-bold ${item.delta > 0 ? 'text-emerald-400' : item.delta < 0 ? 'text-red-400' : item.color}`}>
+                    {item.val}{item.suffix}
                   </span>
-                  <div className="flex items-baseline gap-1.5 font-mono-nums">
-                    <span
-                      className={`text-sm font-bold ${
-                        delta > 0
-                          ? 'text-emerald-400'
-                          : delta < 0
-                          ? 'text-red-400'
-                          : 'text-slate-100'
-                      }`}
-                    >
-                      {prevVal}
+                  {item.delta !== 0 && (
+                    <span className={`text-[11px] font-semibold ${item.delta > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      ({item.delta > 0 ? `+${item.delta}` : item.delta})
                     </span>
-                    {delta !== 0 && (
-                      <span
-                        className={`text-[11px] font-semibold ${
-                          delta > 0 ? 'text-emerald-400' : 'text-red-400'
-                        }`}
-                      >
-                        ({delta > 0 ? `+${delta}` : delta})
-                      </span>
-                    )}
-                  </div>
+                  )}
                 </div>
-              );
-            })}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="grid grid-cols-3 xl:grid-cols-4 gap-1.5 font-mono-nums">
+                {STAT_KEYS.map((key) => {
+                  const delta = statDeltas[key];
+                  return (
+                    <div key={key} className="rounded border border-slate-800/80 bg-[#080C14] px-2.5 py-1.5 flex items-center justify-between gap-1.5 text-xs">
+                      <span className="font-semibold text-slate-400">{getStatShort(lang, key)}</span>
+                      <span className="inline-flex items-baseline gap-1">
+                        <span className={`font-bold ${delta > 0 ? 'text-emerald-400' : delta < 0 ? 'text-red-400' : 'text-slate-100'}`}>
+                          {previewStats[key]}
+                        </span>
+                        {delta !== 0 && (
+                          <span className={`text-[11px] font-semibold ${delta > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                            ({delta > 0 ? `+${delta}` : delta})
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="grid grid-cols-3 xl:grid-cols-4 gap-1.5 font-mono-nums">
+                {derivedMetrics.map((m) => {
+                  const diff = m.prev - m.cur;
+                  return (
+                    <div key={m.key} data-testid={m.key === 'accuracy' ? 'gear-derived-accuracy' : undefined} title={m.title} className="rounded border border-slate-800/80 bg-[#080C14] px-2.5 py-1.5">
+                      <div className="text-[10px] text-slate-400 truncate">{m.label}</div>
+                      <div className="text-xs font-bold flex items-baseline gap-1">
+                        <span className={diff > 0 ? 'text-emerald-400' : diff < 0 ? 'text-red-400' : m.color}>
+                          {m.prev}{m.suffix ?? ''}
+                        </span>
+                        {diff !== 0 && (
+                          <span className={`text-[10px] ${diff > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                            {diff > 0 ? `+${diff}` : diff}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
-          <div className="grid grid-cols-2 gap-1.5">
-            {derivedMetrics.map((m) => {
-              const diff = m.prev - m.cur;
-              return (
-                <div
-                  key={m.key}
-                  data-testid={
-                    m.key === 'accuracy' ? 'gear-derived-accuracy' : undefined
-                  }
-                  title={m.title}
-                  className="rounded border border-slate-800/80 bg-[#080C14] px-2.5 py-1.5"
-                >
-                  <div className="text-[10px] text-slate-400 truncate">
-                    {m.label}
-                  </div>
-                  <div className="font-mono-nums text-xs font-bold flex items-baseline gap-1">
-                    <span
-                      className={
-                        diff > 0
-                          ? 'text-emerald-400'
-                          : diff < 0
-                          ? 'text-red-400'
-                          : m.color
-                      }
-                    >
-                      {m.prev}
-                      {m.suffix ?? ''}
-                    </span>
-                    {diff !== 0 && (
-                      <span
-                        className={`text-[10px] ${
-                          diff > 0 ? 'text-emerald-400' : 'text-red-400'
-                        }`}
-                      >
-                        {diff > 0 ? `+${diff}` : diff}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          {(currentEquipTraits.detectStealth ||
-            previewEquipTraits.detectStealth) && (
+          {(currentEquipTraits.detectStealth || previewEquipTraits.detectStealth) && (
             <div>
               <span
                 data-testid="gear-stealth-detect-chip"
                 title={t('derived.detectStealthHint')}
                 className={`inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[11px] font-medium ${
-                  !currentEquipTraits.detectStealth &&
-                  previewEquipTraits.detectStealth
+                  !currentEquipTraits.detectStealth && previewEquipTraits.detectStealth
                     ? 'border-emerald-500/45 bg-emerald-500/10 text-emerald-300'
-                    : currentEquipTraits.detectStealth &&
-                      !previewEquipTraits.detectStealth
+                    : currentEquipTraits.detectStealth && !previewEquipTraits.detectStealth
                     ? 'border-red-500/45 bg-red-500/10 text-red-300 line-through'
                     : 'border-teal-500/40 bg-teal-500/10 text-teal-300'
                 }`}
@@ -1762,12 +1773,9 @@ export function GearView() {
             </div>
           )}
         </section>
-      </div>
 
-      {/* ==================== BOTTOM ROW: Shared Cargo Grid + Controls | Inline Detail (Desktop) ==================== */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
         {/* Shared Cargo Grid ("Kho đồ chung") */}
-        <section className="lg:col-span-7 rounded-lg border border-slate-800/90 bg-[#0C121D]/95 p-3.5 sm:p-4 flex flex-col gap-3 relative">
+        <section className="rounded-lg border border-slate-800/90 bg-[#0C121D]/95 p-3.5 sm:p-4 flex flex-col gap-3 relative">
           {/* Header Row */}
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-baseline gap-2">
@@ -2827,9 +2835,10 @@ export function GearView() {
             </div>
           )}
         </section>
+        </div>
 
-        {/* Inline Detail Panel (Desktop >= lg) */}
-        <section className="hidden lg:flex lg:col-span-5 rounded-lg border border-slate-800/90 bg-[#0C121D]/95 p-4 flex-col justify-between gap-3">
+        {/* Inline Detail Panel (Desktop >= lg, Sticky Right Column) */}
+        <section className="hidden lg:flex lg:col-span-5 lg:sticky lg:top-4 self-start max-h-[calc(100dvh-2rem)] overflow-y-auto tactical-scroll rounded-lg border border-slate-800/90 bg-[#0C121D]/95 p-4 flex-col justify-between gap-3">
           <div className="flex items-center justify-between gap-2">
             <h2 className="font-display text-lg font-bold tracking-wide text-slate-100">
               {t('gear.detailHeading')}
