@@ -209,7 +209,8 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'status.shield_break': 'Khiên vỡ',
   'status.shield_break.desc': 'Khiên về 0: máy phát khởi động lại, không hồi khiên {n} lượt',
   'status.shield_cracked': 'Khiên nứt',
-  'status.shield_cracked.desc': 'Hồi khiên chỉ 30% trong 3 lượt',
+  'status.shield_cracked.desc':
+    'Khiên nứt: nhận x1,3 sát thương skill lên khiên (đánh thường không đổi), hết khi khiên về 0',
   'status.slow': 'Làm chậm',
   'status.slow.desc': 'Giảm 30% Tốc độ lượt',
   'status.silence': 'Câm lặng',
@@ -369,13 +370,13 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
     'Bắn đạn động năng 110% sát thương và gây Làm chậm (-30% Tốc độ) trong 2 lượt.',
   'skill.sge_aegis_sunder.name': 'Đại Bác Phá Khiên',
   'skill.sge_aegis_sunder.desc':
-    'Bắn xung EMP gây 80% sát thương và kích hoạt Vỡ Khiên (vô hiệu hóa khiên địch 2 lượt).',
+    'Gây 100% sát thương, sát thương lên khiên x1,5, gây Khiên nứt 2 lượt.',
   'skill.sge_thermal_mask.name': 'Ngụy Trang Nhiệt',
   'skill.sge_thermal_mask.desc':
     'Đặc biệt: Ẩn dấu nhiệt, không thể bị nhắm cho tới đòn đánh kế tiếp. Không thể dùng khi đang bật Neo Pháo.',
   'skill.sge_starbreaker_lance.name': 'Thương Railgun Phá Tinh',
   'skill.sge_starbreaker_lance.desc':
-    'Tinh anh (1 lần/trận): Bắn 1 phát siêu tốc 400% sát thương xuyên bỏ toàn bộ Phòng thủ và Khiên.',
+    'Tinh anh (1 lần/trận): Bắn 1 phát siêu tốc 400% sát thương, xuyên giáp, không xuyên khiên.',
   'skill.sge_passive_hull.name': 'Thân Vỏ Hợp Kim Kép',
   'skill.sge_passive_hull.desc':
     'Bị động: Vĩnh viễn tăng +4% Phòng thủ mỗi cấp.',
@@ -641,9 +642,11 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
     '{actor} dùng {skill} tiếp +{amount} SP cho {target}.',
   'log.evade': '{target} lộn vòng né gọn đòn {action} từ {actor}!',
   'log.damage':
-    '{actor} dùng {action} bắn trúng {target} gây {breakdown}{critTag}{defendTag}.',
+    '{actor} dùng {action} bắn trúng {target} gây {breakdown}{shieldMultTag}{critTag}{defendTag}.',
+  'log.shieldMultTag': ' (x{mult} khiên)',
   'log.destroyed': '{target} ({className}) đã phát nổ!',
   'log.statusApplied': '{target} dính hiệu ứng {status} ({turns} lượt)!',
+  'log.shieldCrackNoShield': '{target}: Không có khiên để làm nứt.',
   'log.burnTick': '{target} chịu {damage} sát thương Thiêu đốt!',
   'log.regenTick': '{target} hồi phục +{amount} HP thân tàu!',
   'log.shieldRegen': '{target} hồi khiên SHD +{amount}{suffix}',
@@ -1265,6 +1268,9 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'admin.shieldRegenHitPenaltyPct': 'Giảm mỗi lần trúng (%)',
   'admin.shieldRegenMinHitMultPct': 'Hồi tối thiểu khi bị trúng (%)',
   'admin.shieldRegenRestartTurns': 'Số lượt khiên vỡ',
+  'admin.aegisSunderShieldMult': 'Aegis Sunder: x khiên',
+  'admin.shieldCrackedMult': 'Khiên nứt: x sát thương skill lên khiên',
+  'admin.shieldCrackedTurns': 'Khiên nứt: số lượt',
   'admin.shieldRegenExample': 'SHIELD 25 -> {pct}% khiên tối đa mỗi lượt · Trúng 2 lần -> hồi {hit2Pct}%',
   'admin.battleForceBoss': 'Ép xuất hiện Boss',
   'admin.battleLevelOffset': 'Độ lệch cấp địch',

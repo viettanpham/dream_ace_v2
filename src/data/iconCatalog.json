@@ -63,6 +63,7 @@
   { "id": "DB09", "nameVi": "Dễ tổn thương", "group": "DB", "symbol": "crisis_alert", "color": "#E24B4A", "kind": "debuff", "tag": "sys" },
   { "id": "DB10", "nameVi": "Vỡ khiên", "group": "DB", "symbol": "shield_toggle", "color": "#D85A30", "kind": "debuff", "tag": "sys" },
   { "id": "DB11", "nameVi": "Bị khóa mục tiêu", "group": "DB", "symbol": "point_scan", "color": "#E24B4A", "kind": "debuff", "tag": "sys" },
+  { "id": "DB12", "nameVi": "Khiên nứt", "group": "DB", "symbol": "shield_question", "color": "#EF9F27", "kind": "debuff", "tag": "sys" },
   { "id": "DT01", "nameVi": "Thiêu đốt", "group": "DT", "symbol": "local_fire_department", "color": "#D85A30", "kind": "debuff", "tag": "sys" },
   { "id": "DT02", "nameVi": "Trúng độc", "group": "DT", "symbol": "science", "color": "#7F77DD", "kind": "debuff", "tag": "sys" },
   { "id": "DT03", "nameVi": "Ăn mòn", "group": "DT", "symbol": "water_drop", "color": "#1D9E75", "kind": "debuff", "tag": "sys" },

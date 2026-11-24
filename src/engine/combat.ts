@@ -66,8 +66,11 @@ import {
   generateNpcAllocations,
 } from './stats';
 import {
+  clampShieldDamageMult,
   computeShieldRegen,
   getUnitHitsSinceOwnTurn,
+  sanitizeShieldCrackedMult,
+  sanitizeShieldCrackedTurns,
   sanitizeShieldRegenConfig,
 } from './shieldRegen';
 
@@ -960,6 +963,7 @@ function hydrateFxUnits(
 
 export interface ApplyShieldThenHullOptions {
   ignoreShield?: boolean;
+  shieldMult?: number;
 }
 
 export interface ShieldThenHullResult {
@@ -978,15 +982,22 @@ export function applyShieldThenHull(
   const safeDamage = Math.max(0, Number.isFinite(damage) ? damage : 0);
   const startShield = Math.max(0, Number.isFinite(target.shield) ? target.shield : 0);
   const startHp = Math.max(0, Number.isFinite(target.hp) ? target.hp : 0);
+  const m = clampShieldDamageMult(opts.shieldMult, 1);
 
   let shieldLost = 0;
   let nextShield = startShield;
   let hullDamage = safeDamage;
 
   if (!opts.ignoreShield && startShield > 0 && safeDamage > 0) {
-    shieldLost = Math.min(startShield, safeDamage);
-    nextShield = startShield - shieldLost;
-    hullDamage = safeDamage - shieldLost;
+    if (startShield >= safeDamage * m) {
+      shieldLost = Math.min(startShield, Math.round(safeDamage * m));
+      nextShield = startShield - shieldLost;
+      hullDamage = 0;
+    } else {
+      shieldLost = startShield;
+      nextShield = 0;
+      hullDamage = Math.max(0, Math.round(safeDamage - startShield / m));
+    }
   }
 
   const nextHp = Math.max(0, startHp - hullDamage);
@@ -1008,7 +1019,7 @@ function applyDamageToUnit(
   rawPower: number,
   options: {
     defensePierce?: number;
-    ignoreDefAndShield?: boolean;
+    ignoreDef?: boolean;
     bonusCrit?: number;
     round: number;
     actionMeta: { skillId: string; hitIndex: number; totalHits: number };
@@ -1267,7 +1278,7 @@ function applyDamageToUnit(
 
   const formationConfig =
     options.adminConfig?.formation ?? DEFAULT_FORMATION_CONFIG;
-  const ignoreDef = Boolean(options.ignoreDefAndShield);
+  const ignoreDef = Boolean(options.ignoreDef);
   const totalPierce = ignoreDef
     ? 1.0
     : Math.min(
@@ -1331,17 +1342,42 @@ function applyDamageToUnit(
   }
   finalDamage = Math.max(6, finalDamage);
 
-  // Shield ALWAYS absorbs first unless ignoreDefAndShield (SH2b handles skill shield-ignore)
-  const shieldDisabled = ignoreDef;
+  // Shield ALWAYS absorbs first (Starbreaker ignores DEF only; SH2b applies shield mult on skill hits)
+  const isSkillHit = options.tag === 'SKILL' && !options.isCounter;
+  let effectiveShieldMult = 1;
+  if (isSkillHit) {
+    const skillId = options.actionMeta.skillId;
+    const skillDef = skillId ? getSkillById(skillId) : undefined;
+    const overrideRaw = skillId
+      ? options.adminConfig?.shieldDamageOverrides?.[skillId]
+      : undefined;
+    const attackerMult =
+      typeof overrideRaw === 'number' && Number.isFinite(overrideRaw)
+        ? overrideRaw
+        : skillDef?.shieldDamageMult ?? 1;
+    const crackedMult = hasStatus(curTarget, 'shield_cracked')
+      ? sanitizeShieldCrackedMult(options.adminConfig?.shieldCrackedMult)
+      : 1;
+    effectiveShieldMult = clampShieldDamageMult(
+      Math.max(attackerMult, crackedMult),
+      1
+    );
+  }
+
   const dmgRes = applyShieldThenHull(curTarget, finalDamage, {
-    ignoreShield: shieldDisabled,
+    shieldMult: effectiveShieldMult,
   });
   const nextShield = dmgRes.nextShield;
   const nextHp = dmgRes.nextHp;
   const shieldAbsorbed = dmgRes.shieldLost;
   const hullDamage = dmgRes.hullDamage;
+  const totalDamageDealt = shieldAbsorbed + hullDamage;
   const destroyed = nextHp <= 0;
   const hitShieldOnly = shieldAbsorbed > 0 && hullDamage === 0;
+  const loggedShieldMult =
+    shieldAbsorbed > 0 && effectiveShieldMult > 1
+      ? Number(effectiveShieldMult.toFixed(2))
+      : 1;
 
   if (hitShieldOnly) {
     popups.push({
@@ -1354,7 +1390,7 @@ function applyDamageToUnit(
     popups.push({
       id: nextId('pop'),
       unitId: curTarget.id,
-      text: isCrit ? `CRIT -${finalDamage}` : `-${finalDamage}`,
+      text: isCrit ? `CRIT -${totalDamageDealt}` : `-${totalDamageDealt}`,
       tone: isCrit ? 'crit' : 'damage',
     });
   }
@@ -1374,6 +1410,7 @@ function applyDamageToUnit(
       totalHits: options.actionMeta.totalHits,
       shieldAbsorbed,
       hullDamage,
+      shieldMult: loggedShieldMult,
       isCrit: isCrit ? 1 : 0,
       isDefending: curTarget.isDefending ? 1 : 0,
     },
@@ -1386,7 +1423,7 @@ function applyDamageToUnit(
     actorId: curAttacker.id,
     targetId: curTarget.id,
     type: 'damage',
-    amount: finalDamage,
+    amount: totalDamageDealt,
     shieldAbsorbed,
     hpDamage: hullDamage,
     skillId: options.actionMeta.skillId || undefined,
@@ -1434,6 +1471,10 @@ function applyDamageToUnit(
   let nextStatuses = destroyed ? [] : curTarget.statuses;
   let nextHitsSinceOwnTurn = curTarget.hitsSinceOwnTurn;
 
+  if (!destroyed && dmgRes.brokeNow) {
+    nextStatuses = removeStatus(nextStatuses, 'shield_cracked');
+  }
+
   if (shieldRegenCfg.enabled) {
     if (curAttacker.side !== curTarget.side && (shieldAbsorbed > 0 || hullDamage > 0)) {
       nextHitsSinceOwnTurn = getUnitHitsSinceOwnTurn(curTarget) + 1;
@@ -1478,8 +1519,110 @@ function applyDamageToUnit(
     destroyed,
     evaded: false,
     hitShieldOnly,
-    damageDealt: finalDamage,
+    damageDealt: totalDamageDealt,
     counteredAttackerKilled: false,
+  };
+}
+
+export interface ApplyShieldCrackedSource {
+  actorId?: string;
+  actorName?: string;
+  skillId?: string;
+  round?: number;
+  magnitude?: number;
+  events?: BattleEvent[];
+}
+
+export function applyShieldCracked(
+  target: CombatUnit,
+  turns: number,
+  source: string | ApplyShieldCrackedSource
+): {
+  targetAfter: CombatUnit;
+  applied: boolean;
+  logs: CombatLogEntry[];
+  popups: FloatingPopup[];
+} {
+  if (!target.alive) {
+    return { targetAfter: target, applied: false, logs: [], popups: [] };
+  }
+
+  const src: ApplyShieldCrackedSource =
+    typeof source === 'string' ? { actorName: source } : source;
+  const actorName = src.actorName ?? 'System';
+  const round = src.round ?? 1;
+
+  if (target.shield <= 0 || hasStatus(target, 'shield_break')) {
+    return {
+      targetAfter: target,
+      applied: false,
+      logs: [
+        {
+          id: nextId('log'),
+          round,
+          actorName,
+          tag: 'STATUS',
+          templateKey: 'log.shieldCrackNoShield',
+          params: {
+            target: target.name,
+          },
+        },
+      ],
+      popups: [],
+    };
+  }
+
+  const safeTurns = sanitizeShieldCrackedTurns(turns);
+  const safeMult = sanitizeShieldCrackedMult(src.magnitude);
+  const entry: ActiveStatusEffect = {
+    type: 'shield_cracked',
+    turnsRemaining: safeTurns,
+    magnitude: safeMult,
+    isDebuff: true,
+    sourceSkillId: src.skillId,
+    sourceName: actorName,
+  };
+
+  src.events?.push({
+    id: nextId('ev'),
+    round,
+    turn: 0,
+    actorId: src.actorId ?? '',
+    targetId: target.id,
+    type: 'status_applied',
+    statusId: 'shield_cracked',
+    skillId: src.skillId,
+    flags: { isDebuff: true },
+  });
+
+  return {
+    targetAfter: {
+      ...target,
+      statuses: addOrRefreshStatus(target.statuses, entry),
+    },
+    applied: true,
+    logs: [
+      {
+        id: nextId('log'),
+        round,
+        actorName,
+        tag: 'STATUS',
+        templateKey: 'log.statusApplied',
+        params: {
+          target: target.name,
+          status: 'shield_cracked',
+          turns: safeTurns,
+        },
+      },
+    ],
+    popups: [
+      {
+        id: nextId('pop'),
+        unitId: target.id,
+        text: 'SHD CRACK',
+        tone: 'status',
+      },
+    ],
   };
 }
 
@@ -2880,7 +3023,7 @@ function resolveUnitActionCore(
                   skill.effectKind === 'attack_pierce'
                     ? skill.secondaryRatio ?? 0.3
                     : 0,
-                ignoreDefAndShield: skill.effectKind === 'pierce_all_elite',
+                ignoreDef: skill.effectKind === 'pierce_all_elite',
                 round,
                 actionMeta: { skillId: skill.id, hitIndex: 1, totalHits: 1 },
                 tag: 'SKILL',
@@ -2915,23 +3058,24 @@ function resolveUnitActionCore(
                 logs.push(...st.logs);
                 popups.push(...st.popups);
               } else if (skill.effectKind === 'attack_shield_break') {
-                const st = tryInflictStatus(
+                // shield sunder: applies Khiên nứt via shared helper after damage
+                const crackRes = applyShieldCracked(
                   targetAfter,
+                  sanitizeShieldCrackedTurns(adminConfig?.shieldCrackedTurns),
                   {
-                    type: 'shield_break',
-                    turnsRemaining: skill.duration ?? 2,
-                    sourceSkillId: skill.id,
-                  },
-                  1.0,
-                  act.name,
-                  round,
-                  rng,
-                  events,
-                  act.id
+                    actorId: act.id,
+                    actorName: act.name,
+                    skillId: skill.id,
+                    round,
+                    magnitude: sanitizeShieldCrackedMult(
+                      adminConfig?.shieldCrackedMult
+                    ),
+                    events,
+                  }
                 );
-                targetAfter = st.targetAfter;
-                logs.push(...st.logs);
-                popups.push(...st.popups);
+                targetAfter = crackRes.targetAfter;
+                logs.push(...crackRes.logs);
+                popups.push(...crackRes.popups);
               }
             }
             nextUnits[cIdx] = targetAfter;
@@ -3670,23 +3814,44 @@ function resolveUnitActionCore(
   if (!res.evaded && nextUnits[targetIdx].alive && actor.archetype) {
     const archDef = ENEMY_ARCHETYPE_DEFS[actor.archetype];
     if (archDef.inflictsStatus && archDef.statusChance) {
-      const st = tryInflictStatus(
-        nextUnits[targetIdx],
-        {
-          type: archDef.inflictsStatus,
-          turnsRemaining: 2,
-          sourceName: actor.name,
-        },
-        archDef.statusChance * 0.55,
-        actor.name,
-        round,
-        rng,
-        events,
-        actor.id
-      );
-      nextUnits[targetIdx] = st.targetAfter;
-      logs.push(...st.logs);
-      popups.push(...st.popups);
+      if (archDef.inflictsStatus === 'shield_cracked') {
+        if (rng() <= archDef.statusChance * 0.55) {
+          const crackRes = applyShieldCracked(
+            nextUnits[targetIdx],
+            sanitizeShieldCrackedTurns(adminConfig?.shieldCrackedTurns),
+            {
+              actorId: actor.id,
+              actorName: actor.name,
+              round,
+              magnitude: sanitizeShieldCrackedMult(
+                adminConfig?.shieldCrackedMult
+              ),
+              events,
+            }
+          );
+          nextUnits[targetIdx] = crackRes.targetAfter;
+          logs.push(...crackRes.logs);
+          popups.push(...crackRes.popups);
+        }
+      } else {
+        const st = tryInflictStatus(
+          nextUnits[targetIdx],
+          {
+            type: archDef.inflictsStatus,
+            turnsRemaining: 2,
+            sourceName: actor.name,
+          },
+          archDef.statusChance * 0.55,
+          actor.name,
+          round,
+          rng,
+          events,
+          actor.id
+        );
+        nextUnits[targetIdx] = st.targetAfter;
+        logs.push(...st.logs);
+        popups.push(...st.popups);
+      }
     }
   }
 
@@ -3716,6 +3881,9 @@ function resolveUnitActionCore(
 
       let nextSplashStatuses = splashKo ? [] : otherOpponent.statuses;
       let nextSplashHits = otherOpponent.hitsSinceOwnTurn;
+      if (!splashKo && splashDmgRes.brokeNow) {
+        nextSplashStatuses = removeStatus(nextSplashStatuses, 'shield_cracked');
+      }
       if (shieldRegenCfg.enabled) {
         if (actor.side !== otherOpponent.side && (splashAbsorbed > 0 || splashHpDmg > 0)) {
           nextSplashHits = getUnitHitsSinceOwnTurn(otherOpponent) + 1;

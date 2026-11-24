@@ -524,19 +524,20 @@ describe('SH1 — Shield regeneration engine & UI integration', () => {
     const detail = formatStatusEffectDetail('vi', {
       type: 'shield_cracked',
       turnsRemaining: 3,
-      magnitude: 0.3,
+      magnitude: 1.3,
       isDebuff: true,
     });
     expect(detail.label).toBe('Khiên nứt');
-    expect(detail.fullText).toContain('Hồi khiên chỉ 30% trong 3 lượt');
+    expect(detail.fullText).toContain('x1.3 ST lên khiên');
 
     const detailEn = formatStatusEffectDetail('en', {
       type: 'shield_cracked',
       turnsRemaining: 3,
-      magnitude: 0.3,
+      magnitude: 1.3,
       isDebuff: true,
     });
     expect(detailEn.label).toBe('Cracked shield');
+    expect(detailEn.fullText).toContain('x1.3 shield dmg');
 
     // Render StatusChip for shield_cracked + AdminPanel Hồi khiên
     container = document.createElement('div');
@@ -549,7 +550,7 @@ describe('SH1 — Shield regeneration engine & UI integration', () => {
           status: {
             type: 'shield_cracked',
             turnsRemaining: 3,
-            magnitude: 0.3,
+            magnitude: 1.3,
             isDebuff: true,
           },
           lang: 'vi',
@@ -562,9 +563,13 @@ describe('SH1 — Shield regeneration engine & UI integration', () => {
     expect(chip).not.toBeNull();
     expect(chip?.getAttribute('data-status-kind')).toBe('debuff');
     expect(chip?.getAttribute('title')).toContain('Khiên nứt');
-    expect(chip?.getAttribute('title')).toContain('Hồi khiên chỉ 30% trong 3 lượt');
-    expect(chip?.textContent).toContain('30%');
-    expect(chip?.querySelector('svg')).not.toBeNull();
+    expect(chip?.getAttribute('title')).toContain(
+      'Khiên nứt: nhận x1,3 sát thương skill lên khiên (đánh thường không đổi), hết khi khiên về 0'
+    );
+    expect(chip?.textContent).toContain('x1.3');
+    expect(chip?.querySelector('.material-symbols-outlined')?.textContent).toBe(
+      'shield_question'
+    );
 
     // Render AdminPanel battle tab & check Hồi khiên + live example line
     useGameStore.setState({

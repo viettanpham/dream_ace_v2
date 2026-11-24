@@ -334,12 +334,9 @@ export function formatStatusEffectDetail(
       break;
     }
     case 'shield_cracked': {
-      const pct = Math.round((st.magnitude ?? 0.3) * 100);
-      const turns = Math.max(1, st.turnsRemaining || 3);
-      valueText = isVi
-        ? `Hồi khiên chỉ ${pct}% trong ${turns} lượt`
-        : `Shield regen only ${pct}% for ${turns} turns`;
-      includeTurns = false;
+      const mult =
+        st.magnitude && st.magnitude >= 1 ? Number(st.magnitude.toFixed(2)) : 1.3;
+      valueText = isVi ? `x${mult} ST lên khiên` : `x${mult} shield dmg`;
       break;
     }
     case 'silence': {
@@ -760,6 +757,13 @@ function formatCombatLogBody(
           : shd > 0
           ? translate(lang, 'log.breakdownShield', { shield: shd })
           : translate(lang, 'log.breakdownHp', { hp });
+      const rawShieldMult = Number(p.shieldMult ?? 1);
+      const shieldMultTag =
+        Number.isFinite(rawShieldMult) && rawShieldMult > 1
+          ? translate(lang, 'log.shieldMultTag', {
+              mult: Number(rawShieldMult.toFixed(2)),
+            })
+          : '';
       const critTag = Number(p.isCrit ?? 0)
         ? translate(lang, 'log.critTag')
         : '';
@@ -772,6 +776,7 @@ function formatCombatLogBody(
         action: actionText,
         target: String(p.target ?? ''),
         breakdown,
+        shieldMultTag,
         critTag,
         defendTag,
       });
@@ -793,6 +798,11 @@ function formatCombatLogBody(
         turns: Number(p.turns ?? 2),
       });
     }
+
+    case 'log.shieldCrackNoShield':
+      return translate(lang, 'log.shieldCrackNoShield', {
+        target: String(p.target ?? ''),
+      });
 
     case 'log.burnTick':
       return translate(lang, 'log.burnTick', {

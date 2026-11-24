@@ -12,13 +12,13 @@ import { getCatalogRow } from './iconCatalog';
 
 /**
  * Maps engine StatusEffectType IDs to catalog IDs in `iconCatalog.json`.
- * Effects without an accurate semantic match in the 98-row catalog are intentionally
+ * Effects without an accurate semantic match in the 99-row catalog are intentionally
  * kept `null` (neutral Lucide icon fallback) — never invent catalog rows.
  */
 export const STATUS_TO_CATALOG_ID: Record<StatusEffectType, string | null> = {
   burn: 'DT01',
   shield_break: 'DB10',
-  shield_cracked: null,
+  shield_cracked: 'DB12',
   slow: 'DB05',
   silence: 'CC04',
   stealth: 'BF18',
@@ -46,7 +46,6 @@ export const STATUS_TO_CATALOG_ID: Record<StatusEffectType, string | null> = {
  * mapped to a catalog row nor listed here.
  */
 export const UNMAPPED_STATUS_ALLOWLIST: readonly StatusEffectType[] = [
-  'shield_cracked',
   'evade_all',
   'invincible',
   'siege_mode',
@@ -205,8 +204,9 @@ export function formatStatusChipShortValue(
     case 'shield_break':
       return isVi ? 'KhiênVỡ' : 'ShdDown';
     case 'shield_cracked': {
-      const pct = Math.round((st.magnitude ?? 0.3) * 100);
-      return `${pct}%`;
+      const mult =
+        st.magnitude && st.magnitude >= 1 ? Number(st.magnitude.toFixed(2)) : 1.3;
+      return `x${mult}`;
     }
     case 'silence':
       return isVi ? 'Khóa KN' : 'No Skill';

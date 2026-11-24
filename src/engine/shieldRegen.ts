@@ -1,3 +1,4 @@
+import { SKILLS_LIST } from '../data/skills';
 import type { CombatUnit, ShieldRegenConfig, StatusEffectType } from '../types/game';
 
 export const DEFAULT_SHIELD_REGEN_CONFIG: ShieldRegenConfig = {
@@ -10,6 +11,11 @@ export const DEFAULT_SHIELD_REGEN_CONFIG: ShieldRegenConfig = {
   minHitMultPct: 0,
   restartTurns: 1,
 };
+
+export const DEFAULT_SHIELD_CRACKED_MULT = 1.3;
+export const DEFAULT_SHIELD_CRACKED_TURNS = 2;
+
+const KNOWN_SKILL_ID_SET = new Set<string>(SKILLS_LIST.map((s) => s.id));
 
 export type ShieldRegenReason =
   | 'not_hit'
@@ -27,6 +33,33 @@ export interface ShieldRegenResult {
 function clampFinite(value: unknown, min: number, max: number, fallback: number): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
   return Math.max(min, Math.min(max, value));
+}
+
+export function clampShieldDamageMult(value: unknown, fallback = 1): number {
+  return clampFinite(value, 1, 4, fallback);
+}
+
+export function sanitizeShieldCrackedMult(raw: unknown): number {
+  return Number(clampFinite(raw, 1, 2, DEFAULT_SHIELD_CRACKED_MULT).toFixed(4));
+}
+
+export function sanitizeShieldCrackedTurns(raw: unknown): number {
+  return Math.round(clampFinite(raw, 1, 5, DEFAULT_SHIELD_CRACKED_TURNS));
+}
+
+export function sanitizeShieldDamageOverrides(
+  raw: unknown
+): Record<string, number> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return {};
+  }
+  const out: Record<string, number> = {};
+  for (const [skillId, val] of Object.entries(raw as Record<string, unknown>)) {
+    if (!KNOWN_SKILL_ID_SET.has(skillId)) continue;
+    if (typeof val !== 'number' || !Number.isFinite(val)) continue;
+    out[skillId] = Number(clampShieldDamageMult(val, 1).toFixed(4));
+  }
+  return out;
 }
 
 export function sanitizeShieldRegenConfig(

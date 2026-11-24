@@ -170,6 +170,7 @@ export interface SkillDefinition {
   targetType: SkillTargetType;
   effectKind: SkillEffectKind;
   powerMultiplier?: number; // e.g., 1.3 for 130%
+  shieldDamageMult?: number; // e.g., 1.5 for Aegis Sunder shield damage multiplier
   secondaryRatio?: number; // e.g., 0.5 for 50% splash, 0.3 for 30% pierce
   buffMagnitude?: number; // e.g., 0.25 for +25%
   secondaryMagnitude?: number; // e.g., second stat bonus in dual buffs
@@ -903,6 +904,7 @@ export type CombatLogTemplateKey =
   | 'log.damage'
   | 'log.destroyed'
   | 'log.statusApplied'
+  | 'log.shieldCrackNoShield'
   | 'log.burnTick'
   | 'log.regenTick'
   | 'log.shieldRegen'
@@ -1324,6 +1326,9 @@ export interface AdminConfig {
   iconCatalogMods?: IconCatalogModRow[];
   statusDisplayDefaults?: StatusDisplayDefaults;
   shieldRegen?: ShieldRegenConfig;
+  shieldCrackedMult?: number;
+  shieldCrackedTurns?: number;
+  shieldDamageOverrides?: Record<string, number>;
   warehouseCapacity: number;
   ignoreFrontline?: boolean;
   noticeDurationSec?: number;

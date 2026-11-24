@@ -46,7 +46,15 @@ import {
 } from '../data/autoEquipConfig';
 import { cloneFormationConfig, DEFAULT_FORMATION_CONFIG } from '../data/formationConfig';
 import { mergeVisibleUnlockedSectors } from './frontline';
-import { DEFAULT_SHIELD_REGEN_CONFIG, sanitizeShieldRegenConfig } from './shieldRegen';
+import {
+  DEFAULT_SHIELD_CRACKED_MULT,
+  DEFAULT_SHIELD_CRACKED_TURNS,
+  DEFAULT_SHIELD_REGEN_CONFIG,
+  sanitizeShieldCrackedMult,
+  sanitizeShieldCrackedTurns,
+  sanitizeShieldDamageOverrides,
+  sanitizeShieldRegenConfig,
+} from './shieldRegen';
 import {
   cloneStarterSetConfig,
   DEFAULT_STARTER_SET_CONFIG,
@@ -230,6 +238,9 @@ export function createDefaultAdminConfig(): AdminConfig {
     starterSet: cloneStarterSetConfig(DEFAULT_STARTER_SET_CONFIG),
     iconCatalogMods: [],
     shieldRegen: { ...DEFAULT_SHIELD_REGEN_CONFIG },
+    shieldCrackedMult: DEFAULT_SHIELD_CRACKED_MULT,
+    shieldCrackedTurns: DEFAULT_SHIELD_CRACKED_TURNS,
+    shieldDamageOverrides: {},
     warehouseCapacity: DEFAULT_WAREHOUSE_CAPACITY,
     ignoreFrontline: false,
     noticeDurationSec: DEFAULT_NOTICE_DURATION_SEC,
@@ -528,6 +539,11 @@ export function migrateSaveData(
       rawAdmin.statusDisplayDefaults
     ),
     shieldRegen: sanitizeShieldRegenConfig(rawAdmin.shieldRegen),
+    shieldCrackedMult: sanitizeShieldCrackedMult(rawAdmin.shieldCrackedMult),
+    shieldCrackedTurns: sanitizeShieldCrackedTurns(rawAdmin.shieldCrackedTurns),
+    shieldDamageOverrides: sanitizeShieldDamageOverrides(
+      rawAdmin.shieldDamageOverrides
+    ),
     warehouseCapacity:
       version < CURRENT_SAVE_VERSION
         ? DEFAULT_WAREHOUSE_CAPACITY

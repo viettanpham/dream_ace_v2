@@ -667,7 +667,7 @@ describe('Task G4a-1 Part 2 — Icon catalog, status chips, settings, Bảng ico
     expect(JSON.stringify(env)).not.toContain('dreamAce.status.v1');
   });
 
-  it('7) "Bảng icon" preview renders all 98 sys rows + mods across 8 groups, and read-only', () => {
+  it('7) "Bảng icon" preview renders all 99 sys rows + mods across 8 groups, and read-only', () => {
     useGameStore.setState({
       adminConfig: {
         ...createDefaultAdminConfig(),
@@ -703,7 +703,7 @@ describe('Task G4a-1 Part 2 — Icon catalog, status chips, settings, Bảng ico
     const sysTags = Array.from(
       modal!.querySelectorAll('[data-testid^="icon-catalog-tag-"]')
     );
-    expect(sysTags.filter((el) => el.textContent === 'sys')).toHaveLength(98);
+    expect(sysTags.filter((el) => el.textContent === 'sys')).toHaveLength(99);
     expect(
       modal!.querySelector('[data-testid="icon-catalog-tag-BF99"]')?.textContent
     ).toBe('mods');

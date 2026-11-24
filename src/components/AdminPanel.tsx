@@ -44,6 +44,9 @@ import {
 import { ENABLE_ADMIN_CP, useGameStore } from '../store/useGameStore';
 import {
   computeShieldRegenPct,
+  sanitizeShieldCrackedMult,
+  sanitizeShieldCrackedTurns,
+  sanitizeShieldDamageOverrides,
   sanitizeShieldRegenConfig,
 } from '../engine/shieldRegen';
 import { sanitizeNoticeDurationSec } from '../engine/migration';
@@ -1651,6 +1654,81 @@ export function AdminPanel() {
                           value={srCfg.restartTurns}
                           onChange={(e) =>
                             updateSr({ restartTurns: Number(e.target.value) })
+                          }
+                          className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                        />
+                      </label>
+
+                      <label className="space-y-1 block">
+                        <span className="text-[11px] text-slate-400 block">
+                          {t('admin.aegisSunderShieldMult')}
+                        </span>
+                        <input
+                          type="number"
+                          data-testid="admin-aegis-sunder-shield-mult"
+                          min={1}
+                          max={4}
+                          step={0.1}
+                          value={
+                            adminConfig.shieldDamageOverrides?.sge_aegis_sunder ??
+                            1.5
+                          }
+                          onChange={(e) =>
+                            adminUpdateConfig({
+                              shieldDamageOverrides:
+                                sanitizeShieldDamageOverrides({
+                                  ...(adminConfig.shieldDamageOverrides ?? {}),
+                                  sge_aegis_sunder: Number(e.target.value),
+                                }),
+                            })
+                          }
+                          className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                        />
+                      </label>
+
+                      <label className="space-y-1 block">
+                        <span className="text-[11px] text-slate-400 block">
+                          {t('admin.shieldCrackedMult')}
+                        </span>
+                        <input
+                          type="number"
+                          data-testid="admin-shield-cracked-mult"
+                          min={1}
+                          max={2}
+                          step={0.1}
+                          value={sanitizeShieldCrackedMult(
+                            adminConfig.shieldCrackedMult
+                          )}
+                          onChange={(e) =>
+                            adminUpdateConfig({
+                              shieldCrackedMult: sanitizeShieldCrackedMult(
+                                Number(e.target.value)
+                              ),
+                            })
+                          }
+                          className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                        />
+                      </label>
+
+                      <label className="space-y-1 block">
+                        <span className="text-[11px] text-slate-400 block">
+                          {t('admin.shieldCrackedTurns')}
+                        </span>
+                        <input
+                          type="number"
+                          data-testid="admin-shield-cracked-turns"
+                          min={1}
+                          max={5}
+                          step={1}
+                          value={sanitizeShieldCrackedTurns(
+                            adminConfig.shieldCrackedTurns
+                          )}
+                          onChange={(e) =>
+                            adminUpdateConfig({
+                              shieldCrackedTurns: sanitizeShieldCrackedTurns(
+                                Number(e.target.value)
+                              ),
+                            })
                           }
                           className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
                         />

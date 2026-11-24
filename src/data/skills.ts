@@ -207,8 +207,9 @@ export const SKILLS_LIST: SkillDefinition[] = [
     spCost: 14,
     cooldown: 4,
     targetType: 'single_enemy',
-    effectKind: 'attack_shield_break',
-    powerMultiplier: 0.8,
+    effectKind: 'attack_shield_break', // shield sunder
+    powerMultiplier: 1.0,
+    shieldDamageMult: 1.5,
     duration: 2,
   },
   {

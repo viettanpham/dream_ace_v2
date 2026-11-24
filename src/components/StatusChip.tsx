@@ -84,8 +84,8 @@ export function StatusChip({
     ? `${fullDetail.label}: ${fullDetail.valueText}`
     : fullDetail.label;
   const extraDesc =
-    status.type === 'shield_break'
-      ? ` · ${getStatusDesc(lang, 'shield_break', turnsLeft ?? 1)}`
+    status.type === 'shield_break' || status.type === 'shield_cracked'
+      ? ` · ${getStatusDesc(lang, status.type, turnsLeft ?? 1)}`
       : '';
   const accessibleSummary = `${nameAndValue} · ${turnsText} · ${stacksText}${extraDesc}`;
 

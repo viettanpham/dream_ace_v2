@@ -207,7 +207,8 @@ export const EN_TRANSLATIONS = {
   'status.shield_break': 'Shield down',
   'status.shield_break.desc': 'Shield at 0: generator restarting, no shield recovery for {n} turn(s)',
   'status.shield_cracked': 'Cracked shield',
-  'status.shield_cracked.desc': 'Shield regen reduced to 30% for 3 turns',
+  'status.shield_cracked.desc':
+    'Cracked shield: takes x1.3 skill damage to shields (basic attacks unchanged), cleared when shield hits 0',
   'status.slow': 'Slow',
   'status.slow.desc': '-30% Turn Speed',
   'status.silence': 'Silenced',
@@ -367,13 +368,13 @@ export const EN_TRANSLATIONS = {
     'Fires a heavy kinetic shell for 110% damage and inflicts Slow (-30% Speed) for 2 turns.',
   'skill.sge_aegis_sunder.name': 'Aegis Sunder Cannon',
   'skill.sge_aegis_sunder.desc':
-    'Fires an EMP disruptor for 80% damage that triggers Shield Break (disables shields for 2 turns).',
+    'Deals 100% damage, x1.5 shield damage, and inflicts Cracked Shield for 2 turns.',
   'skill.sge_thermal_mask.name': 'Thermal Masking',
   'skill.sge_thermal_mask.desc':
     'Special: Masks signature to become untargetable until your next attack. Cannot be used in Anchor Siege Mode.',
   'skill.sge_starbreaker_lance.name': 'Starbreaker Rail-Lance',
   'skill.sge_starbreaker_lance.desc':
-    'Elite (1x/battle): Fires a 400% hyper-velocity lance ignoring both Defense and Energy Shields.',
+    'Elite (1x/battle): Fires a 400% hyper-velocity lance that pierces Defense but hits shields first.',
   'skill.sge_passive_hull.name': 'Composite Bulkheads',
   'skill.sge_passive_hull.desc':
     'Passive: Permanently increases Defense by +4% per skill level.',
@@ -639,9 +640,11 @@ export const EN_TRANSLATIONS = {
     '{actor} transfers +{amount} SP to {target} via {skill}.',
   'log.evade': '{target} barrel-rolls and evades {action} from {actor}!',
   'log.damage':
-    '{actor} hits {target} with {action} for {breakdown}{critTag}{defendTag}.',
+    '{actor} hits {target} with {action} for {breakdown}{shieldMultTag}{critTag}{defendTag}.',
+  'log.shieldMultTag': ' (x{mult} shield)',
   'log.destroyed': '{target} ({className}) exploded!',
   'log.statusApplied': '{target} afflicted with {status} ({turns}t)!',
+  'log.shieldCrackNoShield': '{target}: No active shield to crack.',
   'log.burnTick': '{target} suffers {damage} hull burn damage!',
   'log.regenTick': '{target} regenerates +{amount} hull HP!',
   'log.shieldRegen': '{target} regenerates shield SHD +{amount}{suffix}',
@@ -1263,6 +1266,9 @@ export const EN_TRANSLATIONS = {
   'admin.shieldRegenHitPenaltyPct': 'Penalty per hit (%)',
   'admin.shieldRegenMinHitMultPct': 'Min regen when hit (%)',
   'admin.shieldRegenRestartTurns': 'Shield down turns',
+  'admin.aegisSunderShieldMult': 'Aegis Sunder: shield x',
+  'admin.shieldCrackedMult': 'Cracked shield: skill shield dmg x',
+  'admin.shieldCrackedTurns': 'Cracked shield: turns',
   'admin.shieldRegenExample': 'SHIELD 25 -> {pct}% max shield per turn · Hit 2x -> regen {hit2Pct}%',
   'admin.battleForceBoss': 'Force Boss Spawn',
   'admin.battleLevelOffset': 'Enemy Level Offset',
