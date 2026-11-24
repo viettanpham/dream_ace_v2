@@ -930,10 +930,10 @@ describe('10. War Point Shop & Special/Elite Opening Cards', () => {
     expect(buyFail.reason).toBe('insufficient_wp');
 
     // Grant WP and purchase card
-    pilot.warPoints = 200;
+    pilot.warPoints = 2000;
     const buyOk = buyOpeningCard(pilot, 'card_sge_starbreaker_lance');
     expect(buyOk.ok).toBe(true);
-    expect(buyOk.pilot.warPoints).toBe(40);
+    expect(buyOk.pilot.warPoints).toBe(400);
     expect(
       buyOk.pilot.ownedOpeningCards.includes('card_sge_starbreaker_lance')
     ).toBe(true);

@@ -61,6 +61,7 @@ import {
   SlotIcon,
 } from './GameIcons';
 import { SkillIcon } from './SkillIcon';
+import { SupplyShopPanel } from './SupplyShopPanel';
 
 type ClassFilter = 'all' | 'usable' | 'universal' | MechClassId;
 
@@ -416,7 +417,7 @@ export function ShopScreen() {
               </button>
             )}
 
-            <div className="w-full md:w-auto grid grid-cols-3 md:flex items-center gap-1 p-1 rounded-lg bg-slate-900 border border-slate-800">
+            <div className="w-full md:w-auto grid grid-cols-4 md:flex items-center gap-1 p-1 rounded-lg bg-slate-900 border border-slate-800">
               <button
                 type="button"
                 data-testid="shop-tab-buy"
@@ -472,6 +473,18 @@ export function ShopScreen() {
                 <span className="truncate">
                   {t('shop.tabWpShort', { count: availableWpOffersCount })}
                 </span>
+              </button>
+
+              <button
+                type="button"
+                data-testid="shop-tab-supply"
+                onClick={() => { setShopSubTab('supply'); setNoticeText(null); }}
+                className={`min-h-[44px] md:min-h-0 md:h-9 px-1.5 md:px-3 inline-flex items-center justify-center gap-1 rounded text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap ${
+                  shopSubTab === 'supply' ? 'bg-emerald-500 text-slate-950' : 'text-emerald-300 hover:text-emerald-100'
+                }`}
+              >
+                <Package className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">{t('shop.tabSupply')}</span>
               </button>
             </div>
           </div>
@@ -530,7 +543,7 @@ export function ShopScreen() {
         )}
 
         {/* Filters for Buy / Sell (Wrapped chips with shared SlotIcon & ClassIcon) */}
-        {shopSubTab !== 'warpoints' && (
+        {(shopSubTab === 'buy' || shopSubTab === 'sell') && (
           <div className="rounded-lg border border-slate-800/90 bg-[#0D131D]/95 p-3 sm:p-4 space-y-2.5">
             <div
               data-testid="shop-slot-tabs"
@@ -673,6 +686,10 @@ export function ShopScreen() {
               </div>
             )}
           </div>
+        )}
+
+        {shopSubTab === 'supply' && (
+          <SupplyShopPanel onNotice={(msg) => { setNoticeAction('none'); setNoticeText(msg); }} />
         )}
 
         {/* WAR POINT SHOP: ROTATING RANDOM OFFERS + OPENING CARDS */}

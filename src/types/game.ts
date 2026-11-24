@@ -412,6 +412,11 @@ export interface ShopItemListing extends ItemInstance {
   soldOut?: boolean;
 }
 
+export interface SupplyShopListing {
+  templateId: string;
+  remaining: number;
+}
+
 export type ConsumableKind =
   | 'equipment_crate'
   | 'enchant_stone'
@@ -1349,6 +1354,10 @@ export interface AdminConfig {
   noticeDurationSec?: number;
   supplyLoadoutSlots?: number;
   supplyUsesPerTurn?: number;
+  supplyShopMinTypes?: number;
+  supplyShopMaxTypes?: number;
+  supplyShopMinQty?: number;
+  supplyShopMaxQty?: number;
   showRawI18nKeys: boolean;
 }
 

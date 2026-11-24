@@ -1,3 +1,4 @@
+import { getSupplyTemplateById, SUPPLY_TEMPLATES } from '../data/consumables';
 import { PRICE_FORMULA } from '../data/itemPricing';
 import { EQUIPMENT_SLOTS, ITEM_TEMPLATES } from '../data/items';
 import { SECTORS_CATALOG } from '../data/maps';
@@ -11,9 +12,12 @@ import type {
   ItemRarity,
   PilotAccount,
   ShopItemListing,
+  SupplyShopListing,
+  SupplyTemplate,
   WpMarketOffer,
 } from '../types/game';
 import { generateItemInstance, pickWeightedRarity } from './equipment';
+import { SUPPLY_STACK_CAP } from './supplies';
 
 let wpOfferSeq = 1;
 
@@ -261,4 +265,186 @@ export function buildShopOptionsFromState(
     priceMultiplier: adminConfig?.shopPriceMultiplier ?? 1.0,
     shipyardBonus: hasOperationalShipyard(pilot),
   };
+}
+
+export const DEFAULT_SUPPLY_SHOP_MIN_TYPES = 2;
+export const DEFAULT_SUPPLY_SHOP_MAX_TYPES = 5;
+export const MIN_SUPPLY_SHOP_TYPES = 1;
+export const MAX_SUPPLY_SHOP_TYPES = 12;
+
+export const DEFAULT_SUPPLY_SHOP_MIN_QTY = 3;
+export const DEFAULT_SUPPLY_SHOP_MAX_QTY = 15;
+export const MIN_SUPPLY_SHOP_QTY = 1;
+export const MAX_SUPPLY_SHOP_QTY = SUPPLY_STACK_CAP;
+
+function clampSupplyInt(
+  raw: unknown,
+  min: number,
+  max: number,
+  fallback: number
+): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return fallback;
+  return Math.max(min, Math.min(max, Math.round(raw)));
+}
+
+export function sanitizeSupplyShopConfig(
+  cfg?: Pick<
+    Partial<AdminConfig>,
+    | 'supplyShopMinTypes'
+    | 'supplyShopMaxTypes'
+    | 'supplyShopMinQty'
+    | 'supplyShopMaxQty'
+  > | null
+): {
+  supplyShopMinTypes: number;
+  supplyShopMaxTypes: number;
+  supplyShopMinQty: number;
+  supplyShopMaxQty: number;
+} {
+  const minTypes = clampSupplyInt(
+    cfg?.supplyShopMinTypes,
+    MIN_SUPPLY_SHOP_TYPES,
+    MAX_SUPPLY_SHOP_TYPES,
+    DEFAULT_SUPPLY_SHOP_MIN_TYPES
+  );
+  const maxTypes = Math.max(
+    minTypes,
+    clampSupplyInt(
+      cfg?.supplyShopMaxTypes,
+      MIN_SUPPLY_SHOP_TYPES,
+      MAX_SUPPLY_SHOP_TYPES,
+      DEFAULT_SUPPLY_SHOP_MAX_TYPES
+    )
+  );
+  const minQty = clampSupplyInt(
+    cfg?.supplyShopMinQty,
+    MIN_SUPPLY_SHOP_QTY,
+    MAX_SUPPLY_SHOP_QTY,
+    DEFAULT_SUPPLY_SHOP_MIN_QTY
+  );
+  const maxQty = Math.max(
+    minQty,
+    clampSupplyInt(
+      cfg?.supplyShopMaxQty,
+      MIN_SUPPLY_SHOP_QTY,
+      MAX_SUPPLY_SHOP_QTY,
+      DEFAULT_SUPPLY_SHOP_MAX_QTY
+    )
+  );
+  return {
+    supplyShopMinTypes: minTypes,
+    supplyShopMaxTypes: maxTypes,
+    supplyShopMinQty: minQty,
+    supplyShopMaxQty: maxQty,
+  };
+}
+
+export function getMaxGearLevel(
+  pilot: Pick<PilotAccount, 'gears'> | null | undefined
+): number {
+  const gears = pilot?.gears;
+  if (!gears || typeof gears !== 'object') return 1;
+  let maxLv = 1;
+  for (const gear of Object.values(gears)) {
+    if (gear && typeof gear.level === 'number' && Number.isFinite(gear.level)) {
+      maxLv = Math.max(maxLv, Math.floor(gear.level));
+    }
+  }
+  return maxLv;
+}
+
+export function sanitizeSupplyShopStock(rawStock: unknown): SupplyShopListing[] {
+  if (!Array.isArray(rawStock)) return [];
+  const seen = new Set<string>();
+  const clean: SupplyShopListing[] = [];
+
+  for (const entry of rawStock) {
+    if (!entry || typeof entry !== 'object') continue;
+    const rawId = (entry as { templateId?: unknown }).templateId;
+    const tplId = typeof rawId === 'string' ? rawId.trim() : '';
+    if (!tplId || !getSupplyTemplateById(tplId) || seen.has(tplId)) {
+      continue;
+    }
+    seen.add(tplId);
+    const rawRem = (entry as { remaining?: unknown }).remaining;
+    const remaining =
+      typeof rawRem === 'number' && Number.isFinite(rawRem)
+        ? Math.max(0, Math.min(SUPPLY_STACK_CAP, Math.round(rawRem)))
+        : 0;
+    clean.push({
+      templateId: tplId,
+      remaining,
+    });
+  }
+
+  return clean;
+}
+
+function rollIntInclusive(
+  min: number,
+  max: number,
+  rng: () => number
+): number {
+  if (max <= min) return min;
+  const span = max - min + 1;
+  return Math.min(max, min + Math.floor(rng() * span));
+}
+
+/**
+ * Generates N distinct battle supply listings with unlockLevel <= maxGearLevel,
+ * equal weight per template, and random remaining quantity per template.
+ */
+export function generateSupplyShopStock(
+  maxGearLevel: number,
+  cfg?: Pick<
+    Partial<AdminConfig>,
+    | 'supplyShopMinTypes'
+    | 'supplyShopMaxTypes'
+    | 'supplyShopMinQty'
+    | 'supplyShopMaxQty'
+  > | null,
+  templates: readonly SupplyTemplate[] = SUPPLY_TEMPLATES,
+  rng: () => number = Math.random
+): SupplyShopListing[] {
+  const {
+    supplyShopMinTypes,
+    supplyShopMaxTypes,
+    supplyShopMinQty,
+    supplyShopMaxQty,
+  } = sanitizeSupplyShopConfig(cfg);
+
+  const levelCap = Number.isFinite(maxGearLevel)
+    ? Math.max(1, Math.floor(maxGearLevel))
+    : 1;
+
+  const seenIds = new Set<string>();
+  const eligible: SupplyTemplate[] = [];
+  for (const tpl of templates) {
+    if (tpl.unlockLevel <= levelCap && !seenIds.has(tpl.id)) {
+      seenIds.add(tpl.id);
+      eligible.push(tpl);
+    }
+  }
+
+  if (eligible.length === 0) return [];
+
+  const desiredCount = rollIntInclusive(
+    supplyShopMinTypes,
+    supplyShopMaxTypes,
+    rng
+  );
+  const count = Math.min(eligible.length, desiredCount);
+
+  const pool = [...eligible];
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.min(i, Math.floor(rng() * (i + 1)));
+    const tmp = pool[i];
+    pool[i] = pool[j];
+    pool[j] = tmp;
+  }
+
+  return pool.slice(0, count).map((tpl) => ({
+    templateId: tpl.id,
+    remaining: rollIntInclusive(supplyShopMinQty, supplyShopMaxQty, rng),
+  }));
 }

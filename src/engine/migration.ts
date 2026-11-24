@@ -15,6 +15,7 @@ import {
   getSkillById,
   LEGACY_SKILL_ID_MAP,
 } from '../data/skills';
+import { SUPPLY_TEMPLATES } from '../data/consumables';
 import {
   DEFAULT_ADMIN_SHOP_RARITY_WEIGHTS,
   SHOP_STOCK_CONFIG,
@@ -35,6 +36,7 @@ import type {
   QuickSellFilterConfig,
   ShopItemListing,
   StarterSetConfig,
+  SupplyShopListing,
   WorldClockSpeedMode,
   WorldClockState,
   WpMarketOffer,
@@ -70,9 +72,17 @@ import { getDefaultInventoryFilterState } from './inventory';
 import { DEFAULT_QUICK_SELL_CONFIG } from './quickSell';
 import {
   buildShopOptionsFromState,
+  DEFAULT_SUPPLY_SHOP_MAX_QTY,
+  DEFAULT_SUPPLY_SHOP_MAX_TYPES,
+  DEFAULT_SUPPLY_SHOP_MIN_QTY,
+  DEFAULT_SUPPLY_SHOP_MIN_TYPES,
   generateCategorizedShopStock,
+  generateSupplyShopStock,
   generateWpMarketOffers,
+  getMaxGearLevel,
   hasOperationalShipyard,
+  sanitizeSupplyShopConfig,
+  sanitizeSupplyShopStock,
 } from './shop';
 import { isSkillAllowedForClass, MAX_ACTIVE_SKILL_BAR } from './skills';
 import {
@@ -204,6 +214,7 @@ export function sanitizeWorldClock(raw: unknown): WorldClockState {
 export interface PersistedCampaignState {
   pilot: PilotAccount;
   shopStock: ShopItemListing[];
+  supplyShopStock?: SupplyShopListing[];
   wpMarketOffers: WpMarketOffer[];
   battlesUntilRestock: number;
   inventoryFilterState: InventoryFilterState;
@@ -267,6 +278,10 @@ export function createDefaultAdminConfig(): AdminConfig {
     noticeDurationSec: DEFAULT_NOTICE_DURATION_SEC,
     supplyLoadoutSlots: DEFAULT_SUPPLY_LOADOUT_SLOTS,
     supplyUsesPerTurn: DEFAULT_SUPPLY_USES_PER_TURN,
+    supplyShopMinTypes: DEFAULT_SUPPLY_SHOP_MIN_TYPES,
+    supplyShopMaxTypes: DEFAULT_SUPPLY_SHOP_MAX_TYPES,
+    supplyShopMinQty: DEFAULT_SUPPLY_SHOP_MIN_QTY,
+    supplyShopMaxQty: DEFAULT_SUPPLY_SHOP_MAX_QTY,
     showRawI18nKeys: false,
   };
 }
@@ -298,6 +313,12 @@ export function createFreshCampaignState(
     shopStock: generateCategorizedShopStock(
       1,
       buildShopOptionsFromState(pilot, adminConfig),
+      rng
+    ),
+    supplyShopStock: generateSupplyShopStock(
+      1,
+      adminConfig,
+      SUPPLY_TEMPLATES,
       rng
     ),
     wpMarketOffers: generateWpMarketOffers(
@@ -577,6 +598,7 @@ export function migrateSaveData(
     noticeDurationSec: sanitizeNoticeDurationSec(rawAdmin.noticeDurationSec),
     supplyLoadoutSlots: sanitizeSupplyLoadoutSlots(rawAdmin.supplyLoadoutSlots),
     supplyUsesPerTurn: sanitizeSupplyUsesPerTurn(rawAdmin.supplyUsesPerTurn),
+    ...sanitizeSupplyShopConfig(rawAdmin as Partial<AdminConfig>),
     showRawI18nKeys: Boolean(rawAdmin.showRawI18nKeys),
   };
 
@@ -881,6 +903,14 @@ export function migrateSaveData(
               buildShopOptionsFromState(finalMigratedPilot, adminConfig),
               rng
             ),
+      supplyShopStock: Array.isArray(raw.supplyShopStock)
+        ? sanitizeSupplyShopStock(raw.supplyShopStock)
+        : generateSupplyShopStock(
+            getMaxGearLevel(finalMigratedPilot),
+            adminConfig,
+            SUPPLY_TEMPLATES,
+            rng
+          ),
       wpMarketOffers:
         rawWpOffers.length > 0
           ? rawWpOffers
@@ -1040,6 +1070,12 @@ export function migrateSaveData(
     shopStock: generateCategorizedShopStock(
       migratedLevel,
       buildShopOptionsFromState(finalLegacyPilot, adminConfig),
+      rng
+    ),
+    supplyShopStock: generateSupplyShopStock(
+      getMaxGearLevel(finalLegacyPilot),
+      adminConfig,
+      SUPPLY_TEMPLATES,
       rng
     ),
     wpMarketOffers: generateWpMarketOffers(

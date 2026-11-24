@@ -50,6 +50,9 @@ import {
   sanitizeShieldRegenConfig,
 } from '../engine/shieldRegen';
 import {
+  MAX_SUPPLY_SHOP_QTY, MAX_SUPPLY_SHOP_TYPES, MIN_SUPPLY_SHOP_QTY, MIN_SUPPLY_SHOP_TYPES, sanitizeSupplyShopConfig,
+} from '../engine/shop';
+import {
   DEFAULT_BOX_CAPACITY,
   DEFAULT_WAREHOUSE_CAPACITY,
   getBoxCapacity,
@@ -1809,6 +1812,54 @@ export function AdminPanel() {
                           className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
                         />
                       </label>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Supply Shop ("Cửa hàng vật tư") */}
+              {(() => {
+                const supCfg = sanitizeSupplyShopConfig(adminConfig);
+                const updateSup = (patch: Partial<typeof supCfg>) =>
+                  adminUpdateConfig(sanitizeSupplyShopConfig({ ...supCfg, ...patch }));
+                const fields: Array<[keyof typeof supCfg, string, number, number, string]> = [
+                  ['supplyShopMinTypes', t('admin.supplyShopMinTypes'), MIN_SUPPLY_SHOP_TYPES, MAX_SUPPLY_SHOP_TYPES, 'admin-supply-shop-min-types'],
+                  ['supplyShopMaxTypes', t('admin.supplyShopMaxTypes'), MIN_SUPPLY_SHOP_TYPES, MAX_SUPPLY_SHOP_TYPES, 'admin-supply-shop-max-types'],
+                  ['supplyShopMinQty', t('admin.supplyShopMinQty'), MIN_SUPPLY_SHOP_QTY, MAX_SUPPLY_SHOP_QTY, 'admin-supply-shop-min-qty'],
+                  ['supplyShopMaxQty', t('admin.supplyShopMaxQty'), MIN_SUPPLY_SHOP_QTY, MAX_SUPPLY_SHOP_QTY, 'admin-supply-shop-max-qty'],
+                ];
+                return (
+                  <div data-testid="admin-supply-shop-section" className="p-3.5 rounded-lg border border-slate-800 bg-[#0D1422] space-y-2.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <div className="text-xs font-semibold text-emerald-300">{t('admin.supplyShopTitle')}</div>
+                        <p className="text-[11px] text-slate-400">{t('admin.supplyShopHint')}</p>
+                      </div>
+                      <button
+                        type="button"
+                        data-testid="admin-supply-shop-restock-btn"
+                        onClick={() => { adminRestockShopNow(); flash(t('admin.supplyShopRestockNow')); }}
+                        className="min-h-[36px] px-3 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span>{t('admin.supplyShopRestockNow')}</span>
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      {fields.map(([key, label, min, max, testId]) => (
+                        <label key={key} className="space-y-1 block">
+                          <span className="text-[11px] text-slate-400 block">{label}</span>
+                          <input
+                            type="number"
+                            data-testid={testId}
+                            min={min}
+                            max={max}
+                            value={supCfg[key]}
+                            onChange={(e) => updateSup({ [key]: Number(e.target.value) })}
+                            className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                          />
+                        </label>
+                      ))}
                     </div>
                   </div>
                 );

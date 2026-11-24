@@ -79,8 +79,8 @@ export const BALANCE_CONFIG = {
   } as Record<SkillCategory, number>,
   skillUpgradeCosts: [250, 550, 1100, 2200] as readonly number[],
   openingCardCosts: {
-    special: 80,
-    elite: 160,
+    special: 800,
+    elite: 1600,
   },
 
   // ---- Randomized Item Rarity Config ----
