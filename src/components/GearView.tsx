@@ -14,7 +14,6 @@ import {
   SlidersHorizontal,
   Sparkles,
   Star,
-  Tag,
   Trash2,
   Unlock,
   Wand2,
@@ -88,6 +87,13 @@ import { Notice } from './Notice';
 import { BottomSheet } from './BottomSheet';
 import { FighterSvg } from './FighterSvg';
 import { ClassIcon, ConsumableIcon, SlotIcon } from './GameIcons';
+import {
+  GearSlotTile,
+  isEquipmentSlotKey,
+  PAPER_DOLL_LEFT_SLOTS,
+  PAPER_DOLL_RIGHT_SLOTS,
+  type GearPaperDollSlotKey,
+} from './GearSlotTile';
 import { QuickSellModal } from './QuickSellModal';
 
 type GearSelection =
@@ -1243,12 +1249,83 @@ export function GearView() {
     );
   };
 
+  const renderPaperDollTile = (
+    slotKey: GearPaperDollSlotKey,
+    variant: 'desktop' | 'phone'
+  ) => {
+    if (!isEquipmentSlotKey(slotKey)) {
+      const extNum = slotKey.replace('ext', '');
+      const fullLabel =
+        slotKey === 'radar'
+          ? t('slot.radar')
+          : t('slot.extender', { n: extNum });
+      const shortLabel =
+        slotKey === 'radar'
+          ? t('slotShort.radar')
+          : t('slotShort.extender', { n: extNum });
+      const lockedLabel = t('slot.lockedSoon');
+      return (
+        <GearSlotTile
+          key={`${variant}-${slotKey}`}
+          slotKey={slotKey}
+          label={variant === 'desktop' ? shortLabel : fullLabel}
+          locked
+          lockedLabel={lockedLabel}
+          title={`${fullLabel} — ${lockedLabel}`}
+          variant={variant}
+        />
+      );
+    }
+
+    const slot = slotKey;
+    const slotMeta = EQUIPMENT_SLOT_META[slot];
+    const inst = equippedMap[slot];
+    const fullLabel = getSlotLabel(lang, slot);
+    const shortLabel = getSlotShort(lang, slot);
+    const itemName = inst ? getItemInstanceName(lang, inst) : undefined;
+    const isSelected = selection?.kind === 'slot' && selection.slot === slot;
+    const isTargetOfPreview = Boolean(
+      selectedInventoryInstance &&
+        selectedInventoryInstance.slot === slot &&
+        getItemEquippedByGear(
+          pilot.gears,
+          selectedInventoryInstance.instanceId
+        ) !== activeGear.classId
+    );
+    const isUnequipping = confirmingUnequipSlot === slot;
+    const title = inst
+      ? `${fullLabel}: ${itemName}${
+          inst.enchantLevel > 0 ? ` (+${inst.enchantLevel})` : ''
+        } · ${inst.rollQuality}%`
+      : `${fullLabel}: —`;
+
+    return (
+      <GearSlotTile
+        key={`${variant}-${slot}`}
+        slotKey={slot}
+        label={shortLabel}
+        instance={inst}
+        itemName={itemName}
+        selected={isSelected}
+        previewTarget={isTargetOfPreview}
+        confirmingUnequip={isUnequipping}
+        classLocked={slotMeta.classLocked}
+        classOnlyTitle={t('common.classOnly', {
+          className: getClassName(lang, activeGear.classId),
+        })}
+        starterBadgeLabel={t('inv.starterBadge')}
+        title={title}
+        variant={variant}
+        onSelect={() => handleSelectSlot(slot)}
+      />
+    );
+  };
+
   return (
     <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-5 space-y-3.5 sm:space-y-4">
-      {/* ==================== TOP ROW: Mobile (Ship+KeyStats -> 3x2 Slots) / Desktop (Slots | Ship | Stats) ==================== */}
+      {/* ==================== TOP ROW: Paper-Doll (Ship + 12 Slots, lg:col-span-9) | Live Stats (lg:col-span-3) ==================== */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 sm:gap-4 items-stretch">
-        {/* COL 2 on Desktop / FIRST on Mobile: Hovering Space Fighter + Key Stats + Collapsible Full Stats */}
-        <section className="order-1 lg:order-2 lg:col-span-5 rounded-lg border border-slate-800/90 bg-[#0C121D]/95 p-3.5 sm:p-4 flex flex-col justify-between items-center relative overflow-hidden gap-3">
+        <section className="lg:col-span-9 rounded-lg border border-slate-800/90 bg-[#0C121D]/95 p-3.5 flex flex-col lg:grid lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:items-center gap-3 relative overflow-hidden">
           <svg
             viewBox="0 0 360 280"
             className="pointer-events-none absolute inset-0 w-full h-full opacity-25"
@@ -1286,302 +1363,241 @@ export function GearView() {
             style={{ backgroundColor: activeClass.accentHex }}
           />
 
-          {/* Active Gear Level & Power Rating */}
-          <div className="relative z-10 w-full flex items-start justify-between gap-2">
-            <div>
-              <div className="flex items-baseline gap-2">
-                <span className="font-display text-xl font-bold tracking-wide text-slate-50 leading-none">
-                  {getClassName(lang, activeGear.classId)}
-                </span>
-                <span className="font-mono-nums text-xs font-bold text-amber-400">
-                  {t('common.levelShort')}
-                  {activeGear.level}
-                </span>
+          {/* Desktop Left Slot Rail (>= lg) */}
+          <div
+            data-testid="gear-rail-left"
+            className="hidden lg:flex flex-col items-center gap-1.5 shrink-0 relative z-10"
+          >
+            {PAPER_DOLL_LEFT_SLOTS.map((slotKey) =>
+              renderPaperDollTile(slotKey, 'desktop')
+            )}
+          </div>
+
+          {/* Center Ship Showcase + Key Stats + Collapsible Full Stats + Owned Gear Selector */}
+          <div className="relative z-10 w-full lg:h-full min-w-0 flex flex-col justify-between items-center gap-3">
+            {/* Active Gear Level & Power Rating */}
+            <div className="w-full flex items-start justify-between gap-2">
+              <div>
+                <div className="flex items-baseline gap-2">
+                  <span className="font-display text-xl font-bold tracking-wide text-slate-50 leading-none">
+                    {getClassName(lang, activeGear.classId)}
+                  </span>
+                  <span className="font-mono-nums text-xs font-bold text-amber-400">
+                    {t('common.levelShort')}
+                    {activeGear.level}
+                  </span>
+                </div>
+                <div className="text-xs text-slate-400 mt-0.5">
+                  {getClassCode(lang, activeGear.classId)} ·{' '}
+                  {getClassRole(lang, activeGear.classId)}
+                </div>
               </div>
-              <div className="text-xs text-slate-400 mt-0.5">
-                {getClassCode(lang, activeGear.classId)} ·{' '}
-                {getClassRole(lang, activeGear.classId)}
+
+              <div className="text-right">
+                <div className="font-mono-nums text-xs text-sky-300 font-semibold">
+                  {t('common.power')}: {powerRating}
+                </div>
+                {activeGear.unspentPoints > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('garage')}
+                    className="text-xs font-mono-nums font-semibold text-emerald-400 hover:text-emerald-300 cursor-pointer whitespace-nowrap"
+                  >
+                    {t('gear.allocateHint', { count: activeGear.unspentPoints })}
+                  </button>
+                )}
               </div>
             </div>
 
-            <div className="text-right">
-              <div className="font-mono-nums text-xs text-sky-300 font-semibold">
-                {t('common.power')}: {powerRating}
+            {/* Mobile Compact Showcase: Ship Left + Key Stats Right */}
+            <div className="w-full flex items-center justify-center lg:py-2 gap-3">
+              <FighterSvg
+                classId={activeGear.classId}
+                side="ally"
+                facing="right"
+                size="lg"
+                heroHover
+                className="w-32 h-32 sm:w-40 sm:h-40 lg:w-52 lg:h-52 shrink-0"
+              />
+
+              {/* Key stats strip shown only on < lg */}
+              <div className="lg:hidden flex-1 min-w-0 grid grid-cols-2 gap-1.5 font-mono-nums">
+                <div className="rounded border border-slate-800 bg-[#080C14]/90 px-2 py-1.5">
+                  <div className="text-[11px] text-slate-400">HP</div>
+                  <div className="text-sm font-bold text-emerald-400">
+                    {currentDerived.maxHp}
+                  </div>
+                </div>
+                <div className="rounded border border-slate-800 bg-[#080C14]/90 px-2 py-1.5">
+                  <div className="text-[11px] text-slate-400">SHD</div>
+                  <div className="text-sm font-bold text-sky-400">
+                    {currentDerived.maxShield}
+                  </div>
+                </div>
+                <div className="rounded border border-slate-800 bg-[#080C14]/90 px-2 py-1.5">
+                  <div className="text-[11px] text-slate-400">ATK</div>
+                  <div className="text-sm font-bold text-slate-100">
+                    {currentStats.attack}
+                  </div>
+                </div>
+                <div className="rounded border border-slate-800 bg-[#080C14]/90 px-2 py-1.5">
+                  <div className="text-[11px] text-slate-400">SPD</div>
+                  <div className="text-sm font-bold text-amber-300">
+                    {currentDerived.speed}
+                  </div>
+                </div>
               </div>
-              {activeGear.unspentPoints > 0 && (
+            </div>
+
+            {/* Mobile Collapsible Full Stats Toggle (< lg) */}
+            <div className="lg:hidden w-full space-y-2">
+              <button
+                type="button"
+                onClick={() => setMobileStatsExpanded((v) => !v)}
+                className="w-full min-h-[44px] px-3 rounded-lg border border-slate-800 bg-[#080C14]/90 text-slate-200 text-sm font-semibold flex items-center justify-between cursor-pointer"
+              >
+                <span>
+                  {mobileStatsExpanded
+                    ? t('mobile.hideStats')
+                    : t('mobile.fullStats')}
+                </span>
+                {mobileStatsExpanded ? (
+                  <ChevronUp className="w-4 h-4 text-amber-400" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-slate-400" />
+                )}
+              </button>
+
+              {mobileStatsExpanded && (
+                <div className="rounded-lg border border-slate-800 bg-[#080C14]/95 p-3 space-y-2.5">
+                  <div className="grid grid-cols-3 gap-2 font-mono-nums">
+                    {STAT_KEYS.map((key) => (
+                      <div
+                        key={key}
+                        className="rounded border border-slate-800/80 bg-slate-950/70 px-2 py-1.5 flex items-center justify-between text-xs"
+                      >
+                        <span className="text-slate-400">
+                          {getStatShort(lang, key)}
+                        </span>
+                        <span className="font-bold text-slate-100">
+                          {currentStats[key]}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 font-mono-nums">
+                    {derivedMetrics.map((m) => (
+                      <div
+                        key={m.key}
+                        className="rounded border border-slate-800/80 bg-slate-950/70 px-2 py-1.5"
+                      >
+                        <div className="text-[10px] text-slate-400 truncate">
+                          {m.label}
+                        </div>
+                        <div className={`text-xs font-bold ${m.color}`}>
+                          {m.cur}
+                          {m.suffix ?? ''}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Owned Gears Selector (with ClassIcon) */}
+            <div className="w-full flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {ownedGears.map((cls) => {
+                  const g = pilot.gears[cls.id];
+                  const isSelected = cls.id === activeGear.classId;
+                  return (
+                    <button
+                      key={cls.id}
+                      type="button"
+                      onClick={() => {
+                        setSelection(null);
+                        setMobileDetailOpen(false);
+                        setConfirmingUnequipSlot(null);
+                        setConfirmingSellId(null);
+                        setEnchantFeedback(null);
+                        selectActiveGear(cls.id);
+                      }}
+                      className={`min-h-[44px] lg:min-h-0 lg:h-8 px-3 lg:px-2.5 rounded border text-xs font-display font-semibold transition-colors cursor-pointer inline-flex items-center gap-1.5 ${
+                        isSelected
+                          ? 'bg-slate-800 border-amber-400/80 text-slate-50'
+                          : 'bg-slate-900/70 border-slate-800 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <ClassIcon classId={cls.id} className="w-3.5 h-3.5 shrink-0" />
+                      <span>{getClassName(lang, cls.id)}</span>
+                      <span className="font-mono-nums text-[11px] opacity-80">
+                        Lv.{g.level}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {ownedGears.length < 4 && (
                 <button
                   type="button"
                   onClick={() => setActiveTab('garage')}
-                  className="text-xs font-mono-nums font-semibold text-emerald-400 hover:text-emerald-300 cursor-pointer whitespace-nowrap"
+                  className="min-h-[44px] lg:min-h-0 px-2 text-xs font-medium text-amber-400 hover:text-amber-300 cursor-pointer whitespace-nowrap"
                 >
-                  {t('gear.allocateHint', { count: activeGear.unspentPoints })}
+                  + Garage ({ownedGears.length}/4)
                 </button>
               )}
             </div>
           </div>
 
-          {/* Mobile Compact Showcase: Ship Left + Key Stats Right */}
-          <div className="relative z-10 w-full flex items-center justify-center lg:py-3 gap-3">
-            <FighterSvg
-              classId={activeGear.classId}
-              side="ally"
-              facing="right"
-              size="lg"
-              heroHover
-              className="w-32 h-32 sm:w-40 sm:h-40 lg:w-52 lg:h-52 shrink-0"
-            />
-
-            {/* Key stats strip shown only on < lg */}
-            <div className="lg:hidden flex-1 min-w-0 grid grid-cols-2 gap-1.5 font-mono-nums">
-              <div className="rounded border border-slate-800 bg-[#080C14]/90 px-2 py-1.5">
-                <div className="text-[11px] text-slate-400">HP</div>
-                <div className="text-sm font-bold text-emerald-400">
-                  {currentDerived.maxHp}
-                </div>
-              </div>
-              <div className="rounded border border-slate-800 bg-[#080C14]/90 px-2 py-1.5">
-                <div className="text-[11px] text-slate-400">SHD</div>
-                <div className="text-sm font-bold text-sky-400">
-                  {currentDerived.maxShield}
-                </div>
-              </div>
-              <div className="rounded border border-slate-800 bg-[#080C14]/90 px-2 py-1.5">
-                <div className="text-[11px] text-slate-400">ATK</div>
-                <div className="text-sm font-bold text-slate-100">
-                  {currentStats.attack}
-                </div>
-              </div>
-              <div className="rounded border border-slate-800 bg-[#080C14]/90 px-2 py-1.5">
-                <div className="text-[11px] text-slate-400">SPD</div>
-                <div className="text-sm font-bold text-amber-300">
-                  {currentDerived.speed}
-                </div>
-              </div>
-            </div>
+          {/* Desktop Right Slot Rail (>= lg) */}
+          <div
+            data-testid="gear-rail-right"
+            className="hidden lg:flex flex-col items-center gap-1.5 shrink-0 relative z-10"
+          >
+            {PAPER_DOLL_RIGHT_SLOTS.map((slotKey) =>
+              renderPaperDollTile(slotKey, 'desktop')
+            )}
           </div>
 
-          {/* Mobile Collapsible Full Stats Toggle (< lg) */}
-          <div className="lg:hidden relative z-10 w-full space-y-2">
-            <button
-              type="button"
-              onClick={() => setMobileStatsExpanded((v) => !v)}
-              className="w-full min-h-[44px] px-3 rounded-lg border border-slate-800 bg-[#080C14]/90 text-slate-200 text-sm font-semibold flex items-center justify-between cursor-pointer"
-            >
-              <span>
-                {mobileStatsExpanded
-                  ? t('mobile.hideStats')
-                  : t('mobile.fullStats')}
+          {/* Phone Two-Column 12-Slot Grid (< lg) */}
+          <div
+            data-testid="gear-phone-slots"
+            className="lg:hidden relative z-10 w-full pt-2 border-t border-slate-800/80 space-y-2"
+          >
+            <div className="flex items-center justify-between gap-2 px-0.5">
+              <h2 className="font-display text-base font-bold tracking-wide text-slate-100">
+                {t('gear.slotsHeading')}
+              </h2>
+              <span className="text-xs font-mono-nums text-slate-400">
+                {EQUIPMENT_SLOTS.filter((s) => Boolean(equippedMap[s])).length}/6
               </span>
-              {mobileStatsExpanded ? (
-                <ChevronUp className="w-4 h-4 text-amber-400" />
-              ) : (
-                <ChevronDown className="w-4 h-4 text-slate-400" />
-              )}
-            </button>
-
-            {mobileStatsExpanded && (
-              <div className="rounded-lg border border-slate-800 bg-[#080C14]/95 p-3 space-y-2.5">
-                <div className="grid grid-cols-3 gap-2 font-mono-nums">
-                  {STAT_KEYS.map((key) => (
-                    <div
-                      key={key}
-                      className="rounded border border-slate-800/80 bg-slate-950/70 px-2 py-1.5 flex items-center justify-between text-xs"
-                    >
-                      <span className="text-slate-400">
-                        {getStatShort(lang, key)}
-                      </span>
-                      <span className="font-bold text-slate-100">
-                        {currentStats[key]}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-                <div className="grid grid-cols-3 gap-2 font-mono-nums">
-                  {derivedMetrics.map((m) => (
-                    <div
-                      key={m.key}
-                      className="rounded border border-slate-800/80 bg-slate-950/70 px-2 py-1.5"
-                    >
-                      <div className="text-[10px] text-slate-400 truncate">
-                        {m.label}
-                      </div>
-                      <div className={`text-xs font-bold ${m.color}`}>
-                        {m.cur}
-                        {m.suffix ?? ''}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Owned Gears Selector (with ClassIcon) */}
-          <div className="relative z-10 w-full flex items-center justify-between gap-2 flex-wrap">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {ownedGears.map((cls) => {
-                const g = pilot.gears[cls.id];
-                const isSelected = cls.id === activeGear.classId;
-                return (
-                  <button
-                    key={cls.id}
-                    type="button"
-                    onClick={() => {
-                      setSelection(null);
-                      setMobileDetailOpen(false);
-                      setConfirmingUnequipSlot(null);
-                      setConfirmingSellId(null);
-                      setEnchantFeedback(null);
-                      selectActiveGear(cls.id);
-                    }}
-                    className={`min-h-[44px] lg:min-h-0 lg:h-8 px-3 lg:px-2.5 rounded border text-xs font-display font-semibold transition-colors cursor-pointer inline-flex items-center gap-1.5 ${
-                      isSelected
-                        ? 'bg-slate-800 border-amber-400/80 text-slate-50'
-                        : 'bg-slate-900/70 border-slate-800 text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    <ClassIcon classId={cls.id} className="w-3.5 h-3.5 shrink-0" />
-                    <span>{getClassName(lang, cls.id)}</span>
-                    <span className="font-mono-nums text-[11px] opacity-80">
-                      Lv.{g.level}
-                    </span>
-                  </button>
-                );
-              })}
             </div>
 
-            {ownedGears.length < 4 && (
-              <button
-                type="button"
-                onClick={() => setActiveTab('garage')}
-                className="min-h-[44px] lg:min-h-0 px-2 text-xs font-medium text-amber-400 hover:text-amber-300 cursor-pointer whitespace-nowrap"
+            <div className="grid grid-cols-2 gap-2">
+              <div
+                data-testid="gear-phone-left"
+                className="flex flex-col gap-1.5 min-w-0"
               >
-                + Garage ({ownedGears.length}/4)
-              </button>
-            )}
-          </div>
-        </section>
-
-        {/* COL 1 on Desktop / SECOND on Mobile: 6 Equipment Slots */}
-        <section className="order-2 lg:order-1 lg:col-span-4 rounded-lg border border-slate-800/90 bg-[#0C121D]/95 p-3.5 flex flex-col justify-between gap-2.5">
-          <div className="flex items-center justify-between gap-2 px-0.5">
-            <h2 className="font-display text-lg font-bold tracking-wide text-slate-100">
-              {t('gear.slotsHeading')}
-            </h2>
-            <span className="text-xs font-mono-nums text-slate-400">
-              {EQUIPMENT_SLOTS.filter((s) => Boolean(equippedMap[s])).length}/6
-            </span>
-          </div>
-
-          <div className="grid grid-cols-3 lg:grid-cols-1 gap-2 lg:gap-1.5 flex-1">
-            {EQUIPMENT_SLOTS.map((slot) => {
-              const slotMeta = EQUIPMENT_SLOT_META[slot];
-              const inst = equippedMap[slot];
-              const isSelected =
-                selection?.kind === 'slot' && selection.slot === slot;
-              const isTargetOfPreview =
-                selectedInventoryInstance &&
-                selectedInventoryInstance.slot === slot &&
-                getItemEquippedByGear(
-                  pilot.gears,
-                  selectedInventoryInstance.instanceId
-                ) !== activeGear.classId;
-              const isUnequipping = confirmingUnequipSlot === slot;
-
-              return (
-                <button
-                  key={slot}
-                  type="button"
-                  onClick={() => handleSelectSlot(slot)}
-                  className={`w-full aspect-square lg:aspect-auto lg:min-h-[48px] p-2 lg:px-3 lg:py-1.5 rounded-lg lg:rounded border text-center lg:text-left transition-colors cursor-pointer flex flex-col lg:flex-row items-center justify-between gap-1 lg:gap-2.5 ${
-                    isUnequipping
-                      ? 'border-red-400/80 bg-red-500/10'
-                      : isSelected
-                      ? 'border-sky-400 bg-sky-500/15'
-                      : isTargetOfPreview
-                      ? 'border-amber-400/80 bg-amber-500/10'
-                      : inst
-                      ? `${RARITY_META[inst.rarity].borderClass} bg-[#080C14] hover:border-slate-600`
-                      : 'border-slate-800/90 bg-[#080C14] hover:border-slate-700'
-                  }`}
-                >
-                  <div className="flex flex-col lg:flex-row items-center gap-1 lg:gap-2.5 min-w-0 w-full">
-                    <div className="flex items-center justify-between lg:justify-center w-full lg:w-auto">
-                      <span
-                        className={`h-8 w-8 rounded border flex items-center justify-center shrink-0 ${
-                          inst
-                            ? `${RARITY_META[inst.rarity].borderClass} bg-slate-900 ${RARITY_META[inst.rarity].textClass}`
-                            : 'border-slate-800 bg-slate-950 text-slate-600'
-                        }`}
-                      >
-                        <SlotIcon slot={slot} className="w-4 h-4" />
-                      </span>
-                      {inst && inst.enchantLevel > 0 && (
-                        <span className="lg:hidden font-mono-nums text-[11px] font-bold text-amber-400">
-                          +{inst.enchantLevel}
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="min-w-0 w-full">
-                      <div className="flex items-center justify-center lg:justify-start gap-1 text-[11px] text-slate-400 leading-none">
-                        <span className="lg:hidden truncate">
-                          {getSlotShort(lang, slot)}
-                        </span>
-                        <span className="hidden lg:inline">
-                          {getSlotLabel(lang, slot)}
-                        </span>
-                        {slotMeta.classLocked && (
-                          <span
-                            title={t('common.classOnly', {
-                              className: getClassName(lang, activeGear.classId),
-                            })}
-                          >
-                            <Tag className="w-2.5 h-2.5 text-sky-400/80 shrink-0" />
-                          </span>
-                        )}
-                      </div>
-                      <div
-                        className={`mt-1 text-xs font-semibold truncate ${
-                          inst
-                            ? RARITY_META[inst.rarity].textClass
-                            : 'text-slate-600'
-                        }`}
-                      >
-                        {inst ? getItemInstanceName(lang, inst) : '—'}
-                      </div>
-                    </div>
-                  </div>
-
-                  {inst && (
-                    <div className="hidden lg:flex items-center gap-1.5 shrink-0 font-mono-nums text-[11px]">
-                      {inst.isStarter && (
-                        <span
-                          data-testid={`slot-starter-badge-${slot}`}
-                          className="px-1 py-0.2 rounded border border-cyan-500/45 bg-cyan-500/12 text-[10px] font-sans font-semibold text-cyan-300"
-                        >
-                          {t('inv.starterBadge')}
-                        </span>
-                      )}
-                      {inst.locked && (
-                        <Lock className="w-3 h-3 text-amber-300 shrink-0" />
-                      )}
-                      <span className="text-slate-500">{inst.rollQuality}%</span>
-                      {inst.enchantLevel > 0 && (
-                        <span className="font-bold text-amber-400">
-                          +{inst.enchantLevel}
-                        </span>
-                      )}
-                    </div>
-                  )}
-                </button>
-              );
-            })}
+                {PAPER_DOLL_LEFT_SLOTS.map((slotKey) =>
+                  renderPaperDollTile(slotKey, 'phone')
+                )}
+              </div>
+              <div
+                data-testid="gear-phone-right"
+                className="flex flex-col gap-1.5 min-w-0"
+              >
+                {PAPER_DOLL_RIGHT_SLOTS.map((slotKey) =>
+                  renderPaperDollTile(slotKey, 'phone')
+                )}
+              </div>
+            </div>
           </div>
         </section>
 
         {/* COL 3 (Desktop only >= lg): Live Combat Stats Readout with +/- Preview */}
-        <section className="hidden lg:flex lg:order-3 lg:col-span-3 rounded-lg border border-slate-800/90 bg-[#0C121D]/95 p-3.5 flex-col justify-between gap-3">
+        <section className="hidden lg:flex lg:col-span-3 rounded-lg border border-slate-800/90 bg-[#0C121D]/95 p-3.5 flex-col justify-between gap-3">
           <div className="flex items-center justify-between gap-2">
             <h2 className="font-display text-lg font-bold tracking-wide text-slate-100">
               {t('gear.statsHeading')}
