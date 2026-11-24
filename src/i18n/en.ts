@@ -131,6 +131,8 @@ export const EN_TRANSLATIONS = {
   'trait.spRegen': '+{val} SP/Turn',
   'trait.evasionMod': '{val} EVA Handling',
   'trait.longRange': 'Long-Range (targets any row)',
+  'trait.accuracy': 'Accuracy +{val}%',
+  'trait.detectStealth': 'Stealth detect',
 
   // Squad 3-Row Formation Editor
   'formation.title': 'Squad Formation (3-Row Tactical Grid)',
@@ -317,6 +319,10 @@ export const EN_TRANSLATIONS = {
   'derived.speed': 'Turn Speed',
   'derived.dodge': 'Dodge',
   'derived.crit': 'Crit',
+  'derived.accuracy': 'Accuracy',
+  'derived.accuracyHint': 'Lowers target Dodge by {val}',
+  'derived.detectStealth': 'Stealth detect',
+  'derived.detectStealthHint': 'Can target stealthed enemies',
 
   // ==================== 38 ORIGINAL SKILLS ====================
   // GENERAL

@@ -133,6 +133,8 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'trait.spRegen': '+{val} SP/Lượt',
   'trait.evasionMod': '{val} EVA linh hoạt',
   'trait.longRange': 'Tầm xa (bắn mọi hàng)',
+  'trait.accuracy': 'Chính xác +{val}%',
+  'trait.detectStealth': 'Dò tàng hình',
 
   // Squad 3-Row Formation Editor
   'formation.title': 'Đội Hình 3 Hàng Chiến Thuật',
@@ -319,6 +321,10 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'derived.speed': 'Tốc độ lượt',
   'derived.dodge': 'Né đòn',
   'derived.crit': 'Chí mạng',
+  'derived.accuracy': 'Chính xác',
+  'derived.accuracyHint': 'Giảm né tránh của mục tiêu {val} điểm',
+  'derived.detectStealth': 'Dò tàng hình',
+  'derived.detectStealthHint': 'Tấn công được mục tiêu đang tàng hình',
 
   // ==================== 38 ORIGINAL SKILLS (VI) ====================
   // GENERAL

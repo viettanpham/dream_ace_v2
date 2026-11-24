@@ -5,7 +5,6 @@ import { SlotIcon } from './GameIcons';
 
 export type GearPaperDollSlotKey =
   | EquipmentSlot
-  | 'radar'
   | 'ext1'
   | 'ext2'
   | 'ext3'
@@ -33,7 +32,7 @@ export const PAPER_DOLL_RIGHT_SLOTS: readonly GearPaperDollSlotKey[] = [
 export function isEquipmentSlotKey(
   key: GearPaperDollSlotKey
 ): key is EquipmentSlot {
-  return key !== 'radar' && !key.startsWith('ext');
+  return !key.startsWith('ext');
 }
 
 export interface GearSlotTileProps {

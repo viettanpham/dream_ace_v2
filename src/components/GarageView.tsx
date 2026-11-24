@@ -13,6 +13,7 @@ import {
   Lock,
   Minus,
   Plus,
+  Radar,
   RotateCcw,
   ShoppingCart,
 } from 'lucide-react';
@@ -420,7 +421,18 @@ export function GarageView() {
   const activeGearDisplayName =
     pilot.name.trim() || getClassName(lang, activeGear.classId);
 
-  const derivedCards = [
+  const curAcc = currentDerived.accuracyPct ?? 0;
+  const prevAcc = previewDerived.accuracyPct ?? 0;
+
+  const derivedCards: Array<{
+    key: string;
+    label: string;
+    cur: number;
+    prev: number;
+    suffix?: string;
+    color: string;
+    title?: string;
+  }> = [
     {
       key: 'hp',
       label: t('derived.maxHp'),
@@ -466,6 +478,18 @@ export function GarageView() {
       color: 'text-slate-200',
     },
   ];
+
+  if (curAcc > 0 || prevAcc > 0) {
+    derivedCards.push({
+      key: 'accuracy',
+      label: t('derived.accuracy'),
+      cur: curAcc,
+      prev: prevAcc,
+      suffix: '%',
+      color: 'text-teal-300',
+      title: t('derived.accuracyHint', { val: prevAcc }),
+    });
+  }
 
   const sheetEntry = sheetStatKey ? statBreakdown[sheetStatKey] : null;
 
@@ -1079,6 +1103,10 @@ export function GarageView() {
                 return (
                   <div
                     key={m.key}
+                    data-testid={
+                      m.key === 'accuracy' ? 'garage-derived-accuracy' : undefined
+                    }
+                    title={m.title}
                     className="rounded border border-slate-800/90 bg-[#080C14] px-3 py-2"
                   >
                     <div className="text-[11px] text-slate-400">{m.label}</div>
@@ -1095,6 +1123,18 @@ export function GarageView() {
                 );
               })}
             </div>
+            {equipTraits.detectStealth && (
+              <div>
+                <span
+                  data-testid="garage-stealth-detect-chip"
+                  title={t('derived.detectStealthHint')}
+                  className="inline-flex items-center gap-1 rounded border border-teal-500/40 bg-teal-500/10 px-2 py-0.5 text-[11px] font-medium text-teal-300"
+                >
+                  <Radar className="w-3 h-3 shrink-0" />
+                  <span>{t('derived.detectStealth')}</span>
+                </span>
+              </div>
+            )}
 
             <div className="pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2">
               <button

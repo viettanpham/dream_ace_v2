@@ -721,7 +721,18 @@ export function GearView() {
     });
   };
 
-  const derivedMetrics = [
+  const curAcc = currentDerived.accuracyPct ?? 0;
+  const prevAcc = previewDerived.accuracyPct ?? 0;
+
+  const derivedMetrics: Array<{
+    key: string;
+    label: string;
+    cur: number;
+    prev: number;
+    suffix?: string;
+    color: string;
+    title?: string;
+  }> = [
     {
       key: 'hp',
       label: 'HP',
@@ -767,6 +778,18 @@ export function GearView() {
       color: 'text-slate-200',
     },
   ];
+
+  if (curAcc > 0 || prevAcc > 0) {
+    derivedMetrics.push({
+      key: 'accuracy',
+      label: t('derived.accuracy'),
+      cur: curAcc,
+      prev: prevAcc,
+      suffix: '%',
+      color: 'text-teal-300',
+      title: t('derived.accuracyHint', { val: prevAcc }),
+    });
+  }
 
   const activeDetailInstance = selectedInventoryInstance ?? selectedSlotInstance;
   const activeDetailStats = activeDetailInstance
@@ -1248,16 +1271,10 @@ export function GearView() {
     slotKey: GearPaperDollSlotKey,
     variant: 'desktop' | 'phone'
   ) => {
-    if (!isEquipmentSlotKey(slotKey) || slotKey === 'radar') {
+    if (!isEquipmentSlotKey(slotKey)) {
       const extNum = slotKey.replace('ext', '');
-      const fullLabel =
-        (slotKey as string) === 'radar'
-          ? t('slot.radar')
-          : t('slot.extender', { n: extNum });
-      const shortLabel =
-        (slotKey as string) === 'radar'
-          ? t('slotShort.radar')
-          : t('slotShort.extender', { n: extNum });
+      const fullLabel = t('slot.extender', { n: extNum });
+      const shortLabel = t('slotShort.extender', { n: extNum });
       const lockedLabel = t('slot.lockedSoon');
       return (
         <GearSlotTile
@@ -1485,21 +1502,45 @@ export function GearView() {
                     ))}
                   </div>
                   <div className="grid grid-cols-3 gap-2 font-mono-nums">
-                    {derivedMetrics.map((m) => (
-                      <div
-                        key={m.key}
-                        className="rounded border border-slate-800/80 bg-slate-950/70 px-2 py-1.5"
-                      >
-                        <div className="text-[10px] text-slate-400 truncate">
-                          {m.label}
+                    {derivedMetrics
+                      .filter((m) => m.key !== 'accuracy' || m.cur > 0)
+                      .map((m) => (
+                        <div
+                          key={m.key}
+                          data-testid={
+                            m.key === 'accuracy'
+                              ? 'gear-mobile-derived-accuracy'
+                              : undefined
+                          }
+                          title={
+                            m.key === 'accuracy'
+                              ? t('derived.accuracyHint', { val: m.cur })
+                              : m.title
+                          }
+                          className="rounded border border-slate-800/80 bg-slate-950/70 px-2 py-1.5"
+                        >
+                          <div className="text-[10px] text-slate-400 truncate">
+                            {m.label}
+                          </div>
+                          <div className={`text-xs font-bold ${m.color}`}>
+                            {m.cur}
+                            {m.suffix ?? ''}
+                          </div>
                         </div>
-                        <div className={`text-xs font-bold ${m.color}`}>
-                          {m.cur}
-                          {m.suffix ?? ''}
-                        </div>
-                      </div>
-                    ))}
+                      ))}
                   </div>
+                  {currentEquipTraits.detectStealth && (
+                    <div className="pt-0.5">
+                      <span
+                        data-testid="gear-mobile-stealth-detect-chip"
+                        title={t('derived.detectStealthHint')}
+                        className="inline-flex items-center gap-1 rounded border border-teal-500/40 bg-teal-500/10 px-2 py-0.5 text-[11px] font-medium text-teal-300"
+                      >
+                        <SlotIcon slot="radar" className="w-3 h-3 shrink-0" />
+                        <span>{t('derived.detectStealth')}</span>
+                      </span>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1663,6 +1704,10 @@ export function GearView() {
               return (
                 <div
                   key={m.key}
+                  data-testid={
+                    m.key === 'accuracy' ? 'gear-derived-accuracy' : undefined
+                  }
+                  title={m.title}
                   className="rounded border border-slate-800/80 bg-[#080C14] px-2.5 py-1.5"
                 >
                   <div className="text-[10px] text-slate-400 truncate">
@@ -1695,6 +1740,27 @@ export function GearView() {
               );
             })}
           </div>
+          {(currentEquipTraits.detectStealth ||
+            previewEquipTraits.detectStealth) && (
+            <div>
+              <span
+                data-testid="gear-stealth-detect-chip"
+                title={t('derived.detectStealthHint')}
+                className={`inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[11px] font-medium ${
+                  !currentEquipTraits.detectStealth &&
+                  previewEquipTraits.detectStealth
+                    ? 'border-emerald-500/45 bg-emerald-500/10 text-emerald-300'
+                    : currentEquipTraits.detectStealth &&
+                      !previewEquipTraits.detectStealth
+                    ? 'border-red-500/45 bg-red-500/10 text-red-300 line-through'
+                    : 'border-teal-500/40 bg-teal-500/10 text-teal-300'
+                }`}
+              >
+                <SlotIcon slot="radar" className="w-3 h-3 shrink-0" />
+                <span>{t('derived.detectStealth')}</span>
+              </span>
+            </div>
+          )}
         </section>
       </div>
 

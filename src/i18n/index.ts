@@ -639,6 +639,12 @@ export function formatItemTraitsList(
   if (tr.longRange) {
     list.push(translate(lang, 'trait.longRange'));
   }
+  if (tr.accuracyPct) {
+    list.push(translate(lang, 'trait.accuracy', { val: tr.accuracyPct }));
+  }
+  if (tr.detectStealth) {
+    list.push(translate(lang, 'trait.detectStealth'));
+  }
   return list;
 }
 
