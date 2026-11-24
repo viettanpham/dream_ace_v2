@@ -799,9 +799,8 @@ export function GearView() {
       confirmingSellId === activeDetailInstance.instanceId;
 
     return (
-      <div className="flex-1 flex flex-col justify-between gap-3">
-        <div className="space-y-3">
-          {/* Item Header + Lock/Favorite Quick Toggles */}
+      <div className="flex-1 flex flex-col gap-3">
+        {/* Item Header + Lock/Favorite Quick Toggles */}
           <div>
             <div className="flex items-start justify-between gap-2">
               <h3
@@ -976,6 +975,110 @@ export function GearView() {
             )}
           </div>
 
+        {/* Action Buttons (>= 44px height) */}
+        <div className="flex flex-wrap items-center gap-2 pb-3 border-b border-slate-800/80">
+          {selection?.kind === 'inventory' &&
+            activeDetailOwnerGear !== activeGear.classId && (
+              <>
+                <button
+                  type="button"
+                  disabled={!activeValidation?.canEquip}
+                  onClick={handleConfirmEquip}
+                  className="flex-1 min-h-[44px] px-4 inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-white font-semibold text-sm lg:text-xs transition-colors cursor-pointer whitespace-nowrap"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>
+                    {t('gear.confirmEquip', {
+                      gear: getClassName(lang, activeGear.classId),
+                    })}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    soundFx.playClick();
+                    setSelection(null);
+                    setMobileDetailOpen(false);
+                  }}
+                  className="min-h-[44px] px-4 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-300 text-sm lg:text-xs font-medium transition-colors cursor-pointer whitespace-nowrap"
+                >
+                  {t('common.cancel')}
+                </button>
+              </>
+            )}
+
+          {selection?.kind === 'inventory' &&
+            activeDetailOwnerGear === activeGear.classId && (
+              <button
+                type="button"
+                onClick={() =>
+                  setSelection({
+                    kind: 'slot',
+                    slot: activeDetailInstance.slot,
+                  })
+                }
+                className="flex-1 min-h-[44px] px-4 rounded-lg border border-sky-500/50 bg-sky-500/15 hover:bg-sky-500/25 text-sky-200 font-semibold text-sm lg:text-xs transition-colors cursor-pointer"
+              >
+                {t('gear.currentlyEquipped')} · Enchant / Unequip
+              </button>
+            )}
+
+          {selection?.kind === 'slot' && activeEnchantMeta && (
+            <>
+              {!activeEnchantMeta.isMax && (
+                <button
+                  type="button"
+                  disabled={pilot.credits < activeEnchantMeta.cost}
+                  onClick={() => handleEnchant(selection.slot)}
+                  className="flex-1 min-h-[44px] px-3.5 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-slate-950 font-semibold text-sm lg:text-xs transition-colors cursor-pointer whitespace-nowrap"
+                >
+                  {pilot.credits < activeEnchantMeta.cost
+                    ? t('equip.needCredits', {
+                        cost: activeEnchantMeta.cost.toLocaleString(),
+                      })
+                    : t('equip.enchantAction', {
+                        level: activeEnchantMeta.nextLevel,
+                        cost: activeEnchantMeta.cost.toLocaleString(),
+                      })}
+                </button>
+              )}
+
+              {confirmingUnequipSlot === selection.slot ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => handleConfirmUnequip(selection.slot)}
+                    className="min-h-[44px] px-4 rounded-lg bg-red-600 hover:bg-red-500 text-white font-semibold text-sm lg:text-xs transition-colors cursor-pointer whitespace-nowrap"
+                  >
+                    {t('gear.confirmUnequip')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      soundFx.playClick();
+                      setConfirmingUnequipSlot(null);
+                    }}
+                    className="min-h-[44px] px-3.5 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-300 text-sm lg:text-xs font-medium cursor-pointer whitespace-nowrap"
+                  >
+                    {t('common.cancel')}
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    soundFx.playClick();
+                    setConfirmingUnequipSlot(selection.slot);
+                  }}
+                  className="min-h-[44px] px-4 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200 text-sm lg:text-xs font-medium transition-colors cursor-pointer whitespace-nowrap"
+                >
+                  {t('gear.previewUnequip')}
+                </button>
+              )}
+            </>
+          )}
+        </div>
+
           <p className="text-sm lg:text-xs text-slate-300 leading-relaxed">
             {getItemInstanceDesc(lang, activeDetailInstance)}
           </p>
@@ -1140,111 +1243,6 @@ export function GearView() {
               )}
             </div>
           )}
-        </div>
-
-        {/* Action Buttons (>= 44px height) */}
-        <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-slate-800/80">
-          {selection?.kind === 'inventory' &&
-            activeDetailOwnerGear !== activeGear.classId && (
-              <>
-                <button
-                  type="button"
-                  disabled={!activeValidation?.canEquip}
-                  onClick={handleConfirmEquip}
-                  className="flex-1 min-h-[44px] px-4 inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-white font-semibold text-sm lg:text-xs transition-colors cursor-pointer whitespace-nowrap"
-                >
-                  <Check className="w-4 h-4" />
-                  <span>
-                    {t('gear.confirmEquip', {
-                      gear: getClassName(lang, activeGear.classId),
-                    })}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    soundFx.playClick();
-                    setSelection(null);
-                    setMobileDetailOpen(false);
-                  }}
-                  className="min-h-[44px] px-4 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-300 text-sm lg:text-xs font-medium transition-colors cursor-pointer whitespace-nowrap"
-                >
-                  {t('common.cancel')}
-                </button>
-              </>
-            )}
-
-          {selection?.kind === 'inventory' &&
-            activeDetailOwnerGear === activeGear.classId && (
-              <button
-                type="button"
-                onClick={() =>
-                  setSelection({
-                    kind: 'slot',
-                    slot: activeDetailInstance.slot,
-                  })
-                }
-                className="flex-1 min-h-[44px] px-4 rounded-lg border border-sky-500/50 bg-sky-500/15 hover:bg-sky-500/25 text-sky-200 font-semibold text-sm lg:text-xs transition-colors cursor-pointer"
-              >
-                {t('gear.currentlyEquipped')} · Enchant / Unequip
-              </button>
-            )}
-
-          {selection?.kind === 'slot' && activeEnchantMeta && (
-            <>
-              {!activeEnchantMeta.isMax && (
-                <button
-                  type="button"
-                  disabled={pilot.credits < activeEnchantMeta.cost}
-                  onClick={() => handleEnchant(selection.slot)}
-                  className="flex-1 min-h-[44px] px-3.5 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-slate-950 font-semibold text-sm lg:text-xs transition-colors cursor-pointer whitespace-nowrap"
-                >
-                  {pilot.credits < activeEnchantMeta.cost
-                    ? t('equip.needCredits', {
-                        cost: activeEnchantMeta.cost.toLocaleString(),
-                      })
-                    : t('equip.enchantAction', {
-                        level: activeEnchantMeta.nextLevel,
-                        cost: activeEnchantMeta.cost.toLocaleString(),
-                      })}
-                </button>
-              )}
-
-              {confirmingUnequipSlot === selection.slot ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => handleConfirmUnequip(selection.slot)}
-                    className="min-h-[44px] px-4 rounded-lg bg-red-600 hover:bg-red-500 text-white font-semibold text-sm lg:text-xs transition-colors cursor-pointer whitespace-nowrap"
-                  >
-                    {t('gear.confirmUnequip')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      soundFx.playClick();
-                      setConfirmingUnequipSlot(null);
-                    }}
-                    className="min-h-[44px] px-3.5 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-300 text-sm lg:text-xs font-medium cursor-pointer whitespace-nowrap"
-                  >
-                    {t('common.cancel')}
-                  </button>
-                </>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    soundFx.playClick();
-                    setConfirmingUnequipSlot(selection.slot);
-                  }}
-                  className="min-h-[44px] px-4 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200 text-sm lg:text-xs font-medium transition-colors cursor-pointer whitespace-nowrap"
-                >
-                  {t('gear.previewUnequip')}
-                </button>
-              )}
-            </>
-          )}
-        </div>
       </div>
     );
   };

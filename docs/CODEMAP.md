@@ -51,7 +51,7 @@ src/store/useGameStore.ts 3981; src/engine/combat.ts 3860; src/components/Battle
 - src/engine/cloudSave.ts + src/store/useCloudSaveStore.ts + src/components/CloudSaveDialogs.tsx — Firebase Auth/Firestore cloud save sync
 
 ## Other
-- src/components/GearView.tsx + src/components/GearSlotTile.tsx + src/components/__tests__/gearPaperDollU2c1.test.tsx — gear 12-slot paper-doll (`GearSlotTile`, `PAPER_DOLL_LEFT_SLOTS`, `PAPER_DOLL_RIGHT_SLOTS`, desktop rails + phone 2-col), loadout, equipment, and inventory management
+- src/components/GearView.tsx + src/components/GearSlotTile.tsx + src/components/__tests__/gearPaperDollU2c1.test.tsx + src/components/__tests__/gearDetailActionBarU2c2.test.tsx — gear 12-slot paper-doll (`GearSlotTile`, `PAPER_DOLL_LEFT_SLOTS`, `PAPER_DOLL_RIGHT_SLOTS`, desktop rails + phone 2-col), top-mounted detail action bar (`renderDetailContent()`), loadout, equipment, and inventory management
 - src/components/ShopScreen.tsx — item, gear, and WP market shop
 - src/components/MapView.tsx + src/components/__tests__/mapM1.test.tsx + src/components/__tests__/mapFrontlineF2.test.tsx — sector campaign map, phone compact layout/initial zoom (`computeInitialPhoneMapView()`, `clampMapPan()`, `clampMapZoom()`), frontline node/lane visuals (`getMapNodeVisualState()`, `getMapLaneVisualKind()`), briefing `"Trận có thể đánh"` battle options, sticky CTA default/reason states, and base status view + tests
 - src/components/HangarScreen.tsx + src/components/SidebarNav.tsx + src/components/BottomSheet.tsx — hangar tab shell (`pb-[60px]` above mobile fixed tab bar), 6-tab sidebar/mobile nav (`GEAR`, `KHO ĐỒ`/`Warehouse`, `Nhân vật`/`Character`), and shared BottomSheet modal
