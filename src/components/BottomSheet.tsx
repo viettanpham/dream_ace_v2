@@ -11,6 +11,7 @@ interface BottomSheetProps {
   footer?: ReactNode;
   maxHeightClass?: string;
   bodyScrollable?: boolean;
+  size?: 'default' | 'large';
   zIndexClass?: string;
   testId?: string;
 }
@@ -24,6 +25,7 @@ export function BottomSheet({
   footer,
   maxHeightClass = 'max-h-[86dvh]',
   bodyScrollable = true,
+  size = 'default',
   zIndexClass = 'z-50',
   testId,
 }: BottomSheetProps) {
@@ -43,6 +45,11 @@ export function BottomSheet({
 
   if (!open) return null;
 
+  const panelSizeClasses =
+    size === 'large'
+      ? `w-full md:w-[90vw] md:max-w-none md:h-[90dvh] ${maxHeightClass} md:max-h-[90dvh]`
+      : `w-full md:max-w-lg ${maxHeightClass}`;
+
   return (
     <div
       data-testid={testId}
@@ -54,7 +61,7 @@ export function BottomSheet({
       }}
     >
       <div
-        className={`w-full md:max-w-lg ${maxHeightClass} flex flex-col rounded-t-2xl md:rounded-xl border-t md:border border-slate-700/90 bg-[#0B111C] text-slate-100 shadow-2xl overflow-hidden pb-safe`}
+        className={`${panelSizeClasses} flex flex-col rounded-t-2xl md:rounded-xl border-t md:border border-slate-700/90 bg-[#0B111C] text-slate-100 shadow-2xl overflow-hidden pb-safe`}
       >
         {/* Mobile grab handle */}
         <div className="md:hidden pt-2.5 pb-1 flex justify-center shrink-0">

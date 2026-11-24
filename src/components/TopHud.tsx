@@ -356,6 +356,7 @@ export function TopHud() {
       <BottomSheet
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
+        size="large"
         title={screen === 'BATTLE' ? t('battle.menuTitle') : t('mobile.settingsTitle')}
         subtitle={`${pilot.name || 'Vance'} · ${getClassName(
           lang,
