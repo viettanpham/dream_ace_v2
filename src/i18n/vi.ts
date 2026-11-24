@@ -71,17 +71,38 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'title.starterHint':
     'Khởi đầu với 1 chiến cơ Gear. 3 Gear còn lại có thể mua bằng Credits trong tab Nhân vật.',
 
-  // Garage View (replaces Pilot tab)
-  'garage.title': 'Garage Phi Cơ',
+  // Garage View (Character tab)
+  'garage.title': 'Nhân vật',
   'garage.subtitle':
-    'Mỗi Gear có cấp độ, EXP, điểm chỉ số, 6 ô trang bị và thanh kỹ năng riêng biệt. Dùng Credits chung để mua thêm Gear.',
+    'Theo dõi chỉ số tổng hợp, cấp độ, EXP, đội hình và phân bổ điểm cho từng Gear.',
+  'garage.summaryTitle': 'Tổng quan nhân vật',
+  'garage.activeGearBadge': 'Gear đang điều khiển',
+  'garage.expToNext': 'EXP lên cấp',
+  'garage.allAllocated': 'Đã cộng hết điểm',
+  'garage.totalStatsTitle': 'Tổng chỉ số',
+  'garage.totalStatsHint': 'Chạm vào một dòng để xem công thức nguồn chỉ số',
+  'garage.source.base': 'Gốc',
+  'garage.source.levelGrowth': 'Cấp',
+  'garage.source.allocated': 'Điểm cộng',
+  'garage.source.equipment': 'Trang bị',
+  'garage.source.other': 'Nội tại',
+  'garage.source.baseShort': 'G',
+  'garage.source.levelGrowthShort': 'C',
+  'garage.source.allocatedShort': 'Đ',
+  'garage.source.equipmentShort': 'T',
+  'garage.source.otherShort': 'N',
+  'garage.breakdownTotal': 'Tổng',
+  'garage.breakdownNegativeNote':
+    'Lưu ý: {source} đang âm ({val}) do đặc tính trang bị hoặc hiệu ứng.',
+  'garage.allocationPlus5Label': '+5 {stat}',
+  'garage.allocationMaxLabel': 'Dồn tất cả điểm vào {stat}',
   'garage.rosterTitle': 'Danh sách Gear ({owned}/4)',
   'garage.selectGear': 'Chọn Gear',
   'garage.selectedGear': 'Đang dùng',
   'garage.buyGear': 'Mua Gear ({cost} CR)',
   'garage.needMoreCr': 'Cần {cost} CR',
   'garage.record': 'Thành tích: {won}T / {fought}Trận',
-  'garage.unspentPts': '+{count} Điểm chưa cộng',
+  'garage.unspentPts': '+{count} điểm chưa cộng',
   'garage.statsSection': 'Phân bổ chỉ số — {gear} [Lv.{level}]',
 
   // Gear Wireframe View

@@ -69,10 +69,31 @@ export const EN_TRANSLATIONS = {
   'title.starterHint':
     'Start with 1 Gear. Unlock the other 3 Gears later in the Character tab using Credits.',
 
-  // Garage View (replaces Pilot tab)
-  'garage.title': 'Starfighter Garage',
+  // Garage View (Character tab)
+  'garage.title': 'Character',
   'garage.subtitle':
-    'Each Gear levels, allocates stats, equips parts, and learns class skills independently. Buy locked Gears with shared Credits.',
+    'Inspect character totals, level progress, EXP, squad formation, and stat points for each Gear.',
+  'garage.summaryTitle': 'Character Summary',
+  'garage.activeGearBadge': 'Active Gear',
+  'garage.expToNext': 'EXP to Next',
+  'garage.allAllocated': 'All points allocated',
+  'garage.totalStatsTitle': 'Total Stats',
+  'garage.totalStatsHint': 'Tap a stat row to inspect its source breakdown',
+  'garage.source.base': 'Base',
+  'garage.source.levelGrowth': 'Level',
+  'garage.source.allocated': 'Allocated',
+  'garage.source.equipment': 'Equipment',
+  'garage.source.other': 'Passives',
+  'garage.source.baseShort': 'B',
+  'garage.source.levelGrowthShort': 'L',
+  'garage.source.allocatedShort': 'A',
+  'garage.source.equipmentShort': 'E',
+  'garage.source.otherShort': 'P',
+  'garage.breakdownTotal': 'Total',
+  'garage.breakdownNegativeNote':
+    'Note: {source} is negative ({val}) from equipment traits or modifiers.',
+  'garage.allocationPlus5Label': '+5 {stat}',
+  'garage.allocationMaxLabel': 'Allocate all remaining points to {stat}',
   'garage.rosterTitle': 'Owned & Locked Gears ({owned}/4)',
   'garage.selectGear': 'Select Gear',
   'garage.selectedGear': 'Selected',
