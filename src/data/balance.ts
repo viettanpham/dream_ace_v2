@@ -56,7 +56,7 @@ export const BALANCE_CONFIG = {
   maxInventorySize: 60,
 
   // ---- Auto Battle Tactics ----
-  maxTacticsRules: 8,
+  maxTacticsRules: 12,
 
   // ---- Enchant (+0 to +10) ----
   enchantMaxLevel: 10,

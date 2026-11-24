@@ -29,6 +29,7 @@ import {
   clampDefeatStreakLimit,
   DEFAULT_DEFEAT_STREAK_LIMIT,
 } from '../utils/battleDisplay';
+
 import {
   DEBUFF_TYPES,
   getEffectiveUnitSpeed,
@@ -37,6 +38,8 @@ import {
   isUnitStealthed,
 } from './combat';
 import { canUnitUseSkill, isSkillAllowedForClass } from './skills';
+
+export const MAX_PRIORITY_SKILLS = BALANCE_CONFIG.maxEquippedActiveSkills;
 
 export const TACTICS_CONDITION_KINDS: TacticsConditionKind[] = [
   'always',
@@ -674,7 +677,7 @@ export function createSimplePresetConfig(
 
   const defaultPriority = (nonEliteBar.length > 0 ? nonEliteBar : allowedBar).slice(
     0,
-    3
+    MAX_PRIORITY_SKILLS
   );
 
   switch (presetId) {
@@ -696,7 +699,7 @@ export function createSimplePresetConfig(
         lowHpThresholdPct: 45,
         lowHpAction: classId === 'support' ? 'heal' : 'defend',
         elitePolicy: 'boss_only',
-        prioritySkillIds: defaultPriority,
+        prioritySkillIds: defaultPriority.slice(0, 2),
       };
     case 'support_team':
       return {
@@ -802,7 +805,7 @@ export function sanitizeSimpleTacticsConfig(
       ) {
         prioritySkillIds.push(sid);
       }
-      if (prioritySkillIds.length >= 3) break;
+      if (prioritySkillIds.length >= MAX_PRIORITY_SKILLS) break;
     }
   }
 

@@ -614,7 +614,7 @@ export interface SimpleTacticsConfig {
   lowHpThresholdPct: number; // default 35 (10..80)
   lowHpAction: SimpleLowHpAction;
   elitePolicy: SimpleElitePolicy;
-  prioritySkillIds: string[]; // up to 3 skill IDs from equipped bar (A > B > C)
+  prioritySkillIds: string[]; // up to MAX_PRIORITY_SKILLS skill IDs from equipped bar (A > B > C ...)
 }
 
 export type TacticsMode = 'simple' | 'custom';

@@ -953,7 +953,7 @@ export const EN_TRANSLATIONS = {
   'auto.simple.elite.immediate': 'Use immediately',
   'auto.simple.elite.boss_only': 'Save for bosses',
   'auto.simple.elite.off': 'Off (Manual only)',
-  'auto.simple.priorityLabel': '5. Priority Skills (Up to 3, A > B > C)',
+  'auto.simple.priorityLabel': '5. Priority Skills (Max {max}, A > B > C ...)',
   'auto.simple.priorityHelp': 'Tap equipped skills to order which ones Auto tries first.',
   'auto.simple.priorityEmpty': 'No priority skills picked (Auto uses basic attacks + survival rules).',
   'auto.simple.noEquippedSkills': 'Equip active skills in the Skills tab to prioritize them here.',

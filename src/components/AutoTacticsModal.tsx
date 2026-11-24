@@ -17,6 +17,7 @@ import { getSkillById } from '../data/skills';
 import { getSkillsForClass } from '../engine/skills';
 import {
   createDefaultSimpleTactics,
+  MAX_PRIORITY_SKILLS,
   TACTICS_BUFF_OPTIONS,
   TACTICS_CONDITION_KINDS,
   TACTICS_TARGET_SELECTORS,
@@ -196,10 +197,10 @@ export function AutoTacticsModal() {
     const existingIdx = cur.indexOf(skillId);
     if (existingIdx >= 0) {
       cur.splice(existingIdx, 1);
-    } else if (cur.length < 3) {
+    } else if (cur.length < MAX_PRIORITY_SKILLS) {
       cur.push(skillId);
     } else {
-      cur[2] = skillId;
+      cur[cur.length - 1] = skillId;
     }
     applySimpleTactics({ prioritySkillIds: cur });
   };
@@ -285,7 +286,10 @@ export function AutoTacticsModal() {
     }
   };
 
-  const priorityRankLabels = ['A', 'B', 'C'];
+  const priorityRankLabels = Array.from(
+    { length: MAX_PRIORITY_SKILLS },
+    (_, i) => String.fromCharCode(65 + i)
+  );
 
   return (
     <div
@@ -581,7 +585,7 @@ export function AutoTacticsModal() {
             <div className="rounded-lg border border-slate-800 bg-[#090E18] p-3.5 space-y-2.5">
               <div>
                 <div className="text-sm font-semibold text-slate-100">
-                  {t('auto.simple.priorityLabel')}
+                  {t('auto.simple.priorityLabel', { max: MAX_PRIORITY_SKILLS })}
                 </div>
                 <p className="text-xs text-slate-400 mt-0.5">
                   {t('auto.simple.priorityHelp')}

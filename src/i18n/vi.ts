@@ -955,7 +955,7 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'auto.simple.elite.immediate': 'Dùng ngay lập tức',
   'auto.simple.elite.boss_only': 'Để dành cho Boss',
   'auto.simple.elite.off': 'Tắt (Chỉ dùng tay)',
-  'auto.simple.priorityLabel': '5. Kỹ năng ưu tiên (Tối đa 3, A > B > C)',
+  'auto.simple.priorityLabel': '5. Kỹ năng ưu tiên (Tối đa {max}, A > B > C ...)',
   'auto.simple.priorityHelp': 'Chạm vào kỹ năng đang gắn để xếp thứ tự Auto ưu tiên sử dụng.',
   'auto.simple.priorityEmpty': 'Chưa chọn kỹ năng ưu tiên (Auto sẽ đánh thường + xử lý sinh tồn).',
   'auto.simple.noEquippedSkills': 'Hãy gắn kỹ năng chủ động ở tab Kỹ năng để chọn ưu tiên.',
