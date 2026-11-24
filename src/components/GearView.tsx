@@ -412,14 +412,10 @@ export function GearView() {
 
   // Per-slot counts across entire inventory
   const slotCounts = useMemo(() => {
-    const counts: Record<EquipmentSlot, number> = {
-      main_weapon: 0,
-      sub_weapon: 0,
-      armor: 0,
-      engine: 0,
-      cpu: 0,
-      accessory: 0,
-    };
+    const counts = {} as Record<EquipmentSlot, number>;
+    for (const slot of EQUIPMENT_SLOTS) {
+      counts[slot] = 0;
+    }
     for (const inst of pilot.inventory) {
       counts[inst.slot] += 1;
     }
@@ -1252,14 +1248,14 @@ export function GearView() {
     slotKey: GearPaperDollSlotKey,
     variant: 'desktop' | 'phone'
   ) => {
-    if (!isEquipmentSlotKey(slotKey)) {
+    if (!isEquipmentSlotKey(slotKey) || slotKey === 'radar') {
       const extNum = slotKey.replace('ext', '');
       const fullLabel =
-        slotKey === 'radar'
+        (slotKey as string) === 'radar'
           ? t('slot.radar')
           : t('slot.extender', { n: extNum });
       const shortLabel =
-        slotKey === 'radar'
+        (slotKey as string) === 'radar'
           ? t('slotShort.radar')
           : t('slotShort.extender', { n: extNum });
       const lockedLabel = t('slot.lockedSoon');
@@ -1579,7 +1575,7 @@ export function GearView() {
                 {t('gear.slotsHeading')}
               </h2>
               <span className="text-xs font-mono-nums text-slate-400">
-                {EQUIPMENT_SLOTS.filter((s) => Boolean(equippedMap[s])).length}/6
+                {EQUIPMENT_SLOTS.filter((s) => Boolean(equippedMap[s])).length}/{EQUIPMENT_SLOTS.length}
               </span>
             </div>
 

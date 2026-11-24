@@ -204,9 +204,13 @@ describe('SV1b-1 — Cloud Save Core (no network, mock adapter)', () => {
     expect(downV8.migratedState.pilot.gears.striker.equipped.main_weapon).toBe(
       'cloud_v8_railgun'
     );
-    // v8 -> v9 migration fills missing starter slots on active gear
+    // v8 -> current migration fills missing starter slots on active gear (radar stays null by default)
     for (const slot of EQUIPMENT_SLOTS) {
-      expect(downV8.migratedState.pilot.gears.striker.equipped[slot]).toBeTruthy();
+      if (slot === 'radar') {
+        expect(downV8.migratedState.pilot.gears.striker.equipped[slot]).toBeNull();
+      } else {
+        expect(downV8.migratedState.pilot.gears.striker.equipped[slot]).toBeTruthy();
+      }
     }
   });
 

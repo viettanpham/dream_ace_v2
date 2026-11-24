@@ -496,7 +496,7 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'slotShort.engine': 'ĐỘNG CƠ',
   'slotShort.cpu': 'CPU',
   'slotShort.accessory': 'PHẢN ỨNG',
-  'slotShort.radar': 'Radar',
+  'slotShort.radar': 'RADAR',
   'slotShort.extender': 'Ext {n}',
   'rarity.common': 'Thường',
   'rarity.rare': 'Hiếm',

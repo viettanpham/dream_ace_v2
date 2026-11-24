@@ -98,6 +98,7 @@ function seedPilot(options?: {
                 engine: null,
                 cpu: null,
                 accessory: null,
+                radar: null,
               },
           battlesFought: 5,
           battlesWon: 4,

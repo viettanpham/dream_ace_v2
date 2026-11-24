@@ -63,7 +63,11 @@ export function generateStarterItemForSlot(
   rng: () => number = Math.random
 ): ItemInstance {
   const cleanCfg = sanitizeStarterSetConfig(starterConfig);
-  const slotCfg = cleanCfg.slots[slot];
+  const slotCfg = cleanCfg.slots[slot] ?? {
+    templateId: '',
+    level: 1,
+    quality: 20,
+  };
   const template = resolveStarterTemplateForGear(
     slot,
     slotCfg.templateId,
@@ -118,6 +122,7 @@ export function grantStarterSetToGear(
 
   for (const slot of EQUIPMENT_SLOTS) {
     if (nextEquipped[slot] !== null) continue;
+    if (!cleanCfg.slots[slot]) continue;
     const starterItem = generateStarterItemForSlot(
       gear.classId,
       gear.level,

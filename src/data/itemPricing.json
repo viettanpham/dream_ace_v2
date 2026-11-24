@@ -5,7 +5,8 @@
     "armor": 194,
     "engine": 189,
     "cpu": 179,
-    "accessory": 173
+    "accessory": 173,
+    "radar": 176
   },
   "tierFactor": [1, 1.74, 2.54, 3.8],
   "rarityFactor": {

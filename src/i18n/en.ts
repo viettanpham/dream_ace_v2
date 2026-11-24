@@ -494,7 +494,7 @@ export const EN_TRANSLATIONS = {
   'slotShort.engine': 'THRUST',
   'slotShort.cpu': 'CPU',
   'slotShort.accessory': 'REACTOR',
-  'slotShort.radar': 'Radar',
+  'slotShort.radar': 'RADAR',
   'slotShort.extender': 'Ext {n}',
   'rarity.common': 'Common',
   'rarity.rare': 'Rare',

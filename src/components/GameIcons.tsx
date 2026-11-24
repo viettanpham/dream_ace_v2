@@ -6,6 +6,7 @@ import {
   HeartHandshake,
   Layers,
   Package,
+  Radar,
   RotateCcw,
   Shield,
   Sparkles,
@@ -45,6 +46,8 @@ export function SlotIcon({ slot, className = 'w-4 h-4' }: SlotIconProps) {
       return <Zap className={className} aria-hidden="true" />;
     case 'accessory':
       return <BatteryCharging className={className} aria-hidden="true" />;
+    case 'radar':
+      return <Radar className={className} aria-hidden="true" />;
     default:
       return <Layers className={className} aria-hidden="true" />;
   }
@@ -125,5 +128,7 @@ export function getSlotAccentClass(slot: EquipmentSlot): string {
       return 'text-purple-400';
     case 'accessory':
       return 'text-cyan-400';
+    case 'radar':
+      return 'text-teal-400';
   }
 }

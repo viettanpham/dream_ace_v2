@@ -321,14 +321,9 @@ export function getGearEquippedInstances(
   inventory: ItemInstance[]
 ): Record<EquipmentSlot, ItemInstance | null> {
   const byId = new Map(inventory.map((it) => [it.instanceId, it]));
-  const result: Record<EquipmentSlot, ItemInstance | null> = {
-    main_weapon: null,
-    sub_weapon: null,
-    armor: null,
-    engine: null,
-    cpu: null,
-    accessory: null,
-  };
+  const result = {
+    ...EMPTY_EQUIPPED_SLOT_IDS,
+  } as Record<EquipmentSlot, ItemInstance | null>;
   for (const slot of EQUIPMENT_SLOTS) {
     const id = gear.equipped[slot];
     result[slot] = id ? byId.get(id) ?? null : null;
@@ -337,7 +332,7 @@ export function getGearEquippedInstances(
 }
 
 /**
- * Sums all effective flat stat bonuses across all 6 equipped slots of a GearUnit.
+ * Sums all effective flat stat bonuses across all equipped slots of a GearUnit.
  */
 export function sumGearEquipmentStats(
   gear: GearUnit,
@@ -358,7 +353,7 @@ export function sumGearEquipmentStats(
 }
 
 /**
- * Sums special mechanical traits (crit %, armor pierce %, splash %, SP regen, evasion mod)
+ * Sums special mechanical traits (crit %, armor pierce %, splash %, SP regen, evasion mod, accuracy %, detectStealth)
  * across all equipped items on a GearUnit.
  */
 export function sumGearSpecialTraits(
@@ -372,6 +367,8 @@ export function sumGearSpecialTraits(
   let spRegenPerTurn = 0;
   let evasionMod = 0;
   let longRange = false;
+  let accuracyPct = 0;
+  let detectStealth = false;
 
   for (const slot of EQUIPMENT_SLOTS) {
     const inst = equippedMap[slot];
@@ -383,6 +380,8 @@ export function sumGearSpecialTraits(
     spRegenPerTurn += tr.spRegenPerTurn ?? 0;
     evasionMod += tr.evasionMod ?? 0;
     if (tr.longRange) longRange = true;
+    accuracyPct += tr.accuracyPct ?? 0;
+    if (tr.detectStealth) detectStealth = true;
   }
 
   return {
@@ -392,6 +391,8 @@ export function sumGearSpecialTraits(
     spRegenPerTurn,
     evasionMod,
     longRange,
+    accuracyPct,
+    detectStealth,
   };
 }
 

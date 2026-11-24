@@ -27,6 +27,7 @@ function makeGear(
       engine: null,
       cpu: null,
       accessory: null,
+      radar: null,
     },
   };
 }

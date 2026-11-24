@@ -340,7 +340,8 @@ export type EquipmentSlot =
   | 'armor'
   | 'engine'
   | 'cpu'
-  | 'accessory';
+  | 'accessory'
+  | 'radar';
 
 export type ItemRarity = 'common' | 'rare' | 'epic' | 'legendary';
 
@@ -351,6 +352,8 @@ export interface ItemSpecialTraits {
   spRegenPerTurn?: number;
   evasionMod?: number;
   longRange?: boolean;
+  accuracyPct?: number;
+  detectStealth?: boolean;
 }
 
 export type ItemRegistryTag = 'sys' | (string & {});
@@ -1235,7 +1238,9 @@ export interface StarterSlotConfig {
 
 export interface StarterSetConfig {
   enabled: boolean;
-  slots: Record<EquipmentSlot, StarterSlotConfig>;
+  slots: Omit<Record<EquipmentSlot, StarterSlotConfig>, 'radar'> & {
+    radar?: StarterSlotConfig;
+  };
   rookieBoostPct: number;
   boostScope: StarterBoostScope;
 }

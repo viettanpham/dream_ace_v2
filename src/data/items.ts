@@ -2,7 +2,7 @@ import type { EquipmentSlot, EquippedSlotIds, ItemRarity, ItemTemplate, StatKey 
 import { BALANCE_CONFIG } from './balance';
 import rawItemsData from './items.json';
 
-export const EQUIPMENT_SLOTS: EquipmentSlot[] = ['main_weapon', 'sub_weapon', 'armor', 'engine', 'cpu', 'accessory'];
+export const EQUIPMENT_SLOTS: EquipmentSlot[] = ['main_weapon', 'sub_weapon', 'armor', 'engine', 'cpu', 'accessory', 'radar'];
 
 export interface EquipmentSlotMeta {
   slot: EquipmentSlot;
@@ -18,10 +18,11 @@ export const EQUIPMENT_SLOT_META: Record<EquipmentSlot, EquipmentSlotMeta> = {
   engine: { slot: 'engine', label: 'Thrusters', shortLabel: 'THRUST', classLocked: true },
   cpu: { slot: 'cpu', label: 'Targeting CPU', shortLabel: 'CPU', classLocked: false },
   accessory: { slot: 'accessory', label: 'Reactor', shortLabel: 'REACTOR', classLocked: false },
+  radar: { slot: 'radar', label: 'Radar', shortLabel: 'RADAR', classLocked: false },
 };
 
 export const EMPTY_EQUIPPED_SLOT_IDS: EquippedSlotIds = {
-  main_weapon: null, sub_weapon: null, armor: null, engine: null, cpu: null, accessory: null,
+  main_weapon: null, sub_weapon: null, armor: null, engine: null, cpu: null, accessory: null, radar: null,
 };
 
 export const RARITY_LIST: ItemRarity[] = ['common', 'rare', 'epic', 'legendary'];
@@ -100,7 +101,7 @@ export const BUILTIN_ITEM_REGISTRY_TAG = 'sys' as const;
 const VALID_SLOT_SET = new Set<string>(EQUIPMENT_SLOTS);
 const VALID_STAT_SET = new Set<string>(['attack', 'defense', 'fuel', 'spirit', 'shield', 'evasion']);
 const VALID_CLASS_SET = new Set<string>(['striker', 'interceptor', 'siege', 'support']);
-const NUMERIC_TRAIT_KEYS = ['critBonusPct', 'armorPiercePct', 'splashPct', 'spRegenPerTurn', 'evasionMod'] as const;
+const NUMERIC_TRAIT_KEYS = ['critBonusPct', 'armorPiercePct', 'splashPct', 'spRegenPerTurn', 'evasionMod', 'accuracyPct'] as const;
 
 const isNonEmptyStr = (v: unknown): v is string => typeof v === 'string' && v.trim().length > 0;
 const isValidRange = (v: unknown): v is [number, number] =>
@@ -115,7 +116,10 @@ function isValidSpecialTraits(v: unknown): v is ItemTemplate['specialTraits'] {
   for (const k of NUMERIC_TRAIT_KEYS) {
     if (obj[k] !== undefined && (typeof obj[k] !== 'number' || !Number.isFinite(obj[k]))) return false;
   }
-  return obj.longRange === undefined || typeof obj.longRange === 'boolean';
+  return (
+    (obj.longRange === undefined || typeof obj.longRange === 'boolean') &&
+    (obj.detectStealth === undefined || typeof obj.detectStealth === 'boolean')
+  );
 }
 
 export function validateItemTemplates(raw: unknown): ItemTemplate[] {

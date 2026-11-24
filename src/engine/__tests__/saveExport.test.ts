@@ -204,10 +204,14 @@ describe('SV1a — Save Export / Import Engine & Store Backup/Undo', () => {
     expect(afterV8.pilot.credits).toBe(7777);
     // Custom weapon in main_weapon must NOT be overwritten
     expect(afterV8.pilot.gears.striker.equipped.main_weapon).toBe('v8_custom_railgun');
-    // The other 5 empty slots must be filled with Starter items
+    // The other 5 empty starter-configured slots must be filled with Starter items; radar stays null
     for (const slot of EQUIPMENT_SLOTS) {
       if (slot === 'main_weapon') continue;
       const eqId = afterV8.pilot.gears.striker.equipped[slot];
+      if (slot === 'radar') {
+        expect(eqId).toBeNull();
+        continue;
+      }
       expect(eqId).not.toBeNull();
       const item = afterV8.pilot.inventory.find((i) => i.instanceId === eqId);
       expect(item?.isStarter).toBe(true);

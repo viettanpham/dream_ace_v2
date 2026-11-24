@@ -1,4 +1,5 @@
 import type { EquipmentSlot, ItemRarity, SupplyFamily } from '../types/game';
+import { EQUIPMENT_SLOTS } from './items';
 import rawPricingData from './itemPricing.json';
 
 export interface PriceFormulaConfig {
@@ -11,15 +12,6 @@ export interface PriceFormulaConfig {
   readonly minPrice: number;
   readonly consumableBase: Record<SupplyFamily, number>;
 }
-
-const SLOTS: readonly EquipmentSlot[] = [
-  'main_weapon',
-  'sub_weapon',
-  'armor',
-  'engine',
-  'cpu',
-  'accessory',
-];
 
 const RARITIES: readonly ItemRarity[] = ['common', 'rare', 'epic', 'legendary'];
 const SUPPLY_FAMILIES: readonly SupplyFamily[] = [
@@ -37,6 +29,7 @@ export const DEFAULT_PRICE_FORMULA: PriceFormulaConfig = {
     engine: 189,
     cpu: 179,
     accessory: 173,
+    radar: 176,
   },
   tierFactor: [1, 1.74, 2.54, 3.8],
   rarityFactor: {
@@ -91,7 +84,7 @@ export function validatePriceFormula(raw: unknown): PriceFormulaConfig {
   const rawSlots = asPlainObject(obj.baseBySlot);
   if (!rawSlots) warnings.push('baseBySlot');
   const baseBySlot = {} as Record<EquipmentSlot, number>;
-  for (const slot of SLOTS) {
+  for (const slot of EQUIPMENT_SLOTS) {
     const val = rawSlots?.[slot];
     if (isPositiveNumber(val)) {
       baseBySlot[slot] = val;

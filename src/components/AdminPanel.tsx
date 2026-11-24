@@ -991,93 +991,102 @@ export function AdminPanel() {
                           <SlotIcon slot={slot} className="w-3.5 h-3.5 text-sky-400" />
                           <span>{getSlotLabel(lang, slot)}</span>
                         </div>
-                        <label className="space-y-1 block">
-                          <span className="text-[11px] text-slate-400 block">
-                            {t('admin.starter.templateLabel')}
-                          </span>
-                          <select
-                            data-testid={`admin-starter-slot-${slot}-template`}
-                            value={slotCfg.templateId}
-                            onChange={(e) => {
-                              const next = cloneStarterSetConfig(starterCfg);
-                              next.slots[slot] = {
-                                ...next.slots[slot],
-                                templateId: e.target.value,
-                              };
-                              adminUpdateConfig({ starterSet: next });
-                            }}
-                            className="w-full h-8 px-2 rounded border border-slate-700 bg-slate-900 text-xs"
-                          >
-                            {slotTemplates.map((tpl) => (
-                              <option key={tpl.id} value={tpl.id}>
-                                {lang === 'vi' ? tpl.nameVi : tpl.nameEn} (T
-                                {tpl.tier}
-                                {tpl.classRestriction
-                                  ? ` · ${getClassName(lang, tpl.classRestriction)}`
-                                  : ''}
-                                )
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <div className="grid grid-cols-2 gap-2">
-                          <label className="space-y-1 block">
-                            <span className="text-[11px] text-slate-400 block">
-                              {t('admin.starter.levelLabel')}
-                            </span>
-                            <input
-                              type="number"
-                              data-testid={`admin-starter-slot-${slot}-level`}
-                              min={1}
-                              max={BALANCE_CONFIG.maxLevel}
-                              value={slotCfg.level}
-                              onChange={(e) => {
-                                const lv = Math.max(
-                                  1,
-                                  Math.min(
-                                    BALANCE_CONFIG.maxLevel,
-                                    Math.floor(Number(e.target.value) || 1)
-                                  )
-                                );
-                                const next = cloneStarterSetConfig(starterCfg);
-                                next.slots[slot] = {
-                                  ...next.slots[slot],
-                                  level: lv,
-                                };
-                                adminUpdateConfig({ starterSet: next });
-                              }}
-                              className="w-full h-8 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
-                            />
-                          </label>
-                          <label className="space-y-1 block">
-                            <span className="text-[11px] text-slate-400 block">
-                              {t('admin.starter.qualityLabel')}
-                            </span>
-                            <input
-                              type="number"
-                              data-testid={`admin-starter-slot-${slot}-quality`}
-                              min={1}
-                              max={100}
-                              value={slotCfg.quality}
-                              onChange={(e) => {
-                                const q = Math.max(
-                                  1,
-                                  Math.min(
-                                    100,
-                                    Math.round(Number(e.target.value) || 1)
-                                  )
-                                );
-                                const next = cloneStarterSetConfig(starterCfg);
-                                next.slots[slot] = {
-                                  ...next.slots[slot],
-                                  quality: q,
-                                };
-                                adminUpdateConfig({ starterSet: next });
-                              }}
-                              className="w-full h-8 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
-                            />
-                          </label>
-                        </div>
+                        {!slotCfg ? (
+                          <div className="text-xs text-slate-500 py-2">—</div>
+                        ) : (
+                          <>
+                            <label className="space-y-1 block">
+                              <span className="text-[11px] text-slate-400 block">
+                                {t('admin.starter.templateLabel')}
+                              </span>
+                              <select
+                                data-testid={`admin-starter-slot-${slot}-template`}
+                                value={slotCfg.templateId}
+                                onChange={(e) => {
+                                  const next = cloneStarterSetConfig(starterCfg);
+                                  const baseSlot = next.slots[slot] ?? slotCfg;
+                                  next.slots[slot] = {
+                                    ...baseSlot,
+                                    templateId: e.target.value,
+                                  };
+                                  adminUpdateConfig({ starterSet: next });
+                                }}
+                                className="w-full h-8 px-2 rounded border border-slate-700 bg-slate-900 text-xs"
+                              >
+                                {slotTemplates.map((tpl) => (
+                                  <option key={tpl.id} value={tpl.id}>
+                                    {lang === 'vi' ? tpl.nameVi : tpl.nameEn} (T
+                                    {tpl.tier}
+                                    {tpl.classRestriction
+                                      ? ` · ${getClassName(lang, tpl.classRestriction)}`
+                                      : ''}
+                                    )
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            <div className="grid grid-cols-2 gap-2">
+                              <label className="space-y-1 block">
+                                <span className="text-[11px] text-slate-400 block">
+                                  {t('admin.starter.levelLabel')}
+                                </span>
+                                <input
+                                  type="number"
+                                  data-testid={`admin-starter-slot-${slot}-level`}
+                                  min={1}
+                                  max={BALANCE_CONFIG.maxLevel}
+                                  value={slotCfg.level}
+                                  onChange={(e) => {
+                                    const lv = Math.max(
+                                      1,
+                                      Math.min(
+                                        BALANCE_CONFIG.maxLevel,
+                                        Math.floor(Number(e.target.value) || 1)
+                                      )
+                                    );
+                                    const next = cloneStarterSetConfig(starterCfg);
+                                    const baseSlot = next.slots[slot] ?? slotCfg;
+                                    next.slots[slot] = {
+                                      ...baseSlot,
+                                      level: lv,
+                                    };
+                                    adminUpdateConfig({ starterSet: next });
+                                  }}
+                                  className="w-full h-8 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                                />
+                              </label>
+                              <label className="space-y-1 block">
+                                <span className="text-[11px] text-slate-400 block">
+                                  {t('admin.starter.qualityLabel')}
+                                </span>
+                                <input
+                                  type="number"
+                                  data-testid={`admin-starter-slot-${slot}-quality`}
+                                  min={1}
+                                  max={100}
+                                  value={slotCfg.quality}
+                                  onChange={(e) => {
+                                    const q = Math.max(
+                                      1,
+                                      Math.min(
+                                        100,
+                                        Math.round(Number(e.target.value) || 1)
+                                      )
+                                    );
+                                    const next = cloneStarterSetConfig(starterCfg);
+                                    const baseSlot = next.slots[slot] ?? slotCfg;
+                                    next.slots[slot] = {
+                                      ...baseSlot,
+                                      quality: q,
+                                    };
+                                    adminUpdateConfig({ starterSet: next });
+                                  }}
+                                  className="w-full h-8 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                                />
+                              </label>
+                            </div>
+                          </>
+                        )}
                       </div>
                     );
                   })}
