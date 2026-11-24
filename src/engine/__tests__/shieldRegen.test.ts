@@ -126,7 +126,7 @@ afterEach(() => {
 });
 
 describe('SH1 — Shield regeneration engine & UI integration', () => {
-  it('1) computeShieldRegen covers not_hit, hit, cracked, shield_break (blocked), maxShield 0, capPct, and <= maxShield clamp', () => {
+  it('1) computeShieldRegen covers not_hit, hit, shield_break (restarting), maxShield 0, capPct, and <= maxShield clamp', () => {
     const cfg = DEFAULT_SHIELD_REGEN_CONFIG;
     // shield = 25 -> regenPct = 3 + 25 * 0.08 = 5%, maxShield = 200 -> base = 10
     const baseUnit = makeUnit({ shield: 100 });
@@ -135,14 +135,16 @@ describe('SH1 — Shield regeneration engine & UI integration', () => {
     expect(computeShieldRegen(baseUnit, cfg)).toEqual({
       amount: 10,
       multPct: 100,
+      hits: 0,
       reason: 'not_hit',
     });
 
     expect(
-      computeShieldRegen({ ...baseUnit, hitSinceOwnTurn: true }, cfg)
+      computeShieldRegen({ ...baseUnit, hitsSinceOwnTurn: 1 }, cfg)
     ).toEqual({
-      amount: 8, // Math.round(10 * 0.75) = 8
-      multPct: 75,
+      amount: 8, // Math.round(10 * 0.80) = 8
+      multPct: 80,
+      hits: 1,
       reason: 'hit',
     });
 
@@ -150,25 +152,10 @@ describe('SH1 — Shield regeneration engine & UI integration', () => {
       computeShieldRegen(
         {
           ...baseUnit,
-          hitSinceOwnTurn: true,
-          statuses: [{ type: 'shield_cracked', turnsRemaining: 3, isDebuff: true }],
-        },
-        cfg
-      )
-    ).toEqual({
-      amount: 3, // Math.round(10 * 0.30) = 3
-      multPct: 30,
-      reason: 'cracked',
-    });
-
-    expect(
-      computeShieldRegen(
-        {
-          ...baseUnit,
-          hitSinceOwnTurn: true,
+          hitsSinceOwnTurn: 1,
           statuses: [
             { type: 'shield_cracked', turnsRemaining: 3, isDebuff: true },
-            { type: 'shield_break', turnsRemaining: 2, isDebuff: true },
+            { type: 'shield_break', turnsRemaining: 1, isDebuff: true },
           ],
         },
         cfg
@@ -176,7 +163,8 @@ describe('SH1 — Shield regeneration engine & UI integration', () => {
     ).toEqual({
       amount: 0,
       multPct: 0,
-      reason: 'blocked',
+      hits: 1,
+      reason: 'restarting',
     });
 
     const zeroShieldUnit = makeUnit({
@@ -186,6 +174,7 @@ describe('SH1 — Shield regeneration engine & UI integration', () => {
     expect(computeShieldRegen(zeroShieldUnit, cfg)).toEqual({
       amount: 0,
       multPct: 0,
+      hits: 0,
       reason: 'none',
     });
 
@@ -198,6 +187,7 @@ describe('SH1 — Shield regeneration engine & UI integration', () => {
     expect(computeShieldRegen(highStatUnit, cfg)).toEqual({
       amount: 24,
       multPct: 100,
+      hits: 0,
       reason: 'not_hit',
     });
 
@@ -206,6 +196,7 @@ describe('SH1 — Shield regeneration engine & UI integration', () => {
     expect(computeShieldRegen(nearlyFull, cfg)).toEqual({
       amount: 4,
       multPct: 100,
+      hits: 0,
       reason: 'not_hit',
     });
 
@@ -215,11 +206,12 @@ describe('SH1 — Shield regeneration engine & UI integration', () => {
     ).toEqual({
       amount: 0,
       multPct: 0,
+      hits: 0,
       reason: 'none',
     });
   });
 
-  it('2) hitSinceOwnTurn is set on hit, NOT set by evade or burn DoT, and resets on own turn start', () => {
+  it('2) hitsSinceOwnTurn increments on hit, NOT by evade or burn DoT, and resets on own turn start', () => {
     const adminCfg = createDefaultAdminConfig();
     const attacker = makeUnit({
       id: 'e1',
@@ -229,7 +221,7 @@ describe('SH1 — Shield regeneration engine & UI integration', () => {
       derived: { ...makeUnit().derived, dodgeChance: 0 },
     });
 
-    // 2a) Evade does NOT set hitSinceOwnTurn
+    // 2a) Evade does NOT increment hitsSinceOwnTurn
     const agileDefender = makeUnit({
       id: 'p1',
       name: 'Phantom',
@@ -246,9 +238,9 @@ describe('SH1 — Shield regeneration engine & UI integration', () => {
       () => 0.01 // hits <= dodgeChance (100) -> evaded!
     );
     const afterEvade = evadeRes.updatedUnits.find((u) => u.id === 'p1')!;
-    expect(afterEvade.hitSinceOwnTurn).toBeUndefined();
+    expect(afterEvade.hitsSinceOwnTurn).toBeUndefined();
 
-    // 2b) Actual hit sets hitSinceOwnTurn = true
+    // 2b) Actual hit sets hitsSinceOwnTurn = 1
     const tankDefender = makeUnit({
       id: 'p2',
       name: 'Bastion',
@@ -265,9 +257,9 @@ describe('SH1 — Shield regeneration engine & UI integration', () => {
       () => 0.99
     );
     const afterHit = hitRes.updatedUnits.find((u) => u.id === 'p2')!;
-    expect(afterHit.hitSinceOwnTurn).toBe(true);
+    expect(afterHit.hitsSinceOwnTurn).toBe(1);
 
-    // 2c) Own turn applies hitMult regen (8) AND resets hitSinceOwnTurn = false, and logs SHIELD line
+    // 2c) Own turn applies hit regen (8) AND resets hitsSinceOwnTurn = 0, and logs SHIELD line
     const ownTurnRes = resolveUnitAction(
       hitRes.updatedUnits,
       'p2',
@@ -278,20 +270,20 @@ describe('SH1 — Shield regeneration engine & UI integration', () => {
       () => 0.5
     );
     const afterOwnTurn = ownTurnRes.updatedUnits.find((u) => u.id === 'p2')!;
-    expect(afterOwnTurn.hitSinceOwnTurn).toBe(false);
+    expect(afterOwnTurn.hitsSinceOwnTurn).toBe(0);
     const shieldLog = ownTurnRes.logEntries.find((l) => l.tag === 'SHIELD');
     expect(shieldLog).toBeDefined();
     expect(shieldLog?.templateKey).toBe('log.shieldRegen');
     const viMsg = formatCombatLogMessage('vi', shieldLog!);
     expect(viMsg).toContain('Bastion hồi khiên SHD +8');
-    expect(viMsg).toContain(' (bị trúng, 75%)');
+    expect(viMsg).toContain(' (trúng 1 lần, 80%)');
 
-    // 2d) Burn DoT at start of own turn does NOT set hitSinceOwnTurn = true
+    // 2d) Burn DoT at start of own turn does NOT increment hitsSinceOwnTurn
     const burningUnit = makeUnit({
       id: 'p3',
       name: 'Torch',
       shield: 100,
-      hitSinceOwnTurn: false,
+      hitsSinceOwnTurn: 0,
       statuses: [{ type: 'burn', turnsRemaining: 2, isDebuff: true }],
     });
     const burnTurnRes = resolveUnitAction(
@@ -304,7 +296,7 @@ describe('SH1 — Shield regeneration engine & UI integration', () => {
       () => 0.5
     );
     const afterBurnTurn = burnTurnRes.updatedUnits.find((u) => u.id === 'p3')!;
-    expect(afterBurnTurn.hitSinceOwnTurn).toBe(false);
+    expect(afterBurnTurn.hitsSinceOwnTurn).toBe(0);
     expect(
       burnTurnRes.logEntries.some(
         (l) =>
@@ -314,7 +306,7 @@ describe('SH1 — Shield regeneration engine & UI integration', () => {
     ).toBe(true);
   });
 
-  it('3) Shield drop from > 0 to 0 adds shield_cracked for 3 own turns, refreshes on re-break, and expires after turn 3', () => {
+  it('3) Shield drop from > 0 to 0 adds shield_break for restartTurns own turns, blocks regen while active, and regens normally after expiring', () => {
     const adminCfg = createDefaultAdminConfig();
     const strongAttacker = makeUnit({
       id: 'e1',
@@ -336,7 +328,7 @@ describe('SH1 — Shield regeneration engine & UI integration', () => {
       },
     });
 
-    // Hit breaks shield from 40 -> 0 -> shield_cracked (3 turns)
+    // Hit breaks shield from 40 -> 0 -> shield_break (1 turn)
     const breakRes = resolveUnitAction(
       [strongAttacker, defender],
       'e1',
@@ -346,34 +338,22 @@ describe('SH1 — Shield regeneration engine & UI integration', () => {
       adminCfg,
       () => 0.99
     );
-    let current = breakRes.updatedUnits;
-    let p1 = current.find((u) => u.id === 'p1')!;
+    let p1 = breakRes.updatedUnits.find((u) => u.id === 'p1')!;
     expect(p1.shield).toBe(0);
-    expect(p1.statuses.find((s) => s.type === 'shield_cracked')?.turnsRemaining).toBe(3);
-
-    // Own turn 1: regens at 30% (3), logs "(khiên nứt, 30%)", ticks 3 -> 2
-    const t1 = resolveUnitAction(current, 'p1', 'attack', 'e1', 1, adminCfg, () => 0.99);
-    const t1Log = t1.logEntries.find((l) => l.templateKey === 'log.shieldRegen');
-    expect(t1Log).toBeDefined();
-    expect(formatCombatLogMessage('vi', t1Log!)).toContain('Aegis hồi khiên SHD +3 (khiên nứt, 30%)');
-    p1 = t1.updatedUnits.find((u) => u.id === 'p1')!;
-    expect(p1.shield).toBe(3);
-    expect(p1.statuses.find((s) => s.type === 'shield_cracked')?.turnsRemaining).toBe(2);
-
-    // Enemy hits p1 again (taking remaining shield 3 -> 0): refreshes shield_cracked back to 3 turns!
-    const rebreak = resolveUnitAction(t1.updatedUnits, 'e1', 'attack', 'p1', 2, adminCfg, () => 0.99);
-    p1 = rebreak.updatedUnits.find((u) => u.id === 'p1')!;
-    expect(p1.shield).toBe(0);
-    expect(p1.statuses.find((s) => s.type === 'shield_cracked')?.turnsRemaining).toBe(3);
-
-    // Burn through own turns 1, 2, 3 without getting hit again
-    let sim = rebreak.updatedUnits;
-    for (let r = 2; r <= 4; r += 1) {
-      const res = resolveUnitAction(sim, 'p1', 'attack', 'e1', r, adminCfg, () => 0.99);
-      sim = res.updatedUnits;
-    }
-    p1 = sim.find((u) => u.id === 'p1')!;
+    expect(p1.statuses.find((s) => s.type === 'shield_break')?.turnsRemaining).toBe(1);
     expect(p1.statuses.some((s) => s.type === 'shield_cracked')).toBe(false);
+
+    // Own turn 1: regens 0 (no log), status expires
+    const t1 = resolveUnitAction(breakRes.updatedUnits, 'p1', 'attack', 'e1', 1, adminCfg, () => 0.99);
+    expect(t1.logEntries.some((l) => l.templateKey === 'log.shieldRegen')).toBe(false);
+    p1 = t1.updatedUnits.find((u) => u.id === 'p1')!;
+    expect(p1.shield).toBe(0);
+    expect(p1.statuses.some((s) => s.type === 'shield_break')).toBe(false);
+
+    // Turn after (no hits): regens 100% (10)
+    const t2 = resolveUnitAction(t1.updatedUnits, 'p1', 'attack', 'e1', 2, adminCfg, () => 0.99);
+    p1 = t2.updatedUnits.find((u) => u.id === 'p1')!;
+    expect(p1.shield).toBe(10);
   });
 
   it('4) shieldRegen.enabled = false produces deterministic fixed-seed battle with zero regen/cracked/defend changes', () => {
@@ -441,7 +421,7 @@ describe('SH1 — Shield regeneration engine & UI integration', () => {
         sp: u.sp,
         alive: u.alive,
         statuses: u.statuses,
-        hitSinceOwnTurn: u.hitSinceOwnTurn,
+        hitsSinceOwnTurn: u.hitsSinceOwnTurn,
       }))
     ).toEqual(
       b2.units.map((u) => ({
@@ -451,14 +431,14 @@ describe('SH1 — Shield regeneration engine & UI integration', () => {
         sp: u.sp,
         alive: u.alive,
         statuses: u.statuses,
-        hitSinceOwnTurn: u.hitSinceOwnTurn,
+        hitsSinceOwnTurn: u.hitsSinceOwnTurn,
       }))
     );
     expect(b1.log.some((l) => l.templateKey === 'log.shieldRegen')).toBe(false);
     expect(
       b1.units.some(
         (u) =>
-          u.hitSinceOwnTurn !== undefined ||
+          u.hitsSinceOwnTurn !== undefined ||
           u.statuses.some((s) => s.type === 'shield_cracked')
       )
     ).toBe(false);
@@ -497,7 +477,7 @@ describe('SH1 — Shield regeneration engine & UI integration', () => {
     ).toBe(true);
   });
 
-  it('6) Admin sanitizer clamps pct 0-50, mult 0-200, turns 1-10 and migration fills defaults at CURRENT_SAVE_VERSION = 9', () => {
+  it('6) Admin sanitizer clamps pct/penalty/min/restartTurns, drops old v1 keys, and migration fills defaults at CURRENT_SAVE_VERSION = 11', () => {
     expect(CURRENT_SAVE_VERSION).toBe(11);
     const clamped = sanitizeShieldRegenConfig({
       enabled: false,
@@ -505,22 +485,25 @@ describe('SH1 — Shield regeneration engine & UI integration', () => {
       perPointPct: 99,
       capPct: 80,
       notHitMult: -10,
-      hitMult: 250,
-      brokenMult: 999,
-      brokenTurns: 0,
-    });
+      hitPenaltyPct: 250,
+      minHitMultPct: -20,
+      restartTurns: 0,
+      hitMult: 75,
+      brokenMult: 30,
+      brokenTurns: 3,
+    } as Record<string, unknown>);
     expect(clamped).toEqual({
       enabled: false,
       basePct: 0,
       perPointPct: 50,
       capPct: 50,
       notHitMult: 0,
-      hitMult: 200,
-      brokenMult: 200,
-      brokenTurns: 1,
+      hitPenaltyPct: 100,
+      minHitMultPct: 0,
+      restartTurns: 1,
     });
 
-    expect(sanitizeShieldRegenConfig({ brokenTurns: 42 }).brokenTurns).toBe(10);
+    expect(sanitizeShieldRegenConfig({ restartTurns: 42 }).restartTurns).toBe(3);
 
     const fresh = createFreshCampaignState('Vance', 'striker', createSeededRng(9));
     const oldAdmin = { ...fresh.adminConfig } as Partial<AdminConfig>;
@@ -604,7 +587,7 @@ describe('SH1 — Shield regeneration engine & UI integration', () => {
     expect(srSection?.textContent).toContain('Hồi khiên');
     expect(
       container.querySelector('[data-testid="admin-shield-regen-example"]')?.textContent
-    ).toBe('SHIELD 25 -> 5% khiên tối đa mỗi lượt');
+    ).toBe('SHIELD 25 -> 5% khiên tối đa mỗi lượt · Trúng 2 lần -> hồi 3%');
   });
 
   it('8) Seeded 4v4 full battle finishes cleanly without any NaN values', () => {
@@ -672,5 +655,134 @@ describe('SH1 — Shield regeneration engine & UI integration', () => {
       !battle.units.some((u) => u.side === 'ally' && u.alive);
     expect(done).toBe(true);
     expect(steps).toBeLessThan(200);
+  });
+
+  it('9) SH2a: regen mult scales for 0/1/2/3/5 hits (100/80/60/40/0), respects minHitMultPct floor, and reads legacy hitSinceOwnTurn=true as 1', () => {
+    const unit = makeUnit({ shield: 0 });
+    const cfg = DEFAULT_SHIELD_REGEN_CONFIG;
+
+    expect([0, 1, 2, 3, 5].map((hits) => computeShieldRegen({ ...unit, hitsSinceOwnTurn: hits }, cfg))).toEqual([
+      { amount: 10, multPct: 100, hits: 0, reason: 'not_hit' },
+      { amount: 8, multPct: 80, hits: 1, reason: 'hit' },
+      { amount: 6, multPct: 60, hits: 2, reason: 'hit' },
+      { amount: 4, multPct: 40, hits: 3, reason: 'hit' },
+      { amount: 0, multPct: 0, hits: 5, reason: 'hit' },
+    ]);
+
+    expect(
+      computeShieldRegen(
+        { ...unit, hitsSinceOwnTurn: 6 },
+        { ...cfg, minHitMultPct: 25 }
+      )
+    ).toEqual({ amount: 3, multPct: 25, hits: 6, reason: 'hit' });
+
+    const legacyUnit = { ...unit, hitSinceOwnTurn: true } as unknown as CombatUnit;
+    expect(computeShieldRegen(legacyUnit, cfg)).toEqual({
+      amount: 8,
+      multPct: 80,
+      hits: 1,
+      reason: 'hit',
+    });
+  });
+
+  it('10) SH2a: while shield_break ("Khiên vỡ") is active, defend & skill shield restore give 0 shield and detail formats Restarting', () => {
+    const adminCfg = createDefaultAdminConfig();
+    const brokenUnit = makeUnit({
+      id: 'p1',
+      name: 'Aegis',
+      classId: 'support',
+      shield: 0,
+      sp: 50,
+      equippedSkillIds: ['sup_aegis_field'],
+      skillLevels: { sup_aegis_field: 1 },
+      statuses: [{ type: 'shield_break', turnsRemaining: 2, isDebuff: true }],
+    });
+    const enemy = makeUnit({ id: 'e1', side: 'enemy', isPlayer: false });
+
+    const defendRes = resolveUnitAction([brokenUnit, enemy], 'p1', 'defend', null, 1, adminCfg, () => 0.5);
+    expect(defendRes.updatedUnits.find((u) => u.id === 'p1')!.shield).toBe(0);
+
+    const skillRes = resolveUnitAction([brokenUnit, enemy], 'p1', 'skill', 'p1', 1, adminCfg, () => 0.5, 'sup_aegis_field');
+    expect(skillRes.updatedUnits.find((u) => u.id === 'p1')!.shield).toBe(0);
+
+    const detailVi = formatStatusEffectDetail('vi', { type: 'shield_break', turnsRemaining: 2, isDebuff: true });
+    expect(detailVi.label).toBe('Khiên vỡ');
+    expect(detailVi.valueText).toBe('Khởi động lại 2 lượt');
+  });
+
+  it('11) SH2a: shield_break no longer bypasses an active shield > 0; damage at shield 0 goes to HP', () => {
+    const adminCfg = createDefaultAdminConfig();
+    const attacker = makeUnit({
+      id: 'e1',
+      side: 'enemy',
+      isPlayer: false,
+      derived: { ...makeUnit().derived, attackPower: 40, dodgeChance: 0 },
+    });
+    const shieldedBroken = makeUnit({
+      id: 'p1',
+      hp: 600,
+      shield: 150,
+      derived: { ...makeUnit().derived, maxHp: 600, maxShield: 200, dodgeChance: 0 },
+      statuses: [{ type: 'shield_break', turnsRemaining: 1, isDebuff: true }],
+    });
+
+    const hitWithShield = resolveUnitAction([attacker, shieldedBroken], 'e1', 'attack', 'p1', 1, adminCfg, () => 0.99);
+    const p1After = hitWithShield.updatedUnits.find((u) => u.id === 'p1')!;
+    expect(p1After.shield).toBeLessThan(150);
+    expect(p1After.hp).toBe(600);
+
+    const noShield = makeUnit({ ...shieldedBroken, id: 'p2', shield: 0 });
+    const hitWithoutShield = resolveUnitAction([attacker, noShield], 'e1', 'attack', 'p2', 1, adminCfg, () => 0.99);
+    expect(hitWithoutShield.updatedUnits.find((u) => u.id === 'p2')!.hp).toBeLessThan(600);
+  });
+
+  it('12) SH2a: splash damage increments hitsSinceOwnTurn and triggers Khiên vỡ (shield_break) when splash drops shield > 0 to 0', () => {
+    const adminCfg = createDefaultAdminConfig();
+    const attacker = makeUnit({
+      id: 'p1',
+      name: 'Bomber',
+      side: 'ally',
+      derived: { ...makeUnit().derived, attackPower: 150, splashPct: 40, dodgeChance: 0 },
+    });
+    const enemyFront1 = makeUnit({
+      id: 'e1',
+      name: 'Target',
+      side: 'enemy',
+      row: 'front',
+      formationCol: 0,
+      isPlayer: false,
+      shield: 200,
+      derived: { ...makeUnit().derived, maxShield: 200, dodgeChance: 0 },
+    });
+    const enemyFront2 = makeUnit({
+      id: 'e2',
+      name: 'Wingman',
+      side: 'enemy',
+      row: 'front',
+      formationCol: 1,
+      isPlayer: false,
+      hp: 500,
+      shield: 15,
+      derived: { ...makeUnit().derived, maxHp: 500, maxShield: 200, dodgeChance: 0 },
+    });
+
+    const splashRes = resolveUnitAction(
+      [attacker, enemyFront1, enemyFront2],
+      'p1',
+      'attack',
+      'e1',
+      1,
+      adminCfg,
+      () => 0.99
+    );
+    const wingmanAfter = splashRes.updatedUnits.find((u) => u.id === 'e2')!;
+    expect(wingmanAfter.shield).toBe(0);
+    expect(wingmanAfter.hitsSinceOwnTurn).toBe(1);
+    expect(wingmanAfter.statuses.find((s) => s.type === 'shield_break')?.turnsRemaining).toBe(1);
+    expect(
+      splashRes.events.some(
+        (e) => e.type === 'status_applied' && e.targetId === 'e2' && e.statusId === 'shield_break'
+      )
+    ).toBe(true);
   });
 });
