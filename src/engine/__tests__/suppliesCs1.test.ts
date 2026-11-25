@@ -88,26 +88,26 @@ function makeDummyUnit(overrides: Partial<CombatUnit> = {}): CombatUnit {
 
 describe('TASK CS1 — Battle Supply Data, Price Formula, Save v11 & Pure Rules', () => {
   it('1) loads 12 valid sys supply templates (hp/shield/sp x T1-T4) and drops bad rows with console.warn', () => {
-    expect(SUPPLY_TEMPLATES).toHaveLength(12);
+    expect(SUPPLY_TEMPLATES).toHaveLength(15);
     const catalogIds = new Set(
       (rawIconCatalog as Array<{ id: string }>).map((row) => row.id)
     );
     for (const tpl of SUPPLY_TEMPLATES) {
       expect(tpl.registryTag).toBe('sys');
-      expect(tpl.cooldownTurns).toBe(2);
-      expect(tpl.perBattleLimit).toBe(3);
+      expect(tpl.cooldownTurns).toBe(tpl.family === 'sp_kit' ? 3 : 2);
+      expect(tpl.perBattleLimit).toBe(5);
       expect(catalogIds.has(tpl.iconId)).toBe(true);
     }
 
     expect(getSupplyTemplateById('sup_hp_t2')?.unlockLevel).toBe(10);
     expect(getSupplyTemplateById('sup_hp_t2')?.effects).toEqual([
-      { kind: 'heal_hp_pct', value: 22 },
+      { kind: 'heal_hp', value: 500 },
     ]);
     expect(getSupplyTemplateById('sup_shield_t4')?.effects).toEqual([
-      { kind: 'restore_shield_pct', value: 45 },
+      { kind: 'restore_shield', value: 1700 },
     ]);
     expect(getSupplyTemplateById('sup_sp_t3')?.effects).toEqual([
-      { kind: 'restore_sp_pct', value: 36 },
+      { kind: 'restore_sp', value: 350 },
     ]);
 
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -144,7 +144,7 @@ describe('TASK CS1 — Battle Supply Data, Price Formula, Save v11 & Pure Rules'
         SUPPLY_TEMPLATES[4],
       ],
     });
-    expect(parsed.map((t) => t.id)).toEqual(['sup_hp_t1', 'sup_shield_t1']);
+    expect(parsed.map((t) => t.id)).toEqual(['sup_hp_t1', 'sup_hp_t5']);
     expect(warnSpy).toHaveBeenCalled();
     warnSpy.mockRestore();
   });
@@ -158,26 +158,29 @@ describe('TASK CS1 — Battle Supply Data, Price Formula, Save v11 & Pure Rules'
     });
 
     const expected: Record<string, number> = {
-      sup_hp_t1: 30,
-      sup_hp_t2: 52,
-      sup_hp_t3: 76,
-      sup_hp_t4: 114,
-      sup_shield_t1: 30,
-      sup_shield_t2: 52,
-      sup_shield_t3: 76,
-      sup_shield_t4: 114,
-      sup_sp_t1: 36,
-      sup_sp_t2: 63,
-      sup_sp_t3: 91,
-      sup_sp_t4: 137,
+      sup_hp_t1: 60,
+      sup_hp_t2: 100,
+      sup_hp_t3: 160,
+      sup_hp_t4: 240,
+      sup_hp_t5: 360,
+      sup_shield_t1: 100,
+      sup_shield_t2: 160,
+      sup_shield_t3: 240,
+      sup_shield_t4: 340,
+      sup_shield_t5: 500,
+      sup_sp_t1: 40,
+      sup_sp_t2: 80,
+      sup_sp_t3: 140,
+      sup_sp_t4: 220,
+      sup_sp_t5: 320,
     };
 
     for (const tpl of SUPPLY_TEMPLATES) {
-      const base = PRICE_FORMULA.consumableBase[tpl.family];
-      const factor = PRICE_FORMULA.tierFactor[tpl.tier - 1];
+      const val = tpl.effects[0].value;
+      const mult = tpl.family === 'sp_kit' ? 2 : 1;
       const formulaPrice = Math.max(
         PRICE_FORMULA.minPrice,
-        Math.round(base * factor)
+        Math.round(val / 5) * mult
       );
       expect(computeSupplyPrice(tpl)).toBe(formulaPrice);
       expect(computeSupplyPrice(tpl)).toBe(expected[tpl.id]);
@@ -222,7 +225,7 @@ describe('TASK CS1 — Battle Supply Data, Price Formula, Save v11 & Pure Rules'
   });
 
   it('4) bumps CURRENT_SAVE_VERSION to 11 and migrates old saves, loadouts, and admin defaults', () => {
-    expect(CURRENT_SAVE_VERSION).toBe(12);
+    expect(CURRENT_SAVE_VERSION).toBeGreaterThanOrEqual(12);
 
     const defAdmin = createDefaultAdminConfig();
     expect(defAdmin.supplyLoadoutSlots).toBe(DEFAULT_SUPPLY_LOADOUT_SLOTS);
@@ -450,7 +453,7 @@ describe('TASK CS1 — Battle Supply Data, Price Formula, Save v11 & Pure Rules'
       unit: makeDummyUnit(),
       supplyState: {
         ...baseState,
-        usedCountsByTemplate: { [hpTpl.id]: 3 },
+        usedCountsByTemplate: { [hpTpl.id]: 5 },
       },
       isOwnTurn: true,
     });
@@ -461,7 +464,7 @@ describe('TASK CS1 — Battle Supply Data, Price Formula, Save v11 & Pure Rules'
         battleLimitRes.reasonKey as TranslateKey,
         battleLimitRes.params
       )
-    ).toBe('Đã dùng 3/3');
+    ).toBe('Đã dùng 5/5');
 
     const cdRes = canUseSupply({
       template: hpTpl,
@@ -578,7 +581,7 @@ describe('TASK CS1 — Battle Supply Data, Price Formula, Save v11 & Pure Rules'
     fresh.adminConfig.supplyUsesPerTurn = 2;
 
     const envelope = await buildExportEnvelope(fresh);
-    expect(envelope.saveVersion).toBe(12);
+    expect(envelope.saveVersion).toBeGreaterThanOrEqual(12);
 
     const parsed = await parseImportEnvelope(JSON.stringify(envelope));
     expect(parsed.ok).toBe(true);

@@ -123,9 +123,12 @@ import {
   grantStarterSetToGear,
 } from './starter';
 import {
+  cloneSupplyEconomyConfig,
+  DEFAULT_SUPPLY_ECONOMY_CONFIG,
   DEFAULT_SUPPLY_LOADOUT_SLOTS,
   DEFAULT_SUPPLY_USES_PER_TURN,
   sanitizeConsumables,
+  sanitizeSupplyEconomyConfig,
   sanitizeSupplyLoadout,
   sanitizeSupplyLoadoutSlots,
   sanitizeSupplyUsesPerTurn,
@@ -315,6 +318,7 @@ export function createDefaultAdminConfig(): AdminConfig {
     iconCatalogMods: [],
     shieldRegen: { ...DEFAULT_SHIELD_REGEN_CONFIG },
     spEconomy: cloneSpEconomyConfig(DEFAULT_SP_ECONOMY_CONFIG),
+    supplyEconomy: cloneSupplyEconomyConfig(DEFAULT_SUPPLY_ECONOMY_CONFIG),
     shieldCrackedMult: DEFAULT_SHIELD_CRACKED_MULT,
     shieldCrackedTurns: DEFAULT_SHIELD_CRACKED_TURNS,
     shieldDamageOverrides: {},
@@ -660,6 +664,7 @@ export function migrateSaveData(
     ),
     shieldRegen: sanitizeShieldRegenConfig(rawAdmin.shieldRegen),
     spEconomy: sanitizeSpEconomyConfig(rawAdmin.spEconomy),
+    supplyEconomy: sanitizeSupplyEconomyConfig(rawAdmin.supplyEconomy),
     shieldCrackedMult: sanitizeShieldCrackedMult(rawAdmin.shieldCrackedMult),
     shieldCrackedTurns: sanitizeShieldCrackedTurns(rawAdmin.shieldCrackedTurns),
     shieldDamageOverrides: sanitizeShieldDamageOverrides(

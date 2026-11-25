@@ -94,7 +94,7 @@ describe('TASK CS3b — Shop tab "Vật tư" + Admin CP block "Cửa hàng vật
     expect(buffSec).toBeNull();
 
     const hpRow = container!.querySelector('[data-testid="supply-buy-row-sup_hp_t1"]');
-    expect(hpRow?.textContent).toContain('HP +15%');
+    expect(hpRow?.textContent).toContain('HP +300');
     expect(hpRow?.textContent).toContain('còn 6');
     expect(hpRow?.textContent).toContain('có 0');
     expect(
@@ -215,6 +215,13 @@ describe('TASK CS3b — Shop tab "Vật tư" + Admin CP block "Cửa hàng vật
     act(() => {
       buy5Btn.click();
     });
+    act(() => {
+      (
+        container!.querySelector(
+          '[data-testid="supply-confirm-ok"]'
+        ) as HTMLButtonElement
+      ).click();
+    });
 
     expect(useGameStore.getState().pilot.credits).toBe(5000 - buyPrice * 5);
     expect(
@@ -233,6 +240,13 @@ describe('TASK CS3b — Shop tab "Vật tư" + Admin CP block "Cửa hàng vật
     expect(sell5Btn.disabled).toBe(false);
     act(() => {
       sell5Btn.click();
+    });
+    act(() => {
+      (
+        container!.querySelector(
+          '[data-testid="supply-confirm-ok"]'
+        ) as HTMLButtonElement
+      ).click();
     });
 
     expect(useGameStore.getState().pilot.credits).toBe(

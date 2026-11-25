@@ -432,7 +432,10 @@ export type SupplyFamily = 'hp_kit' | 'shield_kit' | 'sp_kit' | 'buff';
 export type SupplyEffectKind =
   | 'heal_hp_pct'
   | 'restore_shield_pct'
-  | 'restore_sp_pct';
+  | 'restore_sp_pct'
+  | 'heal_hp'
+  | 'restore_shield'
+  | 'restore_sp';
 
 export interface SupplyEffect {
   kind: SupplyEffectKind;
@@ -442,7 +445,7 @@ export interface SupplyEffect {
 export interface SupplyTemplate {
   id: string;
   family: SupplyFamily;
-  tier: 1 | 2 | 3 | 4;
+  tier: 1 | 2 | 3 | 4 | 5;
   unlockLevel: number;
   iconId: string;
   effects: SupplyEffect[];
@@ -1385,6 +1388,11 @@ export interface SpEconomyConfig {
   costLevelPct: number;
 }
 
+export interface SupplyEconomyConfig {
+  maxUsesPerBattle: number;
+  spPriceMult: number;
+}
+
 export interface AdminConfig {
   godMode: boolean;
   oneHitKills: boolean;
@@ -1407,6 +1415,7 @@ export interface AdminConfig {
   statusDisplayDefaults?: StatusDisplayDefaults;
   shieldRegen?: ShieldRegenConfig;
   spEconomy?: SpEconomyConfig;
+  supplyEconomy?: SupplyEconomyConfig;
   shieldCrackedMult?: number;
   shieldCrackedTurns?: number;
   shieldDamageOverrides?: Record<string, number>;

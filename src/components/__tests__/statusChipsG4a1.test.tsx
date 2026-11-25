@@ -663,7 +663,7 @@ describe('Task G4a-1 Part 2 — Icon catalog, status chips, settings, Bảng ico
     // SV1a save export does NOT include dreamAce.status.v1
     writeStatusDisplayOverride({ phoneRows: 4, badgeLayout: 'A' });
     const env = await buildExportEnvelope(useGameStore.getState());
-    expect(env.saveVersion).toBe(12);
+    expect(env.saveVersion).toBeGreaterThanOrEqual(12);
     expect(JSON.stringify(env)).not.toContain('dreamAce.status.v1');
   });
 

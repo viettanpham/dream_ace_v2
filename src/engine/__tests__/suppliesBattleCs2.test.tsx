@@ -143,8 +143,8 @@ describe('TASK CS2 — Battle Supply Use, Cooldowns, Stock & Sheet', () => {
     });
     expect(first.ok).toBe(true);
     if (!first.ok) return;
-    expect(first.gains.hp).toBe(110);
-    expect(first.units[0].hp).toBe(310);
+    expect(first.gains.hp).toBe(300);
+    expect(first.units[0].hp).toBe(500);
 
     const second = applyBattleSupplyUse({
       units: first.units,
@@ -198,25 +198,21 @@ describe('TASK CS2 — Battle Supply Use, Cooldowns, Stock & Sheet', () => {
     if (!blockedTurn3.ok) expect(blockedTurn3.reason).toBe('cooldown');
     supplyByUnit = { ally_player: tickSupplyState(supplyByUnit.ally_player) }; // end turn 3 -> cd 0
 
-    // Use #2
-    const u2 = applyBattleSupplyUse({ units, supplyByUnit, unitId: 'ally_player', template: hpKit, stock: 4, isOwnTurn: true });
-    expect(u2.ok).toBe(true);
-    if (!u2.ok) return;
-    units = u2.units;
-    supplyByUnit = { ally_player: tickSupplyState(tickSupplyState(tickSupplyState(u2.supplyByUnit.ally_player))) };
+    // Use #2..#5 (drop HP first so not full with flat 500 heal)
+    for (let useNum = 2; useNum <= 5; useNum++) {
+      units = [{ ...units[0], hp: 100 }];
+      const nextUse = applyBattleSupplyUse({ units, supplyByUnit, unitId: 'ally_player', template: hpKit, stock: 6 - useNum, isOwnTurn: true });
+      expect(nextUse.ok).toBe(true);
+      if (!nextUse.ok) return;
+      units = nextUse.units;
+      supplyByUnit = { ally_player: tickSupplyState(tickSupplyState(tickSupplyState(nextUse.supplyByUnit.ally_player))) };
+    }
 
-    // Use #3 (drop HP first so not full)
+    // 6th attempt hits battle_limit (5)
     units = [{ ...units[0], hp: 100 }];
-    const u3 = applyBattleSupplyUse({ units, supplyByUnit, unitId: 'ally_player', template: hpKit, stock: 3, isOwnTurn: true });
-    expect(u3.ok).toBe(true);
-    if (!u3.ok) return;
-    supplyByUnit = { ally_player: tickSupplyState(tickSupplyState(tickSupplyState(u3.supplyByUnit.ally_player))) };
-
-    // 4th attempt hits battle_limit
-    units = [{ ...u3.units[0], hp: 100 }];
-    const u4 = applyBattleSupplyUse({ units, supplyByUnit, unitId: 'ally_player', template: hpKit, stock: 2, isOwnTurn: true });
-    expect(u4.ok).toBe(false);
-    if (!u4.ok) expect(u4.reason).toBe('battle_limit');
+    const u6 = applyBattleSupplyUse({ units, supplyByUnit, unitId: 'ally_player', template: hpKit, stock: 2, isOwnTurn: true });
+    expect(u6.ok).toBe(false);
+    if (!u6.ok) expect(u6.reason).toBe('battle_limit');
 
     // Also verify store performPlayerAction ticks cooldown at end of own action
     useGameStore.getState().useBattleSupply('sup_hp_t2');
@@ -301,7 +297,7 @@ describe('TASK CS2 — Battle Supply Use, Cooldowns, Stock & Sheet', () => {
 
     expect(container.textContent).toContain('Dùng 0/1 lượt này');
     expect(container.textContent).toContain('x5');
-    expect(container.textContent).toContain('0/3 trận');
+    expect(container.textContent).toContain('0/5 trận');
     expect(container.textContent).toContain('Ô trống — chọn ở GEAR > Túi vật tư');
 
     const useBtn = container.querySelector<HTMLButtonElement>(

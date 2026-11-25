@@ -7,6 +7,7 @@ import type {
   ConsumableItem,
   GearUnit,
   PilotAccount,
+  SupplyEconomyConfig,
   SupplyEffect,
   SupplyTemplate,
 } from '../types/game';
@@ -24,6 +25,19 @@ export const MAX_SUPPLY_LOADOUT_SLOTS = 8;
 export const DEFAULT_SUPPLY_USES_PER_TURN = 1;
 export const MIN_SUPPLY_USES_PER_TURN = 1;
 export const MAX_SUPPLY_USES_PER_TURN = 3;
+
+export const DEFAULT_SUPPLY_MAX_USES_PER_BATTLE = 5;
+export const MIN_SUPPLY_MAX_USES_PER_BATTLE = 1;
+export const MAX_SUPPLY_MAX_USES_PER_BATTLE = 20;
+
+export const DEFAULT_SUPPLY_SP_PRICE_MULT = 2;
+export const MIN_SUPPLY_SP_PRICE_MULT = 1;
+export const MAX_SUPPLY_SP_PRICE_MULT = 5;
+
+export const DEFAULT_SUPPLY_ECONOMY_CONFIG: SupplyEconomyConfig = {
+  maxUsesPerBattle: DEFAULT_SUPPLY_MAX_USES_PER_BATTLE,
+  spPriceMult: DEFAULT_SUPPLY_SP_PRICE_MULT,
+};
 
 export type SupplyRejectReason = 'unknown' | 'duplicate' | 'over_slots';
 
@@ -49,7 +63,7 @@ export interface CanUseSupplyInput {
   unit: CombatUnit;
   supplyState?: Partial<BattleSupplyUnitState> | null;
   isOwnTurn: boolean;
-  cfg?: Pick<AdminConfig, 'supplyUsesPerTurn'> | null;
+  cfg?: Pick<AdminConfig, 'supplyUsesPerTurn' | 'supplyEconomy'> | null;
 }
 
 export interface CanUseSupplyResult {
@@ -85,6 +99,38 @@ export function sanitizeSupplyUsesPerTurn(raw: unknown): number {
     MAX_SUPPLY_USES_PER_TURN,
     DEFAULT_SUPPLY_USES_PER_TURN
   );
+}
+
+export function cloneSupplyEconomyConfig(
+  cfg: SupplyEconomyConfig
+): SupplyEconomyConfig {
+  return {
+    maxUsesPerBattle: cfg.maxUsesPerBattle,
+    spPriceMult: cfg.spPriceMult,
+  };
+}
+
+export function sanitizeSupplyEconomyConfig(
+  raw?: unknown
+): SupplyEconomyConfig {
+  const obj =
+    raw && typeof raw === 'object' && !Array.isArray(raw)
+      ? (raw as Partial<SupplyEconomyConfig>)
+      : null;
+  return {
+    maxUsesPerBattle: clampFiniteInt(
+      obj?.maxUsesPerBattle,
+      MIN_SUPPLY_MAX_USES_PER_BATTLE,
+      MAX_SUPPLY_MAX_USES_PER_BATTLE,
+      DEFAULT_SUPPLY_MAX_USES_PER_BATTLE
+    ),
+    spPriceMult: clampFiniteInt(
+      obj?.spPriceMult,
+      MIN_SUPPLY_SP_PRICE_MULT,
+      MAX_SUPPLY_SP_PRICE_MULT,
+      DEFAULT_SUPPLY_SP_PRICE_MULT
+    ),
+  };
 }
 
 /**
@@ -233,17 +279,17 @@ function checkEffectBlockedReason(
   eff: SupplyEffect,
   unit: CombatUnit
 ): SupplyUseFailureReason | null {
-  if (eff.kind === 'heal_hp_pct') {
+  if (eff.kind === 'heal_hp_pct' || eff.kind === 'heal_hp') {
     return unit.hp >= unit.derived.maxHp ? 'hp_full' : null;
   }
-  if (eff.kind === 'restore_shield_pct') {
+  if (eff.kind === 'restore_shield_pct' || eff.kind === 'restore_shield') {
     const shieldBroken = unit.statuses.some(
       (s) => s.type === 'shield_break' && s.turnsRemaining > 0
     );
     if (shieldBroken) return 'shield_broken';
     return unit.shield >= unit.derived.maxShield ? 'shield_full' : null;
   }
-  if (eff.kind === 'restore_sp_pct') {
+  if (eff.kind === 'restore_sp_pct' || eff.kind === 'restore_sp') {
     return unit.sp >= unit.derived.maxSp ? 'sp_full' : null;
   }
   return null;
@@ -282,14 +328,17 @@ export function canUseSupply({
     return failUse('turn_limit', { n: usedThisTurn, max: usesPerTurn });
   }
 
+  const maxUsesPerBattle = sanitizeSupplyEconomyConfig(
+    cfg?.supplyEconomy
+  ).maxUsesPerBattle;
   const usedInBattle = Math.max(
     0,
     supplyState?.usedCountsByTemplate?.[template.id] ?? 0
   );
-  if (usedInBattle >= template.perBattleLimit) {
+  if (usedInBattle >= maxUsesPerBattle) {
     return failUse('battle_limit', {
       n: usedInBattle,
-      max: template.perBattleLimit,
+      max: maxUsesPerBattle,
     });
   }
 
@@ -322,7 +371,7 @@ export interface ApplyBattleSupplyUseInput {
   template: SupplyTemplate;
   stock: number;
   isOwnTurn: boolean;
-  cfg?: Pick<AdminConfig, 'supplyUsesPerTurn'> | null;
+  cfg?: Pick<AdminConfig, 'supplyUsesPerTurn' | 'supplyEconomy'> | null;
 }
 
 export type ApplyBattleSupplyUseResult =
@@ -470,8 +519,11 @@ function formatRawEffects(effects: readonly SupplyEffect[]): string {
   return effects
     .map((eff) => {
       if (eff.kind === 'heal_hp_pct') return `HP +${eff.value}%`;
+      if (eff.kind === 'heal_hp') return `HP +${eff.value}`;
       if (eff.kind === 'restore_shield_pct') return `SHD +${eff.value}%`;
-      return `SP +${eff.value}%`;
+      if (eff.kind === 'restore_shield') return `SHD +${eff.value}`;
+      if (eff.kind === 'restore_sp_pct') return `SP +${eff.value}%`;
+      return `SP +${eff.value}`;
     })
     .join(', ');
 }
@@ -495,10 +547,16 @@ export function getBattleSupplyRows(
     'deployedGearId' | 'units' | 'turnOrder' | 'activeTurnIndex' | 'supplyByUnit' | 'summary' | 'isResolving'
   > | null | undefined,
   pilot: Pick<PilotAccount, 'gears' | 'consumables'> | null | undefined,
-  cfg?: Pick<AdminConfig, 'supplyLoadoutSlots' | 'supplyUsesPerTurn'> | null
+  cfg?: Pick<
+    AdminConfig,
+    'supplyLoadoutSlots' | 'supplyUsesPerTurn' | 'supplyEconomy'
+  > | null
 ): BattleSupplyRowsSummary {
   const maxSlots = sanitizeSupplyLoadoutSlots(cfg?.supplyLoadoutSlots);
   const usesPerTurn = sanitizeSupplyUsesPerTurn(cfg?.supplyUsesPerTurn);
+  const maxUsesPerBattle = sanitizeSupplyEconomyConfig(
+    cfg?.supplyEconomy
+  ).maxUsesPerBattle;
   if (!battle || !pilot) {
     return {
       rows: [],
@@ -594,7 +652,7 @@ export function getBattleSupplyRows(
       effects: tpl.effects,
       stock,
       usedCount,
-      limit: tpl.perBattleLimit,
+      limit: maxUsesPerBattle,
       ok: check.ok,
       reason: check.reason,
       reasonKey: check.reasonKey,

@@ -97,6 +97,7 @@ import {
   addSupplyToConsumables,
   applyBattleSupplyUse,
   getSupplyStockCount,
+  sanitizeSupplyEconomyConfig,
   sanitizeSupplyLoadout,
   sanitizeSupplyLoadoutSlots,
   setSupplyLoadout as setSupplyLoadoutEngine,
@@ -2659,7 +2660,7 @@ export const useGameStore = create<GameStoreState>()(
         }
 
         const bought = Math.min(safeQty, listing.remaining, room);
-        const unitPrice = computeSupplyPrice(tpl);
+        const unitPrice = computeSupplyPrice(tpl, state.adminConfig);
         const totalCost = unitPrice * bought;
         if (state.pilot.credits < totalCost) {
           return { ok: false, bought: 0, reason: 'insufficient_credits' };
@@ -2941,7 +2942,7 @@ export const useGameStore = create<GameStoreState>()(
 
         const sold = Math.min(safeQty, owned);
         const unitCredit = Math.round(
-          computeSupplyPrice(tpl) * SHOP_CONFIG.sellPriceRatio
+          computeSupplyPrice(tpl, state.adminConfig) * SHOP_CONFIG.sellPriceRatio
         );
         const creditsEarned = unitCredit * sold;
 
@@ -4567,6 +4568,10 @@ export const useGameStore = create<GameStoreState>()(
             patch.spEconomy !== undefined
               ? sanitizeSpEconomyConfig(patch.spEconomy)
               : sanitizeSpEconomyConfig(state.adminConfig.spEconomy);
+          const nextSupplyEconomy =
+            patch.supplyEconomy !== undefined
+              ? sanitizeSupplyEconomyConfig(patch.supplyEconomy)
+              : sanitizeSupplyEconomyConfig(state.adminConfig.supplyEconomy);
           const nextAdminConfig: AdminConfig = {
             ...state.adminConfig,
             ...patch,
@@ -4576,6 +4581,7 @@ export const useGameStore = create<GameStoreState>()(
             statusDisplayDefaults: nextStatusDefaults,
             pirates: nextPirates,
             spEconomy: nextSpEconomy,
+            supplyEconomy: nextSupplyEconomy,
           };
           let updatedPilot =
             patch.formation &&
@@ -4880,6 +4886,7 @@ export const useGameStore = create<GameStoreState>()(
               ),
               ...sanitizeSupplyShopConfig(rawAdmin as Partial<AdminConfig>),
               spEconomy: sanitizeSpEconomyConfig(rawAdmin.spEconomy),
+              supplyEconomy: sanitizeSupplyEconomyConfig(rawAdmin.supplyEconomy),
               pirates: sanitizePiratesConfig(rawAdmin.pirates),
               rewardMultiplier:
                 typeof state.adminConfig.rewardMultiplier === 'number' &&

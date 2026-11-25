@@ -49,10 +49,19 @@ export function formatSupplyEffects(
       if (eff.kind === 'heal_hp_pct') {
         return t('supply.effect.healHp', { pct: eff.value });
       }
+      if (eff.kind === 'heal_hp') {
+        return t('supply.effect.healHpFlat', { val: eff.value });
+      }
       if (eff.kind === 'restore_shield_pct') {
         return t('supply.effect.restoreShield', { pct: eff.value });
       }
-      return t('supply.effect.restoreSp', { pct: eff.value });
+      if (eff.kind === 'restore_shield') {
+        return t('supply.effect.restoreShieldFlat', { val: eff.value });
+      }
+      if (eff.kind === 'restore_sp_pct') {
+        return t('supply.effect.restoreSp', { pct: eff.value });
+      }
+      return t('supply.effect.restoreSpFlat', { val: eff.value });
     })
     .join(', ');
 }

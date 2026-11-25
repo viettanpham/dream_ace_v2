@@ -34,28 +34,43 @@ export function applySupplyEffects(
   let sp = unit.sp;
 
   for (const eff of effects) {
-    const pct = Number.isFinite(eff.value) && eff.value > 0 ? eff.value : 0;
-    if (pct <= 0) continue;
+    const rawVal = Number.isFinite(eff.value) && eff.value > 0 ? eff.value : 0;
+    if (rawVal <= 0) continue;
 
-    if (eff.kind === 'heal_hp_pct') {
+    if (eff.kind === 'heal_hp_pct' || eff.kind === 'heal_hp') {
       const maxHp = Math.max(0, unit.derived.maxHp);
-      const rawAdd = Math.round((maxHp * pct) / 100);
-      const nextHp = Math.min(maxHp, hp + Math.max(0, rawAdd));
-      gains.hp += Math.max(0, nextHp - hp);
-      hp = nextHp;
-    } else if (eff.kind === 'restore_shield_pct') {
+      const rawAdd =
+        eff.kind === 'heal_hp'
+          ? Math.round(rawVal)
+          : Math.round((maxHp * rawVal) / 100);
+      const add = Math.min(Math.max(0, rawAdd), Math.max(0, maxHp - hp));
+      gains.hp += add;
+      hp += add;
+    } else if (
+      eff.kind === 'restore_shield_pct' ||
+      eff.kind === 'restore_shield'
+    ) {
       if (shieldBroken) continue;
       const maxShield = Math.max(0, unit.derived.maxShield);
-      const rawAdd = Math.round((maxShield * pct) / 100);
-      const nextShield = Math.min(maxShield, shield + Math.max(0, rawAdd));
-      gains.shield += Math.max(0, nextShield - shield);
-      shield = nextShield;
-    } else if (eff.kind === 'restore_sp_pct') {
+      const rawAdd =
+        eff.kind === 'restore_shield'
+          ? Math.round(rawVal)
+          : Math.round((maxShield * rawVal) / 100);
+      const add = Math.min(
+        Math.max(0, rawAdd),
+        Math.max(0, maxShield - shield)
+      );
+      gains.shield += add;
+      shield += add;
+    } else if (eff.kind === 'restore_sp_pct' || eff.kind === 'restore_sp') {
       const maxSp = Math.max(0, unit.derived.maxSp);
-      const rawAdd = Math.round((maxSp * pct) / 100);
-      const nextSp = Math.min(maxSp, sp + Math.max(0, rawAdd));
-      gains.sp += Math.max(0, nextSp - sp);
-      sp = nextSp;
+      const rawAdd =
+        eff.kind === 'restore_sp'
+          ? Math.round(rawVal)
+          : Math.round((maxSp * rawVal) / 100);
+      const add = Math.min(Math.max(0, rawAdd), Math.max(0, maxSp - sp));
+      gains.sp += add;
+      sp += add;
     }
   }
 

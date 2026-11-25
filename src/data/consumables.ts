@@ -20,6 +20,9 @@ export const SUPPLY_EFFECT_KINDS: readonly SupplyEffectKind[] = [
   'heal_hp_pct',
   'restore_shield_pct',
   'restore_sp_pct',
+  'heal_hp',
+  'restore_shield',
+  'restore_sp',
 ];
 
 const VALID_FAMILY_SET = new Set<string>(SUPPLY_TEMPLATE_FAMILIES);
@@ -84,7 +87,7 @@ export function validateSupplyTemplate(raw: unknown): SupplyTemplate | null {
     typeof r.tier === 'number' &&
     Number.isInteger(r.tier) &&
     r.tier >= 1 &&
-    r.tier <= 4 &&
+    r.tier <= 5 &&
     typeof r.unlockLevel === 'number' &&
     Number.isInteger(r.unlockLevel) &&
     r.unlockLevel >= 1 &&
@@ -110,7 +113,7 @@ export function validateSupplyTemplate(raw: unknown): SupplyTemplate | null {
   return {
     id: (r.id as string).trim(),
     family: r.family as SupplyFamily,
-    tier: r.tier as 1 | 2 | 3 | 4,
+    tier: r.tier as 1 | 2 | 3 | 4 | 5,
     unlockLevel: r.unlockLevel as number,
     iconId: r.iconId as string,
     effects: (r.effects as SupplyEffect[]).map((eff) => ({

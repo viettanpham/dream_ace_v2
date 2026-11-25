@@ -21,6 +21,7 @@ import {
   Wrench,
   X,
 } from 'lucide-react';
+import { SupplyEconomyAdminBlock } from './admin/SupplyEconomyAdminBlock';
 import {
   BALANCE_CONFIG,
   sanitizeSpEconomyConfig,
@@ -1971,6 +1972,8 @@ export function AdminPanel() {
                   </div>
                 );
               })()}
+
+              <SupplyEconomyAdminBlock />
 
               {/* Reward Mult */}
               <div className="p-3.5 rounded-lg border border-slate-800 bg-[#0D1422] space-y-2">

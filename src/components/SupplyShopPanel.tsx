@@ -44,6 +44,7 @@ export function SupplyShopPanel({ onNotice }: SupplyShopPanelProps) {
   const credits = useGameStore((s) => s.pilot.credits);
   const consumables = useGameStore((s) => s.pilot.consumables);
   const supplyShopStock = useGameStore((s) => s.supplyShopStock);
+  const adminConfig = useGameStore((s) => s.adminConfig);
   const iconCatalogMods = useGameStore((s) => s.adminConfig.iconCatalogMods);
   const screen = useGameStore((s) => s.screen);
   const battle = useGameStore((s) => s.battle);
@@ -75,7 +76,7 @@ export function SupplyShopPanel({ onNotice }: SupplyShopPanelProps) {
         listing,
         tpl,
         owned: getSupplyStockCount(consumables, tpl.id),
-        unitPrice: computeSupplyPrice(tpl),
+        unitPrice: computeSupplyPrice(tpl, adminConfig),
       });
     }
     const result: Array<{ family: SupplyFamily; rows: ResolvedListingRow[] }> =
@@ -89,7 +90,7 @@ export function SupplyShopPanel({ onNotice }: SupplyShopPanelProps) {
       result.push({ family, rows });
     }
     return result;
-  }, [supplyShopStock, consumables]);
+  }, [supplyShopStock, consumables, adminConfig]);
 
   const ownedRows = useMemo<OwnedSupplyRow[]>(() => {
     const seen = new Set<string>();
@@ -107,7 +108,7 @@ export function SupplyShopPanel({ onNotice }: SupplyShopPanelProps) {
         tpl,
         owned,
         unitSellPrice: Math.round(
-          computeSupplyPrice(tpl) * SHOP_CONFIG.sellPriceRatio
+          computeSupplyPrice(tpl, adminConfig) * SHOP_CONFIG.sellPriceRatio
         ),
       });
     }
@@ -122,7 +123,7 @@ export function SupplyShopPanel({ onNotice }: SupplyShopPanelProps) {
         a.tpl.id.localeCompare(b.tpl.id)
     );
     return rows;
-  }, [consumables]);
+  }, [consumables, adminConfig]);
 
   const getBuyDisabledReason = (
     row: ResolvedListingRow,

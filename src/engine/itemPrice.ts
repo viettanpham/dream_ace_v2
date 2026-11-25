@@ -1,12 +1,15 @@
 import { SHOP_CONFIG } from '../data/items';
 import { PRICE_FORMULA } from '../data/itemPricing';
 import type {
+  AdminConfig,
   EquipmentSlot,
   ItemRarity,
   ItemSpecialTraits,
   ModuleTemplate,
+  SupplyEconomyConfig,
   SupplyTemplate,
 } from '../types/game';
+import { sanitizeSupplyEconomyConfig } from './supplies';
 
 export interface ComputeItemPriceInput {
   slot: EquipmentSlot;
@@ -71,10 +74,16 @@ export function computeItemPrice(input: ComputeItemPriceInput): number {
 
 /**
  * Single unified price formula for battle supply templates.
- * priceOverride wins if present and positive; otherwise max(minPrice, round(base * tierFactor[tier - 1])).
+ * priceOverride wins if present and positive; flat effects use round(value / 5) * (sp_kit ? spPriceMult : 1);
+ * legacy *_pct effects keep consumableBase * tierFactor fallback.
  */
 export function computeSupplyPrice(
-  template: Pick<SupplyTemplate, 'family' | 'tier' | 'priceOverride'>
+  template: Pick<SupplyTemplate, 'family' | 'tier' | 'priceOverride'> &
+    Partial<Pick<SupplyTemplate, 'effects'>>,
+  adminOrEconomy?:
+    | Pick<AdminConfig, 'supplyEconomy'>
+    | SupplyEconomyConfig
+    | null
 ): number {
   if (
     typeof template.priceOverride === 'number' &&
@@ -82,6 +91,24 @@ export function computeSupplyPrice(
     template.priceOverride > 0
   ) {
     return Math.round(template.priceOverride);
+  }
+  const flatEff = template.effects?.find(
+    (e) =>
+      e.kind === 'heal_hp' ||
+      e.kind === 'restore_shield' ||
+      e.kind === 'restore_sp'
+  );
+  if (flatEff) {
+    const rawEco =
+      adminOrEconomy && 'supplyEconomy' in adminOrEconomy
+        ? adminOrEconomy.supplyEconomy
+        : (adminOrEconomy as SupplyEconomyConfig | null | undefined);
+    const { spPriceMult } = sanitizeSupplyEconomyConfig(rawEco);
+    const mult = template.family === 'sp_kit' ? spPriceMult : 1;
+    return Math.max(
+      PRICE_FORMULA.minPrice,
+      Math.round(flatEff.value / 5) * mult
+    );
   }
   const base = PRICE_FORMULA.consumableBase[template.family];
   const tierIdx = Math.max(

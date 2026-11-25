@@ -160,7 +160,7 @@ describe('TASK CS-UI — SupplyLoadoutBar ("Túi vật tư") + Picker', () => {
     expect(hpT1Row.textContent).toContain('Đã mang');
     expect(spT1Row).not.toBeNull();
     expect(spT1Row.disabled).toBe(false);
-    expect(spT1Row.textContent).toContain('SP +20%');
+    expect(spT1Row.textContent).toContain('SP +100');
     expect(hpT4Row).toBeNull();
     expect(shieldT1Row).toBeNull();
   });
