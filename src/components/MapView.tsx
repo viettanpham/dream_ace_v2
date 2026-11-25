@@ -43,6 +43,7 @@ import {
   isVisible,
   pickDefaultBattle,
 } from '../engine/frontline';
+import { getActivePirateIncidentForNode } from '../engine/pirates';
 import {
   ENGINEER_OVERCHARGE_COST,
   getBaseMonthlyIncome,
@@ -1476,6 +1477,20 @@ export function MapView() {
               const tokenShape = getTokenShapeForBaseType(sector.baseType);
               const isSquare = tokenShape === 'square';
               const scale = adminConfig.battleSizeOverride ?? sector.squadSize;
+              const pirateIncident = getActivePirateIncidentForNode(
+                pilot,
+                sector.id,
+                adminConfig.pirates
+              );
+              const pirateMonthsLeft = pirateIncident
+                ? Math.max(1, pirateIncident.expiresMonth - pilot.campaignMonth)
+                : 0;
+              const pirateTitle = pirateIncident
+                ? t('map.pirateBadgeTitle', {
+                    size: pirateIncident.size,
+                    months: pirateMonthsLeft,
+                  })
+                : '';
 
               return (
                 <g
@@ -1731,6 +1746,37 @@ export function MapView() {
                       </g>
                     )}
 
+                  {/* Pirate Incident Skull Badge (Top-Left) */}
+                  {pirateIncident && (
+                    <g
+                      data-testid={`map-node-pirate-${sector.id}`}
+                      data-pirate="true"
+                      transform={`translate(${pos.x - 18}, ${
+                        baseState.faction === 'allied' &&
+                        baseState.status !== 'operational'
+                          ? pos.y - 36
+                          : pos.y - 19
+                      })`}
+                      aria-label={pirateTitle}
+                      {...({ title: pirateTitle } as Record<string, string>)}
+                    >
+                      <title>{pirateTitle}</title>
+                      <circle
+                        r="8.5"
+                        fill="#4C0519"
+                        stroke="#FB7185"
+                        strokeWidth="1.2"
+                      />
+                      <Skull
+                        x={-5}
+                        y={-5}
+                        width={10}
+                        height={10}
+                        className="text-rose-200"
+                      />
+                    </g>
+                  )}
+
                   {/* Base Label */}
                   <text
                     x={pos.x}
@@ -1830,6 +1876,15 @@ export function MapView() {
           <span className="inline-flex items-center gap-1.5 text-orange-300">
             <span className="w-4 border-t-2 border-dashed border-red-500 inline-block" />
             <span>{t('map.legendIncoming')}</span>
+          </span>
+          <span
+            data-testid="map-legend-pirates"
+            className="inline-flex items-center gap-1.5 text-rose-300"
+          >
+            <span className="w-4 h-4 rounded-full bg-rose-950 border border-rose-400 inline-flex items-center justify-center shrink-0">
+              <Skull className="w-2.5 h-2.5 text-rose-200" />
+            </span>
+            <span>{t('map.legendPirates')}</span>
           </span>
         </div>
       </section>

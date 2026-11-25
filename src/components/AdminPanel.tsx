@@ -63,6 +63,7 @@ import {
   sanitizeWarehouseCapacity,
 } from '../engine/migration';
 import { AdminCapacityField } from './AdminCapacityField';
+import { PirateAdminBlock } from './admin/PirateAdminBlock';
 import type {
   BattleSize,
   CombatRow,
@@ -2212,6 +2213,8 @@ export function AdminPanel() {
                   })}
                 </div>
               </div>
+
+              <PirateAdminBlock flash={flash} />
             </div>
           )}
 

@@ -84,6 +84,7 @@ import {
   clearPirateIncidentById,
   ensureIdle,
   registerPirateBattleSourceProvider,
+  rollIncident,
   sanitizePirateIncidents,
   sanitizePiratesConfig,
   spawnOnMonth,
@@ -582,6 +583,9 @@ interface GameStoreState {
   adminSetCampaignMonth: (month: number) => void;
   adminSetBaseFaction: (sectorId: string, faction: BaseFaction) => void;
   adminTriggerEnemyAttack: (sectorId: string) => void;
+  adminSpawnPirateIncident: () => boolean;
+  adminClearPirateIncidents: () => void;
+  adminRemovePirateIncident: (incidentId: string) => void;
   adminUnlockAllGears: () => void;
   adminUnlockAllSectors: () => void;
   adminApplyStarterToEmptySlots: () => number;
@@ -4418,6 +4422,49 @@ export const useGameStore = create<GameStoreState>()(
         });
       },
 
+      adminSpawnPirateIncident: () => {
+        const state = get();
+        const cfg = sanitizePiratesConfig(state.adminConfig.pirates);
+        if (!cfg.enabled) return false;
+        const month = Math.max(1, Math.floor(state.pilot.campaignMonth || 1));
+        const active = sanitizePirateIncidents(
+          state.pilot.pirateIncidents,
+          month,
+          cfg
+        );
+        if (active.length >= cfg.maxActive) return false;
+        const spawned = rollIncident(
+          { ...state.pilot, pirateIncidents: active },
+          cfg
+        );
+        if (!spawned) return false;
+        set({
+          pilot: {
+            ...state.pilot,
+            pirateIncidents: [...active, spawned],
+          },
+          hasSaveData: true,
+        });
+        return true;
+      },
+
+      adminClearPirateIncidents: () => {
+        set((state) => ({
+          pilot: {
+            ...state.pilot,
+            pirateIncidents: [],
+          },
+          hasSaveData: true,
+        }));
+      },
+
+      adminRemovePirateIncident: (incidentId) => {
+        set((state) => ({
+          pilot: clearPirateIncidentById(state.pilot, incidentId),
+          hasSaveData: true,
+        }));
+      },
+
       adminUnlockAllGears: () => {
         set((state) => {
           const nextGears = { ...state.pilot.gears };
@@ -4491,6 +4538,10 @@ export const useGameStore = create<GameStoreState>()(
               : sanitizeStatusDisplayDefaults(
                   state.adminConfig.statusDisplayDefaults
                 );
+          const nextPirates =
+            patch.pirates !== undefined
+              ? sanitizePiratesConfig(patch.pirates)
+              : sanitizePiratesConfig(state.adminConfig.pirates);
           const nextAdminConfig: AdminConfig = {
             ...state.adminConfig,
             ...patch,
@@ -4498,6 +4549,7 @@ export const useGameStore = create<GameStoreState>()(
             autoEquip: nextAutoEquip,
             starterSet: nextStarterSet,
             statusDisplayDefaults: nextStatusDefaults,
+            pirates: nextPirates,
           };
           let updatedPilot =
             patch.formation &&
@@ -4511,6 +4563,16 @@ export const useGameStore = create<GameStoreState>()(
                   ),
                 }
               : state.pilot;
+          if (patch.pirates !== undefined) {
+            updatedPilot = {
+              ...updatedPilot,
+              pirateIncidents: sanitizePirateIncidents(
+                updatedPilot.pirateIncidents,
+                updatedPilot.campaignMonth,
+                nextPirates
+              ),
+            };
+          }
           if (
             patch.starterSet &&
             nextStarterSet.enabled &&
