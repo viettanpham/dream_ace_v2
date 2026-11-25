@@ -1960,6 +1960,7 @@ export const EN_TRANSLATIONS = {
   'map.preview.mixLabel': 'Mix',
   'map.preview.rewardLabel': 'Est. reward',
   'map.preview.highDangerWarn': 'Warning: Enemy +{diff} Lv above',
+  'battle.levelBadge': 'Level {level}',
 } as const;
 
 export type TranslationKey = keyof typeof EN_TRANSLATIONS;

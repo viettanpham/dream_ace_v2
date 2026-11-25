@@ -1963,6 +1963,7 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'map.preview.mixLabel': 'Đội hình',
   'map.preview.rewardLabel': 'Thưởng ước tính',
   'map.preview.highDangerWarn': 'Cảnh báo: Địch vượt +{diff} cấp',
+  'battle.levelBadge': 'Cấp {level}',
 };
 
 

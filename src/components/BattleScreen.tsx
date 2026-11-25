@@ -112,6 +112,7 @@ import {
   FixedStatusArea,
   countStatusChipRows,
 } from './FixedStatusArea';
+import { LevelBadge } from './LevelBadge';
 import { PhoneSkillsSheet } from './PhoneSkillsSheet';
 import {
   RadarStatusBoard,
@@ -1892,6 +1893,17 @@ export function BattleScreen() {
             >
               {getTeamTagLabel(lang, teamRole)}
             </span>
+            {isEnemy && (
+              <LevelBadge
+                level={sidebarUnit.level}
+                refLevel={
+                  playerUnitForTargets?.level ??
+                  pilot.gears[battle.deployedGearId]?.level ??
+                  1
+                }
+                side={sidebarUnit.side}
+              />
+            )}
             <span
               data-testid="sidebar-unit-name"
               className="font-display text-[14px] font-bold truncate min-w-0 flex-1"
@@ -3413,6 +3425,11 @@ export function BattleScreen() {
       >
         <PhoneUnitDetailSheet
           unit={phoneSheetUnit}
+          refLevel={
+            playerUnitForTargets?.level ??
+            pilot.gears[battle.deployedGearId]?.level ??
+            1
+          }
           selectedTargetId={battle.selectedTargetId}
           selectedAllyTargetId={battle.selectedAllyTargetId}
           hasSingleAllySkill={hasSingleAllySkill}

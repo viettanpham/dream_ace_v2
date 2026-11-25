@@ -773,6 +773,7 @@ export type TeamColorRole = 'me' | 'ally' | 'enemy' | 'boss';
 export interface TurnQueueEntry {
   unitId: string;
   name: string;
+  level: number;
   classId: MechClassId;
   side: CombatSide;
   isPlayer: boolean;

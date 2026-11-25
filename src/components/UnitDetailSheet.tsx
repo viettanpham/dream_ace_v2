@@ -38,11 +38,13 @@ import { useStatusDisplaySettings } from '../utils/statusDisplayPrefs';
 import { BottomSheet } from './BottomSheet';
 import { CatalogIcon } from './CatalogIcon';
 import { FighterSvg } from './FighterSvg';
+import { LevelBadge } from './LevelBadge';
 import { SkillIcon } from './SkillIcon';
 import { StatBar } from './StatBar';
 
 interface UnitDetailSheetProps {
   unit: CombatUnit | null;
+  refLevel?: number;
   onClose: () => void;
   isTargeted: boolean;
   canLockEnemy: boolean;
@@ -76,6 +78,7 @@ function formatStatusDuration(st: ActiveStatusEffect): string {
 
 export function UnitDetailSheet({
   unit,
+  refLevel,
   onClose,
   isTargeted,
   canLockEnemy,
@@ -198,6 +201,13 @@ export function UnitDetailSheet({
           >
             {teamTag}
           </span>
+          {isEnemy && (
+            <LevelBadge
+              level={unit.level}
+              refLevel={refLevel ?? unit.level}
+              side={unit.side}
+            />
+          )}
           <span className="truncate" style={{ color: unit.alive ? teamColor : undefined }}>
             {unit.name}
           </span>

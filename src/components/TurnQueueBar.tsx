@@ -28,6 +28,7 @@ import {
   TURN_QUEUE_UPCOMING_MAX,
 } from '../utils/battleDisplay';
 import { BottomSheet } from './BottomSheet';
+import { LevelBadge } from './LevelBadge';
 
 export type TurnQueueVariant = 'default' | 'phone' | 'sidebar';
 
@@ -143,12 +144,14 @@ function TeamShapeIcon({ role }: { role: TeamColorRole }) {
 
 function ConveyorChip({
   entry,
+  refLevel,
   isActive,
   compactPhone,
   animateShift,
   onInspect,
 }: {
   entry: TurnQueueEntry;
+  refLevel: number;
   isActive: boolean;
   compactPhone: boolean;
   animateShift: boolean;
@@ -214,13 +217,22 @@ function ConveyorChip({
         </div>
 
         <div className="mt-0.5 flex items-center justify-between gap-1">
-          <span
-            data-testid="turn-queue-chip-name"
-            data-full-name={entry.name}
-            className="text-[13px] font-bold text-white whitespace-nowrap"
-          >
-            {formatShortUnitName(entry.name, 10)}
-          </span>
+          <div className="flex items-center gap-1 min-w-0 flex-1">
+            {!compactPhone && (
+              <LevelBadge
+                level={entry.level}
+                refLevel={refLevel}
+                side={entry.side}
+              />
+            )}
+            <span
+              data-testid="turn-queue-chip-name"
+              data-full-name={entry.name}
+              className="text-[13px] font-bold text-white whitespace-nowrap truncate min-w-0"
+            >
+              {formatShortUnitName(entry.name, 10)}
+            </span>
+          </div>
           <span
             className={`font-mono-nums text-[12px] font-bold shrink-0 inline-flex items-center gap-0.5 ${speedColor}`}
           >
@@ -284,10 +296,15 @@ function ConveyorChip({
           >
             {teamTag}
           </span>
+          <LevelBadge
+            level={entry.level}
+            refLevel={refLevel}
+            side={entry.side}
+          />
           <span
             data-testid="turn-queue-chip-name"
             data-full-name={entry.name}
-            className="text-slate-200 font-medium whitespace-nowrap flex-1"
+            className="text-slate-200 font-medium whitespace-nowrap truncate min-w-0 flex-1"
           >
             {formatShortUnitName(entry.name, 10)}
           </span>
@@ -455,6 +472,16 @@ export function TurnQueueBar({
   );
   const currentRoundChips = queue.current;
   const nextRoundChips = queue.next;
+  const refLevel = battle.units.find((u) => u.isPlayer)?.level ?? 1;
+  const targetUnit =
+    targetName && upcomingData.actingEntry
+      ? battle.units.find(
+          (u) =>
+            u.name === targetName &&
+            u.side !== upcomingData.actingEntry!.side &&
+            u.alive
+        ) ?? battle.units.find((u) => u.name === targetName)
+      : undefined;
 
   const handleChipClick = (entry: TurnQueueEntry) => {
     if (onSelectUnit) {
@@ -584,6 +611,11 @@ export function TurnQueueBar({
                   >
                     {getTeamTagLabel(lang, entry.teamRole)}
                   </span>
+                  <LevelBadge
+                    level={entry.level}
+                    refLevel={refLevel}
+                    side={entry.side}
+                  />
                   <span className="text-[13px] font-semibold text-slate-100 truncate">
                     {entry.name}
                   </span>
@@ -620,6 +652,11 @@ export function TurnQueueBar({
                   >
                     {getTeamTagLabel(lang, entry.teamRole)}
                   </span>
+                  <LevelBadge
+                    level={entry.level}
+                    refLevel={refLevel}
+                    side={entry.side}
+                  />
                   <span className="text-[13px] text-slate-200 truncate">
                     {entry.name}
                   </span>
@@ -706,6 +743,11 @@ export function TurnQueueBar({
               }}
             >
               <TeamShapeIcon role={actingEntry.teamRole} />
+              <LevelBadge
+                level={actingEntry.level}
+                refLevel={refLevel}
+                side={actingEntry.side}
+              />
               <span data-testid="turn-queue-acting-name">{actingLabel}</span>
             </button>
           )}
@@ -734,6 +776,11 @@ export function TurnQueueBar({
                 }`}
               >
                 <TeamShapeIcon role={entry.teamRole} />
+                <LevelBadge
+                  level={entry.level}
+                  refLevel={refLevel}
+                  side={entry.side}
+                />
                 <span data-testid="turn-queue-chip-name">{item.shortName}</span>
               </button>
             );
@@ -858,8 +905,13 @@ export function TurnQueueBar({
                 </span>
                 <div
                   data-testid="turn-queue-acting-name"
-                  className="flex items-center flex-1 min-w-0 text-[13px] font-bold text-amber-100"
+                  className="flex items-center gap-1 flex-1 min-w-0 text-[13px] font-bold text-amber-100"
                 >
+                  <LevelBadge
+                    level={actingEntry.level}
+                    refLevel={refLevel}
+                    side={actingEntry.side}
+                  />
                   <span
                     data-testid="turn-queue-acting-attacker"
                     title={actingEntry.name}
@@ -877,11 +929,18 @@ export function TurnQueueBar({
                   {targetName && (
                     <>
                       <span
-                        className="shrink-0 px-1 text-amber-200/80"
+                        className="shrink-0 px-0.5 text-amber-200/80"
                         aria-hidden="true"
                       >
                         &gt;
                       </span>
+                      {targetUnit && (
+                        <LevelBadge
+                          level={targetUnit.level}
+                          refLevel={refLevel}
+                          side={targetUnit.side}
+                        />
+                      )}
                       <span
                         data-testid="turn-queue-acting-target"
                         title={targetName}
@@ -1001,6 +1060,11 @@ export function TurnQueueBar({
                         {item.order}
                       </span>
                       <TeamShapeIcon role={entry.teamRole} />
+                      <LevelBadge
+                        level={entry.level}
+                        refLevel={refLevel}
+                        side={entry.side}
+                      />
                       <span
                         data-testid="turn-queue-chip-name"
                         title={entry.name}
@@ -1091,6 +1155,7 @@ export function TurnQueueBar({
           <ConveyorChip
             key={`cur-${entry.unitId}`}
             entry={entry}
+            refLevel={refLevel}
             isActive={idx === 0 && !battle.summary}
             compactPhone={isPhone}
             animateShift={animateShift}
@@ -1111,6 +1176,7 @@ export function TurnQueueBar({
           <ConveyorChip
             key={`next-${entry.unitId}`}
             entry={entry}
+            refLevel={refLevel}
             isActive={false}
             compactPhone={isPhone}
             animateShift={animateShift}

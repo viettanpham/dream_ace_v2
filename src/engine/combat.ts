@@ -456,6 +456,7 @@ function toTurnQueueEntry(
   return {
     unitId: unit.id,
     name: unit.name,
+    level: unit.level,
     classId: unit.classId,
     side: unit.side,
     isPlayer: unit.isPlayer,
