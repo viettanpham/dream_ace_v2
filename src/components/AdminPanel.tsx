@@ -53,8 +53,6 @@ import {
   MAX_SUPPLY_SHOP_QTY, MAX_SUPPLY_SHOP_TYPES, MIN_SUPPLY_SHOP_QTY, MIN_SUPPLY_SHOP_TYPES, sanitizeSupplyShopConfig,
 } from '../engine/shop';
 import {
-  DEFAULT_BOX_CAPACITY,
-  DEFAULT_WAREHOUSE_CAPACITY,
   getBoxCapacity,
   MAX_BOX_CAPACITY,
   MAX_WAREHOUSE_CAPACITY,
@@ -64,6 +62,7 @@ import {
   sanitizeNoticeDurationSec,
   sanitizeWarehouseCapacity,
 } from '../engine/migration';
+import { AdminCapacityField } from './AdminCapacityField';
 import type {
   BattleSize,
   CombatRow,
@@ -1512,60 +1511,58 @@ export function AdminPanel() {
                 </label>
 
                 {/* Box Capacity ("Sức chứa Hòm đồ") */}
-                <label className="space-y-1 block">
-                  <span className="text-[11px] text-slate-400 block">
-                    {t('admin.boxCapacity')}
-                  </span>
-                  <input
-                    type="number"
-                    min={MIN_BOX_CAPACITY}
-                    max={MAX_BOX_CAPACITY}
-                    data-testid="admin-box-capacity-input"
-                    value={getBoxCapacity(adminConfig)}
-                    onChange={(e) => {
-                      const raw =
-                        e.target.value === ''
-                          ? DEFAULT_BOX_CAPACITY
-                          : Number(e.target.value);
-                      adminUpdateConfig({
-                        boxCapacity: sanitizeBoxCapacity(raw),
-                      });
-                    }}
-                    className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
-                  />
-                  <span className="text-[10px] text-slate-500 block">
-                    {t('admin.boxCapacityHint')}
-                  </span>
-                </label>
+                <AdminCapacityField
+                  label={t('admin.boxCapacity')}
+                  min={MIN_BOX_CAPACITY}
+                  max={MAX_BOX_CAPACITY}
+                  storedValue={getBoxCapacity(adminConfig)}
+                  usedCount={pilot.inventory.length}
+                  inputTestId="admin-box-capacity-input"
+                  applyTestId="admin-box-capacity-apply"
+                  hintTestId="admin-box-capacity-hint"
+                  appliedTestId="admin-box-capacity-applied"
+                  overCapTestId="admin-box-capacity-overcap"
+                  overCapacityText={t('admin.boxOverCapacityHint', {
+                    used: pilot.inventory.length,
+                  })}
+                  sanitize={sanitizeBoxCapacity}
+                  onApply={(boxCapacity) => adminUpdateConfig({ boxCapacity })}
+                  applyLabel={t('admin.capacityApply')}
+                  rangeHintText={t('admin.capacityRangeHint', {
+                    min: MIN_BOX_CAPACITY,
+                    max: MAX_BOX_CAPACITY,
+                  })}
+                  formatAppliedText={(n) => t('admin.capacityApplied', { n })}
+                />
 
                 {/* Warehouse Capacity ("Sức chứa Kho đồ") */}
-                <label className="space-y-1 block">
-                  <span className="text-[11px] text-slate-400 block">
-                    {t('admin.warehouseCapacity')}
-                  </span>
-                  <input
-                    type="number"
-                    min={MIN_WAREHOUSE_CAPACITY}
-                    max={MAX_WAREHOUSE_CAPACITY}
-                    data-testid="admin-warehouse-capacity-input"
-                    value={sanitizeWarehouseCapacity(
-                      adminConfig.warehouseCapacity
-                    )}
-                    onChange={(e) => {
-                      const raw =
-                        e.target.value === ''
-                          ? DEFAULT_WAREHOUSE_CAPACITY
-                          : Number(e.target.value);
-                      adminUpdateConfig({
-                        warehouseCapacity: sanitizeWarehouseCapacity(raw),
-                      });
-                    }}
-                    className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
-                  />
-                  <span className="text-[10px] text-slate-500 block">
-                    {t('admin.warehouseCapacityHint')}
-                  </span>
-                </label>
+                <AdminCapacityField
+                  label={t('admin.warehouseCapacity')}
+                  min={MIN_WAREHOUSE_CAPACITY}
+                  max={MAX_WAREHOUSE_CAPACITY}
+                  storedValue={sanitizeWarehouseCapacity(
+                    adminConfig.warehouseCapacity
+                  )}
+                  usedCount={pilot.warehouse.length}
+                  inputTestId="admin-warehouse-capacity-input"
+                  applyTestId="admin-warehouse-capacity-apply"
+                  hintTestId="admin-warehouse-capacity-hint"
+                  appliedTestId="admin-warehouse-capacity-applied"
+                  overCapTestId="admin-warehouse-capacity-overcap"
+                  overCapacityText={t('warehouse.overCapacityHint', {
+                    used: pilot.warehouse.length,
+                  })}
+                  sanitize={sanitizeWarehouseCapacity}
+                  onApply={(warehouseCapacity) =>
+                    adminUpdateConfig({ warehouseCapacity })
+                  }
+                  applyLabel={t('admin.capacityApply')}
+                  rangeHintText={t('admin.capacityRangeHint', {
+                    min: MIN_WAREHOUSE_CAPACITY,
+                    max: MAX_WAREHOUSE_CAPACITY,
+                  })}
+                  formatAppliedText={(n) => t('admin.capacityApplied', { n })}
+                />
               </div>
 
               {/* Shield Regen ("Hồi khiên") */}
