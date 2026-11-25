@@ -25,6 +25,10 @@ import { SupplyEconomyAdminBlock } from './admin/SupplyEconomyAdminBlock';
 import { EnemyLevelAdminBlock } from './admin/EnemyLevelAdminBlock';
 import {
   BALANCE_CONFIG,
+  getMaxLevel,
+  MAX_ADMIN_MAX_LEVEL,
+  MIN_ADMIN_MAX_LEVEL,
+  sanitizeMaxLevel,
   sanitizeSpEconomyConfig,
 } from '../data/balance';
 import { MECH_CLASS_LIST } from '../data/classes';
@@ -398,13 +402,13 @@ export function AdminPanel() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="p-3 rounded-lg border border-slate-800 bg-[#0D1422] space-y-2">
                   <div className="text-xs font-semibold text-slate-300">
-                    {t('admin.setLevel')} (1–{BALANCE_CONFIG.maxLevel})
+                    {t('admin.setLevel')} (1–{getMaxLevel()})
                   </div>
                   <div className="flex gap-2">
                     <input
                       type="number"
                       min={1}
-                      max={BALANCE_CONFIG.maxLevel}
+                      max={getMaxLevel()}
                       value={levelInput}
                       onChange={(e) => setLevelInput(e.target.value)}
                       className="flex-1 h-9 px-2.5 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
@@ -422,6 +426,29 @@ export function AdminPanel() {
                       {t('admin.apply')}
                     </button>
                   </div>
+                  <label className="pt-1.5 border-t border-slate-800/80 space-y-1 block">
+                    <span className="text-[11px] font-semibold text-slate-300 block">
+                      {t('admin.maxLevelLabel')}
+                    </span>
+                    <input
+                      type="number"
+                      data-testid="admin-max-level-input"
+                      min={MIN_ADMIN_MAX_LEVEL}
+                      max={MAX_ADMIN_MAX_LEVEL}
+                      step={1}
+                      value={sanitizeMaxLevel(adminConfig.maxLevel)}
+                      onChange={(e) => {
+                        const v = Number(e.target.value);
+                        if (Number.isFinite(v)) {
+                          adminUpdateConfig({ maxLevel: sanitizeMaxLevel(v) });
+                        }
+                      }}
+                      className="w-full h-8 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                    />
+                    <span className="text-[10px] text-slate-400 block leading-snug">
+                      {t('admin.maxLevelHint')}
+                    </span>
+                  </label>
                 </div>
 
                 <div className="p-3 rounded-lg border border-slate-800 bg-[#0D1422] space-y-2">
@@ -1048,13 +1075,13 @@ export function AdminPanel() {
                                   type="number"
                                   data-testid={`admin-starter-slot-${slot}-level`}
                                   min={1}
-                                  max={BALANCE_CONFIG.maxLevel}
+                                  max={getMaxLevel()}
                                   value={slotCfg.level}
                                   onChange={(e) => {
                                     const lv = Math.max(
                                       1,
                                       Math.min(
-                                        BALANCE_CONFIG.maxLevel,
+                                        getMaxLevel(),
                                         Math.floor(Number(e.target.value) || 1)
                                       )
                                     );

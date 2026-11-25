@@ -1,5 +1,5 @@
 import { Award, BarChart3, Package, ScrollText } from 'lucide-react';
-import { BALANCE_CONFIG } from '../data/balance';
+import { getMaxLevel } from '../data/balance';
 import { STAT_KEYS } from '../data/classes';
 import { RARITY_META } from '../data/items';
 import { getEffectiveItemStats } from '../engine/equipment';
@@ -151,7 +151,7 @@ export function BattleResultDialog({
                     +{summary.expGained} EXP
                   </div>
                   <div className="text-[12px] font-mono-nums text-slate-400 mt-0.5">
-                    {summary.newLevel >= BALANCE_CONFIG.maxLevel
+                    {summary.newLevel >= getMaxLevel()
                       ? t('summary.maxLevelReached')
                       : t('summary.battlesToNext', {
                           count: summary.battlesToNextLevel,

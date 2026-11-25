@@ -1377,6 +1377,8 @@ export const EN_TRANSLATIONS = {
   'admin.systemInspector': 'Live State Inspector',
   'admin.close': 'Close',
   'admin.setLevel': 'Set Level',
+  'admin.maxLevelLabel': 'Max Level (20–100)',
+  'admin.maxLevelHint': 'Does not lower existing gear levels; only caps new level-ups.',
   'admin.apply': 'Apply',
   'admin.addExp': 'Add EXP',
   'admin.statPoints': 'Stat Points',

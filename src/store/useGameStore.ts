@@ -3,7 +3,10 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import {
   BALANCE_CONFIG,
   getGarageUnlockCost,
+  getMaxLevel,
+  sanitizeMaxLevel,
   sanitizeSpEconomyConfig,
+  setRuntimeMaxLevel,
 } from '../data/balance';
 import { BATTLE_KIND_RULES } from '../data/battleKinds';
 import { sanitizeAutoEquipConfig } from '../data/autoEquipConfig';
@@ -1298,6 +1301,8 @@ export const useGameStore = create<GameStoreState>()(
         clearImportBackupRaw();
         const fresh = createFreshCampaignState('Vance', 'striker');
         const deviceLoopPrefs = readDeviceLoopPrefs();
+        const defaultAdmin = createDefaultAdminConfig();
+        setRuntimeMaxLevel(defaultAdmin.maxLevel);
         set({
           ...fresh,
           supplyShopStock: fresh.supplyShopStock ?? [],
@@ -1306,7 +1311,7 @@ export const useGameStore = create<GameStoreState>()(
           battleSpeed: state.battleSpeed,
           skipAnimations: state.skipAnimations,
           battleViewMode: state.battleViewMode,
-          adminConfig: createDefaultAdminConfig(),
+          adminConfig: defaultAdmin,
           hasSaveData: false,
           battle: null,
           screen: 'TITLE',
@@ -3997,7 +4002,7 @@ export const useGameStore = create<GameStoreState>()(
         const state = get();
         const clamped = Math.max(
           1,
-          Math.min(BALANCE_CONFIG.maxLevel, Math.floor(level) || 1)
+          Math.min(getMaxLevel(), Math.floor(level) || 1)
         );
         const id = gearId ?? state.pilot.activeGearId;
         const gear = state.pilot.gears[id];
@@ -4240,7 +4245,7 @@ export const useGameStore = create<GameStoreState>()(
               rarity,
               requiredLevel: Math.max(
                 1,
-                Math.min(BALANCE_CONFIG.maxLevel, activeGear.level + (i % 5) - 2)
+                Math.min(getMaxLevel(), activeGear.level + (i % 5) - 2)
               ),
               isNew: i < 12,
               obtainedAt: now + i,
@@ -4578,9 +4583,15 @@ export const useGameStore = create<GameStoreState>()(
             patch.enemyLevel !== undefined
               ? sanitizeEnemyLevelConfig(patch.enemyLevel)
               : sanitizeEnemyLevelConfig(state.adminConfig.enemyLevel);
+          const nextMaxLevel =
+            patch.maxLevel !== undefined
+              ? sanitizeMaxLevel(patch.maxLevel)
+              : sanitizeMaxLevel(state.adminConfig.maxLevel);
+          setRuntimeMaxLevel(nextMaxLevel);
           const nextAdminConfig: AdminConfig = {
             ...state.adminConfig,
             ...patch,
+            maxLevel: nextMaxLevel,
             formation: nextFormation,
             autoEquip: nextAutoEquip,
             starterSet: nextStarterSet,
@@ -4668,6 +4679,7 @@ export const useGameStore = create<GameStoreState>()(
           const payloadState =
             (parsed as { state?: unknown }).state ?? parsed;
           const migrated = migrateSaveData(payloadState, version);
+          setRuntimeMaxLevel(migrated.adminConfig.maxLevel);
           set({
             ...migrated,
             battle: null,
@@ -4717,6 +4729,7 @@ export const useGameStore = create<GameStoreState>()(
         }
 
         const migrated = migrateSaveData(rawState, saveVersion);
+        setRuntimeMaxLevel(migrated.adminConfig.maxLevel);
         const rawObj = rawState as Record<string, unknown>;
         const importedAutoRepeatStopOnDefeat =
           typeof rawObj.autoRepeatStopOnDefeat === 'boolean'
@@ -4785,6 +4798,7 @@ export const useGameStore = create<GameStoreState>()(
           }
 
           const restored = migrateSaveData(backupPayload, backupVersion);
+          setRuntimeMaxLevel(restored.adminConfig.maxLevel);
           const rawObj = backupPayload as Record<string, unknown>;
           const restoredAutoRepeatStopOnDefeat =
             typeof rawObj.autoRepeatStopOnDefeat === 'boolean'
@@ -4885,6 +4899,7 @@ export const useGameStore = create<GameStoreState>()(
             state.adminConfig = {
               ...createDefaultAdminConfig(),
               ...state.adminConfig,
+              maxLevel: sanitizeMaxLevel(rawAdmin.maxLevel),
               formation: sanitizedFormation,
               autoEquip: sanitizeAutoEquipConfig(rawAdmin.autoEquip),
               starterSet: sanitizeStarterSetConfig(rawAdmin.starterSet),
@@ -4912,6 +4927,7 @@ export const useGameStore = create<GameStoreState>()(
             delete cleaned.formationBackCapacity;
             delete cleaned.backRowDamageReduction;
           }
+          setRuntimeMaxLevel(state.adminConfig.maxLevel);
           if (state.pilot && typeof state.pilot === 'object') {
             if (
               !Array.isArray(state.pilot.squadFormation) ||
@@ -5025,6 +5041,12 @@ export const useGameStore = create<GameStoreState>()(
     }
   )
 );
+
+useGameStore.subscribe((state, prevState) => {
+  if (state.adminConfig?.maxLevel !== prevState.adminConfig?.maxLevel) {
+    setRuntimeMaxLevel(state.adminConfig?.maxLevel);
+  }
+});
 
 registerPirateBattleSourceProvider(
   () => useGameStore.getState().adminConfig?.pirates

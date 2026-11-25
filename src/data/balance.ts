@@ -294,3 +294,28 @@ export function getSkillPurchaseCost(
     ] ?? 500;
   return Math.round(stepCost + unlockLevel * 20);
 }
+
+export const MIN_ADMIN_MAX_LEVEL = 20;
+export const MAX_ADMIN_MAX_LEVEL = 100;
+
+let runtimeMaxLevel: number = BALANCE_CONFIG.maxLevel;
+
+export function sanitizeMaxLevel(raw: unknown): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) {
+    return BALANCE_CONFIG.maxLevel;
+  }
+  return Math.max(
+    MIN_ADMIN_MAX_LEVEL,
+    Math.min(MAX_ADMIN_MAX_LEVEL, Math.round(raw))
+  );
+}
+
+export function getMaxLevel(): number {
+  return runtimeMaxLevel;
+}
+
+export function setRuntimeMaxLevel(raw: unknown): number {
+  runtimeMaxLevel = sanitizeMaxLevel(raw);
+  return runtimeMaxLevel;
+}
+

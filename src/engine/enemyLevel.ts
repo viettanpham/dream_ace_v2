@@ -1,4 +1,4 @@
-import { BALANCE_CONFIG } from '../data/balance';
+import { getMaxLevel } from '../data/balance';
 import type {
   BattleKind,
   EnemyLevelConfig,
@@ -183,7 +183,7 @@ export function clampEnemyLevel(
   const safeCfg = sanitizeEnemyLevelConfig(cfg);
   const maxEnemyLevel = Math.max(
     1,
-    BALANCE_CONFIG.maxLevel + safeCfg.enemyLevelCapOverMax
+    getMaxLevel() + safeCfg.enemyLevelCapOverMax
   );
   return Math.max(1, Math.min(maxEnemyLevel, Math.round(rawLevel)));
 }

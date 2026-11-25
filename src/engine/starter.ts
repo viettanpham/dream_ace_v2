@@ -1,4 +1,4 @@
-import { BALANCE_CONFIG } from '../data/balance';
+import { getMaxLevel } from '../data/balance';
 import { MECH_CLASS_LIST } from '../data/classes';
 import { BUILTIN_ITEM_REGISTRY_TAG, EQUIPMENT_SLOTS } from '../data/items';
 import {
@@ -34,7 +34,7 @@ export function computeStarterEffectiveParams(
   const mult = 1 + Math.max(0, Math.min(300, rookieBoostPct)) / 100;
   const boostedLevel = Math.max(
     1,
-    Math.min(BALANCE_CONFIG.maxLevel, Math.round(slotCfg.level * mult))
+    Math.min(getMaxLevel(), Math.round(slotCfg.level * mult))
   );
   const boostedQuality = Math.max(
     1,

@@ -1379,6 +1379,8 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'admin.systemInspector': 'Trình xem State trực tiếp',
   'admin.close': 'Đóng',
   'admin.setLevel': 'Đặt cấp',
+  'admin.maxLevelLabel': 'Cấp tối đa (20–100)',
+  'admin.maxLevelHint': 'Không hạ cấp tàu đang có; chỉ chặn lên cấp mới vượt mức này.',
   'admin.apply': 'Áp dụng',
   'admin.addExp': 'Cộng EXP',
   'admin.statPoints': 'Điểm chỉ số',

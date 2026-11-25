@@ -1433,6 +1433,7 @@ export interface AdminConfig {
   enrageStepPct: number;
   forceBoss: boolean;
   battleLevelOffsetOverride: number | null;
+  maxLevel?: number;
   shopMinStock: number;
   shopMaxStock: number;
   shopRarityWeights: Record<ItemRarity, number>;

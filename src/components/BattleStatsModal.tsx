@@ -16,7 +16,7 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import { BALANCE_CONFIG } from '../data/balance';
+import { getMaxLevel } from '../data/balance';
 import { STAT_KEYS } from '../data/classes';
 import { RARITY_META } from '../data/items';
 import { aggregateBattleStats } from '../engine/battleStats';
@@ -396,7 +396,7 @@ export function BattleStatsModal({
                     +{summary.expGained} EXP
                   </div>
                   <div className="text-[11px] font-mono-nums text-slate-500">
-                    {summary.newLevel >= BALANCE_CONFIG.maxLevel
+                    {summary.newLevel >= getMaxLevel()
                       ? t('summary.maxLevelReached')
                       : t('summary.battlesToNext', {
                           count: summary.battlesToNextLevel,

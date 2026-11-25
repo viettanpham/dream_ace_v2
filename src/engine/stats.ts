@@ -1,6 +1,7 @@
 import {
   BALANCE_CONFIG,
   COMBAT_FORMULAS,
+  getMaxLevel,
   sanitizeSpEconomyConfig,
 } from '../data/balance';
 import {
@@ -321,7 +322,8 @@ export function applyExpToGear(
   let unspentPoints = gear.unspentPoints;
   let statPointsGained = 0;
 
-  while (level < BALANCE_CONFIG.maxLevel) {
+  const maxLevel = getMaxLevel();
+  while (level < maxLevel) {
     const needed = getExpForNextLevel(level);
     if (exp >= needed) {
       exp -= needed;
@@ -333,7 +335,7 @@ export function applyExpToGear(
     }
   }
 
-  if (level >= BALANCE_CONFIG.maxLevel) {
+  if (level >= maxLevel) {
     exp = 0;
   }
 
@@ -406,7 +408,7 @@ export function estimateBattlesToNextLevel(
   gear: GearUnit,
   expPerVictory: number
 ): number {
-  if (gear.level >= BALANCE_CONFIG.maxLevel) return 0;
+  if (gear.level >= getMaxLevel()) return 0;
   const remaining = Math.max(0, getExpForNextLevel(gear.level) - gear.exp);
   if (remaining === 0) return 0;
   return Math.max(1, Math.ceil(remaining / Math.max(1, expPerVictory)));

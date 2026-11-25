@@ -1,4 +1,4 @@
-import { BALANCE_CONFIG } from './balance';
+import { getMaxLevel } from './balance';
 import { EQUIPMENT_SLOTS, getItemTemplate, ITEM_TEMPLATES } from './items';
 import type {
   ItemTemplate,
@@ -144,7 +144,7 @@ export function sanitizeStarterSetConfig(raw: unknown): StarterSetConfig {
       const level = Math.max(
         1,
         Math.min(
-          BALANCE_CONFIG.maxLevel,
+          getMaxLevel(),
           Math.floor(Number(s.level) || defSlot?.level || 1)
         )
       );

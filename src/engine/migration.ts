@@ -2,6 +2,7 @@ import {
   BALANCE_CONFIG,
   cloneSpEconomyConfig,
   DEFAULT_SP_ECONOMY_CONFIG,
+  sanitizeMaxLevel,
   sanitizeSpEconomyConfig,
 } from '../data/balance';
 import { EMPTY_STAT_BLOCK, MECH_CLASS_LIST } from '../data/classes';
@@ -313,6 +314,7 @@ export function createDefaultAdminConfig(): AdminConfig {
     enrageStepPct: BALANCE_CONFIG.enrageStepPct,
     forceBoss: false,
     battleLevelOffsetOverride: null,
+    maxLevel: BALANCE_CONFIG.maxLevel,
     enemyLevel: cloneEnemyLevelConfig(DEFAULT_ENEMY_LEVEL_CONFIG),
     shopMinStock: SHOP_STOCK_CONFIG.minStockPerCategory,
     shopMaxStock: SHOP_STOCK_CONFIG.maxStockPerCategory,
@@ -633,6 +635,7 @@ export function migrateSaveData(
       Number.isFinite(rawAdmin.battleLevelOffsetOverride)
         ? Math.floor(rawAdmin.battleLevelOffsetOverride)
         : null,
+    maxLevel: sanitizeMaxLevel(rawAdmin.maxLevel),
     shopMinStock: safeMinStock,
     shopMaxStock: safeMaxStock,
     shopRarityWeights:
@@ -794,10 +797,7 @@ export function migrateSaveData(
         gears[cls.id] = {
           classId: cls.id,
           owned: Boolean(rawGear.owned),
-          level: Math.max(
-            1,
-            Math.min(BALANCE_CONFIG.maxLevel, Number(rawGear.level) || 1)
-          ),
+          level: Math.max(1, Math.floor(Number(rawGear.level) || 1)),
           exp: Math.max(0, Number(rawGear.exp) || 0),
           unspentPoints: Math.max(0, Number(rawGear.unspentPoints) || 0),
           allocatedPoints: {
@@ -1214,10 +1214,7 @@ export function migrateSaveData(
       gears[cls.id] = {
         classId: cls.id,
         owned: true,
-        level: Math.max(
-          1,
-          Math.min(BALANCE_CONFIG.maxLevel, Number(legacyPlayer.level) || 1)
-        ),
+        level: Math.max(1, Math.floor(Number(legacyPlayer.level) || 1)),
         exp: Math.max(0, Number(legacyPlayer.exp) || 0),
         unspentPoints: Math.max(
           0,
