@@ -194,6 +194,7 @@ import type {
   Language,
   LaunchBattleOptions,
   MechClassId,
+  PaperDollSlot,
   PilotAccount,
   QuickSellFilterConfig,
   QuickSellUndoState,
@@ -486,7 +487,7 @@ interface GameStoreState {
   undoAutoEquip: () => { ok: boolean; restoredGearsCount: number };
   clearAutoEquipUndo: () => void;
   equipItem: (instanceId: string) => EquipValidationResult;
-  unequipSlot: (slot: EquipmentSlot) => void;
+  unequipSlot: (slot: PaperDollSlot) => void;
   unequipInstanceEverywhere: (instanceId: string) => void;
   buyShopItem: (instanceId: string) => { ok: boolean };
   buySupply: (
@@ -509,7 +510,7 @@ interface GameStoreState {
     templateId: string,
     qty: number
   ) => { ok: boolean; sold: number; creditsEarned: number };
-  enchantEquippedSlot: (slot: EquipmentSlot) => EnchantAttemptResult | null;
+  enchantEquippedSlot: (slot: PaperDollSlot) => EnchantAttemptResult | null;
 
   // Battle actions
   startBattle: (sectorId?: string, opts?: LaunchBattleOptions) => void;
@@ -4082,6 +4083,7 @@ export const useGameStore = create<GameStoreState>()(
       },
 
       adminGenerateItems: (slot, tier, rarity, quantity, options) => {
+        if (slot === 'module') return 0;
         const count = Math.max(1, Math.min(200, Math.floor(quantity) || 1));
         const generated: ItemInstance[] = [];
         const now = Date.now();

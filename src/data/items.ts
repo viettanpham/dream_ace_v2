@@ -1,17 +1,19 @@
-import type { EquipmentSlot, EquippedSlotIds, ItemRarity, ItemTemplate, StatKey } from '../types/game';
+import type { EquipmentSlot, EquippedSlotIds, ItemRarity, ItemTemplate, PaperDollSlot, StatKey } from '../types/game';
 import { BALANCE_CONFIG } from './balance';
 import rawItemsData from './items.json';
+import { MODULE_ITEM_TEMPLATES } from './modules';
 
-export const EQUIPMENT_SLOTS: EquipmentSlot[] = ['main_weapon', 'sub_weapon', 'armor', 'engine', 'cpu', 'accessory', 'radar'];
+export const EQUIPMENT_SLOTS: PaperDollSlot[] = ['main_weapon', 'sub_weapon', 'armor', 'engine', 'cpu', 'accessory', 'radar'];
+export const ITEM_SLOTS: EquipmentSlot[] = [...EQUIPMENT_SLOTS, 'module'];
 
 export interface EquipmentSlotMeta {
-  slot: EquipmentSlot;
+  slot: PaperDollSlot;
   label: string;
   shortLabel: string;
   classLocked: boolean;
 }
 
-export const EQUIPMENT_SLOT_META: Record<EquipmentSlot, EquipmentSlotMeta> = {
+export const EQUIPMENT_SLOT_META: Record<PaperDollSlot, EquipmentSlotMeta> = {
   main_weapon: { slot: 'main_weapon', label: 'Main Weapon', shortLabel: 'MAIN', classLocked: false },
   sub_weapon: { slot: 'sub_weapon', label: 'Sub Weapon', shortLabel: 'SUB', classLocked: false },
   armor: { slot: 'armor', label: 'Hull Plating', shortLabel: 'HULL', classLocked: true },
@@ -98,7 +100,7 @@ export const DROP_CONFIG = BALANCE_CONFIG.dropConfig;
 
 export const BUILTIN_ITEM_REGISTRY_TAG = 'sys' as const;
 
-const VALID_SLOT_SET = new Set<string>(EQUIPMENT_SLOTS);
+const VALID_SLOT_SET = new Set<string>(ITEM_SLOTS);
 const VALID_STAT_SET = new Set<string>(['attack', 'defense', 'fuel', 'spirit', 'shield', 'evasion']);
 const VALID_CLASS_SET = new Set<string>(['striker', 'interceptor', 'siege', 'support']);
 const NUMERIC_TRAIT_KEYS = ['critBonusPct', 'armorPiercePct', 'splashPct', 'spRegenPerTurn', 'evasionMod', 'accuracyPct'] as const;
@@ -195,7 +197,10 @@ export function validateItemTemplates(raw: unknown): ItemTemplate[] {
   return valid;
 }
 
-export const ITEM_TEMPLATES: ItemTemplate[] = validateItemTemplates(rawItemsData);
+export const ITEM_TEMPLATES: ItemTemplate[] = [
+  ...validateItemTemplates(rawItemsData),
+  ...MODULE_ITEM_TEMPLATES,
+];
 
 export const ITEM_TEMPLATES_BY_ID: Record<string, ItemTemplate> = ITEM_TEMPLATES.reduce((acc, tpl) => {
   acc[tpl.id] = tpl;

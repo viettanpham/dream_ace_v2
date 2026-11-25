@@ -119,18 +119,19 @@ export function generateCategorizedShopStock(
       bonusShift,
       rng
     );
-    const eligibleTemplates = ITEM_TEMPLATES.filter(
+    const nonModuleTemplates = ITEM_TEMPLATES.filter((t) => t.slot !== 'module');
+    const eligibleTemplates = nonModuleTemplates.filter(
       (t) => t.slot === slot && t.tier <= maxTier
     );
     const fallbackTemplates =
       eligibleTemplates.length > 0
         ? eligibleTemplates
-        : ITEM_TEMPLATES.filter((t) => t.slot === slot);
+        : nonModuleTemplates.filter((t) => t.slot === slot);
 
     for (let i = 0; i < countForSlot; i++) {
       const pickedTpl =
         fallbackTemplates[Math.floor(rng() * fallbackTemplates.length)] ??
-        ITEM_TEMPLATES[0];
+        nonModuleTemplates[0];
       const rarity = pickWeightedRarity(weights, rng);
       const tier = Math.min(maxTier, Math.max(1, pickedTpl.tier));
       const item = generateItemInstance(

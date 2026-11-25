@@ -186,7 +186,8 @@ export function evaluateQuickSellCandidates(
 
     // Condition 4: required level lower than equipped item in that slot on active Gear
     if (config.belowEquippedLevel) {
-      const equippedInSlot = activeEquippedMap[item.slot];
+      const equippedInSlot =
+        item.slot === 'module' ? null : activeEquippedMap[item.slot];
       if (!equippedInSlot || item.requiredLevel >= equippedInSlot.requiredLevel) {
         continue;
       }
@@ -217,12 +218,12 @@ export function evaluateQuickSellCandidates(
         );
         if (relevantGears.length === 0) continue;
         const worseForAll = relevantGears.every(({ equipped }) => {
-          const eq = equipped[item.slot];
+          const eq = item.slot === 'module' ? null : equipped[item.slot];
           return eq !== null && itemScore < calculateItemPowerScore(eq);
         });
         if (!worseForAll) continue;
       } else {
-        const eq = activeEquippedMap[item.slot];
+        const eq = item.slot === 'module' ? null : activeEquippedMap[item.slot];
         if (!eq || itemScore >= calculateItemPowerScore(eq)) {
           continue;
         }

@@ -500,6 +500,7 @@ export const EN_TRANSLATIONS = {
   'slot.cpu': 'Targeting CPU',
   'slot.accessory': 'Reactor',
   'slot.radar': 'Radar',
+  'slot.module': 'Module',
   'slot.extender': 'Extender {n}',
   'slot.lockedSoon': 'Soon',
   'slotShort.main_weapon': 'MAIN',
@@ -509,6 +510,7 @@ export const EN_TRANSLATIONS = {
   'slotShort.cpu': 'CPU',
   'slotShort.accessory': 'REACTOR',
   'slotShort.radar': 'RADAR',
+  'slotShort.module': 'MODULE',
   'slotShort.extender': 'Ext {n}',
   'rarity.common': 'Common',
   'rarity.rare': 'Rare',
@@ -542,6 +544,7 @@ export const EN_TRANSLATIONS = {
   'equip.inventoryEmptyFilter': 'No modules found for this slot.',
   'equip.cannotEquip': 'Cannot equip: {reason}',
   'enchant.msg.max_level': '{item} is already at maximum +10 enchant.',
+  'enchant.msg.not_enchantable': '{item} is an extender module and cannot be enchanted.',
   'enchant.msg.insufficient_credits': 'Insufficient Credits (need {cost} CR).',
   'enchant.msg.success':
     'Enchant succeeded! {item} reached +{level} (+{pct}% rolled stats).',

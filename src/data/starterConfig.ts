@@ -1,16 +1,16 @@
 import { BALANCE_CONFIG } from './balance';
 import { EQUIPMENT_SLOTS, getItemTemplate, ITEM_TEMPLATES } from './items';
 import type {
-  EquipmentSlot,
   ItemTemplate,
   MechClassId,
+  PaperDollSlot,
   StarterBoostScope,
   StarterSetConfig,
   StarterSlotConfig,
 } from '../types/game';
 
 export const DEFAULT_STARTER_SLOT_CONFIGS: Omit<
-  Record<EquipmentSlot, StarterSlotConfig>,
+  Record<PaperDollSlot, StarterSlotConfig>,
   'radar'
 > & { radar?: StarterSlotConfig } = {
   main_weapon: {
@@ -73,11 +73,12 @@ export function cloneStarterSetConfig(
   };
 }
 
-function findFallbackTemplateForSlot(slot: EquipmentSlot): ItemTemplate {
+function findFallbackTemplateForSlot(slot: PaperDollSlot): ItemTemplate {
+  const nonModule = ITEM_TEMPLATES.filter((t) => t.slot !== 'module');
   return (
-    ITEM_TEMPLATES.find((t) => t.slot === slot && t.tier === 1) ??
-    ITEM_TEMPLATES.find((t) => t.slot === slot) ??
-    ITEM_TEMPLATES[0]
+    nonModule.find((t) => t.slot === slot && t.tier === 1) ??
+    nonModule.find((t) => t.slot === slot) ??
+    nonModule[0]
   );
 }
 
@@ -87,7 +88,7 @@ function findFallbackTemplateForSlot(slot: EquipmentSlot): ItemTemplate {
  * picks the closest matching tier template compatible with `classId`.
  */
 export function resolveStarterTemplateForGear(
-  slot: EquipmentSlot,
+  slot: PaperDollSlot,
   configuredTemplateId: string,
   classId: MechClassId
 ): ItemTemplate {
@@ -104,6 +105,7 @@ export function resolveStarterTemplateForGear(
   const desiredTier = configured?.tier ?? 1;
   const compatible = ITEM_TEMPLATES.filter(
     (t) =>
+      t.slot !== 'module' &&
       t.slot === slot &&
       (t.classRestriction === null || t.classRestriction === classId)
   );

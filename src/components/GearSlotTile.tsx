@@ -1,10 +1,10 @@
 import { Lock, Tag } from 'lucide-react';
 import { RARITY_META } from '../data/items';
-import type { EquipmentSlot, ItemInstance } from '../types/game';
+import type { ItemInstance, PaperDollSlot } from '../types/game';
 import { SlotIcon } from './GameIcons';
 
 export type GearPaperDollSlotKey =
-  | EquipmentSlot
+  | PaperDollSlot
   | 'ext1'
   | 'ext2'
   | 'ext3'
@@ -31,7 +31,7 @@ export const PAPER_DOLL_RIGHT_SLOTS: readonly GearPaperDollSlotKey[] = [
 
 export function isEquipmentSlotKey(
   key: GearPaperDollSlotKey
-): key is EquipmentSlot {
+): key is PaperDollSlot {
   return !key.startsWith('ext');
 }
 

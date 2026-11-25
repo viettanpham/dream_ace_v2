@@ -502,6 +502,7 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'slot.cpu': 'CPU Nhắm bắn',
   'slot.accessory': 'Lò phản ứng',
   'slot.radar': 'Radar',
+  'slot.module': 'Mô-đun',
   'slot.extender': 'Extender {n}',
   'slot.lockedSoon': 'Sắp có',
   'slotShort.main_weapon': 'VK CHÍNH',
@@ -511,6 +512,7 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'slotShort.cpu': 'CPU',
   'slotShort.accessory': 'PHẢN ỨNG',
   'slotShort.radar': 'RADAR',
+  'slotShort.module': 'MÔ-ĐUN',
   'slotShort.extender': 'Ext {n}',
   'rarity.common': 'Thường',
   'rarity.rare': 'Hiếm',
@@ -544,6 +546,7 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'equip.inventoryEmptyFilter': 'Không có linh kiện nào thuộc ô này.',
   'equip.cannotEquip': 'Không thể lắp: {reason}',
   'enchant.msg.max_level': '{item} đã đạt cấp cường hóa tối đa (+10).',
+  'enchant.msg.not_enchantable': '{item} là mô-đun mở rộng nên không thể cường hóa.',
   'enchant.msg.insufficient_credits': 'Không đủ Credits (cần {cost} CR).',
   'enchant.msg.success':
     'Cường hóa thành công! {item} đạt +{level} (+{pct}% chỉ số).',

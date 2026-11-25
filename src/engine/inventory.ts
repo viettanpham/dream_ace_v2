@@ -79,6 +79,7 @@ export function isItemUpgradeForGear(
   gear: GearUnit,
   inventory: ItemInstance[]
 ): boolean {
+  if (item.slot === 'module') return false;
   if (!isItemUsableByGear(item, gear)) return false;
   const equippedMap = getGearEquippedInstances(gear, inventory);
   const currentInSlot = equippedMap[item.slot];

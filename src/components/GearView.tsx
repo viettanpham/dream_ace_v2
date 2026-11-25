@@ -30,6 +30,7 @@ import {
   ENCHANT_CONFIG,
   EQUIPMENT_SLOTS,
   EQUIPMENT_SLOT_META,
+  ITEM_SLOTS,
   RARITY_META,
 } from '../data/items';
 import {
@@ -79,6 +80,7 @@ import type {
   InventorySortKey,
   ItemInstance,
   ItemRarity,
+  PaperDollSlot,
   StatBlock,
 } from '../types/game';
 import { soundFx } from '../utils/sound';
@@ -99,7 +101,7 @@ import { QuickSellModal } from './QuickSellModal';
 import { SupplyLoadoutBar } from './SupplyLoadoutBar';
 
 type GearSelection =
-  | { kind: 'slot'; slot: EquipmentSlot }
+  | { kind: 'slot'; slot: PaperDollSlot }
   | { kind: 'inventory'; instanceId: string }
   | null;
 
@@ -183,7 +185,7 @@ export function GearView() {
   const [mobileStatsExpanded, setMobileStatsExpanded] = useState(false);
   const [desktopStatsExpanded, setDesktopStatsExpanded] = useState(false);
   const [confirmingUnequipSlot, setConfirmingUnequipSlot] =
-    useState<EquipmentSlot | null>(null);
+    useState<PaperDollSlot | null>(null);
   const [confirmingSellId, setConfirmingSellId] = useState<string | null>(null);
   const [enchantFeedback, setEnchantFeedback] =
     useState<EnchantAttemptResult | null>(null);
@@ -194,7 +196,7 @@ export function GearView() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmBulkRare, setConfirmBulkRare] = useState(false);
   const [quickSellOpen, setQuickSellOpen] = useState(false);
-  const [swapPickerSlot, setSwapPickerSlot] = useState<EquipmentSlot | null>(null);
+  const [swapPickerSlot, setSwapPickerSlot] = useState<PaperDollSlot | null>(null);
   const [autoEquipPlan, setAutoEquipPlan] = useState<AutoEquipPlan | null>(
     null
   );
@@ -416,7 +418,7 @@ export function GearView() {
   // Per-slot counts across entire inventory
   const slotCounts = useMemo(() => {
     const counts = {} as Record<EquipmentSlot, number>;
-    for (const slot of EQUIPMENT_SLOTS) {
+    for (const slot of ITEM_SLOTS) {
       counts[slot] = 0;
     }
     for (const inst of pilot.inventory) {
@@ -479,7 +481,7 @@ export function GearView() {
     endRow * cols
   );
 
-  const handleSelectSlot = (slot: EquipmentSlot) => {
+  const handleSelectSlot = (slot: PaperDollSlot) => {
     soundFx.playClick();
     setEnchantFeedback(null);
     setConfirmingUnequipSlot(null);
@@ -520,13 +522,13 @@ export function GearView() {
   const handleConfirmEquip = () => {
     if (!selectedInventoryInstance) return;
     const res = equipItem(selectedInventoryInstance.instanceId);
-    if (res.canEquip) {
+    if (res.canEquip && selectedInventoryInstance.slot !== 'module') {
       setSelection({ kind: 'slot', slot: selectedInventoryInstance.slot });
       setConfirmingSellId(null);
     }
   };
 
-  const handleConfirmUnequip = (slot: EquipmentSlot) => {
+  const handleConfirmUnequip = (slot: PaperDollSlot) => {
     unequipSlot(slot);
     setConfirmingUnequipSlot(null);
     setSelection(null);
@@ -534,7 +536,7 @@ export function GearView() {
     setEnchantFeedback(null);
   };
 
-  const handleEnchant = (slot: EquipmentSlot) => {
+  const handleEnchant = (slot: PaperDollSlot) => {
     const res = enchantEquippedSlot(slot);
     if (res) setEnchantFeedback(res);
   };
@@ -700,6 +702,9 @@ export function GearView() {
     const itemName = inst ? getItemInstanceName(lang, inst) : fb.templateId;
     if (fb.code === 'max_level') {
       return t('enchant.msg.max_level', { item: itemName });
+    }
+    if (fb.code === 'not_enchantable') {
+      return t('enchant.msg.not_enchantable', { item: itemName });
     }
     if (fb.code === 'insufficient_credits') {
       return t('enchant.msg.insufficient_credits', {
@@ -1006,7 +1011,11 @@ export function GearView() {
                     <button
                       type="button"
                       data-testid="detail-swap-btn"
-                      onClick={() => setSwapPickerSlot(activeDetailInstance.slot)}
+                      onClick={() => {
+                        if (activeDetailInstance.slot !== 'module') {
+                          setSwapPickerSlot(activeDetailInstance.slot);
+                        }
+                      }}
                       className="px-2 py-0.5 rounded bg-emerald-500/25 hover:bg-emerald-500/40 text-emerald-100 font-bold cursor-pointer"
                     >
                       {t('gear.swapBtn')}
@@ -1062,12 +1071,14 @@ export function GearView() {
             activeDetailOwnerGear === activeGear.classId && (
               <button
                 type="button"
-                onClick={() =>
-                  setSelection({
-                    kind: 'slot',
-                    slot: activeDetailInstance.slot,
-                  })
-                }
+                onClick={() => {
+                  if (activeDetailInstance.slot !== 'module') {
+                    setSelection({
+                      kind: 'slot',
+                      slot: activeDetailInstance.slot,
+                    });
+                  }
+                }}
                 className="flex-1 min-h-[44px] px-4 rounded-lg border border-sky-500/50 bg-sky-500/15 hover:bg-sky-500/25 text-sky-200 font-semibold text-sm lg:text-xs transition-colors cursor-pointer"
               >
                 {t('gear.currentlyEquipped')} · Enchant / Unequip
@@ -1967,7 +1978,7 @@ export function GearView() {
               </span>
             </button>
 
-            {EQUIPMENT_SLOTS.map((slot) => (
+            {ITEM_SLOTS.map((slot) => (
               <button
                 key={slot}
                 type="button"

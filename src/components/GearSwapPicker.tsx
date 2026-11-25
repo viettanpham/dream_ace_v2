@@ -20,15 +20,15 @@ import {
   useI18n,
 } from '../i18n';
 import { useGameStore } from '../store/useGameStore';
-import type { EquipmentSlot, ItemInstance, StatKey } from '../types/game';
+import type { ItemInstance, PaperDollSlot, StatKey } from '../types/game';
 import { BottomSheet } from './BottomSheet';
 import { SlotIcon } from './GameIcons';
 
 export interface GearSwapPickerProps {
   open: boolean;
-  slot: EquipmentSlot | null;
+  slot: PaperDollSlot | null;
   onClose: () => void;
-  onEquipped?: (slot: EquipmentSlot) => void;
+  onEquipped?: (slot: PaperDollSlot) => void;
 }
 
 interface SwapCandidate {
@@ -138,7 +138,7 @@ export function GearSwapPicker({
 
   const handleEquipRow = (item: ItemInstance) => {
     const res = equipItem(item.instanceId);
-    if (res.canEquip) {
+    if (res.canEquip && item.slot !== 'module') {
       onEquipped?.(item.slot);
       onClose();
     }

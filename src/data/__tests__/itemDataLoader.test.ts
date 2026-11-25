@@ -9,6 +9,7 @@ import {
   RARITY_LIST,
   validateItemTemplates,
 } from '../items';
+import { MODULE_ITEM_TEMPLATES } from '../modules';
 import {
   DEFAULT_PRICE_FORMULA,
   PRICE_FORMULA,
@@ -78,7 +79,7 @@ describe('D1-2b — JSON Data Schema & Typed Loaders', () => {
     expect(rawItemsJson.schemaVersion).toBe(1);
     expect(Array.isArray(rawItemsJson.templates)).toBe(true);
     expect(rawItemsJson.templates).toHaveLength(42);
-    expect(ITEM_TEMPLATES).toHaveLength(42);
+    expect(ITEM_TEMPLATES).toHaveLength(42 + MODULE_ITEM_TEMPLATES.length);
     expect(
       ITEM_TEMPLATES.every((t) => t.registryTag === BUILTIN_ITEM_REGISTRY_TAG)
     ).toBe(true);

@@ -1,14 +1,13 @@
 import type {
-  EquipmentSlot,
   ItemRarity,
   ModuleFamily,
+  PaperDollSlot,
   SupplyFamily,
 } from '../types/game';
-import { EQUIPMENT_SLOTS } from './items';
 import rawPricingData from './itemPricing.json';
 
 export interface PriceFormulaConfig {
-  readonly baseBySlot: Record<EquipmentSlot, number>;
+  readonly baseBySlot: Record<PaperDollSlot, number>;
   readonly tierFactor: readonly number[];
   readonly rarityFactor: Record<ItemRarity, number>;
   readonly qualitySlopePerPoint: number;
@@ -96,8 +95,8 @@ export function validatePriceFormula(raw: unknown): PriceFormulaConfig {
 
   const rawSlots = asPlainObject(obj.baseBySlot);
   if (!rawSlots) warnings.push('baseBySlot');
-  const baseBySlot = {} as Record<EquipmentSlot, number>;
-  for (const slot of EQUIPMENT_SLOTS) {
+  const baseBySlot = {} as Record<PaperDollSlot, number>;
+  for (const slot of Object.keys(DEFAULT_PRICE_FORMULA.baseBySlot) as PaperDollSlot[]) {
     const val = rawSlots?.[slot];
     if (isPositiveNumber(val)) {
       baseBySlot[slot] = val;

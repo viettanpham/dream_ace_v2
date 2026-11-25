@@ -14,7 +14,7 @@ import {
 import { getSectorById } from '../data/maps';
 import { getModuleTemplateById } from '../data/modules';
 import { getUnlockedExtenderCount } from './extenders';
-import { computeItemPrice, countNonZeroTraits } from './itemPrice';
+import { computeItemPrice, computeModulePrice, countNonZeroTraits } from './itemPrice';
 import type {
   AdminConfig,
   CombatUnit,
@@ -29,6 +29,7 @@ import type {
   ItemSpecialTraits,
   ItemTemplate,
   MechClassId,
+  PaperDollSlot,
   PilotAccount,
   StatBlock,
   StatKey,
@@ -79,7 +80,8 @@ export function generateItemInstance(
     : undefined;
 
   if (!template) {
-    let pool = ITEM_TEMPLATES;
+    const nonModulePool = ITEM_TEMPLATES.filter((t) => t.slot !== 'module');
+    let pool = nonModulePool;
     if (options.slot) {
       pool = pool.filter((t) => t.slot === options.slot);
     }
@@ -97,8 +99,48 @@ export function generateItemInstance(
       );
       if (classMatch.length > 0) pool = classMatch;
     }
-    if (pool.length === 0) pool = ITEM_TEMPLATES;
+    if (pool.length === 0) pool = nonModulePool;
     template = pool[Math.floor(rng() * pool.length)];
+  }
+
+  if (template.slot === 'module') {
+    const modTpl = getModuleTemplateById(template.id);
+    const isStatModule = modTpl
+      ? modTpl.family === 'stat'
+      : template.primaryRange[1] > 0;
+    const rolledBaseStats: Partial<StatBlock> = isStatModule
+      ? { [template.primaryStat]: template.primaryRange[0] }
+      : {};
+    const price = modTpl
+      ? computeModulePrice(modTpl)
+      : Math.max(1, Math.round(template.basePrice));
+
+    itemUidSeq += 1;
+    return {
+      instanceId: `itm_${Date.now().toString(36)}_${itemUidSeq}_${Math.floor(
+        rng() * 1e6
+      ).toString(36)}`,
+      templateId: template.id,
+      slot: 'module',
+      tier: template.tier,
+      requiredLevel: template.requiredLevel,
+      classRestriction: null,
+      rarity: 'common',
+      rolledBaseStats,
+      affixes: [],
+      suffixId: null,
+      rollQuality: 100,
+      price,
+      enchantLevel: 0,
+      specialTraits: template.specialTraits
+        ? { ...template.specialTraits }
+        : undefined,
+      registryTag:
+        options.registryTag ?? template.registryTag ?? BUILTIN_ITEM_REGISTRY_TAG,
+      ...(options.isStarter ? { isStarter: true } : {}),
+      isNew: options.isNew ?? false,
+      obtainedAt: options.obtainedAt ?? Date.now(),
+    };
   }
 
   const tier = Math.max(1, Math.min(4, options.tier ?? template.tier));
@@ -263,13 +305,14 @@ export function generateShopStock(
   for (let i = 0; i < count; i++) {
     // Ensure every slot appears at least twice in a 12-item stock
     const slot = EQUIPMENT_SLOTS[i % EQUIPMENT_SLOTS.length];
-    const eligibleTemplates = ITEM_TEMPLATES.filter(
+    const nonModuleTemplates = ITEM_TEMPLATES.filter((t) => t.slot !== 'module');
+    const eligibleTemplates = nonModuleTemplates.filter(
       (t) => t.slot === slot && t.tier <= maxTier
     );
     const pickedTpl =
       eligibleTemplates[Math.floor(rng() * eligibleTemplates.length)] ??
-      ITEM_TEMPLATES.find((t) => t.slot === slot) ??
-      ITEM_TEMPLATES[0];
+      nonModuleTemplates.find((t) => t.slot === slot) ??
+      nonModuleTemplates[0];
 
     const rarity = pickWeightedRarity(shopRarityWeights, rng);
     const tier = Math.min(maxTier, Math.max(1, pickedTpl.tier));
@@ -322,11 +365,11 @@ export function getEffectiveItemStats(
 export function getGearEquippedInstances(
   gear: GearUnit,
   inventory: ItemInstance[]
-): Record<EquipmentSlot, ItemInstance | null> {
+): Record<PaperDollSlot, ItemInstance | null> {
   const byId = new Map(inventory.map((it) => [it.instanceId, it]));
   const result = {
     ...EMPTY_EQUIPPED_SLOT_IDS,
-  } as Record<EquipmentSlot, ItemInstance | null>;
+  } as Record<PaperDollSlot, ItemInstance | null>;
   for (const slot of EQUIPMENT_SLOTS) {
     const id = gear.equipped[slot];
     result[slot] = id ? byId.get(id) ?? null : null;
@@ -475,6 +518,7 @@ export function validateEquipOnGear(
 
   return {
     canEquip:
+      instance.slot !== 'module' &&
       missingLevel === null &&
       requiredClass === null &&
       equippedOnOtherGear === null,
@@ -507,7 +551,7 @@ export function equipItemOnGear(
   }
 
   const validation = validateEquipOnGear(instance, gear, pilot.gears);
-  if (!validation.canEquip) {
+  if (!validation.canEquip || instance.slot === 'module') {
     return { pilot, validation };
   }
 
@@ -537,7 +581,7 @@ export function equipItemOnGear(
 export function unequipSlotOnGear(
   pilot: PilotAccount,
   gearId: MechClassId,
-  slot: EquipmentSlot
+  slot: PaperDollSlot
 ): PilotAccount {
   const gear = pilot.gears[gearId];
   if (!gear || !gear.equipped[slot]) return pilot;
@@ -585,11 +629,26 @@ export function getEnchantMetadata(instance: ItemInstance): {
   currentLevel: number;
   nextLevel: number;
   isMax: boolean;
+  enchantable: boolean;
   cost: number;
   successRate: number;
   currentStats: StatBlock;
   nextStats: StatBlock;
 } {
+  if (instance.slot === 'module') {
+    const baseStats = getEffectiveItemStats(instance, 0);
+    return {
+      currentLevel: 0,
+      nextLevel: 0,
+      isMax: true,
+      enchantable: false,
+      cost: 0,
+      successRate: 0,
+      currentStats: baseStats,
+      nextStats: baseStats,
+    };
+  }
+
   const currentLevel = Math.max(
     0,
     Math.min(ENCHANT_CONFIG.maxLevel, instance.enchantLevel)
@@ -613,6 +672,7 @@ export function getEnchantMetadata(instance: ItemInstance): {
     currentLevel,
     nextLevel,
     isMax,
+    enchantable: !isMax,
     cost,
     successRate,
     currentStats: getEffectiveItemStats(instance, currentLevel),
@@ -633,6 +693,24 @@ export function resolveEnchantAttempt(
   updatedInstance: ItemInstance;
   remainingCredits: number;
 } {
+  if (instance.slot === 'module') {
+    return {
+      result: {
+        attempted: false,
+        success: false,
+        code: 'not_enchantable',
+        instanceId: instance.instanceId,
+        templateId: instance.templateId,
+        previousLevel: 0,
+        newLevel: 0,
+        creditsSpent: 0,
+        successRate: 0,
+      },
+      updatedInstance: instance,
+      remainingCredits: pilotCredits,
+    };
+  }
+
   const meta = getEnchantMetadata(instance);
   const effectiveSuccessRate = meta.isMax
     ? 0
@@ -753,9 +831,10 @@ export function rollBattleItemDrops(
     Math.max(cfg.maxTier, gearLevel >= 9 ? 4 : gearLevel >= 6 ? 3 : gearLevel >= 3 ? 2 : 1)
   );
 
+  const nonModuleTemplates = ITEM_TEMPLATES.filter((t) => t.slot !== 'module');
   const pickTemplateForDrop = (): ItemTemplate => {
-    const pool = ITEM_TEMPLATES.filter((t) => t.tier <= maxTier);
-    const source = pool.length > 0 ? pool : ITEM_TEMPLATES;
+    const pool = nonModuleTemplates.filter((t) => t.tier <= maxTier);
+    const source = pool.length > 0 ? pool : nonModuleTemplates;
     return source[Math.floor(rng() * source.length)];
   };
 
@@ -823,7 +902,7 @@ export function simulateGearEquipChange(
   gear: GearUnit,
   change:
     | { type: 'equip'; instance: ItemInstance }
-    | { type: 'unequip'; slot: EquipmentSlot }
+    | { type: 'unequip'; slot: PaperDollSlot }
 ): GearUnit {
   const nextEquipped: EquippedSlotIds = {
     ...EMPTY_EQUIPPED_SLOT_IDS,
@@ -831,7 +910,7 @@ export function simulateGearEquipChange(
   };
   if (change.type === 'unequip') {
     nextEquipped[change.slot] = null;
-  } else {
+  } else if (change.instance.slot !== 'module') {
     nextEquipped[change.instance.slot] = change.instance.instanceId;
   }
   return {

@@ -10,7 +10,7 @@ import {
   X,
 } from 'lucide-react';
 import { STAT_KEYS } from '../data/classes';
-import { EQUIPMENT_SLOTS, RARITY_META } from '../data/items';
+import { ITEM_SLOTS, RARITY_META } from '../data/items';
 import { getEffectiveItemStats, getItemEquippedByGear } from '../engine/equipment';
 import {
   getBoxCapacity,
@@ -35,7 +35,7 @@ import { BottomSheet } from './BottomSheet';
 import { ClassIcon, SlotIcon } from './GameIcons';
 
 type WarehouseContainer = 'box' | 'warehouse';
-type SlotFilter = 'all' | (typeof EQUIPMENT_SLOTS)[number];
+type SlotFilter = 'all' | (typeof ITEM_SLOTS)[number];
 
 interface SelectedWarehouseItem {
   container: WarehouseContainer;
@@ -464,7 +464,7 @@ export function WarehouseView() {
                 className="h-9 px-2.5 rounded border border-slate-700 bg-slate-900 text-xs text-slate-100 min-w-0 flex-1 sm:flex-none cursor-pointer"
               >
                 <option value="all">{t('warehouse.slotAll')}</option>
-                {EQUIPMENT_SLOTS.map((slot) => (
+                {ITEM_SLOTS.map((slot) => (
                   <option key={slot} value={slot}>
                     {getSlotLabel(lang, slot)}
                   </option>

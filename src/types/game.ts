@@ -342,7 +342,10 @@ export type EquipmentSlot =
   | 'engine'
   | 'cpu'
   | 'accessory'
-  | 'radar';
+  | 'radar'
+  | 'module';
+
+export type PaperDollSlot = Exclude<EquipmentSlot, 'module'>;
 
 export type ItemRarity = 'common' | 'rare' | 'epic' | 'legendary';
 
@@ -570,7 +573,7 @@ export type ExtenderEquipFailureReason =
   | 'same_effect'
   | 'skill_limit';
 
-export type EquippedSlotIds = Record<EquipmentSlot, string | null>;
+export type EquippedSlotIds = Record<PaperDollSlot, string | null>;
 
 export interface EquipValidationResult {
   canEquip: boolean;
@@ -581,6 +584,7 @@ export interface EquipValidationResult {
 
 export type EnchantResultCode =
   | 'max_level'
+  | 'not_enchantable'
   | 'insufficient_credits'
   | 'success'
   | 'failed';
@@ -1246,7 +1250,7 @@ export interface AutoEquipTraitDeltas {
 }
 
 export interface AutoEquipSlotPlan {
-  slot: EquipmentSlot;
+  slot: PaperDollSlot;
   currentItem: ItemInstance | null;
   nextItem: ItemInstance | null;
   currentScore: number;
@@ -1292,7 +1296,7 @@ export interface StarterSlotConfig {
 
 export interface StarterSetConfig {
   enabled: boolean;
-  slots: Omit<Record<EquipmentSlot, StarterSlotConfig>, 'radar'> & {
+  slots: Omit<Record<PaperDollSlot, StarterSlotConfig>, 'radar'> & {
     radar?: StarterSlotConfig;
   };
   rookieBoostPct: number;

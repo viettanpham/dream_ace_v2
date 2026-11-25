@@ -46,7 +46,10 @@ export function computeItemPrice(input: ComputeItemPriceInput): number {
     affixCount = 0,
     traitCount = 0,
   } = input;
-  const base = PRICE_FORMULA.baseBySlot[slot];
+  const base =
+    slot === 'module'
+      ? PRICE_FORMULA.moduleBase.stat
+      : PRICE_FORMULA.baseBySlot[slot];
   const tierIdx = Math.max(
     0,
     Math.min(PRICE_FORMULA.tierFactor.length - 1, Math.round(tier) - 1)

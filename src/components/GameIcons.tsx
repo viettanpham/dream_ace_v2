@@ -1,5 +1,6 @@
 import {
   BatteryCharging,
+  Cpu,
   Crosshair,
   Flame,
   Gift,
@@ -48,6 +49,8 @@ export function SlotIcon({ slot, className = 'w-4 h-4' }: SlotIconProps) {
       return <BatteryCharging className={className} aria-hidden="true" />;
     case 'radar':
       return <Radar className={className} aria-hidden="true" />;
+    case 'module':
+      return <Cpu className={className} aria-hidden="true" />;
     default:
       return <Layers className={className} aria-hidden="true" />;
   }
@@ -130,5 +133,7 @@ export function getSlotAccentClass(slot: EquipmentSlot): string {
       return 'text-cyan-400';
     case 'radar':
       return 'text-teal-400';
+    case 'module':
+      return 'text-indigo-400';
   }
 }

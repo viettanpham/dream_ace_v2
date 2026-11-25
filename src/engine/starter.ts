@@ -7,10 +7,10 @@ import {
   sanitizeStarterSetConfig,
 } from '../data/starterConfig';
 import type {
-  EquipmentSlot,
   GearUnit,
   ItemInstance,
   MechClassId,
+  PaperDollSlot,
   PilotAccount,
   StarterSetConfig,
   StarterSlotConfig,
@@ -58,7 +58,7 @@ export function computeStarterEffectiveParams(
 export function generateStarterItemForSlot(
   classId: MechClassId,
   gearLevel: number,
-  slot: EquipmentSlot,
+  slot: PaperDollSlot,
   starterConfig: StarterSetConfig = DEFAULT_STARTER_SET_CONFIG,
   rng: () => number = Math.random
 ): ItemInstance {

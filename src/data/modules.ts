@@ -1,4 +1,5 @@
 import type {
+  ItemTemplate,
   ModuleFamily,
   ModuleTemplate,
   ModuleTraitKey,
@@ -6,6 +7,7 @@ import type {
 } from '../types/game';
 import { STAT_KEYS } from './classes';
 import rawIconCatalog from './iconCatalog.json';
+import { PRICE_FORMULA } from './itemPricing';
 import rawModulesData from './modules.json';
 
 export type { ModuleTemplate };
@@ -183,3 +185,53 @@ export function getModuleTemplateById(
 ): ModuleTemplate | undefined {
   return MODULE_TEMPLATES_BY_ID[id];
 }
+
+export const MODULE_ITEM_TEMPLATES: ItemTemplate[] = MODULE_TEMPLATES.map(
+  (mod): ItemTemplate => {
+    const tierIdx = Math.max(
+      0,
+      Math.min(PRICE_FORMULA.tierFactor.length - 1, Math.round(mod.tier) - 1)
+    );
+    const basePrice = Math.round(
+      PRICE_FORMULA.moduleBase[mod.family] *
+        (PRICE_FORMULA.tierFactor[tierIdx] ?? 1)
+    );
+    if (mod.family === 'stat') {
+      return {
+        id: mod.id,
+        nameEn: mod.nameEn,
+        nameVi: mod.nameVi,
+        descEn: mod.descEn,
+        descVi: mod.descVi,
+        slot: 'module',
+        tier: mod.tier,
+        requiredLevel: mod.requiredLevel,
+        classRestriction: null,
+        basePrice,
+        primaryStat: mod.effectKey as StatKey,
+        primaryRange: [mod.value, mod.value],
+        affixPool: [],
+        registryTag: BUILTIN_MODULE_REGISTRY_TAG,
+      };
+    }
+    return {
+      id: mod.id,
+      nameEn: mod.nameEn,
+      nameVi: mod.nameVi,
+      descEn: mod.descEn,
+      descVi: mod.descVi,
+      slot: 'module',
+      tier: mod.tier,
+      requiredLevel: mod.requiredLevel,
+      classRestriction: null,
+      basePrice,
+      primaryStat: 'attack',
+      primaryRange: [0, 0],
+      affixPool: [],
+      ...(mod.family === 'trait'
+        ? { specialTraits: { [mod.effectKey]: mod.value } }
+        : {}),
+      registryTag: BUILTIN_MODULE_REGISTRY_TAG,
+    };
+  }
+);

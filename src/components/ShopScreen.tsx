@@ -1291,7 +1291,10 @@ export function ShopScreen() {
                     const canAfford = pilot.credits >= item.price;
                     const canBuy = !isSoldOut && canAfford && !isInventoryFull;
                     const itemStats = getEffectiveItemStats(item);
-                    const currentInSlot = equippedOnActive[item.slot];
+                    const currentInSlot =
+                      item.slot !== 'module'
+                        ? equippedOnActive[item.slot]
+                        : null;
                     const curSlotStats = currentInSlot
                       ? getEffectiveItemStats(currentInSlot)
                       : null;
@@ -1673,7 +1676,8 @@ export function ShopScreen() {
               const canAfford = pilot.credits >= item.price;
               const canBuy = !isSoldOut && canAfford && !isInventoryFull;
               const itemStats = getEffectiveItemStats(item);
-              const currentInSlot = equippedOnActive[item.slot];
+              const currentInSlot =
+                item.slot !== 'module' ? equippedOnActive[item.slot] : null;
               const curSlotStats = currentInSlot
                 ? getEffectiveItemStats(currentInSlot)
                 : null;
