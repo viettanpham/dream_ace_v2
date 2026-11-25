@@ -1149,7 +1149,7 @@
       "basePrice": 176,
       "primaryStat": "evasion",
       "primaryRange": [3, 6],
-      "secondaryStat": "attack",
+      "secondaryStat": "defense",
       "secondaryRange": [2, 4],
       "affixPool": ["evasion", "attack", "fuel", "spirit"],
       "specialTraits": {
@@ -1161,21 +1161,20 @@
       "id": "tpl_rd_fire_control",
       "nameEn": "Fire-Control Radar",
       "nameVi": "Radar Điều Khiển Hỏa Lực",
-      "descEn": "Ballistic tracking array calibrating salvo trajectory and crit precision.",
-      "descVi": "Cụm radar dẫn bắn hiệu chỉnh quỹ đạo và gia tăng độ chí mạng.",
+      "descEn": "Ballistic tracking array calibrating salvo trajectory and target-lock accuracy.",
+      "descVi": "Cụm radar dẫn bắn hiệu chỉnh quỹ đạo và tăng độ chính xác khóa mục tiêu.",
       "slot": "radar",
       "tier": 2,
       "requiredLevel": 3,
       "classRestriction": null,
       "basePrice": 310,
-      "primaryStat": "attack",
-      "primaryRange": [5, 9],
-      "secondaryStat": "evasion",
-      "secondaryRange": [3, 6],
+      "primaryStat": "evasion",
+      "primaryRange": [4, 7],
+      "secondaryStat": "attack",
+      "secondaryRange": [4, 7],
       "affixPool": ["attack", "evasion", "fuel", "spirit"],
       "specialTraits": {
-        "accuracyPct": 6,
-        "critBonusPct": 3
+        "accuracyPct": 6
       },
       "registryTag": "sys"
     },
@@ -1183,21 +1182,20 @@
       "id": "tpl_rd_wideband",
       "nameEn": "Wide-Band Radar",
       "nameVi": "Radar Dải Rộng",
-      "descEn": "Multi-spectrum sensor suite capable of exposing cloaked signatures.",
-      "descVi": "Tổ hợp cảm biến đa dải tần giúp phát hiện mục tiêu tàng hình.",
+      "descEn": "Multi-spectrum sensor suite stabilizing defensive tracking and target lock.",
+      "descVi": "Tổ hợp cảm biến đa dải tần giúp ổn định phòng thủ và khóa mục tiêu.",
       "slot": "radar",
       "tier": 2,
       "requiredLevel": 4,
       "classRestriction": null,
       "basePrice": 315,
-      "primaryStat": "spirit",
-      "primaryRange": [6, 10],
-      "secondaryStat": "fuel",
-      "secondaryRange": [3, 6],
+      "primaryStat": "evasion",
+      "primaryRange": [5, 8],
+      "secondaryStat": "defense",
+      "secondaryRange": [4, 7],
       "affixPool": ["spirit", "fuel", "shield", "evasion"],
       "specialTraits": {
-        "accuracyPct": 5,
-        "detectStealth": true
+        "accuracyPct": 5
       },
       "registryTag": "sys"
     },
@@ -1206,7 +1204,7 @@
       "nameEn": "Phased-Array Radar",
       "nameVi": "Radar Mảng Pha",
       "descEn": "Solid-state phased array delivering rapid multi-target lock accuracy.",
-      "descVi": "Radar mảng pha quét điện tử cho độ chính xác và chí mạng vượt trội.",
+      "descVi": "Radar mảng pha quét điện tử cho độ chính xác khóa mục tiêu vượt trội.",
       "slot": "radar",
       "tier": 3,
       "requiredLevel": 6,
@@ -1215,11 +1213,10 @@
       "primaryStat": "evasion",
       "primaryRange": [8, 12],
       "secondaryStat": "attack",
-      "secondaryRange": [6, 9],
+      "secondaryRange": [5, 8],
       "affixPool": ["evasion", "attack", "spirit", "fuel"],
       "specialTraits": {
-        "accuracyPct": 9,
-        "critBonusPct": 4
+        "accuracyPct": 9
       },
       "registryTag": "sys"
     },
@@ -1227,21 +1224,20 @@
       "id": "tpl_rd_hunter",
       "nameEn": "Hunter Radar",
       "nameVi": "Radar Săn Mồi",
-      "descEn": "High-gain interceptor scanner stripping enemy stealth cover.",
-      "descVi": "Radar truy kích công suất cao bóc trần mục tiêu ẩn thân trên chiến trường.",
+      "descEn": "High-gain interceptor scanner sharpening evasive lock-on and strike accuracy.",
+      "descVi": "Radar truy kích công suất cao giúp tăng né tránh và độ chính xác công kích.",
       "slot": "radar",
       "tier": 3,
       "requiredLevel": 6,
       "classRestriction": null,
       "basePrice": 450,
-      "primaryStat": "attack",
-      "primaryRange": [8, 12],
-      "secondaryStat": "spirit",
+      "primaryStat": "evasion",
+      "primaryRange": [6, 9],
+      "secondaryStat": "attack",
       "secondaryRange": [5, 8],
       "affixPool": ["attack", "spirit", "evasion", "defense"],
       "specialTraits": {
-        "accuracyPct": 8,
-        "detectStealth": true
+        "accuracyPct": 8
       },
       "registryTag": "sys"
     },
@@ -1249,22 +1245,20 @@
       "id": "tpl_rd_aegis_eye",
       "nameEn": "AEGIS Eye",
       "nameVi": "Mắt Thần AEGIS",
-      "descEn": "Apex orbital sensor core unifying pinpoint lock, crit, and stealth detection.",
-      "descVi": "Lõi cảm biến tối thượng hợp nhất độ chính xác, chí mạng và phát hiện tàng hình.",
+      "descEn": "Apex orbital sensor core delivering pinpoint target lock and evasive guidance.",
+      "descVi": "Lõi cảm biến tối thượng tối ưu độ chính xác khóa mục tiêu và dẫn đường cơ động.",
       "slot": "radar",
       "tier": 4,
       "requiredLevel": 9,
       "classRestriction": null,
       "basePrice": 670,
-      "primaryStat": "attack",
-      "primaryRange": [10, 15],
-      "secondaryStat": "evasion",
-      "secondaryRange": [8, 12],
+      "primaryStat": "evasion",
+      "primaryRange": [9, 13],
+      "secondaryStat": "attack",
+      "secondaryRange": [7, 10],
       "affixPool": ["attack", "evasion", "spirit", "shield", "fuel"],
       "specialTraits": {
-        "accuracyPct": 12,
-        "critBonusPct": 4,
-        "detectStealth": true
+        "accuracyPct": 12
       },
       "registryTag": "sys"
     }

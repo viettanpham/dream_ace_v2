@@ -173,7 +173,7 @@ describe('TASK RAD1a-2 — Radar accuracy, stealth detection, and auto-equip wei
     );
     expect(skillHitStealth.updatedUnits.find((u) => u.id === 'enemy_s')!.shield).toBeLessThan(200);
 
-    // Real battle init: player with detectStealth radar detects; allied AI and all enemies keep defaults
+    // Real battle init: player with wideband radar gets accuracyPct 5 and no detectStealth
     const campaign = createFreshCampaignState('ScanPilot', 'striker', createRng(5));
     const wideband = generateItemInstance({ templateId: 'tpl_rd_wideband', rarity: 'rare', rollQuality: 50 }, createRng(6));
     const pilotWithRadar = {
@@ -190,18 +190,18 @@ describe('TASK RAD1a-2 — Radar accuracy, stealth detection, and auto-equip wei
     const battle = createInitialBattleState(pilotWithRadar, 'sec_1', createRng(7));
     const player = battle.units.find((u) => u.isPlayer)!;
     const npcs = battle.units.filter((u) => !u.isPlayer);
-    expect(player.detectsStealth).toBe(true);
+    expect(player.detectsStealth).toBe(false);
     expect(player.accuracyPct).toBe(5);
     expect(npcs.length).toBeGreaterThan(0);
     expect(npcs.every((u) => u.detectsStealth === false && u.accuracyPct === 0)).toBe(true);
   });
 
-  it('3) autoEquip picks a radar for a striker and scores accuracyPct + detectStealth', () => {
+  it('3) autoEquip picks a radar for a striker and scores accuracyPct', () => {
     const campaign = createFreshCampaignState('AutoRadar', 'striker', createRng(10));
     const scout = generateItemInstance({ templateId: 'tpl_rd_scout', rarity: 'common', rollQuality: 50 }, createRng(11));
     const hunter = generateItemInstance({ templateId: 'tpl_rd_hunter', rarity: 'epic', rollQuality: 60 }, createRng(12));
 
-    // Confirm score contribution from accuracyPct (1.2 for striker) and detectStealthBonus (5)
+    // Confirm score contribution from accuracyPct (1.2 for striker)
     expect(scoreItemForClass(hunter, 'striker', DEFAULT_AUTO_EQUIP_CONFIG)).toBeGreaterThan(
       scoreItemForClass(scout, 'striker', DEFAULT_AUTO_EQUIP_CONFIG)
     );
@@ -209,8 +209,8 @@ describe('TASK RAD1a-2 — Radar accuracy, stealth detection, and auto-equip wei
     const delta =
       scoreItemForClass(hunter, 'striker', DEFAULT_AUTO_EQUIP_CONFIG) -
       scoreItemForClass(plainHunter, 'striker', DEFAULT_AUTO_EQUIP_CONFIG);
-    // hunter traits: accuracyPct 8 * 1.2 = 9.6 + detectStealthBonus 5 = 14.6
-    expect(delta).toBeCloseTo(14.6, 1);
+    // hunter traits: accuracyPct 8 * 1.2 = 9.6
+    expect(delta).toBeCloseTo(9.6, 1);
 
     const pilot = {
       ...campaign.pilot,
@@ -225,7 +225,7 @@ describe('TASK RAD1a-2 — Radar accuracy, stealth detection, and auto-equip wei
     expect(radarPlan.changed).toBe(true);
     expect(radarPlan.nextItem?.instanceId).toBe(hunter.instanceId);
     expect(radarPlan.traitDeltas.accuracyPct).toBe(8);
-    expect(radarPlan.traitDeltas.detectStealthDelta).toBe(1);
+    expect(radarPlan.traitDeltas.detectStealthDelta).toBe(0);
   });
 
   it('4) fixed-seed battle with no radar is identical to before (zero defaults and deterministic outcomes)', () => {

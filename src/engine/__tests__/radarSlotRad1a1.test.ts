@@ -119,7 +119,7 @@ describe('TASK RAD1a-1 — Radar 7th equipment slot, items, pricing, and save mi
       },
       createRng(42)
     );
-    expect(countNonZeroTraits(inst.specialTraits)).toBe(3);
+    expect(countNonZeroTraits(inst.specialTraits)).toBe(1);
     expect(inst.price).toBe(
       computeItemPrice({
         slot: 'radar',
@@ -127,7 +127,7 @@ describe('TASK RAD1a-1 — Radar 7th equipment slot, items, pricing, and save mi
         rarity: 'epic',
         rollQuality: 70,
         affixCount: inst.affixes.length,
-        traitCount: 3,
+        traitCount: 1,
       })
     );
   });
@@ -157,7 +157,7 @@ describe('TASK RAD1a-1 — Radar 7th equipment slot, items, pricing, and save mi
     expect(traitsA.accuracyPct).toBe(4);
     expect(traitsA.detectStealth).toBe(false);
 
-    // Combine scout radar + hunter (in cpu/radar test inventory override) to confirm sum + OR
+    // Combine scout radar + hunter (in cpu/radar test inventory override) to confirm sum + false stealth detect
     const gearStacked = {
       ...fresh.pilot.gears.striker,
       equipped: {
@@ -172,7 +172,7 @@ describe('TASK RAD1a-1 — Radar 7th equipment slot, items, pricing, and save mi
       rdHunter,
     ]);
     expect(traitsB.accuracyPct).toBe(12);
-    expect(traitsB.detectStealth).toBe(true);
+    expect(traitsB.detectStealth).toBe(false);
   });
 
   it('4) radar items can appear in a seeded drop roll and in shop stock', () => {

@@ -178,20 +178,6 @@ export function TopHud() {
                 {activeGear.level}
               </span>
             </div>
-
-            {cheatsActive && (
-              <button
-                type="button"
-                onClick={() => ENABLE_ADMIN_CP && toggleAdminPanel()}
-                data-testid="cheats-active-badge"
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-rose-500/70 bg-rose-500/20 text-[12px] font-bold text-rose-200 whitespace-nowrap shrink-0 cursor-pointer"
-                title={t('admin.cheatsActiveBadge')}
-              >
-                <AlertTriangle className="w-3 h-3 text-rose-400 shrink-0" />
-                <span className="hidden sm:inline">{t('admin.cheatsActiveBadge')}</span>
-                <span className="sm:hidden">CHEAT</span>
-              </button>
-            )}
           </div>
 
           {/* Center: Desktop full info / Credits & WP */}

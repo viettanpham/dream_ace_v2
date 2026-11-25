@@ -467,6 +467,16 @@ function convertLegacyItemInstance(
     const syncedRequiredLevel = itemLevels.kinds[kind].enabled
       ? getTierRequiredLevel(kind, tier, itemLevels)
       : Math.max(1, Number(obj.requiredLevel) || tpl.requiredLevel);
+    const modTpl = tpl.slot === 'module' ? getModuleTemplateById(tpl.id) : undefined;
+    const isStatModule = modTpl
+      ? modTpl.family === 'stat'
+      : tpl.slot === 'module' && tpl.primaryRange[1] > 0;
+    const rolledBaseStats: ItemInstance['rolledBaseStats'] =
+      tpl.slot === 'module'
+        ? isStatModule
+          ? ({ [tpl.primaryStat]: tpl.primaryRange[0] } as ItemInstance['rolledBaseStats'])
+          : {}
+        : (obj.rolledBaseStats as ItemInstance['rolledBaseStats']);
     return {
       instanceId: obj.instanceId,
       templateId: tpl.id,
@@ -482,7 +492,7 @@ function convertLegacyItemInstance(
         obj.rarity === 'legendary'
           ? obj.rarity
           : 'common',
-      rolledBaseStats: obj.rolledBaseStats as ItemInstance['rolledBaseStats'],
+      rolledBaseStats,
       affixes: Array.isArray(obj.affixes) ? obj.affixes : [],
       suffixId: typeof obj.suffixId === 'string' ? obj.suffixId : null,
       rollQuality: Math.max(1, Math.min(100, Number(obj.rollQuality) || 50)),
