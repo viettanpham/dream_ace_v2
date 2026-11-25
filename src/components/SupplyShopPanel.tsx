@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   getSupplyTemplateById,
   SUPPLY_TEMPLATE_FAMILIES,
@@ -17,6 +17,7 @@ import type {
 } from '../types/game';
 import { CatalogIcon } from './CatalogIcon';
 import { formatSupplyEffectSummary, getSupplyName } from './SupplyLoadoutBar';
+import { SupplyTradeConfirm } from './SupplyTradeConfirm';
 
 export interface SupplyShopPanelProps {
   onNotice?: (message: string) => void;
@@ -53,6 +54,12 @@ export function SupplyShopPanel({ onNotice }: SupplyShopPanelProps) {
   const sellSupply = useGameStore((s) => s.sellSupply);
 
   const isLocked = isBattleActive({ screen, battle }) || autoRepeatActive;
+  const [pendingTrade, setPendingTrade] = useState<{
+    mode: 'buy' | 'sell';
+    template: SupplyTemplate;
+    qty: number;
+    unitPrice: number;
+  } | null>(null);
 
   const groupedFamilies = useMemo(() => {
     const byFamily = new Map<SupplyFamily, ResolvedListingRow[]>();
@@ -189,6 +196,17 @@ export function SupplyShopPanel({ onNotice }: SupplyShopPanelProps) {
     }
   };
 
+  const handleConfirmTrade = () => {
+    if (!pendingTrade) return;
+    const trade = pendingTrade;
+    setPendingTrade(null);
+    if (trade.mode === 'buy') {
+      handleBuy(trade.template, trade.qty, trade.unitPrice);
+    } else {
+      handleSell(trade.template, trade.qty);
+    }
+  };
+
   if (groupedFamilies.length === 0 && ownedRows.length === 0) {
     return (
       <p
@@ -290,6 +308,7 @@ export function SupplyShopPanel({ onNotice }: SupplyShopPanelProps) {
                         <div className="flex flex-wrap items-center gap-1.5">
                           {BUY_QUANTITIES.map((qty) => {
                             const reason = getBuyDisabledReason(row, qty);
+                            const totalPrice = unitPrice * qty;
                             return (
                               <button
                                 key={qty}
@@ -297,10 +316,20 @@ export function SupplyShopPanel({ onNotice }: SupplyShopPanelProps) {
                                 data-testid={`supply-buy-${tpl.id}-${qty}`}
                                 disabled={Boolean(reason)}
                                 title={reason ?? undefined}
-                                onClick={() => handleBuy(tpl, qty, unitPrice)}
-                                className="min-h-[38px] md:min-h-[32px] px-2.5 rounded border border-amber-500/50 bg-amber-500/15 hover:bg-amber-500/25 disabled:border-slate-700 disabled:bg-slate-900 disabled:text-slate-500 disabled:cursor-not-allowed text-amber-200 text-xs font-mono-nums font-semibold transition-colors cursor-pointer"
+                                onClick={() =>
+                                  setPendingTrade({
+                                    mode: 'buy',
+                                    template: tpl,
+                                    qty,
+                                    unitPrice,
+                                  })
+                                }
+                                className="min-h-[38px] md:min-h-[32px] px-2.5 py-1 rounded border border-amber-500/50 bg-amber-500/15 hover:bg-amber-500/25 disabled:border-slate-700 disabled:bg-slate-900 disabled:text-slate-500 disabled:cursor-not-allowed text-amber-200 text-xs font-mono-nums font-semibold transition-colors cursor-pointer flex flex-col items-center justify-center leading-tight"
                               >
-                                x{qty}
+                                <span>x{qty}</span>
+                                <span className="text-[10px] font-normal opacity-85">
+                                  {totalPrice.toLocaleString()} CR
+                                </span>
                               </button>
                             );
                           })}
@@ -360,16 +389,27 @@ export function SupplyShopPanel({ onNotice }: SupplyShopPanelProps) {
                 <div className="flex flex-wrap items-center gap-1.5 shrink-0">
                   {SELL_QUANTITIES.map((qty) => {
                     const disabled = isLocked || owned < qty;
+                    const totalEarned = unitSellPrice * qty;
                     return (
                       <button
                         key={qty}
                         type="button"
                         data-testid={`supply-sell-${tpl.id}-${qty}`}
                         disabled={disabled}
-                        onClick={() => handleSell(tpl, qty)}
-                        className="min-h-[38px] md:min-h-[32px] px-2.5 rounded border border-emerald-500/50 bg-emerald-500/15 hover:bg-emerald-500/25 disabled:border-slate-700 disabled:bg-slate-900 disabled:text-slate-500 disabled:cursor-not-allowed text-emerald-200 text-xs font-semibold transition-colors cursor-pointer"
+                        onClick={() =>
+                          setPendingTrade({
+                            mode: 'sell',
+                            template: tpl,
+                            qty,
+                            unitPrice: unitSellPrice,
+                          })
+                        }
+                        className="min-h-[38px] md:min-h-[32px] px-2.5 py-1 rounded border border-emerald-500/50 bg-emerald-500/15 hover:bg-emerald-500/25 disabled:border-slate-700 disabled:bg-slate-900 disabled:text-slate-500 disabled:cursor-not-allowed text-emerald-200 text-xs font-semibold transition-colors cursor-pointer flex flex-col items-center justify-center leading-tight"
                       >
-                        {t('shop.supplySellBtn', { qty })}
+                        <span>{t('shop.supplySellBtn', { qty })}</span>
+                        <span className="text-[10px] font-mono-nums font-normal opacity-85">
+                          +{totalEarned.toLocaleString()} CR
+                        </span>
                       </button>
                     );
                   })}
@@ -379,6 +419,17 @@ export function SupplyShopPanel({ onNotice }: SupplyShopPanelProps) {
           </div>
         </section>
       )}
+
+      <SupplyTradeConfirm
+        mode={pendingTrade?.mode ?? 'buy'}
+        template={pendingTrade?.template ?? null}
+        qty={pendingTrade?.qty ?? 1}
+        unitPrice={pendingTrade?.unitPrice ?? 0}
+        credits={credits}
+        iconCatalogMods={iconCatalogMods}
+        onConfirm={handleConfirmTrade}
+        onCancel={() => setPendingTrade(null)}
+      />
     </div>
   );
 }

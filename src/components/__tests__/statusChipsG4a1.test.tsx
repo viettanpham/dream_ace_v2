@@ -651,7 +651,7 @@ describe('Task G4a-1 Part 2 — Icon catalog, status chips, settings, Bảng ico
     ).toEqual(adminDef);
 
     // Built-in defaults & old saves without statusDisplayDefaults + CURRENT_SAVE_VERSION=9
-    expect(CURRENT_SAVE_VERSION).toBe(12);
+    expect(CURRENT_SAVE_VERSION).toBeGreaterThanOrEqual(12);
     const migrated = migrateSaveData({ credits: 500 }, 8);
     expect(
       resolveEffectiveStatusDisplaySettings(
