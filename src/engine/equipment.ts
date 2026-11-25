@@ -371,7 +371,7 @@ export function generateShopStock(
         {
           templateId: pickedTpl.id,
           tier: pickedTpl.tier,
-          statPowerLevel: pickedTpl.requiredLevel,
+          statPowerLevel: getEffectiveTemplateRequiredLevel(pickedTpl, levelCfg),
           rarity,
           itemLevels: levelCfg,
         },
