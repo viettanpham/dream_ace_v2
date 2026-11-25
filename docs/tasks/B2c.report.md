@@ -1,0 +1,13 @@
+# TASK B2c Report
+- Items done: STEP A, ITEM 1 (minPerLevel=20, minPerAlly, affordability cap + getMaxAffordableFluxCount, flux_min_sp uncastable check, picker & store clamp), ITEM 2 (pickFluxCount ally <25% SP, keep >=50% / 15% losing, ready affordable heal/shield check, 3 Admin CP fields), TESTS, CODEMAP.
+- Files changed: src/types/game.ts, src/data/balance.ts, src/engine/skills.ts, src/engine/combat.ts, src/components/FluxTransferPicker.tsx, src/store/useGameStore.ts, src/components/AdminPanel.tsx, src/i18n/vi.ts, src/i18n/en.ts, src/engine/__tests__/fluxTransferB2c.test.ts, docs/CODEMAP.md, docs/tasks/B2c.md, docs/tasks/B2c.progress.md, docs/tasks/B2c.report.md.
+- Checks: npx tsc --noEmit PASS; vitest --reporter=dot (fluxTransferB2c + spEconomyB1 + supplyRebalanceCsBal + enemyLevelLvl1 + supplyLimitMultLvl2) -> 5/5 files, 23/23 tests PASS.
+- Examples @ Support SP 120 (max full targets):
+  - L1 (3t, 3%, fee 10%, min 20): k=3, 20/ally, moved 60, cost 66 (left 54).
+  - L3 (5t, 5%, fee 5%, min 60): k=1, 60/ally, moved 60, cost 63 (left 57).
+  - L5 (7t, 8%, fee 1%, min 100): k=1, 100/ally, moved 100, cost 101 (left 19).
+- Examples @ Support SP 240 (max full targets):
+  - L1 (3t, 3%, fee 10%, min 20): k=3, 20/ally, moved 60, cost 66 (left 174).
+  - L3 (5t, 5%, fee 5%, min 60): k=3, 60/ally, moved 180, cost 189 (left 51).
+  - L5 (7t, 8%, fee 1%, min 100): k=2, 100/ally, moved 200, cost 202 (left 38).
+- Not checked in a real browser: live BattleScreen FluxTransferPicker DOM layout/hover/click and AdminPanel live form rendering.

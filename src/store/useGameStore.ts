@@ -22,9 +22,12 @@ import { getSkillById, OPENING_CARDS_LIST } from '../data/skills';
 import {
   calculateBattleRewards,
   chooseAiDecision,
+  computeFluxBattlePressure,
   createInitialBattleState,
   createRoundHpSnapshot,
+  getMaxAffordableFluxCount,
   getValidEnemyTargets,
+  pickFluxCount,
   reconcileRemainingTurnOrder,
   resolveUnitAction,
   sortTurnOrder,
@@ -3254,6 +3257,21 @@ export const useGameStore = create<GameStoreState>()(
 
         // Route single_ally skills to selectedAllyTargetId; offensive actions to selectedTargetId
         const skillDef = skillId ? getSkillById(skillId) : undefined;
+        let clampedTransferCount = transferCount;
+        if (action === 'skill' && skillDef?.effectKind === 'sp_transfer') {
+          const fluxLv =
+            activeUnit.skillLevels[skillDef.id] ?? activeUnit.skillLevel ?? 1;
+          const maxAffordable = getMaxAffordableFluxCount(
+            battle.units,
+            activeUnit.id,
+            fluxLv,
+            state.adminConfig.fluxTransfer
+          );
+          clampedTransferCount =
+            transferCount === undefined
+              ? maxAffordable
+              : Math.max(0, Math.min(maxAffordable, Math.floor(transferCount)));
+        }
         const resolvedTargetId =
           action === 'skill' && skillDef?.targetType === 'single_ally'
             ? battle.selectedAllyTargetId ?? activeUnit.id
@@ -3268,7 +3286,7 @@ export const useGameStore = create<GameStoreState>()(
           state.adminConfig,
           Math.random,
           skillId,
-          transferCount
+          clampedTransferCount
         );
         playCue(resolution.soundCue, muteSound);
 
@@ -3478,13 +3496,50 @@ export const useGameStore = create<GameStoreState>()(
         }
 
         // 2. Evaluate pure Tactics engine (top-to-bottom priority)
-        const choice = chooseAction(
+        let choice = chooseAction(
           battle,
           activeUnit,
           tactics,
           Math.random,
           state.adminConfig
         );
+        let autoTransferCount: number | undefined;
+        const chosenSkillDef =
+          choice.action === 'skill' && choice.skillId
+            ? getSkillById(choice.skillId)
+            : undefined;
+        if (chosenSkillDef?.effectKind === 'sp_transfer') {
+          const fluxCfg = sanitizeFluxTransferConfig(state.adminConfig.fluxTransfer);
+          const pressure = computeFluxBattlePressure(battle.units, activeUnit.side);
+          const count = pickFluxCount(
+            battle.units,
+            activeUnit.id,
+            { ...fluxCfg, spEconomy: state.adminConfig.spEconomy },
+            pressure,
+            Math.random
+          );
+          if (count > 0) {
+            autoTransferCount = count;
+          } else {
+            const validEnemies = getValidEnemyTargets(
+              battle.units,
+              activeUnit,
+              'attack'
+            );
+            const fallbackEnemy = [...validEnemies].sort((a, b) => a.hp - b.hp)[0];
+            choice = fallbackEnemy
+              ? {
+                  action: 'attack',
+                  targetId: fallbackEnemy.id,
+                  matchedRuleIndex: null,
+                }
+              : {
+                  action: 'defend',
+                  targetId: null,
+                  matchedRuleIndex: null,
+                };
+          }
+        }
         const autoRuleNumber =
           choice.matchedRuleIndex !== null ? choice.matchedRuleIndex + 1 : 0;
 
@@ -3498,7 +3553,8 @@ export const useGameStore = create<GameStoreState>()(
           battle.round,
           state.adminConfig,
           Math.random,
-          choice.skillId
+          choice.skillId,
+          autoTransferCount
         );
         playCue(resolution.soundCue, muteSound);
 

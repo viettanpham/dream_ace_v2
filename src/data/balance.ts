@@ -277,19 +277,28 @@ export const DEFAULT_FLUX_TRANSFER_LEVELS: readonly FluxTransferLevelRule[] = [
   { targets: 7, pct: 8, fee: 1 },
 ];
 
-export const DEFAULT_FLUX_TRANSFER_CONFIG: FluxTransferConfig = {
+export const DEFAULT_FLUX_TRANSFER_CONFIG: Required<FluxTransferConfig> = {
   levels: DEFAULT_FLUX_TRANSFER_LEVELS.map((r) => ({ ...r })),
+  minPerLevel: 20,
+  allySpBelowPct: 25,
+  keepSelfPct: 50,
 };
 
 export function cloneFluxTransferConfig(
   cfg: FluxTransferConfig
-): FluxTransferConfig {
+): Required<FluxTransferConfig> {
+  const clean = sanitizeFluxTransferConfig(cfg);
   return {
-    levels: cfg.levels.map((r) => ({ ...r })),
+    levels: clean.levels.map((r) => ({ ...r })),
+    minPerLevel: clean.minPerLevel,
+    allySpBelowPct: clean.allySpBelowPct,
+    keepSelfPct: clean.keepSelfPct,
   };
 }
 
-export function sanitizeFluxTransferConfig(raw: unknown): FluxTransferConfig {
+export function sanitizeFluxTransferConfig(
+  raw: unknown
+): Required<FluxTransferConfig> {
   const obj =
     raw && typeof raw === 'object' && !Array.isArray(raw)
       ? (raw as Record<string, unknown>)
@@ -310,7 +319,40 @@ export function sanitizeFluxTransferConfig(raw: unknown): FluxTransferConfig {
       };
     }
   );
-  return { levels };
+  return {
+    levels,
+    minPerLevel: Math.round(
+      clampSpNum(
+        obj.minPerLevel,
+        0,
+        200,
+        DEFAULT_FLUX_TRANSFER_CONFIG.minPerLevel
+      )
+    ),
+    allySpBelowPct: clampSpNum(
+      obj.allySpBelowPct,
+      0,
+      100,
+      DEFAULT_FLUX_TRANSFER_CONFIG.allySpBelowPct
+    ),
+    keepSelfPct: clampSpNum(
+      obj.keepSelfPct,
+      0,
+      100,
+      DEFAULT_FLUX_TRANSFER_CONFIG.keepSelfPct
+    ),
+  };
+}
+
+function getClampedFluxSkillLevel(
+  skillLevel: number,
+  skillMaxLevel: number = BALANCE_CONFIG.skillMaxLevel
+): number {
+  const maxLv = Math.max(
+    1,
+    Math.floor(skillMaxLevel || BALANCE_CONFIG.skillMaxLevel)
+  );
+  return Math.max(1, Math.min(maxLv, Math.floor(skillLevel || 1)));
 }
 
 export function getFluxTransferRule(
@@ -319,8 +361,11 @@ export function getFluxTransferRule(
   skillMaxLevel: number = BALANCE_CONFIG.skillMaxLevel
 ): FluxTransferLevelRule {
   const clean = sanitizeFluxTransferConfig(cfg);
-  const maxLv = Math.max(1, Math.floor(skillMaxLevel || BALANCE_CONFIG.skillMaxLevel));
-  const lv = Math.max(1, Math.min(maxLv, Math.floor(skillLevel || 1)));
+  const maxLv = Math.max(
+    1,
+    Math.floor(skillMaxLevel || BALANCE_CONFIG.skillMaxLevel)
+  );
+  const lv = getClampedFluxSkillLevel(skillLevel, maxLv);
   if (maxLv === clean.levels.length) {
     return { ...clean.levels[lv - 1] };
   }
@@ -328,10 +373,51 @@ export function getFluxTransferRule(
   const last = clean.levels[clean.levels.length - 1];
   const t = maxLv <= 1 ? 0 : (lv - 1) / (maxLv - 1);
   return {
-    targets: Math.max(1, Math.round(first.targets + (last.targets - first.targets) * t)),
+    targets: Math.max(
+      1,
+      Math.round(first.targets + (last.targets - first.targets) * t)
+    ),
     pct: Math.round((first.pct + (last.pct - first.pct) * t) * 100) / 100,
     fee: Math.round((first.fee + (last.fee - first.fee) * t) * 100) / 100,
   };
+}
+
+export function getFluxMinPerAlly(
+  skillLevel: number,
+  cfg?: FluxTransferConfig | null,
+  skillMaxLevel: number = BALANCE_CONFIG.skillMaxLevel
+): number {
+  const clean = sanitizeFluxTransferConfig(cfg);
+  const lv = getClampedFluxSkillLevel(skillLevel, skillMaxLevel);
+  return clean.minPerLevel * lv;
+}
+
+export function getFluxPlannedAmountEach(
+  actorSp: number,
+  skillLevel: number,
+  cfg?: FluxTransferConfig | null,
+  skillMaxLevel: number = BALANCE_CONFIG.skillMaxLevel
+): number {
+  const rule = getFluxTransferRule(skillLevel, cfg, skillMaxLevel);
+  const minPerAlly = getFluxMinPerAlly(skillLevel, cfg, skillMaxLevel);
+  const safeSp = Math.max(0, Math.floor(actorSp));
+  return Math.max(Math.floor(safeSp * (rule.pct / 100)), minPerAlly);
+}
+
+export function getFluxMinCastCost(
+  actorSp: number,
+  skillLevel: number,
+  cfg?: FluxTransferConfig | null,
+  skillMaxLevel: number = BALANCE_CONFIG.skillMaxLevel
+): number {
+  const rule = getFluxTransferRule(skillLevel, cfg, skillMaxLevel);
+  const amountEach = getFluxPlannedAmountEach(
+    actorSp,
+    skillLevel,
+    cfg,
+    skillMaxLevel
+  );
+  return amountEach > 0 ? Math.ceil(amountEach * (1 + rule.fee / 100)) : 0;
 }
 
 export function getGarageUnlockCost(ownedCount: number): number {

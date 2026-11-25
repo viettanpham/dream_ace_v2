@@ -1,5 +1,6 @@
 import {
   BALANCE_CONFIG,
+  getFluxMinCastCost,
   getSkillPurchaseCost,
   sanitizeSpEconomyConfig,
 } from '../data/balance';
@@ -383,7 +384,7 @@ export function getEffectiveSpCost(
 export function canUnitUseSkill(
   unit: CombatUnit,
   skillId: string,
-  admin?: Pick<AdminConfig, 'spEconomy'> | null
+  admin?: Pick<AdminConfig, 'spEconomy' | 'fluxTransfer'> | null
 ): BattleSkillUsability {
   const skill = getSkillById(skillId);
   if (!skill || skill.category === 'passive') {
@@ -485,6 +486,25 @@ export function canUnitUseSkill(
       spCost: effectiveSpCost,
       isToggleActive,
     };
+  }
+
+  if (skill.effectKind === 'sp_transfer') {
+    const skillLv = unit.skillLevels[skill.id] ?? unit.skillLevel ?? 1;
+    const minCost = getFluxMinCastCost(
+      unit.sp,
+      skillLv,
+      admin?.fluxTransfer,
+      BALANCE_CONFIG.skillMaxLevel
+    );
+    if (unit.sp < minCost) {
+      return {
+        canUse: false,
+        reason: 'flux_min_sp',
+        cooldownRemaining: cd,
+        spCost: minCost,
+        isToggleActive,
+      };
+    }
   }
 
   return {

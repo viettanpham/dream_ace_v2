@@ -1,7 +1,11 @@
 import {
   BALANCE_CONFIG,
   COMBAT_FORMULAS,
+  DEFAULT_FLUX_TRANSFER_CONFIG,
+  getFluxMinPerAlly,
+  getFluxPlannedAmountEach,
   getFluxTransferRule,
+  sanitizeFluxTransferConfig,
 } from '../data/balance';
 import { EMPTY_STAT_BLOCK, MECH_CLASSES, MECH_CLASS_LIST } from '../data/classes';
 import { DEFAULT_FORMATION_CONFIG, FORMATION_ROWS } from '../data/formationConfig';
@@ -1787,6 +1791,34 @@ export interface SpTransferResolution {
   amountPerAlly: number;
 }
 
+export function getMaxAffordableFluxCount(
+  units: CombatUnit[],
+  actorId: string,
+  skillLevel: number,
+  cfg?: FluxTransferConfig | null
+): number {
+  const actor = units.find((u) => u.id === actorId);
+  if (!actor || !actor.alive) return 0;
+  const rule = getFluxTransferRule(skillLevel, cfg, BALANCE_CONFIG.skillMaxLevel);
+  const maxTargets = Math.max(0, Math.floor(rule.targets));
+  if (maxTargets <= 0) return 0;
+  const actorSp = Math.max(0, actor.sp);
+  const amountEach = getFluxPlannedAmountEach(
+    actorSp,
+    skillLevel,
+    cfg,
+    BALANCE_CONFIG.skillMaxLevel
+  );
+  if (amountEach <= 0) return maxTargets;
+  for (let k = maxTargets; k >= 1; k--) {
+    const worstCaseCost = Math.ceil(k * amountEach * (1 + rule.fee / 100));
+    if (worstCaseCost <= actorSp) {
+      return k;
+    }
+  }
+  return 0;
+}
+
 export function resolveSpTransfer(
   units: CombatUnit[],
   actorId: string,
@@ -1826,10 +1858,21 @@ export function resolveSpTransfer(
   const actor = nextUnits[actorIdx];
   const rule = getFluxTransferRule(skillLevel, cfg, BALANCE_CONFIG.skillMaxLevel);
   const maxTargets = Math.max(0, Math.floor(rule.targets));
+  const maxAffordable = getMaxAffordableFluxCount(
+    nextUnits,
+    actorId,
+    skillLevel,
+    cfg
+  );
   const requested =
     count === undefined ? maxTargets : Math.max(0, Math.floor(count));
-  const effectiveCount = Math.min(requested, maxTargets);
-  const amountEach = Math.max(0, Math.floor(actor.sp * (rule.pct / 100)));
+  const effectiveCount = Math.min(requested, maxTargets, maxAffordable);
+  const amountEach = getFluxPlannedAmountEach(
+    actor.sp,
+    skillLevel,
+    cfg,
+    BALANCE_CONFIG.skillMaxLevel
+  );
 
   const candidateIndices = nextUnits
     .map((u, idx) => ({ u, idx }))
@@ -4255,7 +4298,12 @@ const SUPPORT_RESERVE_EFFECT_KINDS = new Set<SkillDefinition['effectKind']>([
 ]);
 
 export type FluxTransferRulesInput =
-  | (FluxTransferLevelRule & { spEconomy?: SpEconomyConfig | null })
+  | (FluxTransferLevelRule & {
+      spEconomy?: SpEconomyConfig | null;
+      minPerLevel?: number;
+      allySpBelowPct?: number;
+      keepSelfPct?: number;
+    })
   | (FluxTransferConfig & { spEconomy?: SpEconomyConfig | null });
 
 export function computeFluxBattlePressure(
@@ -4294,19 +4342,31 @@ export function pickFluxCount(
     return 0;
   }
 
+  const fluxLv = actor.skillLevels['sup_flux_transfer'] ?? actor.skillLevel ?? 1;
+  const sanitizedCfg = sanitizeFluxTransferConfig(
+    'levels' in rules
+      ? rules
+      : {
+          ...DEFAULT_FLUX_TRANSFER_CONFIG,
+          levels: DEFAULT_FLUX_TRANSFER_CONFIG.levels.map(() => ({
+            targets: rules.targets,
+            pct: rules.pct,
+            fee: rules.fee,
+          })),
+          minPerLevel: rules.minPerLevel,
+          allySpBelowPct: rules.allySpBelowPct,
+          keepSelfPct: rules.keepSelfPct,
+        }
+  );
   const rule: FluxTransferLevelRule =
     'levels' in rules
-      ? getFluxTransferRule(
-          actor.skillLevels['sup_flux_transfer'] ?? actor.skillLevel ?? 1,
-          rules,
-          BALANCE_CONFIG.skillMaxLevel
-        )
+      ? getFluxTransferRule(fluxLv, sanitizedCfg, BALANCE_CONFIG.skillMaxLevel)
       : rules;
   const spEconomy =
     'spEconomy' in rules && rules.spEconomy ? { spEconomy: rules.spEconomy } : undefined;
 
   const maxTargets = Math.max(0, Math.floor(rule.targets));
-  if (maxTargets <= 0 || rule.pct <= 0) return 0;
+  if (maxTargets <= 0) return 0;
 
   const diff =
     typeof pressure === 'number' && Number.isFinite(pressure)
@@ -4316,9 +4376,11 @@ export function pickFluxCount(
   if (diff >= 0.2 && rng() >= 0.5) {
     return 0;
   }
-  const keepSelfPct = diff <= -0.2 ? 0.15 : 0.3;
+  const baseKeepRatio = sanitizedCfg.keepSelfPct / 100;
+  const keepSelfRatio = diff <= -0.2 ? Math.min(baseKeepRatio, 0.15) : baseKeepRatio;
+  const allyBelowRatio = sanitizedCfg.allySpBelowPct / 100;
 
-  // Reserve SP needed by actor's own ready heal / shield / revive skills
+  // Never cast if support has a ready heal/shield/revive skill it can afford; keep reserve SP logic
   let reserveSp = 0;
   for (const sid of actor.equippedSkillIds) {
     const sk = getSkillById(sid);
@@ -4327,18 +4389,37 @@ export function pickFluxCount(
     if ((actor.skillCooldowns[sid] ?? 0) > 0) continue;
     if (sk.oncePerBattle && actor.usedOnceSkills.includes(sid)) continue;
     reserveSp += getEffectiveSpCost(sk, actor, spEconomy);
+    if (canUnitUseSkill(actor, sid, spEconomy).canUse) {
+      return 0;
+    }
   }
 
-  // Only cast if at least 1 ally (self excluded) is under 50% SP
-  const under50Allies = units.filter(
+  // Emergency rule: cast only if at least 1 ally (self excluded) is below threshold (default 25% SP)
+  const underThresholdAllies = units.filter(
     (u) =>
       u.side === actor.side &&
       u.alive &&
       u.id !== actor.id &&
       u.derived.maxSp > 0 &&
-      u.sp < u.derived.maxSp * 0.5
+      u.sp < u.derived.maxSp * allyBelowRatio
   );
-  if (under50Allies.length === 0) return 0;
+  if (underThresholdAllies.length === 0) return 0;
+
+  const maxAffordable = getMaxAffordableFluxCount(
+    units,
+    actorId,
+    fluxLv,
+    sanitizedCfg
+  );
+  if (maxAffordable <= 0) return 0;
+
+  const amountEach = getFluxPlannedAmountEach(
+    actor.sp,
+    fluxLv,
+    sanitizedCfg,
+    BALANCE_CONFIG.skillMaxLevel
+  );
+  if (amountEach <= 0) return 0;
 
   const hasReadySkillAboveSp = (ally: CombatUnit): boolean =>
     ally.equippedSkillIds.some((sid) => {
@@ -4350,16 +4431,18 @@ export function pickFluxCount(
       return getEffectiveSpCost(sk, ally, spEconomy) > ally.sp;
     });
 
-  const orderedUnder50 = [...under50Allies].sort((a, b) => {
+  const orderedUnderThreshold = [...underThresholdAllies].sort((a, b) => {
     const aNeed = hasReadySkillAboveSp(a) ? 0 : 1;
     const bNeed = hasReadySkillAboveSp(b) ? 0 : 1;
     if (aNeed !== bNeed) return aNeed - bNeed;
     return a.sp / a.derived.maxSp - b.sp / b.derived.maxSp;
   });
 
-  const desiredK = Math.min(maxTargets, orderedUnder50.length);
-  const amountEach = Math.max(0, Math.floor(actor.sp * (rule.pct / 100)));
-  if (amountEach <= 0) return 0;
+  const desiredK = Math.min(
+    maxTargets,
+    orderedUnderThreshold.length,
+    maxAffordable
+  );
 
   // Match resolveSpTransfer recipient pool (lowest SP% non-full allies) for exact SP cost check
   const transferPool = units
@@ -4373,7 +4456,7 @@ export function pickFluxCount(
     )
     .sort((a, b) => a.sp / a.derived.maxSp - b.sp / b.derived.maxSp);
 
-  const minRemainingSp = Math.max(reserveSp, keepSelfPct * actor.derived.maxSp);
+  const minRemainingSp = Math.max(reserveSp, keepSelfRatio * actor.derived.maxSp);
 
   for (let k = desiredK; k >= 1; k--) {
     let totalMoved = 0;
@@ -4452,16 +4535,15 @@ export function chooseAiDecision(
     return { action: 'skill', targetId: null, skillId: scanSkill.id };
   }
 
-  // Support Flux Transfer (sp_transfer): dedicated reserve & threshold rule
+  // Support Flux Transfer (sp_transfer): dedicated emergency threshold & keep-self rule
   const fluxSkill = usableSkills.find((s) => s.effectKind === 'sp_transfer');
   if (fluxSkill) {
-    const fluxLv = actor.skillLevels[fluxSkill.id] ?? actor.skillLevel ?? 1;
-    const fluxRule = getFluxTransferRule(fluxLv, adminConfig?.fluxTransfer);
+    const fluxCfg = sanitizeFluxTransferConfig(adminConfig?.fluxTransfer);
     const pressure = computeFluxBattlePressure(units, actor.side);
     const fluxCount = pickFluxCount(
       units,
       actor.id,
-      { ...fluxRule, spEconomy: adminConfig?.spEconomy },
+      { ...fluxCfg, spEconomy: adminConfig?.spEconomy },
       pressure,
       rng
     );

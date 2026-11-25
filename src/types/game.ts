@@ -224,7 +224,8 @@ export interface BattleSkillUsability {
     | 'on_cooldown'
     | 'already_used'
     | 'blocked_by_siege'
-    | 'insufficient_sp';
+    | 'insufficient_sp'
+    | 'flux_min_sp';
   cooldownRemaining: number;
   spCost: number;
   isToggleActive?: boolean;
@@ -1479,6 +1480,9 @@ export interface FluxTransferLevelRule {
 
 export interface FluxTransferConfig {
   levels: FluxTransferLevelRule[];
+  minPerLevel?: number;
+  allySpBelowPct?: number;
+  keepSelfPct?: number;
 }
 
 export interface PirateSizeWeights {

@@ -1963,7 +1963,25 @@ export function AdminPanel() {
                           i === idx ? { ...row, ...patch } : row
                         );
                         adminUpdateConfig({
-                          fluxTransfer: sanitizeFluxTransferConfig({ levels: nextLevels }),
+                          fluxTransfer: sanitizeFluxTransferConfig({
+                            ...fluxCfg,
+                            levels: nextLevels,
+                          }),
+                        });
+                      };
+                      const updateFluxField = (
+                        patch: Partial<
+                          Pick<
+                            typeof fluxCfg,
+                            'minPerLevel' | 'allySpBelowPct' | 'keepSelfPct'
+                          >
+                        >
+                      ) => {
+                        adminUpdateConfig({
+                          fluxTransfer: sanitizeFluxTransferConfig({
+                            ...fluxCfg,
+                            ...patch,
+                          }),
                         });
                       };
                       return (
@@ -1973,6 +1991,65 @@ export function AdminPanel() {
                         >
                           <div className="text-[11px] font-semibold text-sky-300">
                             {t('admin.fluxTransferTitle')}
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                            <label className="space-y-1 text-[10px] text-slate-300">
+                              <span className="block truncate">
+                                {t('admin.fluxTransferMinPerLevel')}
+                              </span>
+                              <input
+                                type="number"
+                                data-testid="admin-flux-min-per-level"
+                                min={0}
+                                max={200}
+                                step={1}
+                                value={fluxCfg.minPerLevel}
+                                onChange={(e) =>
+                                  updateFluxField({
+                                    minPerLevel: Number(e.target.value),
+                                  })
+                                }
+                                className="w-full h-8 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                              />
+                            </label>
+                            <label className="space-y-1 text-[10px] text-slate-300">
+                              <span className="block truncate">
+                                {t('admin.fluxTransferAllyBelowPct')}
+                              </span>
+                              <input
+                                type="number"
+                                data-testid="admin-flux-ally-below-pct"
+                                min={0}
+                                max={100}
+                                step={1}
+                                value={fluxCfg.allySpBelowPct}
+                                onChange={(e) =>
+                                  updateFluxField({
+                                    allySpBelowPct: Number(e.target.value),
+                                  })
+                                }
+                                className="w-full h-8 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                              />
+                            </label>
+                            <label className="space-y-1 text-[10px] text-slate-300">
+                              <span className="block truncate">
+                                {t('admin.fluxTransferKeepSelfPct')}
+                              </span>
+                              <input
+                                type="number"
+                                data-testid="admin-flux-keep-self-pct"
+                                min={0}
+                                max={100}
+                                step={1}
+                                value={fluxCfg.keepSelfPct}
+                                onChange={(e) =>
+                                  updateFluxField({
+                                    keepSelfPct: Number(e.target.value),
+                                  })
+                                }
+                                className="w-full h-8 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                              />
+                            </label>
                           </div>
                           <div className="grid grid-cols-4 gap-2 text-[10px] text-slate-400 px-1">
                             <span>{t('admin.fluxTransferColLevel')}</span>

@@ -1,6 +1,13 @@
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
-import { BALANCE_CONFIG, getFluxTransferRule } from '../data/balance';
-import { resolveSpTransfer } from '../engine/combat';
+import {
+  BALANCE_CONFIG,
+  getFluxMinPerAlly,
+  getFluxTransferRule,
+} from '../data/balance';
+import {
+  getMaxAffordableFluxCount,
+  resolveSpTransfer,
+} from '../engine/combat';
 import type { TranslationKey } from '../i18n/en';
 import type {
   CombatUnit,
@@ -16,6 +23,7 @@ type TranslateFn = (
 export interface FluxTransferPreview {
   skillLevel: number;
   rule: FluxTransferLevelRule;
+  minPerAlly: number;
   nonFullAllyCount: number;
   maxCount: number;
   count: number;
@@ -23,6 +31,7 @@ export interface FluxTransferPreview {
   leftSp: number;
   totalMoved: number;
   hasAllyNeedingSp: boolean;
+  canAfford: boolean;
 }
 
 export function previewFluxTransfer(
@@ -40,7 +49,17 @@ export function previewFluxTransfer(
     cfg,
     BALANCE_CONFIG.skillMaxLevel
   );
-  const maxCount = Math.max(1, Math.floor(rule.targets));
+  const minPerAlly = getFluxMinPerAlly(
+    skillLevel,
+    cfg,
+    BALANCE_CONFIG.skillMaxLevel
+  );
+  const maxAffordable = getMaxAffordableFluxCount(units, actorId, skillLevel, cfg);
+  const maxCount = Math.min(
+    Math.max(1, Math.floor(rule.targets)),
+    Math.max(0, maxAffordable)
+  );
+  const canAfford = maxCount >= 1;
   const nonFullAllyCount = actor
     ? units.filter(
         (u) =>
@@ -52,11 +71,19 @@ export function previewFluxTransfer(
       ).length
     : 0;
   const hasAllyNeedingSp = nonFullAllyCount > 0;
-  const rawCount =
-    requestedCount === undefined
-      ? Math.max(1, Math.min(maxCount, nonFullAllyCount))
-      : requestedCount;
-  const count = Math.max(1, Math.min(maxCount, Math.floor(rawCount || 1)));
+  const count = !canAfford
+    ? 0
+    : Math.max(
+        1,
+        Math.min(
+          maxCount,
+          Math.floor(
+            (requestedCount === undefined
+              ? Math.max(1, Math.min(maxCount, nonFullAllyCount))
+              : requestedCount) || 1
+          )
+        )
+      );
 
   const sim = resolveSpTransfer(units, actorId, skillLevel, cfg, count);
   const actorAfter = sim.updatedUnits.find((u) => u.id === actorId);
@@ -65,6 +92,7 @@ export function previewFluxTransfer(
   return {
     skillLevel,
     rule,
+    minPerAlly,
     nonFullAllyCount,
     maxCount,
     count,
@@ -72,6 +100,7 @@ export function previewFluxTransfer(
     leftSp,
     totalMoved: sim.totalMoved,
     hasAllyNeedingSp,
+    canAfford,
   };
 }
 
@@ -209,7 +238,7 @@ export function FluxTransferPicker({
             type="button"
             data-testid="flux-picker-dec"
             aria-label={t('battle.fluxPickerDec')}
-            disabled={clampedCount <= 1}
+            disabled={clampedCount <= 1 || maxCount <= 0}
             onClick={() => setSelectedCount(Math.max(1, clampedCount - 1))}
             className="w-[18px] h-[18px] rounded border border-slate-700 bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-slate-100 font-mono-nums font-bold text-[11px] leading-none inline-flex items-center justify-center cursor-pointer disabled:cursor-not-allowed"
           >
@@ -242,6 +271,7 @@ export function FluxTransferPicker({
       <div className="text-[10px] leading-[13px] text-slate-300 font-mono-nums truncate">
         {t('battle.fluxPickerRate', {
           pct: preview.rule.pct,
+          min: preview.minPerAlly,
           fee: preview.rule.fee,
         })}
       </div>
@@ -272,9 +302,9 @@ export function FluxTransferPicker({
         <button
           type="button"
           data-testid="flux-picker-confirm"
-          disabled={!preview.hasAllyNeedingSp}
+          disabled={!preview.hasAllyNeedingSp || !preview.canAfford}
           onClick={() => {
-            if (preview.hasAllyNeedingSp) {
+            if (preview.hasAllyNeedingSp && preview.canAfford) {
               onConfirm(clampedCount);
             }
           }}
