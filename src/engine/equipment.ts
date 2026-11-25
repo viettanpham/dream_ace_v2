@@ -14,6 +14,15 @@ import {
 import { getSectorById } from '../data/maps';
 import { getModuleTemplateById } from '../data/modules';
 import { getUnlockedExtenderCount } from './extenders';
+import {
+  DEFAULT_ITEM_LEVELS_CONFIG,
+  getDropSlotPools,
+  getEffectiveTemplateRequiredLevel,
+  getItemLevelKind,
+  getShopEligibleTemplatesForSlot,
+  getTierRequiredLevel,
+  sanitizeItemLevelsConfig,
+} from './itemLevels';
 import { computeItemPrice, computeModulePrice, countNonZeroTraits } from './itemPrice';
 import type {
   AdminConfig,
@@ -25,6 +34,7 @@ import type {
   GearUnit,
   ItemAffix,
   ItemInstance,
+  ItemLevelsConfig,
   ItemRarity,
   ItemSpecialTraits,
   ItemTemplate,
@@ -63,6 +73,7 @@ export interface GenerateItemOptions {
   registryTag?: string;
   isNew?: boolean;
   obtainedAt?: number;
+  itemLevels?: ItemLevelsConfig;
 }
 
 /**
@@ -103,6 +114,12 @@ export function generateItemInstance(
     template = pool[Math.floor(rng() * pool.length)];
   }
 
+  const levelCfg = options.itemLevels
+    ? sanitizeItemLevelsConfig(options.itemLevels)
+    : DEFAULT_ITEM_LEVELS_CONFIG;
+  const itemKind = getItemLevelKind(template.slot);
+  const kindRule = levelCfg.kinds[itemKind];
+
   if (template.slot === 'module') {
     const modTpl = getModuleTemplateById(template.id);
     const isStatModule = modTpl
@@ -114,6 +131,13 @@ export function generateItemInstance(
     const price = modTpl
       ? computeModulePrice(modTpl)
       : Math.max(1, Math.round(template.basePrice));
+    const moduleRequiredLevel = Math.max(
+      1,
+      options.requiredLevel ??
+        (kindRule.enabled
+          ? getTierRequiredLevel(itemKind, template.tier, levelCfg)
+          : template.requiredLevel)
+    );
 
     itemUidSeq += 1;
     return {
@@ -123,7 +147,7 @@ export function generateItemInstance(
       templateId: template.id,
       slot: 'module',
       tier: template.tier,
-      requiredLevel: template.requiredLevel,
+      requiredLevel: moduleRequiredLevel,
       classRestriction: null,
       rarity: 'common',
       rolledBaseStats,
@@ -153,7 +177,9 @@ export function generateItemInstance(
   const requiredLevel = Math.max(
     1,
     options.requiredLevel ??
-      Math.max(template.requiredLevel, (tier - 1) * 3 + 1)
+      (kindRule.enabled
+        ? getTierRequiredLevel(itemKind, tier, levelCfg)
+        : Math.max(template.requiredLevel, (tier - 1) * 3 + 1))
   );
   const scalingLevel = Math.max(1, options.statPowerLevel ?? requiredLevel);
   const levelFactor =
@@ -287,17 +313,36 @@ export function generateItemInstance(
 export function generateShopStock(
   referenceLevel: number,
   count: number = BALANCE_CONFIG.shopStockSize,
-  rng: () => number = Math.random
+  rng: () => number = Math.random,
+  itemLevels?: ItemLevelsConfig
 ): ItemInstance[] {
-  const maxTier =
-    referenceLevel >= 9 ? 4 : referenceLevel >= 6 ? 3 : referenceLevel >= 3 ? 2 : 1;
+  const levelCfg = itemLevels
+    ? sanitizeItemLevelsConfig(itemLevels)
+    : DEFAULT_ITEM_LEVELS_CONFIG;
+  const nonModuleTemplates = ITEM_TEMPLATES.filter((t) => t.slot !== 'module');
+
+  const eligibleBySlot = new Map<PaperDollSlot, ItemTemplate[]>();
+  let maxEligibleTier = 1;
+  for (const slot of EQUIPMENT_SLOTS) {
+    const eligible = getShopEligibleTemplatesForSlot(
+      nonModuleTemplates,
+      slot,
+      referenceLevel,
+      levelCfg
+    );
+    eligibleBySlot.set(slot, eligible);
+    for (const tpl of eligible) {
+      if (tpl.tier > maxEligibleTier) maxEligibleTier = tpl.tier;
+    }
+  }
+  const weightTier = Math.max(1, Math.min(4, maxEligibleTier));
 
   const shopRarityWeights: Record<ItemRarity, number> =
-    maxTier >= 4
+    weightTier >= 4
       ? { common: 25, rare: 40, epic: 26, legendary: 9 }
-      : maxTier === 3
+      : weightTier === 3
       ? { common: 38, rare: 40, epic: 18, legendary: 4 }
-      : maxTier === 2
+      : weightTier === 2
       ? { common: 50, rare: 36, epic: 12, legendary: 2 }
       : { common: 62, rare: 30, epic: 7, legendary: 1 };
 
@@ -305,23 +350,30 @@ export function generateShopStock(
   for (let i = 0; i < count; i++) {
     // Ensure every slot appears at least twice in a 12-item stock
     const slot = EQUIPMENT_SLOTS[i % EQUIPMENT_SLOTS.length];
-    const nonModuleTemplates = ITEM_TEMPLATES.filter((t) => t.slot !== 'module');
-    const eligibleTemplates = nonModuleTemplates.filter(
-      (t) => t.slot === slot && t.tier <= maxTier
-    );
+    const eligibleTemplates = eligibleBySlot.get(slot) ?? [];
+    const slotTemplates = nonModuleTemplates.filter((t) => t.slot === slot);
+    let fallbackPool = slotTemplates;
+    if (eligibleTemplates.length === 0 && slotTemplates.length > 0) {
+      const minReq = Math.min(
+        ...slotTemplates.map((t) => getEffectiveTemplateRequiredLevel(t, levelCfg))
+      );
+      fallbackPool = slotTemplates.filter(
+        (t) => getEffectiveTemplateRequiredLevel(t, levelCfg) === minReq
+      );
+    }
+    const pool = eligibleTemplates.length > 0 ? eligibleTemplates : fallbackPool;
     const pickedTpl =
-      eligibleTemplates[Math.floor(rng() * eligibleTemplates.length)] ??
-      nonModuleTemplates.find((t) => t.slot === slot) ??
-      nonModuleTemplates[0];
+      pool[Math.floor(rng() * pool.length)] ?? nonModuleTemplates[0];
 
     const rarity = pickWeightedRarity(shopRarityWeights, rng);
-    const tier = Math.min(maxTier, Math.max(1, pickedTpl.tier));
     stock.push(
       generateItemInstance(
         {
           templateId: pickedTpl.id,
-          tier,
+          tier: pickedTpl.tier,
+          statPowerLevel: pickedTpl.requiredLevel,
           rarity,
+          itemLevels: levelCfg,
         },
         rng
       )
@@ -852,24 +904,35 @@ export function rollBattleItemDrops(
   sectorId: string,
   gearLevel: number,
   won: boolean,
-  rng: () => number = Math.random
+  rng: () => number = Math.random,
+  itemLevels?: ItemLevelsConfig
 ): ItemInstance[] {
   const sector = getSectorById(sectorId);
   const cfg = DROP_CONFIG[sector.difficulty];
+  const levelCfg = itemLevels
+    ? sanitizeItemLevelsConfig(itemLevels)
+    : DEFAULT_ITEM_LEVELS_CONFIG;
   const destroyedEnemies = enemies.filter((e) => !e.alive);
   if (destroyedEnemies.length === 0) return [];
 
   const drops: ItemInstance[] = [];
-  const maxTier = Math.min(
-    4,
-    Math.max(cfg.maxTier, gearLevel >= 9 ? 4 : gearLevel >= 6 ? 3 : gearLevel >= 3 ? 2 : 1)
+  const nonModuleTemplates = ITEM_TEMPLATES.filter((t) => t.slot !== 'module');
+  const slotPools = getDropSlotPools(
+    nonModuleTemplates,
+    EQUIPMENT_SLOTS,
+    gearLevel,
+    sector.difficulty,
+    levelCfg
   );
 
-  const nonModuleTemplates = ITEM_TEMPLATES.filter((t) => t.slot !== 'module');
-  const pickTemplateForDrop = (): ItemTemplate => {
-    const pool = nonModuleTemplates.filter((t) => t.tier <= maxTier);
-    const source = pool.length > 0 ? pool : nonModuleTemplates;
-    return source[Math.floor(rng() * source.length)];
+  const pickTemplateForDrop = (): ItemTemplate | null => {
+    if (slotPools.length > 0) {
+      const slotPool = slotPools[Math.floor(rng() * slotPools.length)];
+      return (
+        slotPool.templates[Math.floor(rng() * slotPool.templates.length)] ?? null
+      );
+    }
+    return null;
   };
 
   for (const enemy of destroyedEnemies) {
@@ -881,20 +944,22 @@ export function rollBattleItemDrops(
       : cfg.perEnemyDropChance * 0.45;
     if (rng() > effectiveChance) continue;
 
+    const tpl = pickTemplateForDrop();
+    if (!tpl) continue;
     const rarity = enemy.isBoss
       ? pickWeightedRarity(
           { common: 0, rare: 20, epic: 55, legendary: 25 },
           rng
         )
       : pickWeightedRarity(cfg.rarityWeights, rng);
-    const tpl = pickTemplateForDrop();
     drops.push(
       generateItemInstance(
         {
           templateId: tpl.id,
-          tier: Math.min(maxTier, tpl.tier),
+          tier: tpl.tier,
           rarity,
           isNew: true,
+          itemLevels: levelCfg,
         },
         rng
       )
@@ -910,19 +975,22 @@ export function rollBattleItemDrops(
         ? 0.75
         : 0.55;
     if (rng() < pityChance) {
-      const rarity = pickWeightedRarity(cfg.rarityWeights, rng);
       const tpl = pickTemplateForDrop();
-      drops.push(
-        generateItemInstance(
-          {
-            templateId: tpl.id,
-            tier: Math.min(maxTier, tpl.tier),
-            rarity,
-            isNew: true,
-          },
-          rng
-        )
-      );
+      if (tpl) {
+        const rarity = pickWeightedRarity(cfg.rarityWeights, rng);
+        drops.push(
+          generateItemInstance(
+            {
+              templateId: tpl.id,
+              tier: tpl.tier,
+              rarity,
+              isNew: true,
+              itemLevels: levelCfg,
+            },
+            rng
+          )
+        );
+      }
     }
   }
 

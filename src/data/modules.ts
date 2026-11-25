@@ -5,6 +5,7 @@ import type {
   ModuleTraitKey,
   StatKey,
 } from '../types/game';
+import { DEFAULT_ITEM_LEVELS_CONFIG, getTierRequiredLevel } from '../engine/itemLevels';
 import { STAT_KEYS } from './classes';
 import rawIconCatalog from './iconCatalog.json';
 import { PRICE_FORMULA } from './itemPricing';
@@ -116,6 +117,11 @@ export function validateModuleTemplate(raw: unknown): ModuleTemplate | null {
     return null;
   }
 
+  const tier = r.tier as 1 | 2 | 3 | 4;
+  const requiredLevel = DEFAULT_ITEM_LEVELS_CONFIG.kinds.module.enabled
+    ? getTierRequiredLevel('module', tier)
+    : (r.requiredLevel as number);
+
   return {
     id: (r.id as string).trim(),
     nameVi: (r.nameVi as string).trim(),
@@ -124,8 +130,8 @@ export function validateModuleTemplate(raw: unknown): ModuleTemplate | null {
     descEn: (r.descEn as string).trim(),
     iconId: (r.iconId as string).trim(),
     family,
-    tier: r.tier as 1 | 2 | 3 | 4,
-    requiredLevel: r.requiredLevel as number,
+    tier,
+    requiredLevel,
     effectKey: (r.effectKey as string).trim() as StatKey | ModuleTraitKey | string,
     value: r.value as number,
     ...(family === 'skill' ? { skillId: (r.skillId as string).trim() } : {}),

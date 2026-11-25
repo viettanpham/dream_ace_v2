@@ -1,4 +1,5 @@
 import type { EquipmentSlot, EquippedSlotIds, ItemRarity, ItemTemplate, PaperDollSlot, StatKey } from '../types/game';
+import { DEFAULT_ITEM_LEVELS_CONFIG, getItemLevelKind, getTierRequiredLevel } from '../engine/itemLevels';
 import { BALANCE_CONFIG } from './balance';
 import rawItemsData from './items.json';
 import { MODULE_ITEM_TEMPLATES } from './modules';
@@ -163,6 +164,12 @@ export function validateItemTemplates(raw: unknown): ItemTemplate[] {
     }
 
     const id = r.id as string;
+    const slot = r.slot as EquipmentSlot;
+    const tier = r.tier as number;
+    const kind = getItemLevelKind(slot);
+    const requiredLevel = DEFAULT_ITEM_LEVELS_CONFIG.kinds[kind].enabled
+      ? getTierRequiredLevel(kind, tier)
+      : (r.requiredLevel as number);
     seenIds.add(id);
     valid.push({
       id,
@@ -170,9 +177,9 @@ export function validateItemTemplates(raw: unknown): ItemTemplate[] {
       nameVi: r.nameVi as string,
       descEn: r.descEn as string,
       descVi: r.descVi as string,
-      slot: r.slot as EquipmentSlot,
-      tier: r.tier as number,
-      requiredLevel: r.requiredLevel as number,
+      slot,
+      tier,
+      requiredLevel,
       classRestriction: r.classRestriction as ItemTemplate['classRestriction'],
       basePrice: r.basePrice as number,
       primaryStat: r.primaryStat as StatKey,

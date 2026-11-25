@@ -1361,6 +1361,22 @@ export interface ShieldRegenConfig {
   restartTurns: number;
 }
 
+export type ItemLevelKind = 'equipment' | 'radar' | 'module';
+
+export interface ItemKindLevelRule {
+  init: number;
+  step: number;
+  enabled: boolean;
+}
+
+export interface ItemLevelsConfig {
+  kinds: Record<ItemLevelKind, ItemKindLevelRule>;
+  shopAboveLevel: number;
+  shopTierAhead: number;
+  dropWindow: number;
+  dropDifficultyBonus: Record<SectorDifficulty, number>;
+}
+
 export interface AdminConfig {
   godMode: boolean;
   oneHitKills: boolean;
@@ -1397,6 +1413,7 @@ export interface AdminConfig {
   supplyShopMaxQty?: number;
   extenderLevelsPerSocket?: number;
   maxSkillModulesPerGear?: number;
+  itemLevels?: ItemLevelsConfig;
   showRawI18nKeys: boolean;
 }
 

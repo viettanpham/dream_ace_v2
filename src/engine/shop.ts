@@ -9,7 +9,10 @@ import {
 import type {
   AdminConfig,
   ConsumableKind,
+  ItemLevelsConfig,
   ItemRarity,
+  ItemTemplate,
+  PaperDollSlot,
   PilotAccount,
   ShopItemListing,
   SupplyShopListing,
@@ -17,6 +20,12 @@ import type {
   WpMarketOffer,
 } from '../types/game';
 import { generateItemInstance, pickWeightedRarity } from './equipment';
+import {
+  DEFAULT_ITEM_LEVELS_CONFIG,
+  getEffectiveTemplateRequiredLevel,
+  getShopEligibleTemplatesForSlot,
+  sanitizeItemLevelsConfig,
+} from './itemLevels';
 import { SUPPLY_STACK_CAP } from './supplies';
 
 let wpOfferSeq = 1;
@@ -75,6 +84,7 @@ export interface CategorizedShopOptions {
   rarityWeights?: Record<ItemRarity, number> | null;
   priceMultiplier?: number;
   shipyardBonus?: boolean;
+  itemLevels?: ItemLevelsConfig;
 }
 
 /**
@@ -87,8 +97,9 @@ export function generateCategorizedShopStock(
   options: CategorizedShopOptions = {},
   rng: () => number = Math.random
 ): ShopItemListing[] {
-  const maxTier =
-    referenceLevel >= 9 ? 4 : referenceLevel >= 6 ? 3 : referenceLevel >= 3 ? 2 : 1;
+  const levelCfg = options.itemLevels
+    ? sanitizeItemLevelsConfig(options.itemLevels)
+    : DEFAULT_ITEM_LEVELS_CONFIG;
 
   const baseMin = Math.max(
     1,
@@ -100,8 +111,25 @@ export function generateCategorizedShopStock(
   );
   const bonusShift = options.shipyardBonus ? SHOP_STOCK_CONFIG.shipyardStockBonus : 0;
 
+  const nonModuleTemplates = ITEM_TEMPLATES.filter((t) => t.slot !== 'module');
+  const eligibleBySlot = new Map<PaperDollSlot, ItemTemplate[]>();
+  let maxEligibleTier = 1;
+  for (const slot of EQUIPMENT_SLOTS) {
+    const eligible = getShopEligibleTemplatesForSlot(
+      nonModuleTemplates,
+      slot,
+      referenceLevel,
+      levelCfg
+    );
+    eligibleBySlot.set(slot, eligible);
+    for (const tpl of eligible) {
+      if (tpl.tier > maxEligibleTier) maxEligibleTier = tpl.tier;
+    }
+  }
+  const weightTier = Math.max(1, Math.min(4, maxEligibleTier));
+
   const defaultTierWeights =
-    SHOP_STOCK_CONFIG.rarityWeightsByTier[maxTier] ??
+    SHOP_STOCK_CONFIG.rarityWeightsByTier[weightTier] ??
     DEFAULT_ADMIN_SHOP_RARITY_WEIGHTS;
   const weights = options.rarityWeights ?? defaultTierWeights;
   const priceMult =
@@ -119,26 +147,32 @@ export function generateCategorizedShopStock(
       bonusShift,
       rng
     );
-    const nonModuleTemplates = ITEM_TEMPLATES.filter((t) => t.slot !== 'module');
-    const eligibleTemplates = nonModuleTemplates.filter(
-      (t) => t.slot === slot && t.tier <= maxTier
-    );
+    const eligibleTemplates = eligibleBySlot.get(slot) ?? [];
+    const slotTemplates = nonModuleTemplates.filter((t) => t.slot === slot);
+    let fallbackPool = slotTemplates;
+    if (eligibleTemplates.length === 0 && slotTemplates.length > 0) {
+      const minReq = Math.min(
+        ...slotTemplates.map((t) => getEffectiveTemplateRequiredLevel(t, levelCfg))
+      );
+      fallbackPool = slotTemplates.filter(
+        (t) => getEffectiveTemplateRequiredLevel(t, levelCfg) === minReq
+      );
+    }
     const fallbackTemplates =
-      eligibleTemplates.length > 0
-        ? eligibleTemplates
-        : nonModuleTemplates.filter((t) => t.slot === slot);
+      eligibleTemplates.length > 0 ? eligibleTemplates : fallbackPool;
 
     for (let i = 0; i < countForSlot; i++) {
       const pickedTpl =
         fallbackTemplates[Math.floor(rng() * fallbackTemplates.length)] ??
         nonModuleTemplates[0];
       const rarity = pickWeightedRarity(weights, rng);
-      const tier = Math.min(maxTier, Math.max(1, pickedTpl.tier));
       const item = generateItemInstance(
         {
           templateId: pickedTpl.id,
-          tier,
+          tier: pickedTpl.tier,
+          statPowerLevel: pickedTpl.requiredLevel,
           rarity,
+          itemLevels: levelCfg,
         },
         rng
       );
@@ -265,6 +299,7 @@ export function buildShopOptionsFromState(
     rarityWeights: customWeights,
     priceMultiplier: adminConfig?.shopPriceMultiplier ?? 1.0,
     shipyardBonus: hasOperationalShipyard(pilot),
+    itemLevels: adminConfig?.itemLevels,
   };
 }
 

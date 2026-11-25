@@ -43,6 +43,7 @@ import type {
   GearUnit,
   InventoryFilterState,
   ItemInstance,
+  ItemLevelsConfig,
   Language,
   MechClassId,
   PilotAccount,
@@ -61,6 +62,13 @@ import {
 } from '../data/autoEquipConfig';
 import { cloneFormationConfig, DEFAULT_FORMATION_CONFIG } from '../data/formationConfig';
 import { mergeVisibleUnlockedSectors } from './frontline';
+import {
+  cloneItemLevelsConfig,
+  DEFAULT_ITEM_LEVELS_CONFIG,
+  getItemLevelKind,
+  getTierRequiredLevel,
+  sanitizeItemLevelsConfig,
+} from './itemLevels';
 import {
   DEFAULT_SHIELD_CRACKED_MULT,
   DEFAULT_SHIELD_CRACKED_TURNS,
@@ -309,6 +317,7 @@ export function createDefaultAdminConfig(): AdminConfig {
     supplyShopMaxQty: DEFAULT_SUPPLY_SHOP_MAX_QTY,
     extenderLevelsPerSocket: DEFAULT_EXTENDER_LEVELS_PER_SOCKET,
     maxSkillModulesPerGear: DEFAULT_MAX_SKILL_MODULES_PER_GEAR,
+    itemLevels: cloneItemLevelsConfig(DEFAULT_ITEM_LEVELS_CONFIG),
     showRawI18nKeys: false,
   };
 }
@@ -430,7 +439,8 @@ function sanitizeGearSkills(
 
 function convertLegacyItemInstance(
   raw: unknown,
-  rng: () => number
+  rng: () => number,
+  itemLevels: ItemLevelsConfig = DEFAULT_ITEM_LEVELS_CONFIG
 ): ItemInstance | null {
   if (!raw || typeof raw !== 'object') return null;
   const obj = raw as Record<string, unknown>;
@@ -444,12 +454,17 @@ function convertLegacyItemInstance(
   ) {
     const tpl = getItemTemplate(obj.templateId)!;
     const isStarter = Boolean(obj.isStarter);
+    const tier = Math.max(1, Math.min(4, Number(obj.tier) || tpl.tier));
+    const kind = getItemLevelKind(tpl.slot);
+    const syncedRequiredLevel = itemLevels.kinds[kind].enabled
+      ? getTierRequiredLevel(kind, tier, itemLevels)
+      : Math.max(1, Number(obj.requiredLevel) || tpl.requiredLevel);
     return {
       instanceId: obj.instanceId,
       templateId: tpl.id,
       slot: tpl.slot,
-      tier: Math.max(1, Math.min(4, Number(obj.tier) || tpl.tier)),
-      requiredLevel: Math.max(1, Number(obj.requiredLevel) || tpl.requiredLevel),
+      tier,
+      requiredLevel: syncedRequiredLevel,
       classRestriction: tpl.classRestriction,
       rarity:
         obj.rarity === 'common' ||
@@ -496,6 +511,7 @@ function convertLegacyItemInstance(
           0,
           Math.min(BALANCE_CONFIG.enchantMaxLevel, Number(obj.enchantLevel) || 0)
         ),
+        itemLevels,
       },
       rng
     );
@@ -632,6 +648,7 @@ export function migrateSaveData(
     maxSkillModulesPerGear: sanitizeMaxSkillModulesPerGear(
       rawAdmin.maxSkillModulesPerGear
     ),
+    itemLevels: sanitizeItemLevelsConfig(rawAdmin.itemLevels),
     showRawI18nKeys: Boolean(rawAdmin.showRawI18nKeys),
   };
 
@@ -661,7 +678,7 @@ export function migrateSaveData(
     const rawPilot = raw.pilot as Partial<PilotAccount>;
     const convertedInventory = Array.isArray(rawPilot.inventory)
       ? rawPilot.inventory
-          .map((it) => convertLegacyItemInstance(it, rng))
+          .map((it) => convertLegacyItemInstance(it, rng, adminConfig.itemLevels))
           .filter((it): it is ItemInstance => it !== null)
       : [];
 
@@ -677,7 +694,11 @@ export function migrateSaveData(
     if (version >= 10 && Array.isArray(rawPilot.warehouse)) {
       const warehouseIds = new Set<string>();
       for (const entry of rawPilot.warehouse) {
-        const converted = convertLegacyItemInstance(entry, rng);
+        const converted = convertLegacyItemInstance(
+          entry,
+          rng,
+          adminConfig.itemLevels
+        );
         if (!converted) continue;
         if (invIds.has(converted.instanceId)) continue;
         if (warehouseIds.has(converted.instanceId)) continue;
@@ -791,7 +812,11 @@ export function migrateSaveData(
     const rawShop: ShopItemListing[] = Array.isArray(raw.shopStock)
       ? raw.shopStock
           .map((it) => {
-            const converted = convertLegacyItemInstance(it, rng);
+            const converted = convertLegacyItemInstance(
+              it,
+              rng,
+              adminConfig.itemLevels
+            );
             if (!converted) return null;
             const soldOut = Boolean(
               (it as Record<string, unknown>)?.soldOut
@@ -1083,7 +1108,11 @@ export function migrateSaveData(
   if (legacyPlayer.equipped && typeof legacyPlayer.equipped === 'object') {
     const eqMap = legacyPlayer.equipped as Record<string, unknown>;
     for (const slot of EQUIPMENT_SLOTS) {
-      const converted = convertLegacyItemInstance(eqMap[slot], rng);
+      const converted = convertLegacyItemInstance(
+        eqMap[slot],
+        rng,
+        adminConfig.itemLevels
+      );
       if (converted && converted.slot === slot) {
         if (
           !converted.classRestriction ||
@@ -1100,7 +1129,11 @@ export function migrateSaveData(
 
   if (Array.isArray(legacyPlayer.inventory)) {
     for (const item of legacyPlayer.inventory) {
-      const converted = convertLegacyItemInstance(item, rng);
+      const converted = convertLegacyItemInstance(
+        item,
+        rng,
+        adminConfig.itemLevels
+      );
       if (converted) {
         migratedInventory.push(converted);
       }

@@ -717,7 +717,9 @@ function finalizeBattleOutcome(
     updatedUnits.filter((u) => u.side === 'enemy'),
     battle.sectorId,
     deployedGear.level,
-    won
+    won,
+    Math.random,
+    state.adminConfig?.itemLevels
   );
 
   // Active EXP Boost consumable (+50% EXP for N battles)
