@@ -124,6 +124,9 @@ describe('TASK EXT1a-1 — Extender modules data, pricing, and Save v12 migratio
           { templateId: 'mod_stat_attack_t1', count: 50 },
           { templateId: 'mod_stat_attack_t1', count: 80 }, // merge & clamp -> 99
           { templateId: 'mod_trait_accuracyPct_t2', count: 0 }, // clamp min 1
+          { templateId: 'mod_trait_critBonusPct_t2', count: 1 },
+          { templateId: 'mod_stat_fuel_t1', count: 1 },
+          { templateId: 'mod_stat_shield_t1', count: 1 },
           { templateId: 'unknown_mod_id', count: 5 }, // dropped
         ],
         gears: {
@@ -160,6 +163,9 @@ describe('TASK EXT1a-1 — Extender modules data, pricing, and Save v12 migratio
     expect(migrated.pilot.modules).toEqual([
       { templateId: 'mod_stat_attack_t1', count: 99 },
       { templateId: 'mod_trait_accuracyPct_t2', count: 1 },
+      { templateId: 'mod_trait_critBonusPct_t2', count: 1 },
+      { templateId: 'mod_stat_fuel_t1', count: 1 },
+      { templateId: 'mod_stat_shield_t1', count: 1 },
     ]);
     expect(migrated.pilot.gears.striker.extenders).toEqual([
       'mod_stat_attack_t1',

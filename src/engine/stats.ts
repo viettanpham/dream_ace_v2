@@ -9,6 +9,7 @@ import { EMPTY_EQUIPPED_SLOT_IDS } from '../data/items';
 import { createInitialBaseStates, SECTORS_CATALOG } from '../data/maps';
 import { CLASS_STARTER_SKILLS } from '../data/skills';
 import type {
+  AdminConfig,
   DerivedStats,
   GearUnit,
   ItemInstance,
@@ -156,10 +157,11 @@ export function calculateDerivedStats(
  */
 export function calculateGearPowerRating(
   gear: GearUnit,
-  inventory: ItemInstance[]
+  inventory: ItemInstance[],
+  admin?: Pick<AdminConfig, 'extenderUnlockLevels'> | null
 ): number {
-  const equipBonuses = sumGearEquipmentStats(gear, inventory);
-  const traits = sumGearSpecialTraits(gear, inventory);
+  const equipBonuses = sumGearEquipmentStats(gear, inventory, admin);
+  const traits = sumGearSpecialTraits(gear, inventory, admin);
   const passives = getGearPassiveBonuses(gear);
   const stats = calculateEffectiveStats(
     gear.classId,

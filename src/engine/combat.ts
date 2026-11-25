@@ -556,8 +556,16 @@ export function createInitialBattleState(
   const classIds = MECH_CLASS_LIST.map((c) => c.id);
 
   // 1. Player's Deployed Gear (per-Gear level, stats, equipment, passives, and 6-slot skill bar)
-  const playerEquipBonuses = sumGearEquipmentStats(activeGear, pilot.inventory);
-  const playerTraits = sumGearSpecialTraits(activeGear, pilot.inventory);
+  const playerEquipBonuses = sumGearEquipmentStats(
+    activeGear,
+    pilot.inventory,
+    adminConfig
+  );
+  const playerTraits = sumGearSpecialTraits(
+    activeGear,
+    pilot.inventory,
+    adminConfig
+  );
   const playerPassives = getGearPassiveBonuses(activeGear);
 
   const savedFormation = Array.isArray(pilot.squadFormation)

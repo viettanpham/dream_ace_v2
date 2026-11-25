@@ -137,7 +137,16 @@ export const BALANCE_CONFIG = {
       rarityWeights: Record<ItemRarity, number>;
       maxTier: number;
     }
-  >,
+  > ,
+
+  // ---- Extender Module Drop Rates ----
+  moduleDropConfig: {
+    Standard: 0.06,
+    Hard: 0.12,
+    Elite: 0.2,
+    bossBonus: 0.3,
+    lossFactor: 0.45,
+  } as const,
 
   // ---- Status Effects ----
   burnDamageRatio: 0.08, // 8% of Max HP per turn

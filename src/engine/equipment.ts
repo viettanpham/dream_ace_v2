@@ -12,8 +12,11 @@ import {
   SHOP_CONFIG,
 } from '../data/items';
 import { getSectorById } from '../data/maps';
+import { getModuleTemplateById } from '../data/modules';
+import { getUnlockedExtenderCount } from './extenders';
 import { computeItemPrice, countNonZeroTraits } from './itemPrice';
 import type {
+  AdminConfig,
   CombatUnit,
   EnchantAttemptResult,
   EquipmentSlot,
@@ -332,11 +335,12 @@ export function getGearEquippedInstances(
 }
 
 /**
- * Sums all effective flat stat bonuses across all equipped slots of a GearUnit.
+ * Sums all effective flat stat bonuses across all equipped slots and unlocked stat extender modules of a GearUnit.
  */
 export function sumGearEquipmentStats(
   gear: GearUnit,
-  inventory: ItemInstance[]
+  inventory: ItemInstance[],
+  admin?: Pick<AdminConfig, 'extenderUnlockLevels'> | null
 ): StatBlock {
   const total: StatBlock = { ...EMPTY_STAT_BLOCK };
   const equippedMap = getGearEquippedInstances(gear, inventory);
@@ -349,16 +353,32 @@ export function sumGearEquipmentStats(
       total[key] += stats[key];
     }
   }
+
+  const unlockedCount = getUnlockedExtenderCount(gear, admin);
+  const extenders = gear.extenders ?? [];
+  const limit = Math.min(unlockedCount, extenders.length);
+  for (let i = 0; i < limit; i++) {
+    const modId = extenders[i];
+    if (!modId) continue;
+    const tpl = getModuleTemplateById(modId);
+    if (!tpl || tpl.family !== 'stat') continue;
+    const statKey = tpl.effectKey as StatKey;
+    if (statKey in total) {
+      total[statKey] += tpl.value;
+    }
+  }
+
   return total;
 }
 
 /**
  * Sums special mechanical traits (crit %, armor pierce %, splash %, SP regen, evasion mod, accuracy %, detectStealth)
- * across all equipped items on a GearUnit.
+ * across all equipped items and unlocked trait extender modules on a GearUnit.
  */
 export function sumGearSpecialTraits(
   gear: GearUnit,
-  inventory: ItemInstance[]
+  inventory: ItemInstance[],
+  admin?: Pick<AdminConfig, 'extenderUnlockLevels'> | null
 ): ItemSpecialTraits {
   const equippedMap = getGearEquippedInstances(gear, inventory);
   let critBonusPct = 0;
@@ -382,6 +402,20 @@ export function sumGearSpecialTraits(
     if (tr.longRange) longRange = true;
     accuracyPct += tr.accuracyPct ?? 0;
     if (tr.detectStealth) detectStealth = true;
+  }
+
+  const unlockedCount = getUnlockedExtenderCount(gear, admin);
+  const extenders = gear.extenders ?? [];
+  const limit = Math.min(unlockedCount, extenders.length);
+  for (let i = 0; i < limit; i++) {
+    const modId = extenders[i];
+    if (!modId) continue;
+    const tpl = getModuleTemplateById(modId);
+    if (!tpl || tpl.family !== 'trait') continue;
+    if (tpl.effectKey === 'critBonusPct') critBonusPct += tpl.value;
+    else if (tpl.effectKey === 'armorPiercePct') armorPiercePct += tpl.value;
+    else if (tpl.effectKey === 'spRegenPerTurn') spRegenPerTurn += tpl.value;
+    else if (tpl.effectKey === 'accuracyPct') accuracyPct += tpl.value;
   }
 
   return {

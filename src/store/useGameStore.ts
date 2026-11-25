@@ -93,6 +93,13 @@ import {
 } from '../engine/supplies';
 import { computeSupplyPrice } from '../engine/itemPrice';
 import {
+  addModuleDropsToPilot,
+  clearModule as clearModuleEngine,
+  mergeModuleStacks,
+  rollBattleModuleDrops,
+  setModule as setModuleEngine,
+} from '../engine/extenders';
+import {
   isValidSavePayloadShape,
   SAVE_IMPORT_BACKUP_STORAGE_KEY,
   validateImportSaveVersion,
@@ -173,6 +180,7 @@ import type {
   CombatFxTone,
   CombatLogEntry,
   CombatRow,
+  ExtenderEquipFailureReason,
   CombatUnit,
   ConsumableItem,
   EnchantAttemptResult,
@@ -457,6 +465,15 @@ interface GameStoreState {
     gearId: MechClassId,
     ids: string[]
   ) => { ok: boolean; rejected: SupplyLoadoutReject[]; reason?: 'locked' };
+  setExtenderModule: (
+    gearId: MechClassId,
+    index: number,
+    templateId: string | null
+  ) => {
+    ok: boolean;
+    reason?: ExtenderEquipFailureReason | 'locked';
+    reasonKey?: string | null;
+  };
   undoQuickSell: () => { ok: boolean; restoredCount: number };
   clearQuickSellUndo: () => void;
   previewAutoEquip: (
@@ -702,6 +719,12 @@ function finalizeBattleOutcome(
     deployedGear.level,
     won
   );
+  const droppedModules = rollBattleModuleDrops(
+    updatedUnits.filter((u) => u.side === 'enemy'),
+    battle.sectorId,
+    deployedGear.level,
+    won
+  );
 
   // Active EXP Boost consumable (+50% EXP for N battles)
   const expBoostActive = (state.pilot.activeExpBoostBattles ?? 0) > 0;
@@ -724,7 +747,7 @@ function finalizeBattleOutcome(
     nextCapturedSectors = [...state.pilot.capturedSectorIds, battle.sectorId];
   }
 
-  const basePilotBeforeConsequences: PilotAccount = {
+  const pilotWithBaseRewards: PilotAccount = {
     ...state.pilot,
     credits: state.pilot.credits + rewards.creditsGained,
     warPoints: state.pilot.warPoints + rewards.warPointsGained,
@@ -739,6 +762,13 @@ function finalizeBattleOutcome(
       ? Math.max(0, (state.pilot.activeExpBoostBattles ?? 1) - 1)
       : 0,
   };
+  const moduleGrantResult = addModuleDropsToPilot(
+    pilotWithBaseRewards,
+    droppedModules
+  );
+  const basePilotBeforeConsequences = moduleGrantResult.pilot;
+  const totalCreditsGained =
+    rewards.creditsGained + moduleGrantResult.creditsGained;
 
   // Freshly captured bases start Damaged (assault only); repelled raids clear alert (defend only); bonus missions paid (assault/defend)
   const baseConseq = applyBattleBaseConsequences(
@@ -809,10 +839,14 @@ function finalizeBattleOutcome(
       consecutiveDefeats: nextConsecutiveDefeats,
       defeatStreakLimit: streakLimit,
       totalExp: state.autoRepeatSession.totalExp + effectiveExpGained,
-      totalCredits: state.autoRepeatSession.totalCredits + rewards.creditsGained,
+      totalCredits: state.autoRepeatSession.totalCredits + totalCreditsGained,
       totalWarPoints:
         state.autoRepeatSession.totalWarPoints + rewards.warPointsGained,
       totalDrops: [...state.autoRepeatSession.totalDrops, ...droppedItems],
+      totalModuleDrops: mergeModuleStacks(
+        state.autoRepeatSession.totalModuleDrops,
+        droppedModules
+      ),
     };
     if (state.autoRepeatSession.active) {
       const boxCap = getBoxCapacity(state.adminConfig);
@@ -925,7 +959,7 @@ function finalizeBattleOutcome(
         sectorId: battle.sectorId,
         rounds: battle.round,
         expGained: effectiveExpGained,
-        creditsGained: rewards.creditsGained,
+        creditsGained: totalCreditsGained,
         warPointsGained: rewards.warPointsGained,
         baseCaptureBonusWp: rewards.baseCaptureBonusWp,
         leveledUp: levelResult.leveledUp,
@@ -938,6 +972,7 @@ function finalizeBattleOutcome(
         totalEnemies: enemies.length,
         alliesSurviving: aliveAllies.length,
         droppedItems,
+        droppedModules,
       },
     },
   };
@@ -1791,6 +1826,7 @@ export const useGameStore = create<GameStoreState>()(
               totalCredits: 0,
               totalWarPoints: 0,
               totalDrops: [],
+              totalModuleDrops: [],
               stopReason: 'inventory_full',
             },
           });
@@ -1848,6 +1884,7 @@ export const useGameStore = create<GameStoreState>()(
                 totalCredits: 0,
                 totalWarPoints: 0,
                 totalDrops: [],
+                totalModuleDrops: [],
                 stopReason,
               },
             });
@@ -1874,6 +1911,7 @@ export const useGameStore = create<GameStoreState>()(
             totalCredits: 0,
             totalWarPoints: 0,
             totalDrops: [],
+            totalModuleDrops: [],
             stopReason: null,
           },
         });
@@ -2262,6 +2300,45 @@ export const useGameStore = create<GameStoreState>()(
           hasSaveData: true,
         });
         return { ok: true, rejected };
+      },
+
+      setExtenderModule: (gearId, index, templateId) => {
+        const state = get();
+        if (isBattleActive(state) || Boolean(state.autoRepeatSession?.active)) {
+          return {
+            ok: false,
+            reason: 'locked',
+            reasonKey: 'extender.reason.locked',
+          };
+        }
+        if (templateId === null) {
+          const cleared = clearModuleEngine(state.pilot, gearId, index);
+          if (!cleared.ok) {
+            return {
+              ok: false,
+              reason: 'socket_locked',
+              reasonKey: 'extender.reason.socket_locked',
+            };
+          }
+          set({ pilot: cleared.pilot, hasSaveData: true });
+          return { ok: true };
+        }
+        const equipped = setModuleEngine(
+          state.pilot,
+          gearId,
+          index,
+          templateId,
+          state.adminConfig
+        );
+        if (!equipped.ok) {
+          return {
+            ok: false,
+            reason: equipped.reason ?? 'socket_locked',
+            reasonKey: equipped.reasonKey,
+          };
+        }
+        set({ pilot: equipped.pilot, hasSaveData: true });
+        return { ok: true };
       },
 
       moveToBox: (ids) => {

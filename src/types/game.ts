@@ -563,6 +563,13 @@ export interface PilotModuleStack {
   count: number;
 }
 
+export type ExtenderEquipFailureReason =
+  | 'socket_locked'
+  | 'level_too_low'
+  | 'not_owned'
+  | 'same_effect'
+  | 'skill_limit';
+
 export type EquippedSlotIds = Record<EquipmentSlot, string | null>;
 
 export interface EquipValidationResult {
@@ -745,6 +752,7 @@ export interface AutoRepeatSession {
   totalCredits: number;
   totalWarPoints: number;
   totalDrops: ItemInstance[];
+  totalModuleDrops?: PilotModuleStack[];
   stopReason: AutoStopReason | null;
 }
 
@@ -1016,6 +1024,7 @@ export interface BattleSummary {
   totalEnemies: number;
   alliesSurviving: number;
   droppedItems: ItemInstance[];
+  droppedModules?: PilotModuleStack[];
 }
 
 export interface WingmanChatter {
