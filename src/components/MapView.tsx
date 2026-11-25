@@ -351,7 +351,10 @@ export function MapView() {
   const selectedAllowedMapOptions = selectedBattleOptions.filter(
     (opt) =>
       opt.allowed &&
-      (opt.kind === 'assault' || opt.kind === 'defend' || opt.kind === 'patrol')
+      (opt.kind === 'assault' ||
+        opt.kind === 'defend' ||
+        opt.kind === 'patrol' ||
+        opt.kind === 'event')
   );
   const selectedDefaultBattleKind = pickDefaultBattle(selectedBattleOptions);
   const selectedCanDeploy = selectedDefaultBattleKind !== null;
@@ -1042,14 +1045,18 @@ export function MapView() {
                     ? 'text-red-400'
                     : opt.kind === 'patrol'
                     ? 'text-emerald-400'
+                    : opt.kind === 'event'
+                    ? 'text-rose-400'
                     : 'text-amber-400';
-                const rowLabel = t(
-                  `map.optionLabel.${opt.kind}` as TranslationKey,
-                  { size: effectiveSquadSize }
-                );
+                const optionSize = opt.sizeOverride ?? effectiveSquadSize;
+                const rowLabel = opt.labelKey
+                  ? `${t(opt.labelKey as TranslationKey)} ${optionSize}v${optionSize}`
+                  : t(`map.optionLabel.${opt.kind}` as TranslationKey, {
+                      size: optionSize,
+                    });
                 return (
                   <div
-                    key={opt.kind}
+                    key={`${opt.kind}_${opt.sourceId ?? 'default'}`}
                     data-testid={`map-option-row-${opt.kind}`}
                     className="flex items-center justify-between gap-2 rounded border border-slate-800/90 bg-slate-950/80 px-2.5 py-2"
                   >
@@ -1062,7 +1069,10 @@ export function MapView() {
                       data-testid={`map-option-deploy-${opt.kind}`}
                       onClick={() => {
                         setMobileBriefingOpen(false);
-                        startBattle(selectedSector.id, { kind: opt.kind });
+                        startBattle(selectedSector.id, {
+                          kind: opt.kind,
+                          sourceId: opt.sourceId ?? null,
+                        });
                       }}
                       className="min-h-[36px] px-3 rounded-md bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs inline-flex items-center gap-1 shrink-0 cursor-pointer whitespace-nowrap"
                     >

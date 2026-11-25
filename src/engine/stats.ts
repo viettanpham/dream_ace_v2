@@ -280,6 +280,7 @@ export function createDefaultPilotAccount(
     activeBonusMission: null,
     squadFormation: createDefaultSquadFormation(name, starterClassId),
     formationCustomized: false,
+    pirateIncidents: [],
   };
 }
 

@@ -81,6 +81,14 @@ import {
   type WarehouseTransferResult,
 } from '../engine/warehouse';
 import {
+  clearPirateIncidentById,
+  ensureIdle,
+  registerPirateBattleSourceProvider,
+  sanitizePirateIncidents,
+  sanitizePiratesConfig,
+  spawnOnMonth,
+} from '../engine/pirates';
+import {
   addSupplyToConsumables,
   applyBattleSupplyUse,
   getSupplyStockCount,
@@ -768,15 +776,30 @@ function finalizeBattleOutcome(
     won,
     battleKind
   );
+  const pilotAfterPirateClear =
+    won && battleKind === 'event' && battle.sourceId
+      ? clearPirateIncidentById(baseConseq.pilot, battle.sourceId)
+      : baseConseq.pilot;
   // Advance campaign calendar 1 month after each completed non-retreat sortie
   const monthStep = retreated
-    ? { pilot: baseConseq.pilot }
-    : advanceCampaignMonth(baseConseq.pilot);
+    ? { pilot: pilotAfterPirateClear }
+    : {
+        pilot: spawnOnMonth(
+          advanceCampaignMonth(pilotAfterPirateClear).pilot,
+          state.adminConfig.pirates,
+          Math.random
+        ),
+      };
   const nextUnlockedSectors = mergeVisibleUnlockedSectors(monthStep.pilot);
-  const nextPilot: PilotAccount = {
-    ...monthStep.pilot,
-    unlockedSectorIds: nextUnlockedSectors,
-  };
+  const nextPilot: PilotAccount = ensureIdle(
+    {
+      ...monthStep.pilot,
+      unlockedSectorIds: nextUnlockedSectors,
+    },
+    state.adminConfig.pirates,
+    Math.random,
+    state.adminConfig
+  );
   const unlockedSectorId =
     nextUnlockedSectors.find(
       (id) => !state.pilot.unlockedSectorIds.includes(id)
@@ -942,6 +965,7 @@ function finalizeBattleOutcome(
         outcome: won ? 'victory' : 'defeat',
         retreated,
         kind: battleKind,
+        sourceId: battle.sourceId ?? null,
         deployedGearId,
         sectorId: battle.sectorId,
         rounds: battle.round,
@@ -1003,7 +1027,13 @@ function launchBattleForSector(
       state.adminConfig
     );
     const defaultKind = pickDefaultBattle(battleOptions);
-    if (defaultKind === null) {
+    const defaultOpt =
+      defaultKind !== null
+        ? battleOptions.find(
+            (opt) => opt.kind === defaultKind && opt.allowed
+          ) ?? null
+        : null;
+    if (defaultKind === null || !defaultOpt) {
       validation = {
         allowed: false,
         kind: 'assault',
@@ -1012,11 +1042,20 @@ function launchBattleForSector(
           battleOptions.find((opt) => !opt.allowed && opt.reasonKey)
             ?.reasonKey ?? 'map.reason.notFrontline',
       };
+    } else if (defaultOpt.sourceId) {
+      validation = validateBattleLaunch(
+        state.pilot,
+        targetSectorId,
+        defaultOpt.kind,
+        defaultOpt.sourceId,
+        state.adminConfig
+      );
     } else {
       validation = {
         allowed: true,
-        kind: defaultKind,
+        kind: defaultOpt.kind,
         sourceId: null,
+        sizeOverride: defaultOpt.sizeOverride,
       };
     }
   }
@@ -1779,19 +1818,27 @@ export const useGameStore = create<GameStoreState>()(
 
         const ongoingBattle =
           state.battle && !state.battle.summary ? state.battle : null;
+        const autoBattleOptions =
+          opts?.kind === undefined && !ongoingBattle
+            ? getBattleOptions(state.pilot, chosenSector, state.adminConfig)
+            : null;
+        const pickedDefaultKind = autoBattleOptions
+          ? pickDefaultBattle(autoBattleOptions)
+          : null;
+        const pickedDefaultOpt =
+          autoBattleOptions && pickedDefaultKind
+            ? autoBattleOptions.find(
+                (opt) => opt.kind === pickedDefaultKind && opt.allowed
+              ) ?? null
+            : null;
         const resolvedKind: BattleKind | undefined =
-          opts?.kind ??
-          ongoingBattle?.kind ??
-          pickDefaultBattle(
-            getBattleOptions(state.pilot, chosenSector, state.adminConfig)
-          ) ??
-          undefined;
+          opts?.kind ?? ongoingBattle?.kind ?? pickedDefaultKind ?? undefined;
         const resolvedSourceId =
           opts?.sourceId !== undefined
             ? opts.sourceId
             : ongoingBattle
             ? ongoingBattle.sourceId ?? null
-            : null;
+            : pickedDefaultOpt?.sourceId ?? null;
 
         const boxCap = getBoxCapacity(state.adminConfig);
         if (state.pilot.inventory.length >= boxCap) {
@@ -1973,7 +2020,21 @@ export const useGameStore = create<GameStoreState>()(
 
       advanceMonth: () => {
         const state = get();
-        const summary = advanceCampaignMonth(state.pilot);
+        const rawSummary = advanceCampaignMonth(state.pilot);
+        const pilotAfterPirates = ensureIdle(
+          spawnOnMonth(
+            rawSummary.pilot,
+            state.adminConfig.pirates,
+            Math.random
+          ),
+          state.adminConfig.pirates,
+          Math.random,
+          state.adminConfig
+        );
+        const summary: MonthAdvanceSummary = {
+          ...rawSummary,
+          pilot: pilotAfterPirates,
+        };
         soundFx.playConfirm();
         const activeGear = summary.pilot.gears[summary.pilot.activeGearId];
         const nextShopStock = SHOP_STOCK_CONFIG.restockOnMonthAdvance
@@ -4730,6 +4791,7 @@ export const useGameStore = create<GameStoreState>()(
                 rawAdmin.statusDisplayDefaults
               ),
               ...sanitizeSupplyShopConfig(rawAdmin as Partial<AdminConfig>),
+              pirates: sanitizePiratesConfig(rawAdmin.pirates),
               rewardMultiplier:
                 typeof state.adminConfig.rewardMultiplier === 'number' &&
                 Number.isFinite(state.adminConfig.rewardMultiplier) &&
@@ -4767,6 +4829,17 @@ export const useGameStore = create<GameStoreState>()(
                 state.adminConfig.formation
               );
             }
+            state.pilot.pirateIncidents = sanitizePirateIncidents(
+              state.pilot.pirateIncidents,
+              state.pilot.campaignMonth ?? 1,
+              state.adminConfig.pirates
+            );
+            state.pilot = ensureIdle(
+              state.pilot,
+              state.adminConfig.pirates,
+              Math.random,
+              state.adminConfig
+            );
           }
           // Guarantee shop stock and WP market offers are NEVER empty on reload!
           const activeGear = state.pilot?.gears?.[state.pilot?.activeGearId];
@@ -4847,4 +4920,8 @@ export const useGameStore = create<GameStoreState>()(
       },
     }
   )
+);
+
+registerPirateBattleSourceProvider(
+  () => useGameStore.getState().adminConfig?.pirates
 );

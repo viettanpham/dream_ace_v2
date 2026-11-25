@@ -837,6 +837,7 @@ export interface PilotAccount {
   activeEnchantBonusPct?: number;
   squadFormation?: SquadFormationUnit[];
   formationCustomized?: boolean;
+  pirateIncidents?: PirateIncident[];
 }
 
 export type EnemyArchetype = 'drone' | 'gunship' | 'sniper' | 'repair_ship';
@@ -1005,6 +1006,7 @@ export interface BattleSummary {
   outcome: 'victory' | 'defeat';
   retreated?: boolean;
   kind?: BattleKind;
+  sourceId?: string | null;
   deployedGearId: MechClassId;
   sectorId: string;
   rounds: number;
@@ -1414,7 +1416,32 @@ export interface AdminConfig {
   extenderLevelsPerSocket?: number;
   maxSkillModulesPerGear?: number;
   itemLevels?: ItemLevelsConfig;
+  pirates?: PiratesConfig;
   showRawI18nKeys: boolean;
+}
+
+export interface PirateSizeWeights {
+  4: number;
+  6: number;
+  8: number;
+}
+
+export interface PiratesConfig {
+  enabled: boolean;
+  maxActive: number;
+  spawnChancePerMonth: number;
+  ensureOneWhenIdle: boolean;
+  sizeWeights: PirateSizeWeights;
+  expiryMonths: number;
+  rewardMult: number;
+}
+
+export interface PirateIncident {
+  id: string;
+  nodeId: string;
+  size: BattleSize;
+  createdMonth: number;
+  expiresMonth: number;
 }
 
 export type BaseTab = 'gear' | 'warehouse' | 'garage' | 'skill' | 'shop' | 'map';

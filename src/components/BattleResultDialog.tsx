@@ -3,6 +3,7 @@ import { BALANCE_CONFIG } from '../data/balance';
 import { STAT_KEYS } from '../data/classes';
 import { RARITY_META } from '../data/items';
 import { getEffectiveItemStats } from '../engine/equipment';
+import { isPirateIncidentId } from '../engine/pirates';
 import {
   getClassName,
   getItemInstanceName,
@@ -93,7 +94,10 @@ export function BattleResultDialog({
                 >
                   {t('summary.battleKindLine', {
                     kind: t(
-                      `battle.kind.${summary.kind ?? 'assault'}` as TranslationKey
+                      (summary.kind === 'event' &&
+                      isPirateIncidentId(summary.sourceId)
+                        ? 'battle.kind.pirates'
+                        : `battle.kind.${summary.kind ?? 'assault'}`) as TranslationKey
                     ),
                   })}
                 </p>

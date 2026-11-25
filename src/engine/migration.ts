@@ -79,6 +79,13 @@ import {
   sanitizeShieldRegenConfig,
 } from './shieldRegen';
 import {
+  clonePiratesConfig,
+  DEFAULT_PIRATES_CONFIG,
+  ensureIdle,
+  sanitizePirateIncidents,
+  sanitizePiratesConfig,
+} from './pirates';
+import {
   cloneStarterSetConfig,
   DEFAULT_STARTER_SET_CONFIG,
   sanitizeStarterSetConfig,
@@ -318,6 +325,7 @@ export function createDefaultAdminConfig(): AdminConfig {
     extenderLevelsPerSocket: DEFAULT_EXTENDER_LEVELS_PER_SOCKET,
     maxSkillModulesPerGear: DEFAULT_MAX_SKILL_MODULES_PER_GEAR,
     itemLevels: cloneItemLevelsConfig(DEFAULT_ITEM_LEVELS_CONFIG),
+    pirates: clonePiratesConfig(DEFAULT_PIRATES_CONFIG),
     showRawI18nKeys: false,
   };
 }
@@ -649,6 +657,7 @@ export function migrateSaveData(
       rawAdmin.maxSkillModulesPerGear
     ),
     itemLevels: sanitizeItemLevelsConfig(rawAdmin.itemLevels),
+    pirates: sanitizePiratesConfig(rawAdmin.pirates),
     showRawI18nKeys: Boolean(rawAdmin.showRawI18nKeys),
   };
 
@@ -1008,6 +1017,13 @@ export function migrateSaveData(
       rawWarehouse
     );
 
+    const migratedCampaignMonth = Math.max(1, Number(rawPilot.campaignMonth) || 1);
+    const sanitizedPirateIncidents = sanitizePirateIncidents(
+      rawPilot.pirateIncidents,
+      migratedCampaignMonth,
+      adminConfig.pirates
+    );
+
     const migratedPilot: PilotAccount = {
       name: pilotNameClean,
       credits: migratedCredits,
@@ -1020,7 +1036,7 @@ export function migrateSaveData(
       activeGearId: finalActiveGearId,
       unlockedSectorIds: finalUnlockedSectors,
       capturedSectorIds,
-      campaignMonth: Math.max(1, Number(rawPilot.campaignMonth) || 1),
+      campaignMonth: migratedCampaignMonth,
       baseStates: cleanBaseStates,
       hiredWingman: rawPilot.hiredWingman ?? null,
       engineerShieldBoost: Boolean(rawPilot.engineerShieldBoost),
@@ -1036,9 +1052,10 @@ export function migrateSaveData(
       ),
       squadFormation,
       formationCustomized,
+      pirateIncidents: sanitizedPirateIncidents,
     };
 
-    const finalMigratedPilot =
+    const migratedWithStarter =
       version < 9 && adminConfig.starterSet?.enabled
         ? fillEmptyStarterSlotsForPilot(
             migratedPilot,
@@ -1046,6 +1063,12 @@ export function migrateSaveData(
             rng
           ).pilot
         : migratedPilot;
+    const finalMigratedPilot = ensureIdle(
+      migratedWithStarter,
+      adminConfig.pirates,
+      rng,
+      adminConfig
+    );
 
     const rawWpOffers: WpMarketOffer[] = Array.isArray(raw.wpMarketOffers)
       ? (raw.wpMarketOffers as WpMarketOffer[]).filter(
@@ -1225,6 +1248,7 @@ export function migrateSaveData(
       adminConfig.formation
     ),
     formationCustomized: false,
+    pirateIncidents: [],
   };
 
   const finalLegacyPilot =

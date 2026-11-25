@@ -1062,6 +1062,8 @@ export const EN_TRANSLATIONS = {
   'map.optionLabel.assault': 'Assault {size}v{size}',
   'map.optionLabel.defend': 'Defend {size}v{size}',
   'map.optionLabel.patrol': 'Patrol {size}v{size}',
+  'map.optionLabel.event': 'Event {size}v{size}',
+  'map.battle.pirates': 'Clear Pirates',
   'map.briefingReason.notFrontline':
     'Not adjacent to allied territory — capture an adjacent base first',
   'map.briefingReason.rearBase':
@@ -1840,6 +1842,7 @@ export const EN_TRANSLATIONS = {
   'battle.kind.patrol': 'Patrol',
   'battle.kind.mission': 'Mission',
   'battle.kind.event': 'Event',
+  'battle.kind.pirates': 'Pirates',
   'summary.battleKindLine': 'Battle type: {kind}',
   'admin.campaignIgnoreFrontline': 'Ignore frontline rule (test)',
   'perf.label': 'Effects',

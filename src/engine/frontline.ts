@@ -21,12 +21,16 @@ export interface BattleOption {
   kind: BattleKind;
   allowed: boolean;
   reasonKey?: BattleOptionReasonKey;
+  sourceId?: string | null;
+  labelKey?: string;
+  sizeOverride?: BattleSize;
 }
 
 export type FrontlinePilotSlice = Pick<
   PilotAccount,
   'baseStates' | 'unlockedSectorIds'
->;
+> &
+  Partial<Pick<PilotAccount, 'pirateIncidents' | 'campaignMonth'>>;
 
 function getSectorFaction(
   pilot: Pick<PilotAccount, 'baseStates'>,
@@ -136,9 +140,13 @@ export function noEnemyLeft(pilot: Pick<PilotAccount, 'baseStates'>): boolean {
 export function getBattleOptions(
   pilot: FrontlinePilotSlice,
   id: string,
-  adminConfig?: Partial<Pick<AdminConfig, 'ignoreFrontline'>> | null
+  adminConfig?: Partial<Pick<AdminConfig, 'ignoreFrontline' | 'pirates'>> | null
 ): BattleOption[] {
   const ignoreFrontline = Boolean(adminConfig?.ignoreFrontline);
+  const piratesEnabled =
+    adminConfig?.pirates !== undefined
+      ? Boolean(adminConfig.pirates.enabled)
+      : true;
   const visible = isVisible(pilot, id);
 
   if (!visible) {
@@ -151,20 +159,43 @@ export function getBattleOptions(
     ];
   }
 
+  const currentMonth =
+    typeof pilot.campaignMonth === 'number' && Number.isFinite(pilot.campaignMonth)
+      ? Math.floor(pilot.campaignMonth)
+      : null;
+  const activePirateIncident =
+    piratesEnabled && Array.isArray(pilot.pirateIncidents)
+      ? pilot.pirateIncidents.find(
+          (inc) =>
+            inc.nodeId === id &&
+            (currentMonth === null || inc.expiresMonth > currentMonth)
+        ) ?? null
+      : null;
+
   const faction = getSectorFaction(pilot, id);
   const runtime = pilot.baseStates?.[id];
 
   if (isEnemyOrNeutral(faction)) {
-    if (isContested(pilot, id) || ignoreFrontline) {
-      return [{ kind: 'assault', allowed: true }];
+    const enemyOptions: BattleOption[] =
+      isContested(pilot, id) || ignoreFrontline
+        ? [{ kind: 'assault', allowed: true }]
+        : [
+            {
+              kind: 'assault',
+              allowed: false,
+              reasonKey: 'map.reason.notFrontline',
+            },
+          ];
+    if (activePirateIncident) {
+      enemyOptions.push({
+        kind: 'event',
+        allowed: true,
+        sourceId: activePirateIncident.id,
+        labelKey: 'map.battle.pirates',
+        sizeOverride: activePirateIncident.size,
+      });
     }
-    return [
-      {
-        kind: 'assault',
-        allowed: false,
-        reasonKey: 'map.reason.notFrontline',
-      },
-    ];
+    return enemyOptions;
   }
 
   // Allied node
@@ -180,6 +211,16 @@ export function getBattleOptions(
       kind: 'patrol',
       allowed: false,
       reasonKey: 'map.reason.rearBase',
+    });
+  }
+
+  if (activePirateIncident) {
+    options.push({
+      kind: 'event',
+      allowed: true,
+      sourceId: activePirateIncident.id,
+      labelKey: 'map.battle.pirates',
+      sizeOverride: activePirateIncident.size,
     });
   }
 

@@ -1064,6 +1064,8 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'map.optionLabel.assault': 'Tấn công {size}v{size}',
   'map.optionLabel.defend': 'Phòng thủ {size}v{size}',
   'map.optionLabel.patrol': 'Tuần tra {size}v{size}',
+  'map.optionLabel.event': 'Sự kiện {size}v{size}',
+  'map.battle.pirates': 'Truy quét cướp biển',
   'map.briefingReason.notFrontline':
     'Chưa tiếp giáp lãnh thổ ta — chiếm một căn cứ kề bên trước',
   'map.briefingReason.rearBase':
@@ -1843,6 +1845,7 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'battle.kind.patrol': 'Tuần tra',
   'battle.kind.mission': 'Nhiệm vụ',
   'battle.kind.event': 'Sự kiện',
+  'battle.kind.pirates': 'Cướp biển',
   'summary.battleKindLine': 'Loại trận: {kind}',
   'admin.campaignIgnoreFrontline': 'Bỏ qua luật tiền tuyến (test)',
   'perf.label': 'Hiệu ứng',

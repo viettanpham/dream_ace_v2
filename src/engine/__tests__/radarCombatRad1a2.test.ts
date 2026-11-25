@@ -216,7 +216,7 @@ describe('TASK RAD1a-2 — Radar accuracy, stealth detection, and auto-equip wei
       ...campaign.pilot,
       gears: {
         ...campaign.pilot.gears,
-        striker: { ...campaign.pilot.gears.striker, level: 10 },
+        striker: { ...campaign.pilot.gears.striker, level: 25 },
       },
       inventory: [...campaign.pilot.inventory, scout, hunter],
     };
