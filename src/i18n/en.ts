@@ -1942,6 +1942,14 @@ export const EN_TRANSLATIONS = {
   'admin.enemyLevelKindAssault': 'Assault',
   'admin.enemyLevelKindDefend': 'Defend',
   'admin.enemyLevelKindBoss': 'Boss',
+  'admin.supplyLimitMultTitle': 'Supply use limit multipliers by side & battle (1–10)',
+  'admin.supplyLimitMultReset': 'Reset to defaults',
+  'admin.supplyLimitAssaultAttacker': 'Assault · Player',
+  'admin.supplyLimitAssaultDefender': 'Assault · Enemy',
+  'admin.supplyLimitDefendDefender': 'Defend · Player',
+  'admin.supplyLimitDefendAttacker': 'Defend · Enemy',
+  'admin.supplyLimitBossEscort': 'Boss · Escorts',
+  'admin.supplyLimitBossPlayers': 'Boss · Players',
 } as const;
 
 export type TranslationKey = keyof typeof EN_TRANSLATIONS;

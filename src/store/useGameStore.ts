@@ -3114,6 +3114,7 @@ export const useGameStore = create<GameStoreState>()(
           stock,
           isOwnTurn: true,
           cfg: state.adminConfig,
+          kind: battle.kind,
         });
         if (!res.ok) return;
 

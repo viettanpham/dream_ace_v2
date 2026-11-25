@@ -154,7 +154,7 @@ export function FieldSuppliesSheet({
                             <span className="font-mono-nums text-slate-400">
                               {t('supply.usesCount', {
                                 n: row.usedCount,
-                                max: row.limit,
+                                max: Number.isFinite(row.limit) ? row.limit : '∞',
                               })}
                             </span>
                           </div>

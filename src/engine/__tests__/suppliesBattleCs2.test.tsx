@@ -297,7 +297,7 @@ describe('TASK CS2 — Battle Supply Use, Cooldowns, Stock & Sheet', () => {
 
     expect(container.textContent).toContain('Dùng 0/1 lượt này');
     expect(container.textContent).toContain('x5');
-    expect(container.textContent).toContain('0/5 trận');
+    expect(container.textContent).toContain('0/10 trận');
     expect(container.textContent).toContain('Ô trống — chọn ở GEAR > Túi vật tư');
 
     const useBtn = container.querySelector<HTMLButtonElement>(

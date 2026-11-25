@@ -1388,9 +1388,19 @@ export interface SpEconomyConfig {
   costLevelPct: number;
 }
 
+export interface SupplyLimitMultConfig {
+  assaultAttacker: number;
+  assaultDefender: number;
+  defendDefender: number;
+  defendAttacker: number;
+  bossEscort: number;
+  bossPlayers: number;
+}
+
 export interface SupplyEconomyConfig {
   maxUsesPerBattle: number;
   spPriceMult: number;
+  limitMult?: SupplyLimitMultConfig;
 }
 
 export type EnemyLevelRangeKind =

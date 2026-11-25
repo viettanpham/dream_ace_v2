@@ -1,6 +1,7 @@
 import { getSupplyTemplateById } from '../data/consumables';
 import type {
   AdminConfig,
+  BattleKind,
   BattleState,
   BattleSupplyUnitState,
   CombatUnit,
@@ -9,6 +10,7 @@ import type {
   PilotAccount,
   SupplyEconomyConfig,
   SupplyEffect,
+  SupplyLimitMultConfig,
   SupplyTemplate,
 } from '../types/game';
 import {
@@ -34,9 +36,22 @@ export const DEFAULT_SUPPLY_SP_PRICE_MULT = 2;
 export const MIN_SUPPLY_SP_PRICE_MULT = 1;
 export const MAX_SUPPLY_SP_PRICE_MULT = 5;
 
+export const MIN_SUPPLY_LIMIT_MULT = 1;
+export const MAX_SUPPLY_LIMIT_MULT = 10;
+
+export const DEFAULT_SUPPLY_LIMIT_MULT: SupplyLimitMultConfig = {
+  assaultAttacker: 2,
+  assaultDefender: 3,
+  defendDefender: 2,
+  defendAttacker: 1,
+  bossEscort: 2,
+  bossPlayers: 3,
+};
+
 export const DEFAULT_SUPPLY_ECONOMY_CONFIG: SupplyEconomyConfig = {
   maxUsesPerBattle: DEFAULT_SUPPLY_MAX_USES_PER_BATTLE,
   spPriceMult: DEFAULT_SUPPLY_SP_PRICE_MULT,
+  limitMult: { ...DEFAULT_SUPPLY_LIMIT_MULT },
 };
 
 export type SupplyRejectReason = 'unknown' | 'duplicate' | 'over_slots';
@@ -64,6 +79,8 @@ export interface CanUseSupplyInput {
   supplyState?: Partial<BattleSupplyUnitState> | null;
   isOwnTurn: boolean;
   cfg?: Pick<AdminConfig, 'supplyUsesPerTurn' | 'supplyEconomy'> | null;
+  kind?: BattleKind | null;
+  units?: readonly CombatUnit[] | null;
 }
 
 export interface CanUseSupplyResult {
@@ -101,12 +118,58 @@ export function sanitizeSupplyUsesPerTurn(raw: unknown): number {
   );
 }
 
+export function sanitizeSupplyLimitMult(raw?: unknown): SupplyLimitMultConfig {
+  const obj =
+    raw && typeof raw === 'object' && !Array.isArray(raw)
+      ? (raw as Partial<SupplyLimitMultConfig>)
+      : null;
+  return {
+    assaultAttacker: clampFiniteInt(
+      obj?.assaultAttacker,
+      MIN_SUPPLY_LIMIT_MULT,
+      MAX_SUPPLY_LIMIT_MULT,
+      DEFAULT_SUPPLY_LIMIT_MULT.assaultAttacker
+    ),
+    assaultDefender: clampFiniteInt(
+      obj?.assaultDefender,
+      MIN_SUPPLY_LIMIT_MULT,
+      MAX_SUPPLY_LIMIT_MULT,
+      DEFAULT_SUPPLY_LIMIT_MULT.assaultDefender
+    ),
+    defendDefender: clampFiniteInt(
+      obj?.defendDefender,
+      MIN_SUPPLY_LIMIT_MULT,
+      MAX_SUPPLY_LIMIT_MULT,
+      DEFAULT_SUPPLY_LIMIT_MULT.defendDefender
+    ),
+    defendAttacker: clampFiniteInt(
+      obj?.defendAttacker,
+      MIN_SUPPLY_LIMIT_MULT,
+      MAX_SUPPLY_LIMIT_MULT,
+      DEFAULT_SUPPLY_LIMIT_MULT.defendAttacker
+    ),
+    bossEscort: clampFiniteInt(
+      obj?.bossEscort,
+      MIN_SUPPLY_LIMIT_MULT,
+      MAX_SUPPLY_LIMIT_MULT,
+      DEFAULT_SUPPLY_LIMIT_MULT.bossEscort
+    ),
+    bossPlayers: clampFiniteInt(
+      obj?.bossPlayers,
+      MIN_SUPPLY_LIMIT_MULT,
+      MAX_SUPPLY_LIMIT_MULT,
+      DEFAULT_SUPPLY_LIMIT_MULT.bossPlayers
+    ),
+  };
+}
+
 export function cloneSupplyEconomyConfig(
   cfg: SupplyEconomyConfig
 ): SupplyEconomyConfig {
   return {
     maxUsesPerBattle: cfg.maxUsesPerBattle,
     spPriceMult: cfg.spPriceMult,
+    limitMult: sanitizeSupplyLimitMult(cfg.limitMult),
   };
 }
 
@@ -130,7 +193,63 @@ export function sanitizeSupplyEconomyConfig(
       MAX_SUPPLY_SP_PRICE_MULT,
       DEFAULT_SUPPLY_SP_PRICE_MULT
     ),
+    limitMult: sanitizeSupplyLimitMult(obj?.limitMult),
   };
+}
+
+function extractSupplyEconomyRaw(
+  cfg?: Pick<AdminConfig, 'supplyEconomy'> | Partial<SupplyEconomyConfig> | null
+): unknown {
+  if (!cfg || typeof cfg !== 'object') return undefined;
+  return 'supplyEconomy' in cfg ? cfg.supplyEconomy : cfg;
+}
+
+export function getSupplyLimitMult(
+  kind: BattleKind | null | undefined,
+  unit: Pick<CombatUnit, 'side' | 'isBoss'> | null | undefined,
+  units?: readonly Pick<CombatUnit, 'isBoss'>[] | null,
+  cfg?: Pick<AdminConfig, 'supplyEconomy'> | Partial<SupplyEconomyConfig> | null
+): number {
+  if (!unit) return 1;
+  const limitMult = sanitizeSupplyEconomyConfig(
+    extractSupplyEconomyRaw(cfg)
+  ).limitMult!;
+  const isBossBattle = Boolean(
+    unit.isBoss || units?.some((u) => Boolean(u.isBoss))
+  );
+
+  if (isBossBattle) {
+    if (unit.isBoss) return Infinity;
+    return unit.side === 'enemy' ? limitMult.bossEscort : limitMult.bossPlayers;
+  }
+
+  if (kind === 'assault') {
+    return unit.side === 'ally'
+      ? limitMult.assaultAttacker
+      : limitMult.assaultDefender;
+  }
+
+  if (kind === 'defend') {
+    return unit.side === 'ally'
+      ? limitMult.defendDefender
+      : limitMult.defendAttacker;
+  }
+
+  return 1;
+}
+
+export function getEffectiveSupplyBattleLimit(
+  kind: BattleKind | null | undefined,
+  unit: Pick<CombatUnit, 'side' | 'isBoss'> | null | undefined,
+  units?: readonly Pick<CombatUnit, 'isBoss'>[] | null,
+  cfg?: Pick<AdminConfig, 'supplyEconomy'> | Partial<SupplyEconomyConfig> | null
+): number {
+  const baseMax = sanitizeSupplyEconomyConfig(
+    extractSupplyEconomyRaw(cfg)
+  ).maxUsesPerBattle;
+  const mult = getSupplyLimitMult(kind, unit, units, cfg);
+  if (!Number.isFinite(mult)) return Infinity;
+  return Math.floor(baseMax * mult);
 }
 
 /**
@@ -314,6 +433,8 @@ export function canUseSupply({
   supplyState,
   isOwnTurn,
   cfg,
+  kind,
+  units,
 }: CanUseSupplyInput): CanUseSupplyResult {
   if (!isOwnTurn) {
     return failUse('not_your_turn');
@@ -328,17 +449,23 @@ export function canUseSupply({
     return failUse('turn_limit', { n: usedThisTurn, max: usesPerTurn });
   }
 
-  const maxUsesPerBattle = sanitizeSupplyEconomyConfig(
-    cfg?.supplyEconomy
-  ).maxUsesPerBattle;
+  const effectiveBattleLimit = getEffectiveSupplyBattleLimit(
+    kind,
+    unit,
+    units,
+    cfg
+  );
   const usedInBattle = Math.max(
     0,
     supplyState?.usedCountsByTemplate?.[template.id] ?? 0
   );
-  if (usedInBattle >= maxUsesPerBattle) {
+  if (
+    Number.isFinite(effectiveBattleLimit) &&
+    usedInBattle >= effectiveBattleLimit
+  ) {
     return failUse('battle_limit', {
       n: usedInBattle,
-      max: maxUsesPerBattle,
+      max: effectiveBattleLimit,
     });
   }
 
@@ -372,6 +499,7 @@ export interface ApplyBattleSupplyUseInput {
   stock: number;
   isOwnTurn: boolean;
   cfg?: Pick<AdminConfig, 'supplyUsesPerTurn' | 'supplyEconomy'> | null;
+  kind?: BattleKind | null;
 }
 
 export type ApplyBattleSupplyUseResult =
@@ -431,6 +559,7 @@ export function applyBattleSupplyUse({
   stock,
   isOwnTurn,
   cfg,
+  kind,
 }: ApplyBattleSupplyUseInput): ApplyBattleSupplyUseResult {
   const unitIdx = units.findIndex((u) => u.id === unitId);
   const unit = unitIdx >= 0 ? units[unitIdx] : undefined;
@@ -450,6 +579,8 @@ export function applyBattleSupplyUse({
     supplyState: prevState,
     isOwnTurn,
     cfg,
+    kind,
+    units,
   });
 
   if (!check.ok) {
@@ -544,7 +675,14 @@ export function getSupplyStockCount(
 export function getBattleSupplyRows(
   battle: Pick<
     BattleState,
-    'deployedGearId' | 'units' | 'turnOrder' | 'activeTurnIndex' | 'supplyByUnit' | 'summary' | 'isResolving'
+    | 'kind'
+    | 'deployedGearId'
+    | 'units'
+    | 'turnOrder'
+    | 'activeTurnIndex'
+    | 'supplyByUnit'
+    | 'summary'
+    | 'isResolving'
   > | null | undefined,
   pilot: Pick<PilotAccount, 'gears' | 'consumables'> | null | undefined,
   cfg?: Pick<
@@ -623,6 +761,9 @@ export function getBattleSupplyRows(
       0,
       supplyState?.usedCountsByTemplate?.[tpl.id] ?? 0
     );
+    const effectiveLimit = playerUnit
+      ? getEffectiveSupplyBattleLimit(battle.kind, playerUnit, battle.units, cfg)
+      : maxUsesPerBattle;
     const check: CanUseSupplyResult = playerUnit
       ? canUseSupply({
           template: tpl,
@@ -631,6 +772,8 @@ export function getBattleSupplyRows(
           supplyState,
           isOwnTurn: isPlayerTurn,
           cfg,
+          kind: battle.kind,
+          units: battle.units,
         })
       : {
           ok: false,
@@ -652,7 +795,7 @@ export function getBattleSupplyRows(
       effects: tpl.effects,
       stock,
       usedCount,
-      limit: maxUsesPerBattle,
+      limit: effectiveLimit,
       ok: check.ok,
       reason: check.reason,
       reasonKey: check.reasonKey,

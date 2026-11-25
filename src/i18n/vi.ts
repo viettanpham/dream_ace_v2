@@ -1945,6 +1945,14 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'admin.enemyLevelKindAssault': 'Tấn công',
   'admin.enemyLevelKindDefend': 'Phòng thủ',
   'admin.enemyLevelKindBoss': 'Boss',
+  'admin.supplyLimitMultTitle': 'Hệ số giới hạn dùng theo phe & loại trận (1–10)',
+  'admin.supplyLimitMultReset': 'Khôi phục mặc định',
+  'admin.supplyLimitAssaultAttacker': 'Tấn công · Phe ta',
+  'admin.supplyLimitAssaultDefender': 'Tấn công · Địch',
+  'admin.supplyLimitDefendDefender': 'Phòng thủ · Phe ta',
+  'admin.supplyLimitDefendAttacker': 'Phòng thủ · Địch',
+  'admin.supplyLimitBossEscort': 'Boss · Hộ tống',
+  'admin.supplyLimitBossPlayers': 'Boss · Phe ta',
 };
 
 
