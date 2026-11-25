@@ -1,6 +1,5 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
-import { sortStatusEffects } from '../data/statusIconMap';
 import { getTeamColorRole } from '../engine/combat';
 import { useI18n } from '../i18n';
 import type {
@@ -13,7 +12,11 @@ import {
   STATUS_BADGE_SAFE_PX,
   STATUS_CHIP_FRAME_PX,
 } from '../utils/statusDisplayPrefs';
-import { StatusChip } from './StatusChip';
+import {
+  CARD_STATUS_FALLBACK_WIDTH_PX,
+  countStatusChipRows,
+  FixedStatusArea,
+} from './FixedStatusArea';
 
 export const STATUS_BOARD_STORAGE_KEY = 'dreamAce.statusBoard.v1';
 export const STATUS_BOARD_HEADER_HEIGHT_PX = 28;
@@ -25,6 +28,9 @@ export const STATUS_BOARD_DESKTOP_HEIGHT_PX =
   STATUS_BOARD_MAX_VISIBLE_ROWS * STATUS_BOARD_ROW_HEIGHT_PX;
 export const STATUS_BOARD_DESKTOP_MAX_CHIPS = 6;
 export const STATUS_BOARD_PHONE_MAX_CHIPS = 4;
+
+const BOARD_PHONE_FALLBACK_WIDTH_PX = 240;
+const BOARD_MAX_VISIBLE_CHIP_ROWS = 2;
 
 export function readStatusBoardCollapsed(): boolean {
   if (typeof window === 'undefined' || !window.localStorage) return false;
@@ -120,9 +126,42 @@ export function RadarStatusBoard({
 }: RadarStatusBoardProps) {
   const { lang, t } = useI18n();
   const isPhone = variant === 'phone';
-  const maxChips = isPhone
-    ? STATUS_BOARD_PHONE_MAX_CHIPS
-    : STATUS_BOARD_DESKTOP_MAX_CHIPS;
+  const defaultChipWidthPx = isPhone
+    ? BOARD_PHONE_FALLBACK_WIDTH_PX
+    : CARD_STATUS_FALLBACK_WIDTH_PX;
+
+  const boardBodyRef = useRef<HTMLDivElement | null>(null);
+  const [measuredBodyWidth, setMeasuredBodyWidth] = useState<number>(0);
+
+  useEffect(() => {
+    if (collapsed) return;
+    const el = boardBodyRef.current;
+    if (!el) return;
+    const syncWidth = () => {
+      if (el.clientWidth > 0) {
+        setMeasuredBodyWidth(el.clientWidth);
+      }
+    };
+    syncWidth();
+    if (typeof ResizeObserver !== 'undefined') {
+      const ro = new ResizeObserver(syncWidth);
+      ro.observe(el);
+      return () => ro.disconnect();
+    }
+    window.addEventListener('resize', syncWidth);
+    return () => window.removeEventListener('resize', syncWidth);
+  }, [collapsed, isPhone]);
+
+  const chipAreaWidthPx = useMemo(() => {
+    if (measuredBodyWidth <= 0) return defaultChipWidthPx;
+    if (isPhone) {
+      // px-2 (16) + 100px name + gap-2 (8) = 124px
+      return Math.max(120, measuredBodyWidth - 124);
+    }
+    // 2 columns + 1px divider; each row: px-2 (16) + 110px name + gap-2 (8) = 134px
+    const colWidth = Math.floor((measuredBodyWidth - 1) / 2);
+    return Math.max(120, colWidth - 134);
+  }, [measuredBodyWidth, isPhone, defaultChipWidthPx]);
 
   const allyUnits = useMemo(
     () => filterAndSortStatusBoardSide(units, 'ally'),
@@ -133,83 +172,105 @@ export function RadarStatusBoard({
     [units]
   );
 
+  const allyNeededRows = useMemo(
+    () =>
+      allyUnits.map((unit) =>
+        countStatusChipRows(unit.statuses, {
+          lang,
+          unit,
+          iconMods,
+          showLabels: true,
+          compact: false,
+          containerWidthPx: chipAreaWidthPx,
+        })
+      ),
+    [allyUnits, lang, iconMods, chipAreaWidthPx]
+  );
+
+  const enemyNeededRows = useMemo(
+    () =>
+      enemyUnits.map((unit) =>
+        countStatusChipRows(unit.statuses, {
+          lang,
+          unit,
+          iconMods,
+          showLabels: true,
+          compact: false,
+          containerWidthPx: chipAreaWidthPx,
+        })
+      ),
+    [enemyUnits, lang, iconMods, chipAreaWidthPx]
+  );
+
+  const desktopPairRows = useMemo(() => {
+    const pairCount = Math.max(allyUnits.length, enemyUnits.length);
+    const result: number[] = [];
+    for (let i = 0; i < pairCount; i += 1) {
+      const maxForRow = Math.max(
+        allyNeededRows[i] ?? 0,
+        enemyNeededRows[i] ?? 0
+      );
+      result.push(Math.max(1, Math.min(BOARD_MAX_VISIBLE_CHIP_ROWS, maxForRow)));
+    }
+    return result;
+  }, [allyUnits.length, enemyUnits.length, allyNeededRows, enemyNeededRows]);
+
   const totalRows = allyUnits.length + enemyUnits.length;
 
-  const renderUnitRow = (unit: CombatUnit) => {
-    const sortedStatuses = sortStatusEffects(unit.statuses, iconMods);
-    const visibleStatuses = sortedStatuses.slice(0, maxChips);
-    const overflowCount = Math.max(
-      0,
-      sortedStatuses.length - visibleStatuses.length
-    );
+  const renderUnitRow = (unit: CombatUnit, areaRows: number) => {
     const isSelected = selectedUnitId === unit.id;
     const accentColor = getTeamAccentColor(unit);
 
     return (
-      <button
+      <div
         key={unit.id}
-        type="button"
         data-testid={`status-board-row-${unit.id}`}
         data-unit-side={unit.side}
         data-unit-row={unit.row}
+        data-status-rows={areaRows}
         data-selected={isSelected ? 'true' : 'false'}
         onClick={() => onSelectUnit(unit)}
-        style={{
-          height: `${STATUS_BOARD_ROW_HEIGHT_PX}px`,
-          minHeight: `${STATUS_BOARD_ROW_HEIGHT_PX}px`,
-          maxHeight: `${STATUS_BOARD_ROW_HEIGHT_PX}px`,
-        }}
-        className={`relative w-full px-2 flex items-center gap-2 text-left transition-colors cursor-pointer min-w-0 overflow-y-visible ${
+        className={`relative w-full px-2 py-1 flex items-center gap-2 text-left transition-colors min-w-0 overflow-y-visible ${
           isSelected
             ? 'bg-sky-500/18 ring-1 ring-inset ring-sky-400/60'
             : 'hover:bg-slate-800/50'
         }`}
       >
-        <span
+        <button
+          type="button"
           data-testid={`status-board-name-${unit.id}`}
           title={unit.name}
           style={{ color: accentColor }}
+          onClick={(e) => {
+            e.stopPropagation();
+            onSelectUnit(unit);
+          }}
           className={`${
             isPhone ? 'w-[100px] max-w-[100px]' : 'w-[110px] max-w-[110px]'
-          } shrink-0 truncate text-[12px] font-semibold leading-tight`}
+          } shrink-0 truncate text-left text-[12px] font-semibold leading-tight cursor-pointer py-1`}
         >
           {unit.name}
-        </span>
+        </button>
 
-        <div
-          data-testid={`status-board-chips-${unit.id}`}
-          style={{
-            paddingLeft: `${STATUS_BADGE_SAFE_PX}px`,
-            paddingRight: `${STATUS_BADGE_SAFE_PX}px`,
-          }}
-          className="flex items-center gap-2 min-w-0 flex-1 overflow-y-visible"
-        >
-          {visibleStatuses.map((st, idx) => (
-            <StatusChip
-              key={`${st.type}-${idx}`}
-              status={st}
-              lang={lang}
-              unit={unit}
-              badgeLayout={badgeLayout}
-              iconMods={iconMods}
-              size="sm"
-              showLabel={false}
-              allowStack={false}
-              stacks={1}
-              testId={`status-board-chip-${unit.id}-${idx}`}
-              className="!p-0 !border-0 !bg-transparent shrink-0"
-            />
-          ))}
-          {overflowCount > 0 && (
-            <span
-              data-testid={`status-board-overflow-${unit.id}`}
-              className="h-[32px] px-1.5 rounded border border-slate-600/80 bg-slate-900 font-mono-nums text-[12px] font-bold text-slate-200 inline-flex items-center justify-center shrink-0"
-            >
-              +{overflowCount}
-            </span>
-          )}
-        </div>
-      </button>
+        <FixedStatusArea
+          statuses={unit.statuses}
+          rows={areaRows}
+          unit={unit}
+          unitTitle={unit.name}
+          badgeLayout={badgeLayout}
+          iconMods={iconMods}
+          showLabels={true}
+          fallbackWidthPx={chipAreaWidthPx}
+          compact={false}
+          scrollOnOverflow={true}
+          showOverflowMarkInScroll={true}
+          rootTestId={`status-board-chips-${unit.id}`}
+          chipTestIdPrefix={`status-board-chip-${unit.id}`}
+          labelTestIdPrefix={`status-board-chip-label-${unit.id}`}
+          overflowTestId={`status-board-overflow-${unit.id}`}
+          className="flex-1 min-w-0"
+        />
+      </div>
     );
   };
 
@@ -278,6 +339,7 @@ export function RadarStatusBoard({
 
       {!collapsed && (
         <div
+          ref={boardBodyRef}
           data-testid="status-board-body"
           className={
             isPhone
@@ -306,7 +368,18 @@ export function RadarStatusBoard({
                   <div className="px-2.5 py-0.5 bg-sky-950/20 text-[11px] font-mono-nums font-bold text-sky-300">
                     {t('statusBoard.allyCol')} ({allyUnits.length})
                   </div>
-                  {allyUnits.map(renderUnitRow)}
+                  {allyUnits.map((unit, idx) =>
+                    renderUnitRow(
+                      unit,
+                      Math.max(
+                        1,
+                        Math.min(
+                          BOARD_MAX_VISIBLE_CHIP_ROWS,
+                          allyNeededRows[idx] ?? 1
+                        )
+                      )
+                    )
+                  )}
                 </div>
               )}
               {enemyUnits.length > 0 && (
@@ -317,7 +390,18 @@ export function RadarStatusBoard({
                   <div className="px-2.5 py-0.5 bg-red-950/20 text-[11px] font-mono-nums font-bold text-red-300">
                     {t('statusBoard.enemyCol')} ({enemyUnits.length})
                   </div>
-                  {enemyUnits.map(renderUnitRow)}
+                  {enemyUnits.map((unit, idx) =>
+                    renderUnitRow(
+                      unit,
+                      Math.max(
+                        1,
+                        Math.min(
+                          BOARD_MAX_VISIBLE_CHIP_ROWS,
+                          enemyNeededRows[idx] ?? 1
+                        )
+                      )
+                    )
+                  )}
                 </div>
               )}
             </div>
@@ -327,13 +411,17 @@ export function RadarStatusBoard({
                 data-testid="status-board-col-ally"
                 className="min-w-0 flex flex-col divide-y divide-slate-800/40"
               >
-                {allyUnits.map(renderUnitRow)}
+                {allyUnits.map((unit, idx) =>
+                  renderUnitRow(unit, desktopPairRows[idx] ?? 1)
+                )}
               </div>
               <div
                 data-testid="status-board-col-enemy"
                 className="min-w-0 flex flex-col divide-y divide-slate-800/40"
               >
-                {enemyUnits.map(renderUnitRow)}
+                {enemyUnits.map((unit, idx) =>
+                  renderUnitRow(unit, desktopPairRows[idx] ?? 1)
+                )}
               </div>
             </div>
           )}
