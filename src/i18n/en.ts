@@ -431,7 +431,7 @@ export const EN_TRANSLATIONS = {
     'Reveals all stealthed hostiles and marks every enemy Vulnerable (+15% damage taken) for 2 turns.',
   'skill.sup_flux_transfer.name': 'Flux Capacitor Link',
   'skill.sup_flux_transfer.desc':
-    'Transfers reactor energy to one selected ally, immediately restoring +20 SP.',
+    'Transfers SP from your reactor to the lowest-SP% allies based on skill level (with transfer fee).',
   'skill.sup_war_hymn.name': 'Tactical Fire-Link',
   'skill.sup_war_hymn.desc':
     'Synchronizes squadron targeting computers, granting +20% ATK to all allies for 3 turns.',
@@ -661,6 +661,8 @@ export const EN_TRANSLATIONS = {
     '{actor} repairs {target} with {skill} for +{amount} HP.',
   'log.energize':
     '{actor} transfers +{amount} SP to {target} via {skill}.',
+  'log.spTransfer':
+    '{actor} transfers {amount} SP to {count} allies (fee {fee})',
   'log.useSupply': '{actor} uses {supply}: {gains}',
   'log.evade': '{target} barrel-rolls and evades {action} from {actor}!',
   'log.damage':
@@ -1339,6 +1341,11 @@ export const EN_TRANSLATIONS = {
   'admin.spEconomyRegenPerSpirit': 'SP regen / SPIRIT (0–2)',
   'admin.spEconomyCostLevelPct': 'Skill SP cost / level (0–0.1)',
   'admin.spEconomyClassFactor': '{cls} factor (0.1–3)',
+  'admin.fluxTransferTitle': 'Flux Transfer (5 levels)',
+  'admin.fluxTransferColLevel': 'Lv',
+  'admin.fluxTransferColTargets': 'Targets',
+  'admin.fluxTransferColPct': 'SP %',
+  'admin.fluxTransferColFee': 'Fee %',
   'admin.battleForceBoss': 'Force Boss Spawn',
   'admin.battleLevelOffset': 'Enemy Level Offset',
   'admin.battleLevelOffsetDefault': 'Sector Default',

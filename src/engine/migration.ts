@@ -1,7 +1,10 @@
 import {
   BALANCE_CONFIG,
+  cloneFluxTransferConfig,
   cloneSpEconomyConfig,
+  DEFAULT_FLUX_TRANSFER_CONFIG,
   DEFAULT_SP_ECONOMY_CONFIG,
+  sanitizeFluxTransferConfig,
   sanitizeMaxLevel,
   sanitizeSpEconomyConfig,
 } from '../data/balance';
@@ -326,6 +329,7 @@ export function createDefaultAdminConfig(): AdminConfig {
     iconCatalogMods: [],
     shieldRegen: { ...DEFAULT_SHIELD_REGEN_CONFIG },
     spEconomy: cloneSpEconomyConfig(DEFAULT_SP_ECONOMY_CONFIG),
+    fluxTransfer: cloneFluxTransferConfig(DEFAULT_FLUX_TRANSFER_CONFIG),
     supplyEconomy: cloneSupplyEconomyConfig(DEFAULT_SUPPLY_ECONOMY_CONFIG),
     shieldCrackedMult: DEFAULT_SHIELD_CRACKED_MULT,
     shieldCrackedTurns: DEFAULT_SHIELD_CRACKED_TURNS,
@@ -673,6 +677,7 @@ export function migrateSaveData(
     ),
     shieldRegen: sanitizeShieldRegenConfig(rawAdmin.shieldRegen),
     spEconomy: sanitizeSpEconomyConfig(rawAdmin.spEconomy),
+    fluxTransfer: sanitizeFluxTransferConfig(rawAdmin.fluxTransfer),
     supplyEconomy: sanitizeSupplyEconomyConfig(rawAdmin.supplyEconomy),
     enemyLevel: sanitizeEnemyLevelConfig(rawAdmin.enemyLevel),
     shieldCrackedMult: sanitizeShieldCrackedMult(rawAdmin.shieldCrackedMult),

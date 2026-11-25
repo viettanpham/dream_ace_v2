@@ -28,6 +28,7 @@ import {
   getMaxLevel,
   MAX_ADMIN_MAX_LEVEL,
   MIN_ADMIN_MAX_LEVEL,
+  sanitizeFluxTransferConfig,
   sanitizeMaxLevel,
   sanitizeSpEconomyConfig,
 } from '../data/balance';
@@ -1951,6 +1952,91 @@ export function AdminPanel() {
                         </label>
                       ))}
                     </div>
+
+                    {(() => {
+                      const fluxCfg = sanitizeFluxTransferConfig(adminConfig.fluxTransfer);
+                      const updateFluxRow = (
+                        idx: number,
+                        patch: Partial<(typeof fluxCfg.levels)[number]>
+                      ) => {
+                        const nextLevels = fluxCfg.levels.map((row, i) =>
+                          i === idx ? { ...row, ...patch } : row
+                        );
+                        adminUpdateConfig({
+                          fluxTransfer: sanitizeFluxTransferConfig({ levels: nextLevels }),
+                        });
+                      };
+                      return (
+                        <div
+                          data-testid="admin-flux-transfer-rows"
+                          className="pt-2.5 border-t border-slate-800/80 space-y-2"
+                        >
+                          <div className="text-[11px] font-semibold text-sky-300">
+                            {t('admin.fluxTransferTitle')}
+                          </div>
+                          <div className="grid grid-cols-4 gap-2 text-[10px] text-slate-400 px-1">
+                            <span>{t('admin.fluxTransferColLevel')}</span>
+                            <span>{t('admin.fluxTransferColTargets')}</span>
+                            <span>{t('admin.fluxTransferColPct')}</span>
+                            <span>{t('admin.fluxTransferColFee')}</span>
+                          </div>
+                          <div className="space-y-1.5">
+                            {fluxCfg.levels.map((row, idx) => (
+                              <div
+                                key={idx}
+                                className="grid grid-cols-4 gap-2 items-center"
+                              >
+                                <span className="text-xs font-mono-nums text-slate-300 px-1">
+                                  L{idx + 1}
+                                </span>
+                                <input
+                                  type="number"
+                                  data-testid={`admin-flux-lv-${idx + 1}-targets`}
+                                  min={1}
+                                  max={10}
+                                  step={1}
+                                  value={row.targets}
+                                  onChange={(e) =>
+                                    updateFluxRow(idx, {
+                                      targets: Number(e.target.value),
+                                    })
+                                  }
+                                  className="w-full h-8 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                                />
+                                <input
+                                  type="number"
+                                  data-testid={`admin-flux-lv-${idx + 1}-pct`}
+                                  min={0}
+                                  max={100}
+                                  step={0.5}
+                                  value={row.pct}
+                                  onChange={(e) =>
+                                    updateFluxRow(idx, {
+                                      pct: Number(e.target.value),
+                                    })
+                                  }
+                                  className="w-full h-8 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                                />
+                                <input
+                                  type="number"
+                                  data-testid={`admin-flux-lv-${idx + 1}-fee`}
+                                  min={0}
+                                  max={100}
+                                  step={0.5}
+                                  value={row.fee}
+                                  onChange={(e) =>
+                                    updateFluxRow(idx, {
+                                      fee: Number(e.target.value),
+                                    })
+                                  }
+                                  className="w-full h-8 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 );
               })()}

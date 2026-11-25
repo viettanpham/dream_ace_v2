@@ -1,5 +1,7 @@
 import type {
   BattleSpeed,
+  FluxTransferConfig,
+  FluxTransferLevelRule,
   ItemRarity,
   MechClassId,
   SectorDifficulty,
@@ -264,6 +266,71 @@ export function sanitizeSpEconomyConfig(raw: unknown): SpEconomyConfig {
       0.1,
       DEFAULT_SP_ECONOMY_CONFIG.costLevelPct
     ),
+  };
+}
+
+export const DEFAULT_FLUX_TRANSFER_LEVELS: readonly FluxTransferLevelRule[] = [
+  { targets: 3, pct: 3, fee: 10 },
+  { targets: 4, pct: 4, fee: 8 },
+  { targets: 5, pct: 5, fee: 5 },
+  { targets: 6, pct: 6, fee: 3 },
+  { targets: 7, pct: 8, fee: 1 },
+];
+
+export const DEFAULT_FLUX_TRANSFER_CONFIG: FluxTransferConfig = {
+  levels: DEFAULT_FLUX_TRANSFER_LEVELS.map((r) => ({ ...r })),
+};
+
+export function cloneFluxTransferConfig(
+  cfg: FluxTransferConfig
+): FluxTransferConfig {
+  return {
+    levels: cfg.levels.map((r) => ({ ...r })),
+  };
+}
+
+export function sanitizeFluxTransferConfig(raw: unknown): FluxTransferConfig {
+  const obj =
+    raw && typeof raw === 'object' && !Array.isArray(raw)
+      ? (raw as Record<string, unknown>)
+      : {};
+  const rawLevels = Array.isArray(obj.levels) ? obj.levels : [];
+  const levels: FluxTransferLevelRule[] = DEFAULT_FLUX_TRANSFER_LEVELS.map(
+    (def, idx) => {
+      const row =
+        rawLevels[idx] &&
+        typeof rawLevels[idx] === 'object' &&
+        !Array.isArray(rawLevels[idx])
+          ? (rawLevels[idx] as Record<string, unknown>)
+          : {};
+      return {
+        targets: Math.round(clampSpNum(row.targets, 1, 10, def.targets)),
+        pct: clampSpNum(row.pct, 0, 100, def.pct),
+        fee: clampSpNum(row.fee, 0, 100, def.fee),
+      };
+    }
+  );
+  return { levels };
+}
+
+export function getFluxTransferRule(
+  skillLevel: number,
+  cfg?: FluxTransferConfig | null,
+  skillMaxLevel: number = BALANCE_CONFIG.skillMaxLevel
+): FluxTransferLevelRule {
+  const clean = sanitizeFluxTransferConfig(cfg);
+  const maxLv = Math.max(1, Math.floor(skillMaxLevel || BALANCE_CONFIG.skillMaxLevel));
+  const lv = Math.max(1, Math.min(maxLv, Math.floor(skillLevel || 1)));
+  if (maxLv === clean.levels.length) {
+    return { ...clean.levels[lv - 1] };
+  }
+  const first = clean.levels[0];
+  const last = clean.levels[clean.levels.length - 1];
+  const t = maxLv <= 1 ? 0 : (lv - 1) / (maxLv - 1);
+  return {
+    targets: Math.max(1, Math.round(first.targets + (last.targets - first.targets) * t)),
+    pct: Math.round((first.pct + (last.pct - first.pct) * t) * 100) / 100,
+    fee: Math.round((first.fee + (last.fee - first.fee) * t) * 100) / 100,
   };
 }
 

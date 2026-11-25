@@ -1,4 +1,8 @@
-import { BALANCE_CONFIG, COMBAT_FORMULAS } from '../data/balance';
+import {
+  BALANCE_CONFIG,
+  COMBAT_FORMULAS,
+  getFluxTransferRule,
+} from '../data/balance';
 import { EMPTY_STAT_BLOCK, MECH_CLASSES, MECH_CLASS_LIST } from '../data/classes';
 import { DEFAULT_FORMATION_CONFIG, FORMATION_ROWS } from '../data/formationConfig';
 import { getSectorById } from '../data/maps';
@@ -30,11 +34,14 @@ import type {
   CombatUnit,
   EnemyArchetype,
   FloatingPopup,
+  FluxTransferConfig,
+  FluxTransferLevelRule,
   FormationConfig,
   ItemSpecialTraits,
   MechClassId,
   PilotAccount,
   SkillDefinition,
+  SpEconomyConfig,
   StatBlock,
   StatusEffectType,
   TeamColorRole,
@@ -56,6 +63,7 @@ import { getBattleOptions, pickDefaultBattle } from './frontline';
 import {
   canUnitUseSkill,
   type GearPassiveBonuses,
+  getEffectiveSpCost,
   getGearPassiveBonuses,
   isSkillAllowedForClass,
   MAX_ACTIVE_SKILL_BAR,
@@ -1768,6 +1776,138 @@ function decrementCooldowns(
   return next;
 }
 
+export interface SpTransferResolution {
+  updatedUnits: CombatUnit[];
+  popups: FloatingPopup[];
+  logEntry: CombatLogEntry;
+  recipientIds: string[];
+  totalMoved: number;
+  cost: number;
+  feePaid: number;
+  amountPerAlly: number;
+}
+
+export function resolveSpTransfer(
+  units: CombatUnit[],
+  actorId: string,
+  skillLevel: number,
+  cfg?: FluxTransferConfig | null,
+  count?: number,
+  round = 1,
+  nextIdFn: (prefix: string) => string = nextId,
+  skillId = 'sup_flux_transfer'
+): SpTransferResolution {
+  const nextUnits = units.map((u) => ({ ...u }));
+  const actorIdx = nextUnits.findIndex((u) => u.id === actorId);
+  const popups: FloatingPopup[] = [];
+  const recipientIds: string[] = [];
+
+  if (actorIdx < 0 || !nextUnits[actorIdx].alive) {
+    return {
+      updatedUnits: nextUnits,
+      popups,
+      logEntry: {
+        id: nextIdFn('log'),
+        round,
+        actorName: '',
+        actorSide: 'ally',
+        tag: 'HEAL',
+        templateKey: 'log.spTransfer',
+        params: { actor: '', skillId, amount: 0, count: 0, fee: 0 },
+      },
+      recipientIds,
+      totalMoved: 0,
+      cost: 0,
+      feePaid: 0,
+      amountPerAlly: 0,
+    };
+  }
+
+  const actor = nextUnits[actorIdx];
+  const rule = getFluxTransferRule(skillLevel, cfg, BALANCE_CONFIG.skillMaxLevel);
+  const maxTargets = Math.max(0, Math.floor(rule.targets));
+  const requested =
+    count === undefined ? maxTargets : Math.max(0, Math.floor(count));
+  const effectiveCount = Math.min(requested, maxTargets);
+  const amountEach = Math.max(0, Math.floor(actor.sp * (rule.pct / 100)));
+
+  const candidateIndices = nextUnits
+    .map((u, idx) => ({ u, idx }))
+    .filter(
+      ({ u }) =>
+        u.side === actor.side &&
+        u.alive &&
+        u.id !== actor.id &&
+        u.derived.maxSp > 0 &&
+        u.sp < u.derived.maxSp
+    )
+    .sort(
+      (a, b) =>
+        a.u.sp / a.u.derived.maxSp - b.u.sp / b.u.derived.maxSp
+    )
+    .slice(0, effectiveCount);
+
+  let totalMoved = 0;
+  if (amountEach > 0) {
+    for (const { idx } of candidateIndices) {
+      const ally = nextUnits[idx];
+      const received = Math.min(amountEach, Math.max(0, ally.derived.maxSp - ally.sp));
+      if (received <= 0) continue;
+      nextUnits[idx] = {
+        ...ally,
+        sp: ally.sp + received,
+        animState: 'shielded',
+      };
+      popups.push({
+        id: nextIdFn('pop'),
+        unitId: ally.id,
+        text: `+${received} SP`,
+        tone: 'buff',
+      });
+      recipientIds.push(ally.id);
+      totalMoved += received;
+    }
+  }
+
+  const rawCost =
+    totalMoved > 0 ? Math.ceil(totalMoved * (1 + rule.fee / 100)) : 0;
+  const nextActorSp = Math.max(0, actor.sp - rawCost);
+  const actualCost = Math.max(0, actor.sp - nextActorSp);
+  const feePaid = Math.max(0, rawCost - totalMoved);
+
+  nextUnits[actorIdx] = {
+    ...actor,
+    sp: nextActorSp,
+  };
+
+  const logEntry: CombatLogEntry = {
+    id: nextIdFn('log'),
+    round,
+    actorName: actor.name,
+    actorSide: actor.side,
+    tag: 'HEAL',
+    templateKey: 'log.spTransfer',
+    params: {
+      actor: actor.name,
+      skillId,
+      amount: totalMoved,
+      count: recipientIds.length,
+      fee: feePaid,
+    },
+  };
+
+  return {
+    updatedUnits: nextUnits,
+    popups,
+    logEntry,
+    recipientIds,
+    totalMoved,
+    cost: actualCost,
+    feePaid,
+    amountPerAlly: amountEach,
+  };
+}
+
 export function resolveUnitAction(
   units: CombatUnit[],
   actorId: string,
@@ -1776,7 +1916,8 @@ export function resolveUnitAction(
   round: number,
   adminConfig?: AdminConfig,
   rng: () => number = Math.random,
-  skillId?: string
+  skillId?: string,
+  transferCount?: number
 ): ActionResolution {
   const events: BattleEvent[] = [];
   const result = resolveUnitActionCore(
@@ -1788,7 +1929,8 @@ export function resolveUnitAction(
     events,
     adminConfig,
     rng,
-    skillId
+    skillId,
+    transferCount
   );
 
   // Automatically record any buffs applied/refreshed during this turn
@@ -1840,7 +1982,8 @@ function resolveUnitActionCore(
   events: BattleEvent[],
   adminConfig?: AdminConfig,
   rng: () => number = Math.random,
-  skillId?: string
+  skillId?: string,
+  transferCount?: number
 ): Omit<ActionResolution, 'events'> {
   const originalActor = units.find((u) => u.id === actorId);
   if (!originalActor || !originalActor.alive) {
@@ -3399,6 +3542,41 @@ function resolveUnitActionCore(
           break;
         }
 
+        case 'sp_transfer': {
+          const transfer = resolveSpTransfer(
+            nextUnits,
+            act.id,
+            skillLv,
+            adminConfig?.fluxTransfer,
+            transferCount,
+            round,
+            nextId,
+            skill.id
+          );
+          popups.push(...transfer.popups);
+          logs.push(transfer.logEntry);
+          const toSlotIndices = transfer.recipientIds.map((id) =>
+            getSlotIndex(units, id)
+          );
+          return {
+            updatedUnits: transfer.updatedUnits,
+            logEntries: logs,
+            popups,
+            fxEvent: {
+              id: nextId('fx'),
+              kind: 'heal',
+              tone: 'sp',
+              fromSide: act.side,
+              fromSlotIndex,
+              toSide: act.side,
+              toSlotIndices,
+              accentHex: '#38BDF8',
+            },
+            destroyedUnitIds,
+            soundCue: 'heal',
+          };
+        }
+
         case 'heal_field_hot': {
           const slotIndices: number[] = [];
           for (let i = 0; i < nextUnits.length; i++) {
@@ -4069,12 +4247,156 @@ function resolveUnitActionCore(
   };
 }
 
+const SUPPORT_RESERVE_EFFECT_KINDS = new Set<SkillDefinition['effectKind']>([
+  'heal_single',
+  'heal_field_hot',
+  'energize_shield_field',
+  'full_recovery_elite',
+]);
+
+export type FluxTransferRulesInput =
+  | (FluxTransferLevelRule & { spEconomy?: SpEconomyConfig | null })
+  | (FluxTransferConfig & { spEconomy?: SpEconomyConfig | null });
+
+export function computeFluxBattlePressure(
+  units: CombatUnit[],
+  side: CombatSide
+): number {
+  let ownCur = 0;
+  let ownMax = 0;
+  let foeCur = 0;
+  let foeMax = 0;
+  for (const u of units) {
+    const cur = u.alive ? Math.max(0, u.hp) + Math.max(0, u.shield) : 0;
+    const max = Math.max(0, u.derived.maxHp) + Math.max(0, u.derived.maxShield);
+    if (u.side === side) {
+      ownCur += cur;
+      ownMax += max;
+    } else {
+      foeCur += cur;
+      foeMax += max;
+    }
+  }
+  const ownRatio = ownMax > 0 ? ownCur / ownMax : 0;
+  const foeRatio = foeMax > 0 ? foeCur / foeMax : 0;
+  return ownRatio - foeRatio;
+}
+
+export function pickFluxCount(
+  units: CombatUnit[],
+  actorId: string,
+  rules: FluxTransferRulesInput,
+  pressure?: number,
+  rng: () => number = Math.random
+): number {
+  const actor = units.find((u) => u.id === actorId);
+  if (!actor || !actor.alive || actor.derived.maxSp <= 0 || actor.sp <= 0) {
+    return 0;
+  }
+
+  const rule: FluxTransferLevelRule =
+    'levels' in rules
+      ? getFluxTransferRule(
+          actor.skillLevels['sup_flux_transfer'] ?? actor.skillLevel ?? 1,
+          rules,
+          BALANCE_CONFIG.skillMaxLevel
+        )
+      : rules;
+  const spEconomy =
+    'spEconomy' in rules && rules.spEconomy ? { spEconomy: rules.spEconomy } : undefined;
+
+  const maxTargets = Math.max(0, Math.floor(rule.targets));
+  if (maxTargets <= 0 || rule.pct <= 0) return 0;
+
+  const diff =
+    typeof pressure === 'number' && Number.isFinite(pressure)
+      ? pressure
+      : computeFluxBattlePressure(units, actor.side);
+
+  if (diff >= 0.2 && rng() >= 0.5) {
+    return 0;
+  }
+  const keepSelfPct = diff <= -0.2 ? 0.15 : 0.3;
+
+  // Reserve SP needed by actor's own ready heal / shield / revive skills
+  let reserveSp = 0;
+  for (const sid of actor.equippedSkillIds) {
+    const sk = getSkillById(sid);
+    if (!sk || !SUPPORT_RESERVE_EFFECT_KINDS.has(sk.effectKind)) continue;
+    if (!isSkillAllowedForClass(sk, actor.classId)) continue;
+    if ((actor.skillCooldowns[sid] ?? 0) > 0) continue;
+    if (sk.oncePerBattle && actor.usedOnceSkills.includes(sid)) continue;
+    reserveSp += getEffectiveSpCost(sk, actor, spEconomy);
+  }
+
+  // Only cast if at least 1 ally (self excluded) is under 50% SP
+  const under50Allies = units.filter(
+    (u) =>
+      u.side === actor.side &&
+      u.alive &&
+      u.id !== actor.id &&
+      u.derived.maxSp > 0 &&
+      u.sp < u.derived.maxSp * 0.5
+  );
+  if (under50Allies.length === 0) return 0;
+
+  const hasReadySkillAboveSp = (ally: CombatUnit): boolean =>
+    ally.equippedSkillIds.some((sid) => {
+      const sk = getSkillById(sid);
+      if (!sk || sk.category === 'passive') return false;
+      if (!isSkillAllowedForClass(sk, ally.classId)) return false;
+      if ((ally.skillCooldowns[sid] ?? 0) > 0) return false;
+      if (sk.oncePerBattle && ally.usedOnceSkills.includes(sid)) return false;
+      return getEffectiveSpCost(sk, ally, spEconomy) > ally.sp;
+    });
+
+  const orderedUnder50 = [...under50Allies].sort((a, b) => {
+    const aNeed = hasReadySkillAboveSp(a) ? 0 : 1;
+    const bNeed = hasReadySkillAboveSp(b) ? 0 : 1;
+    if (aNeed !== bNeed) return aNeed - bNeed;
+    return a.sp / a.derived.maxSp - b.sp / b.derived.maxSp;
+  });
+
+  const desiredK = Math.min(maxTargets, orderedUnder50.length);
+  const amountEach = Math.max(0, Math.floor(actor.sp * (rule.pct / 100)));
+  if (amountEach <= 0) return 0;
+
+  // Match resolveSpTransfer recipient pool (lowest SP% non-full allies) for exact SP cost check
+  const transferPool = units
+    .filter(
+      (u) =>
+        u.side === actor.side &&
+        u.alive &&
+        u.id !== actor.id &&
+        u.derived.maxSp > 0 &&
+        u.sp < u.derived.maxSp
+    )
+    .sort((a, b) => a.sp / a.derived.maxSp - b.sp / b.derived.maxSp);
+
+  const minRemainingSp = Math.max(reserveSp, keepSelfPct * actor.derived.maxSp);
+
+  for (let k = desiredK; k >= 1; k--) {
+    let totalMoved = 0;
+    const slice = transferPool.slice(0, k);
+    for (const ally of slice) {
+      totalMoved += Math.min(amountEach, Math.max(0, ally.derived.maxSp - ally.sp));
+    }
+    if (totalMoved <= 0) continue;
+    const cost = Math.ceil(totalMoved * (1 + rule.fee / 100));
+    if (actor.sp - cost >= minRemainingSp) {
+      return k;
+    }
+  }
+
+  return 0;
+}
+
 export function chooseAiDecision(
   actor: CombatUnit,
   units: CombatUnit[],
   rng: () => number = Math.random,
   adminConfig?: Partial<AdminConfig>
-): { action: ActionType; targetId: string | null; skillId?: string } {
+): { action: ActionType; targetId: string | null; skillId?: string; transferCount?: number } {
   const allies = units.filter((u) => u.side === actor.side && u.alive);
   const enemies = getValidEnemyTargets(units, actor, 'attack');
 
@@ -4130,9 +4452,36 @@ export function chooseAiDecision(
     return { action: 'skill', targetId: null, skillId: scanSkill.id };
   }
 
-  // Offensive or tactical skill roll
+  // Support Flux Transfer (sp_transfer): dedicated reserve & threshold rule
+  const fluxSkill = usableSkills.find((s) => s.effectKind === 'sp_transfer');
+  if (fluxSkill) {
+    const fluxLv = actor.skillLevels[fluxSkill.id] ?? actor.skillLevel ?? 1;
+    const fluxRule = getFluxTransferRule(fluxLv, adminConfig?.fluxTransfer);
+    const pressure = computeFluxBattlePressure(units, actor.side);
+    const fluxCount = pickFluxCount(
+      units,
+      actor.id,
+      { ...fluxRule, spEconomy: adminConfig?.spEconomy },
+      pressure,
+      rng
+    );
+    if (fluxCount > 0) {
+      return {
+        action: 'skill',
+        targetId: null,
+        skillId: fluxSkill.id,
+        transferCount: fluxCount,
+      };
+    }
+  }
+
+  // Offensive or tactical skill roll (sp_transfer excluded; handled above)
   const tacticalSkills = usableSkills.filter(
-    (s) => !s.isToggle && s.effectKind !== 'heal_single' && s.effectKind !== 'heal_field_hot'
+    (s) =>
+      !s.isToggle &&
+      s.effectKind !== 'heal_single' &&
+      s.effectKind !== 'heal_field_hot' &&
+      s.effectKind !== 'sp_transfer'
   );
   if (tacticalSkills.length > 0 && rng() < 0.55) {
     const pick = randomItem(tacticalSkills, rng);

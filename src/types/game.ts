@@ -147,6 +147,7 @@ export type SkillEffectKind =
   | 'heal_single'
   | 'scan_reveal'
   | 'energize_single'
+  | 'sp_transfer'
   | 'heal_field_hot'
   | 'energize_shield_field'
   | 'team_atk_up'
@@ -953,6 +954,7 @@ export type CombatLogTemplateKey =
   | 'log.healSquad'
   | 'log.healSingle'
   | 'log.energize'
+  | 'log.spTransfer'
   | 'log.evade'
   | 'log.damage'
   | 'log.destroyed'
@@ -1446,6 +1448,7 @@ export interface AdminConfig {
   statusDisplayDefaults?: StatusDisplayDefaults;
   shieldRegen?: ShieldRegenConfig;
   spEconomy?: SpEconomyConfig;
+  fluxTransfer?: FluxTransferConfig;
   supplyEconomy?: SupplyEconomyConfig;
   enemyLevel?: EnemyLevelConfig;
   shieldCrackedMult?: number;
@@ -1466,6 +1469,16 @@ export interface AdminConfig {
   itemLevels?: ItemLevelsConfig;
   pirates?: PiratesConfig;
   showRawI18nKeys: boolean;
+}
+
+export interface FluxTransferLevelRule {
+  targets: number;
+  pct: number;
+  fee: number;
+}
+
+export interface FluxTransferConfig {
+  levels: FluxTransferLevelRule[];
 }
 
 export interface PirateSizeWeights {

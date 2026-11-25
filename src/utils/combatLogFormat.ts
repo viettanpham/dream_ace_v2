@@ -794,6 +794,35 @@ export function parseStructuredCombatLogRow(
       };
     }
 
+    case 'log.spTransfer': {
+      const amount = Number(p.amount ?? 0);
+      const count = Number(p.count ?? 0);
+      const fee = Number(p.fee ?? 0);
+      const usedSkill = skillLabel || getSkillName(lang, 'sup_flux_transfer');
+      const sentence = isVi
+        ? `${actorFromParams} truyền ${amount} SP cho ${count} đồng đội (phí ${fee})`
+        : `${actorFromParams} transfers ${amount} SP to ${count} allies (fee ${fee})`;
+      return {
+        id: entry.id,
+        round,
+        turnLabel,
+        faction,
+        actorName: actorFromParams,
+        autoBadge,
+        actionKind: 'shield',
+        actionLabel: usedSkill,
+        targetName: null,
+        valueText: `+${amount} SP`,
+        valueTone: 'shield',
+        fallbackText,
+        sentence,
+        spCost: resolvedSkillSpCost,
+        isStrong: false,
+        strongTone: null,
+        ...avatarMeta,
+      };
+    }
+
     case 'log.useSupply': {
       const tplId = String(p.templateId ?? '');
       const supplyKey = `supply.${tplId}.name` as Parameters<typeof translate>[1];

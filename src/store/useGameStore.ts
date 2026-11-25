@@ -4,6 +4,7 @@ import {
   BALANCE_CONFIG,
   getGarageUnlockCost,
   getMaxLevel,
+  sanitizeFluxTransferConfig,
   sanitizeMaxLevel,
   sanitizeSpEconomyConfig,
   setRuntimeMaxLevel,
@@ -535,7 +536,7 @@ interface GameStoreState {
   selectTarget: (unitId: string) => void;
   selectAllyTarget: (unitId: string) => void;
   logRadarInvalidTarget: (targetName: string, reasonKey: string) => void;
-  performPlayerAction: (action: ActionType, skillId?: string) => void;
+  performPlayerAction: (action: ActionType, skillId?: string, transferCount?: number) => void;
   useBattleSupply: (templateId: string) => void;
   performAutoPlayerTurn: () => void;
   performAiTurn: () => void;
@@ -3239,7 +3240,7 @@ export const useGameStore = create<GameStoreState>()(
         });
       },
 
-      performPlayerAction: (action, skillId) => {
+      performPlayerAction: (action, skillId, transferCount) => {
         const state = get();
         const { battle } = state;
         if (!battle || battle.summary || battle.isResolving) return;
@@ -3266,7 +3267,8 @@ export const useGameStore = create<GameStoreState>()(
           battle.round,
           state.adminConfig,
           Math.random,
-          skillId
+          skillId,
+          transferCount
         );
         playCue(resolution.soundCue, muteSound);
 
@@ -3674,11 +3676,17 @@ export const useGameStore = create<GameStoreState>()(
 
         const skipVisualFx = state.skipAnimations;
         const muteSound = state.skipAnimations || state.battleSpeed >= 10;
-        const decision = playerIsCharging
+        const decision: {
+          action: ActionType;
+          targetId: string | null;
+          skillId?: string;
+          transferCount?: number;
+        } = playerIsCharging
           ? {
               action: 'attack' as ActionType,
               targetId: battle.selectedTargetId,
               skillId: undefined,
+              transferCount: undefined,
             }
           : chooseAiDecision(activeUnit, battle.units, Math.random, state.adminConfig);
 
@@ -3690,7 +3698,8 @@ export const useGameStore = create<GameStoreState>()(
           battle.round,
           state.adminConfig,
           Math.random,
-          decision.skillId
+          decision.skillId,
+          decision.transferCount
         );
         playCue(resolution.soundCue, muteSound);
 
@@ -4575,6 +4584,10 @@ export const useGameStore = create<GameStoreState>()(
             patch.spEconomy !== undefined
               ? sanitizeSpEconomyConfig(patch.spEconomy)
               : sanitizeSpEconomyConfig(state.adminConfig.spEconomy);
+          const nextFluxTransfer =
+            patch.fluxTransfer !== undefined
+              ? sanitizeFluxTransferConfig(patch.fluxTransfer)
+              : sanitizeFluxTransferConfig(state.adminConfig.fluxTransfer);
           const nextSupplyEconomy =
             patch.supplyEconomy !== undefined
               ? sanitizeSupplyEconomyConfig(patch.supplyEconomy)
@@ -4598,6 +4611,7 @@ export const useGameStore = create<GameStoreState>()(
             statusDisplayDefaults: nextStatusDefaults,
             pirates: nextPirates,
             spEconomy: nextSpEconomy,
+            fluxTransfer: nextFluxTransfer,
             supplyEconomy: nextSupplyEconomy,
             enemyLevel: nextEnemyLevel,
           };
@@ -4908,6 +4922,7 @@ export const useGameStore = create<GameStoreState>()(
               ),
               ...sanitizeSupplyShopConfig(rawAdmin as Partial<AdminConfig>),
               spEconomy: sanitizeSpEconomyConfig(rawAdmin.spEconomy),
+              fluxTransfer: sanitizeFluxTransferConfig(rawAdmin.fluxTransfer),
               supplyEconomy: sanitizeSupplyEconomyConfig(rawAdmin.supplyEconomy),
               enemyLevel: sanitizeEnemyLevelConfig(rawAdmin.enemyLevel),
               pirates: sanitizePiratesConfig(rawAdmin.pirates),

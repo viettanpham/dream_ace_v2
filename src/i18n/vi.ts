@@ -433,7 +433,7 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
     'Phá toàn bộ tàng hình của địch và đánh dấu Dễ tổn thương (+15% sát thương nhận) lên toàn đội địch trong 2 lượt.',
   'skill.sup_flux_transfer.name': 'Truyền Năng Lượng Flux',
   'skill.sup_flux_transfer.desc':
-    'Truyền năng lượng lò phản ứng cho 1 đồng minh đã chọn, hồi ngay +20 SP.',
+    'Truyền SP từ lò phản ứng của bản thân cho nhiều đồng minh có SP thấp nhất theo cấp độ kỹ năng (chịu phí tổn thất).',
   'skill.sup_war_hymn.name': 'Liên Kết Hỏa Lực',
   'skill.sup_war_hymn.desc':
     'Đồng bộ máy tính ngắm bắn toàn phi đội, tăng +20% ATK cho toàn bộ đồng minh trong 3 lượt.',
@@ -663,6 +663,8 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
     '{actor} dùng {skill} sửa chữa {target} hồi +{amount} HP.',
   'log.energize':
     '{actor} dùng {skill} tiếp +{amount} SP cho {target}.',
+  'log.spTransfer':
+    '{actor} truyền {amount} SP cho {count} đồng đội (phí {fee})',
   'log.useSupply': '{actor} dùng {supply}: {gains}',
   'log.evade': '{target} lộn vòng né gọn đòn {action} từ {actor}!',
   'log.damage':
@@ -1341,6 +1343,11 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'admin.spEconomyRegenPerSpirit': 'Hồi SP / điểm SPIRIT (0–2)',
   'admin.spEconomyCostLevelPct': 'Tăng SP chiêu / cấp (0–0.1)',
   'admin.spEconomyClassFactor': 'Hệ số {cls} (0.1–3)',
+  'admin.fluxTransferTitle': 'Truyền SP (Flux Transfer — 5 cấp)',
+  'admin.fluxTransferColLevel': 'Cấp',
+  'admin.fluxTransferColTargets': 'Mục tiêu',
+  'admin.fluxTransferColPct': '% SP',
+  'admin.fluxTransferColFee': 'Phí %',
   'admin.battleForceBoss': 'Ép xuất hiện Boss',
   'admin.battleLevelOffset': 'Độ lệch cấp địch',
   'admin.battleLevelOffsetDefault': 'Mặc định khu vực',

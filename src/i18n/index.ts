@@ -750,6 +750,15 @@ function formatCombatLogBody(
       });
     }
 
+    case 'log.spTransfer': {
+      return translate(lang, 'log.spTransfer', {
+        actor: String(p.actor ?? ''),
+        amount: Number(p.amount ?? 0),
+        count: Number(p.count ?? 0),
+        fee: Number(p.fee ?? 0),
+      });
+    }
+
     case 'log.useSupply': {
       const tplId = String(p.templateId ?? '');
       const supplyKey = `supply.${tplId}.name` as TranslationKey;
