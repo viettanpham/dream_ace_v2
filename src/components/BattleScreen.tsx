@@ -112,6 +112,7 @@ import {
   FixedStatusArea,
   countStatusChipRows,
 } from './FixedStatusArea';
+import { FluxTransferPicker } from './FluxTransferPicker';
 import { LevelBadge } from './LevelBadge';
 import { PhoneSkillsSheet } from './PhoneSkillsSheet';
 import {
@@ -199,6 +200,8 @@ export function BattleScreen() {
   const [logSheetOpen, setLogSheetOpen] = useState(false);
   const [skillsSheetOpen, setSkillsSheetOpen] = useState(false);
   const [suppliesSheetOpen, setSuppliesSheetOpen] = useState(false);
+  const [fluxPickerOpen, setFluxPickerOpen] = useState(false);
+  const fluxSkillBtnRef = useRef<HTMLButtonElement | null>(null);
   const [moreActionsOpen, setMoreActionsOpen] = useState(false);
   const [retreatConfirmOpen, setRetreatConfirmOpen] = useState(false);
   const [loopPopoverOpen, setLoopPopoverOpen] = useState(false);
@@ -304,6 +307,7 @@ export function BattleScreen() {
       setLoopPopoverOpen(false);
       setDesktopSpeedPopoverOpen(false);
       setPhoneSpeedPopoverOpen(false);
+      setFluxPickerOpen(false);
     }
   }, [battle?.summary]);
 
@@ -886,6 +890,20 @@ export function BattleScreen() {
     startBattle,
   ]);
 
+  const handleManualSkillTrigger = useCallback(
+    (skillId: string) => {
+      if (!isPlayerTurn || autoBattleEnabled || battle?.summary) return;
+      const def = getSkillById(skillId);
+      if (def?.effectKind === 'sp_transfer') {
+        setFluxPickerOpen((prev) => !prev);
+        return;
+      }
+      setFluxPickerOpen(false);
+      performPlayerAction('skill', skillId);
+    },
+    [isPlayerTurn, autoBattleEnabled, battle?.summary, performPlayerAction]
+  );
+
   // Keyboard shortcuts: A Auto/Manual, M Mute, 1 Fire, 2-7 Skills, Q Shield, Tab Cycle Enemy
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -926,7 +944,7 @@ export function BattleScreen() {
         const skillId = playerUnit.equippedSkillIds[slotIdx];
         if (skillId && canUnitUseSkill(playerUnit, skillId, adminConfig).canUse) {
           e.preventDefault();
-          performPlayerAction('skill', skillId);
+          handleManualSkillTrigger(skillId);
         }
       } else if (e.key === 'Tab') {
         e.preventDefault();
@@ -954,6 +972,7 @@ export function BattleScreen() {
     autoBattleEnabled,
     tacticsModalOpen,
     performPlayerAction,
+    handleManualSkillTrigger,
     selectTarget,
     toggleAutoBattle,
     toggleMute,
@@ -1474,6 +1493,12 @@ export function BattleScreen() {
       : null;
 
   const canPlayerManualAct = isPlayerTurn && !autoBattleEnabled;
+
+  useEffect(() => {
+    if (!canPlayerManualAct || battle?.summary) {
+      setFluxPickerOpen(false);
+    }
+  }, [canPlayerManualAct, battle?.summary]);
   const showRepeatBatchSummary = Boolean(
     autoRepeatSession &&
       !autoRepeatSession.active &&
@@ -3136,15 +3161,19 @@ export function BattleScreen() {
                             ? 'border-purple-400/80 bg-purple-500/15 hover:bg-purple-500/25 text-purple-100'
                             : 'border-sky-500/50 bg-sky-500/15 hover:bg-sky-500/25 text-sky-100';
 
+                          const isFluxSkill = skill.effectKind === 'sp_transfer';
+
                           return (
                             <button
                               key={skill.id}
+                              ref={isFluxSkill ? fluxSkillBtnRef : undefined}
                               type="button"
                               data-testid={`battle-skill-btn-${skill.id}`}
+                              aria-expanded={isFluxSkill ? fluxPickerOpen : undefined}
                               disabled={!clickable}
                               onClick={() => {
                                 if (clickable) {
-                                  performPlayerAction('skill', skill.id);
+                                  handleManualSkillTrigger(skill.id);
                                 }
                               }}
                               onMouseEnter={() => setInspectedSkillId(skill.id)}
@@ -3353,8 +3382,31 @@ export function BattleScreen() {
         lang={lang}
         t={t}
         onClose={() => setSkillsSheetOpen(false)}
-        onUseSkill={(skillId) => performPlayerAction('skill', skillId)}
+        onUseSkill={(skillId) => handleManualSkillTrigger(skillId)}
       />
+
+      {/* ==================== FLUX TRANSFER COUNT PICKER ==================== */}
+      {playerUnit && (
+        <FluxTransferPicker
+          open={
+            fluxPickerOpen &&
+            canPlayerManualAct &&
+            !autoBattleEnabled &&
+            !battle.summary
+          }
+          units={battle.units}
+          actorId={playerUnit.id}
+          fluxConfig={adminConfig.fluxTransfer}
+          isPhone={isPhonePortrait}
+          anchorRef={fluxSkillBtnRef}
+          t={t}
+          onCancel={() => setFluxPickerOpen(false)}
+          onConfirm={(transferCount) => {
+            setFluxPickerOpen(false);
+            performPlayerAction('skill', 'sup_flux_transfer', transferCount);
+          }}
+        />
+      )}
 
       {/* ==================== AUTO-REPEAT PER-BATTLE TOAST ==================== */}
       {autoRepeatToast && !showRepeatBatchSummary && (
