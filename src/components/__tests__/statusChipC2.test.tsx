@@ -281,7 +281,7 @@ describe('TASK C2 — Status chip unclipping + 14px bold arrow badge', () => {
     expect(STATUS_ARROW_GLYPH_PX).toBe(12);
     expect(STATUS_ARROW_BORDER_PX).toBe(1);
     expect(STATUS_ARROW_BORDER_COLOR).toBe('#0B1220');
-    expect(CURRENT_SAVE_VERSION).toBe(11);
+    expect(CURRENT_SAVE_VERSION).toBe(12);
 
     for (const variant of ['bar', 'sm', 'md', 'lg'] as const) {
       expect(STATUS_ICON_SIZE_SPECS[variant].arrowBoxPx).toBe(14);

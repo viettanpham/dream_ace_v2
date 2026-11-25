@@ -24,5 +24,10 @@
     "shield_kit": 30,
     "sp_kit": 36,
     "buff": 60
+  },
+  "moduleBase": {
+    "stat": 120,
+    "trait": 200,
+    "skill": 260
   }
 }

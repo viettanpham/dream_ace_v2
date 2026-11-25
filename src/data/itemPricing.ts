@@ -1,4 +1,9 @@
-import type { EquipmentSlot, ItemRarity, SupplyFamily } from '../types/game';
+import type {
+  EquipmentSlot,
+  ItemRarity,
+  ModuleFamily,
+  SupplyFamily,
+} from '../types/game';
 import { EQUIPMENT_SLOTS } from './items';
 import rawPricingData from './itemPricing.json';
 
@@ -11,6 +16,7 @@ export interface PriceFormulaConfig {
   readonly traitPct: number;
   readonly minPrice: number;
   readonly consumableBase: Record<SupplyFamily, number>;
+  readonly moduleBase: Record<ModuleFamily, number>;
 }
 
 const RARITIES: readonly ItemRarity[] = ['common', 'rare', 'epic', 'legendary'];
@@ -20,6 +26,7 @@ const SUPPLY_FAMILIES: readonly SupplyFamily[] = [
   'sp_kit',
   'buff',
 ];
+const MODULE_FAMILIES: readonly ModuleFamily[] = ['stat', 'trait', 'skill'];
 
 export const DEFAULT_PRICE_FORMULA: PriceFormulaConfig = {
   baseBySlot: {
@@ -47,6 +54,11 @@ export const DEFAULT_PRICE_FORMULA: PriceFormulaConfig = {
     shield_kit: 30,
     sp_kit: 36,
     buff: 60,
+  },
+  moduleBase: {
+    stat: 120,
+    trait: 200,
+    skill: 260,
   },
 };
 
@@ -78,6 +90,7 @@ export function validatePriceFormula(raw: unknown): PriceFormulaConfig {
       traitPct: DEFAULT_PRICE_FORMULA.traitPct,
       minPrice: DEFAULT_PRICE_FORMULA.minPrice,
       consumableBase: { ...DEFAULT_PRICE_FORMULA.consumableBase },
+      moduleBase: { ...DEFAULT_PRICE_FORMULA.moduleBase },
     };
   }
 
@@ -145,6 +158,19 @@ export function validatePriceFormula(raw: unknown): PriceFormulaConfig {
     }
   }
 
+  const rawModuleBase = asPlainObject(obj.moduleBase);
+  if (!rawModuleBase) warnings.push('moduleBase');
+  const moduleBase = {} as Record<ModuleFamily, number>;
+  for (const family of MODULE_FAMILIES) {
+    const val = rawModuleBase?.[family];
+    if (isPositiveNumber(val)) {
+      moduleBase[family] = val;
+    } else {
+      if (rawModuleBase) warnings.push(`moduleBase.${family}`);
+      moduleBase[family] = DEFAULT_PRICE_FORMULA.moduleBase[family];
+    }
+  }
+
   const result: PriceFormulaConfig = {
     baseBySlot,
     tierFactor,
@@ -154,6 +180,7 @@ export function validatePriceFormula(raw: unknown): PriceFormulaConfig {
     traitPct: pickPositive('traitPct'),
     minPrice: pickPositive('minPrice'),
     consumableBase,
+    moduleBase,
   };
 
   if (warnings.length > 0) {

@@ -534,6 +534,35 @@ export interface QuickSellUndoState {
   soldFromWarehouseIds?: string[];
 }
 
+export type ModuleFamily = 'stat' | 'trait' | 'skill';
+
+export type ModuleTraitKey =
+  | 'critBonusPct'
+  | 'armorPiercePct'
+  | 'spRegenPerTurn'
+  | 'accuracyPct';
+
+export interface ModuleTemplate {
+  id: string;
+  nameVi: string;
+  nameEn: string;
+  descVi: string;
+  descEn: string;
+  iconId: string;
+  family: ModuleFamily;
+  tier: 1 | 2 | 3 | 4;
+  requiredLevel: number;
+  effectKey: StatKey | ModuleTraitKey | string;
+  value: number;
+  skillId?: string;
+  registryTag: 'sys' | 'mods';
+}
+
+export interface PilotModuleStack {
+  templateId: string;
+  count: number;
+}
+
 export type EquippedSlotIds = Record<EquipmentSlot, string | null>;
 
 export interface EquipValidationResult {
@@ -763,6 +792,7 @@ export interface GearUnit {
   skillLevels: Record<string, number>; // learned skillId -> 1..5
   equippedSkillBar: string[]; // up to 6 active skills (class + general only)
   supplyLoadout: string[]; // battle supply templateIds equipped for battle
+  extenders?: (string | null)[]; // 5 extender module slot ids (null = empty)
   tactics: GearTacticsProfile;
   battlesWon: number;
   battlesFought: number;
@@ -796,6 +826,7 @@ export interface PilotAccount {
   engineerShieldBoost: boolean;
   activeBonusMission: BonusMissionState | null;
   consumables?: ConsumableItem[];
+  modules?: PilotModuleStack[];
   activeExpBoostBattles?: number;
   activeEnchantBonusPct?: number;
   squadFormation?: SquadFormationUnit[];
@@ -1358,6 +1389,8 @@ export interface AdminConfig {
   supplyShopMaxTypes?: number;
   supplyShopMinQty?: number;
   supplyShopMaxQty?: number;
+  extenderUnlockLevels?: number[];
+  maxSkillModulesPerGear?: number;
   showRawI18nKeys: boolean;
 }
 

@@ -222,7 +222,7 @@ describe('TASK CS1 — Battle Supply Data, Price Formula, Save v11 & Pure Rules'
   });
 
   it('4) bumps CURRENT_SAVE_VERSION to 11 and migrates old saves, loadouts, and admin defaults', () => {
-    expect(CURRENT_SAVE_VERSION).toBe(11);
+    expect(CURRENT_SAVE_VERSION).toBe(12);
 
     const defAdmin = createDefaultAdminConfig();
     expect(defAdmin.supplyLoadoutSlots).toBe(DEFAULT_SUPPLY_LOADOUT_SLOTS);
@@ -578,7 +578,7 @@ describe('TASK CS1 — Battle Supply Data, Price Formula, Save v11 & Pure Rules'
     fresh.adminConfig.supplyUsesPerTurn = 2;
 
     const envelope = await buildExportEnvelope(fresh);
-    expect(envelope.saveVersion).toBe(11);
+    expect(envelope.saveVersion).toBe(12);
 
     const parsed = await parseImportEnvelope(JSON.stringify(envelope));
     expect(parsed.ok).toBe(true);

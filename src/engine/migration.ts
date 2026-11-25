@@ -16,6 +16,7 @@ import {
   LEGACY_SKILL_ID_MAP,
 } from '../data/skills';
 import { SUPPLY_TEMPLATES } from '../data/consumables';
+import { getModuleTemplateById } from '../data/modules';
 import {
   DEFAULT_ADMIN_SHOP_RARITY_WEIGHTS,
   SHOP_STOCK_CONFIG,
@@ -33,6 +34,7 @@ import type {
   Language,
   MechClassId,
   PilotAccount,
+  PilotModuleStack,
   QuickSellFilterConfig,
   ShopItemListing,
   StarterSetConfig,
@@ -108,7 +110,76 @@ import { sanitizeStatusDisplayDefaults } from '../utils/statusDisplayPrefs';
 
 export { createDefaultWorldClock };
 
-export const CURRENT_SAVE_VERSION = 11;
+export const CURRENT_SAVE_VERSION = 12;
+
+export const DEFAULT_EXTENDER_SLOT_COUNT = 5;
+export const DEFAULT_EXTENDER_UNLOCK_LEVELS = [5, 15, 25, 35, 45] as const;
+export const DEFAULT_MAX_SKILL_MODULES_PER_GEAR = 1;
+export const MODULE_STACK_CAP = 99;
+
+export function sanitizePilotModules(rawModules: unknown): PilotModuleStack[] {
+  if (!Array.isArray(rawModules)) return [];
+  const merged = new Map<string, number>();
+  for (const entry of rawModules) {
+    if (!entry || typeof entry !== 'object') continue;
+    const raw = entry as Partial<PilotModuleStack>;
+    const templateId =
+      typeof raw.templateId === 'string' ? raw.templateId.trim() : '';
+    if (!templateId || !getModuleTemplateById(templateId)) continue;
+    if (typeof raw.count !== 'number' || !Number.isFinite(raw.count)) continue;
+    const clamped = Math.max(1, Math.min(MODULE_STACK_CAP, Math.round(raw.count)));
+    const prev = merged.get(templateId) ?? 0;
+    merged.set(templateId, Math.min(MODULE_STACK_CAP, prev + clamped));
+  }
+  return Array.from(merged.entries()).map(([templateId, count]) => ({
+    templateId,
+    count,
+  }));
+}
+
+export function sanitizeGearExtenders(rawExtenders: unknown): (string | null)[] {
+  const result: (string | null)[] = Array(DEFAULT_EXTENDER_SLOT_COUNT).fill(null);
+  if (!Array.isArray(rawExtenders)) return result;
+  const limit = Math.min(DEFAULT_EXTENDER_SLOT_COUNT, rawExtenders.length);
+  for (let i = 0; i < limit; i++) {
+    const val = rawExtenders[i];
+    if (typeof val === 'string') {
+      const id = val.trim();
+      if (id && getModuleTemplateById(id)) {
+        result[i] = id;
+      }
+    }
+  }
+  return result;
+}
+
+export function sanitizeExtenderUnlockLevels(rawLevels: unknown): number[] {
+  if (
+    !Array.isArray(rawLevels) ||
+    rawLevels.length !== DEFAULT_EXTENDER_SLOT_COUNT
+  ) {
+    return [...DEFAULT_EXTENDER_UNLOCK_LEVELS];
+  }
+  const parsed: number[] = [];
+  for (let i = 0; i < DEFAULT_EXTENDER_SLOT_COUNT; i++) {
+    const n = rawLevels[i];
+    if (typeof n !== 'number' || !Number.isInteger(n) || n < 1 || n > 50) {
+      return [...DEFAULT_EXTENDER_UNLOCK_LEVELS];
+    }
+    if (i > 0 && n < parsed[i - 1]) {
+      return [...DEFAULT_EXTENDER_UNLOCK_LEVELS];
+    }
+    parsed.push(n);
+  }
+  return parsed;
+}
+
+export function sanitizeMaxSkillModulesPerGear(raw: unknown): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) {
+    return DEFAULT_MAX_SKILL_MODULES_PER_GEAR;
+  }
+  return Math.max(0, Math.min(2, Math.round(raw)));
+}
 
 export const DEFAULT_BOX_CAPACITY = 100;
 export const MIN_BOX_CAPACITY = 20;
@@ -282,6 +353,8 @@ export function createDefaultAdminConfig(): AdminConfig {
     supplyShopMaxTypes: DEFAULT_SUPPLY_SHOP_MAX_TYPES,
     supplyShopMinQty: DEFAULT_SUPPLY_SHOP_MIN_QTY,
     supplyShopMaxQty: DEFAULT_SUPPLY_SHOP_MAX_QTY,
+    extenderUnlockLevels: [...DEFAULT_EXTENDER_UNLOCK_LEVELS],
+    maxSkillModulesPerGear: DEFAULT_MAX_SKILL_MODULES_PER_GEAR,
     showRawI18nKeys: false,
   };
 }
@@ -299,6 +372,7 @@ export function createFreshCampaignState(
   const basePilot: PilotAccount = {
     ...createDefaultPilotAccount(name, starterClassId, []),
     consumables: [],
+    modules: [],
     activeExpBoostBattles: 0,
     activeEnchantBonusPct: 0,
   };
@@ -599,6 +673,12 @@ export function migrateSaveData(
     supplyLoadoutSlots: sanitizeSupplyLoadoutSlots(rawAdmin.supplyLoadoutSlots),
     supplyUsesPerTurn: sanitizeSupplyUsesPerTurn(rawAdmin.supplyUsesPerTurn),
     ...sanitizeSupplyShopConfig(rawAdmin as Partial<AdminConfig>),
+    extenderUnlockLevels: sanitizeExtenderUnlockLevels(
+      rawAdmin.extenderUnlockLevels
+    ),
+    maxSkillModulesPerGear: sanitizeMaxSkillModulesPerGear(
+      rawAdmin.maxSkillModulesPerGear
+    ),
     showRawI18nKeys: Boolean(rawAdmin.showRawI18nKeys),
   };
 
@@ -715,6 +795,7 @@ export function migrateSaveData(
             rawGear.supplyLoadout,
             adminConfig.supplyLoadoutSlots ?? DEFAULT_SUPPLY_LOADOUT_SLOTS
           ),
+          extenders: sanitizeGearExtenders(rawGear.extenders),
           tactics: sanitizeGearTactics(cls.id, rawGear.tactics),
           battlesWon: Math.max(0, Number(rawGear.battlesWon) || 0),
           battlesFought: Math.max(0, Number(rawGear.battlesFought) || 0),
@@ -864,6 +945,7 @@ export function migrateSaveData(
       engineerShieldBoost: Boolean(rawPilot.engineerShieldBoost),
       activeBonusMission: rawPilot.activeBonusMission ?? null,
       consumables: rawConsumables,
+      modules: sanitizePilotModules(rawPilot.modules),
       activeExpBoostBattles: Math.max(
         0,
         Number(rawPilot.activeExpBoostBattles) || 0
@@ -998,6 +1080,7 @@ export function migrateSaveData(
         skillLevels,
         equippedSkillBar,
         supplyLoadout: [],
+        extenders: sanitizeGearExtenders(null),
         tactics: createDefaultTacticsForClass(cls.id),
         battlesWon: Math.max(0, Number(legacyPlayer.battlesWon) || 0),
         battlesFought: Math.max(0, Number(legacyPlayer.battlesFought) || 0),
@@ -1043,6 +1126,7 @@ export function migrateSaveData(
     engineerShieldBoost: false,
     activeBonusMission: null,
     consumables: [],
+    modules: [],
     activeExpBoostBattles: 0,
     activeEnchantBonusPct: 0,
     squadFormation: createDefaultSquadFormation(

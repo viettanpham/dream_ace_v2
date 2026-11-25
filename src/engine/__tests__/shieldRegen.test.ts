@@ -478,7 +478,7 @@ describe('SH1 — Shield regeneration engine & UI integration', () => {
   });
 
   it('6) Admin sanitizer clamps pct/penalty/min/restartTurns, drops old v1 keys, and migration fills defaults at CURRENT_SAVE_VERSION = 11', () => {
-    expect(CURRENT_SAVE_VERSION).toBe(11);
+    expect(CURRENT_SAVE_VERSION).toBe(12);
     const clamped = sanitizeShieldRegenConfig({
       enabled: false,
       basePct: -5,

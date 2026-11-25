@@ -253,7 +253,7 @@ describe('D1-2a — Unified Item Price Formula & Engine Integration', () => {
   });
 
   it('8) preserves old saved item prices untouched after save load / migration / export round-trip & keeps CURRENT_SAVE_VERSION = 9', async () => {
-    expect(CURRENT_SAVE_VERSION).toBe(11);
+    expect(CURRENT_SAVE_VERSION).toBe(12);
     expect(Array.isArray(BALANCE_CONFIG.tierPriceScale)).toBe(true);
 
     // Pre-D1-2a item price (e.g. legacy armor T4 common = 928 or armor T4 legendary = 5067)

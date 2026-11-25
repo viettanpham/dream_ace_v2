@@ -534,7 +534,7 @@ describe('TASK G4a-3a — Radar declutter (markers, floating labels, lanes, dead
   });
 
   it('6) Card mode, CURRENT_SAVE_VERSION = 9, and vi/en parity remain intact', () => {
-    expect(CURRENT_SAVE_VERSION).toBe(11);
+    expect(CURRENT_SAVE_VERSION).toBe(12);
     expect(VI_TRANSLATIONS['log.invalidTarget']).toBeTruthy();
     expect(EN_TRANSLATIONS['log.invalidTarget']).toBeTruthy();
     expect(Object.keys(VI_TRANSLATIONS).sort()).toEqual(

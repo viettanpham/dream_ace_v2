@@ -1,8 +1,10 @@
+import { SHOP_CONFIG } from '../data/items';
 import { PRICE_FORMULA } from '../data/itemPricing';
 import type {
   EquipmentSlot,
   ItemRarity,
   ItemSpecialTraits,
+  ModuleTemplate,
   SupplyTemplate,
 } from '../types/game';
 
@@ -85,4 +87,29 @@ export function computeSupplyPrice(
   );
   const tierFactor = PRICE_FORMULA.tierFactor[tierIdx] ?? 1;
   return Math.max(PRICE_FORMULA.minPrice, Math.round(base * tierFactor));
+}
+
+/**
+ * Single unified buy price formula for extender modules:
+ * round(moduleBase[family] * tierFactor[tier - 1]).
+ */
+export function computeModulePrice(
+  template: Pick<ModuleTemplate, 'family' | 'tier'>
+): number {
+  const base = PRICE_FORMULA.moduleBase[template.family];
+  const tierIdx = Math.max(
+    0,
+    Math.min(PRICE_FORMULA.tierFactor.length - 1, Math.round(template.tier) - 1)
+  );
+  const tierFactor = PRICE_FORMULA.tierFactor[tierIdx] ?? 1;
+  return Math.round(base * tierFactor);
+}
+
+/**
+ * Sell price for an extender module using the unified shop sell ratio.
+ */
+export function getModuleSellPrice(
+  template: Pick<ModuleTemplate, 'family' | 'tier'>
+): number {
+  return Math.round(computeModulePrice(template) * SHOP_CONFIG.sellPriceRatio);
 }

@@ -227,6 +227,7 @@ export function createDefaultGearUnit(
     skillLevels,
     equippedSkillBar: [...starterSkills],
     supplyLoadout: [],
+    extenders: [null, null, null, null, null],
     tactics: createDefaultTacticsForClass(classId),
     battlesWon: 0,
     battlesFought: 0,
@@ -274,6 +275,7 @@ export function createDefaultPilotAccount(
     hiredWingman: null,
     engineerShieldBoost: false,
     activeBonusMission: null,
+    modules: [],
     squadFormation: createDefaultSquadFormation(name, starterClassId),
     formationCustomized: false,
   };
