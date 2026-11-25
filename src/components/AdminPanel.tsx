@@ -22,6 +22,7 @@ import {
   X,
 } from 'lucide-react';
 import { SupplyEconomyAdminBlock } from './admin/SupplyEconomyAdminBlock';
+import { EnemyLevelAdminBlock } from './admin/EnemyLevelAdminBlock';
 import {
   BALANCE_CONFIG,
   sanitizeSpEconomyConfig,
@@ -1575,6 +1576,8 @@ export function AdminPanel() {
                   formatAppliedText={(n) => t('admin.capacityApplied', { n })}
                 />
               </div>
+
+              <EnemyLevelAdminBlock />
 
               {/* Shield Regen ("Hồi khiên") */}
               {(() => {

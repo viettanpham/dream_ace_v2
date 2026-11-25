@@ -93,6 +93,7 @@ import {
   sanitizePiratesConfig,
   spawnOnMonth,
 } from '../engine/pirates';
+import { sanitizeEnemyLevelConfig } from '../engine/enemyLevel';
 import {
   addSupplyToConsumables,
   applyBattleSupplyUse,
@@ -4572,6 +4573,10 @@ export const useGameStore = create<GameStoreState>()(
             patch.supplyEconomy !== undefined
               ? sanitizeSupplyEconomyConfig(patch.supplyEconomy)
               : sanitizeSupplyEconomyConfig(state.adminConfig.supplyEconomy);
+          const nextEnemyLevel =
+            patch.enemyLevel !== undefined
+              ? sanitizeEnemyLevelConfig(patch.enemyLevel)
+              : sanitizeEnemyLevelConfig(state.adminConfig.enemyLevel);
           const nextAdminConfig: AdminConfig = {
             ...state.adminConfig,
             ...patch,
@@ -4582,6 +4587,7 @@ export const useGameStore = create<GameStoreState>()(
             pirates: nextPirates,
             spEconomy: nextSpEconomy,
             supplyEconomy: nextSupplyEconomy,
+            enemyLevel: nextEnemyLevel,
           };
           let updatedPilot =
             patch.formation &&
@@ -4887,6 +4893,7 @@ export const useGameStore = create<GameStoreState>()(
               ...sanitizeSupplyShopConfig(rawAdmin as Partial<AdminConfig>),
               spEconomy: sanitizeSpEconomyConfig(rawAdmin.spEconomy),
               supplyEconomy: sanitizeSupplyEconomyConfig(rawAdmin.supplyEconomy),
+              enemyLevel: sanitizeEnemyLevelConfig(rawAdmin.enemyLevel),
               pirates: sanitizePiratesConfig(rawAdmin.pirates),
               rewardMultiplier:
                 typeof state.adminConfig.rewardMultiplier === 'number' &&

@@ -1393,6 +1393,25 @@ export interface SupplyEconomyConfig {
   spPriceMult: number;
 }
 
+export type EnemyLevelRangeKind =
+  | 'patrol'
+  | 'pirate'
+  | 'assault'
+  | 'defend'
+  | 'boss';
+
+export interface EnemyLevelRange {
+  min: number;
+  max: number;
+  peak: number;
+}
+
+export interface EnemyLevelConfig {
+  ranges: Record<EnemyLevelRangeKind, EnemyLevelRange>;
+  peakChancePct: number;
+  enemyLevelCapOverMax: number;
+}
+
 export interface AdminConfig {
   godMode: boolean;
   oneHitKills: boolean;
@@ -1416,6 +1435,7 @@ export interface AdminConfig {
   shieldRegen?: ShieldRegenConfig;
   spEconomy?: SpEconomyConfig;
   supplyEconomy?: SupplyEconomyConfig;
+  enemyLevel?: EnemyLevelConfig;
   shieldCrackedMult?: number;
   shieldCrackedTurns?: number;
   shieldDamageOverrides?: Record<string, number>;

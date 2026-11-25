@@ -91,6 +91,11 @@ import {
   sanitizePiratesConfig,
 } from './pirates';
 import {
+  cloneEnemyLevelConfig,
+  DEFAULT_ENEMY_LEVEL_CONFIG,
+  sanitizeEnemyLevelConfig,
+} from './enemyLevel';
+import {
   cloneStarterSetConfig,
   DEFAULT_STARTER_SET_CONFIG,
   sanitizeStarterSetConfig,
@@ -308,6 +313,7 @@ export function createDefaultAdminConfig(): AdminConfig {
     enrageStepPct: BALANCE_CONFIG.enrageStepPct,
     forceBoss: false,
     battleLevelOffsetOverride: null,
+    enemyLevel: cloneEnemyLevelConfig(DEFAULT_ENEMY_LEVEL_CONFIG),
     shopMinStock: SHOP_STOCK_CONFIG.minStockPerCategory,
     shopMaxStock: SHOP_STOCK_CONFIG.maxStockPerCategory,
     shopRarityWeights: { ...DEFAULT_ADMIN_SHOP_RARITY_WEIGHTS },
@@ -665,6 +671,7 @@ export function migrateSaveData(
     shieldRegen: sanitizeShieldRegenConfig(rawAdmin.shieldRegen),
     spEconomy: sanitizeSpEconomyConfig(rawAdmin.spEconomy),
     supplyEconomy: sanitizeSupplyEconomyConfig(rawAdmin.supplyEconomy),
+    enemyLevel: sanitizeEnemyLevelConfig(rawAdmin.enemyLevel),
     shieldCrackedMult: sanitizeShieldCrackedMult(rawAdmin.shieldCrackedMult),
     shieldCrackedTurns: sanitizeShieldCrackedTurns(rawAdmin.shieldCrackedTurns),
     shieldDamageOverrides: sanitizeShieldDamageOverrides(

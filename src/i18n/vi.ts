@@ -1932,6 +1932,19 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'admin.supplyEconomyMaxUses': 'Số lần tối đa mỗi trận (1–20)',
   'admin.supplyEconomySpPriceMult': 'Hệ số giá SP (1–5)',
   'admin.supplyEconomyHint': 'Áp dụng ngay cho trận đấu và cửa hàng vật tư',
+  'admin.enemyLevelTitle': 'Cấp độ địch theo loại trận',
+  'admin.enemyLevelHint': 'Độ lệch so với cấp GEAR đang dùng (mission/event dùng dải Tấn công).',
+  'admin.enemyLevelReset': 'Khôi phục mặc định',
+  'admin.enemyLevelPeakChance': 'Tỉ lệ đỉnh (%)',
+  'admin.enemyLevelCapOverMax': 'Trần cấp vượt Max (+)',
+  'admin.enemyLevelMin': 'Min',
+  'admin.enemyLevelMax': 'Max',
+  'admin.enemyLevelPeak': 'Đỉnh',
+  'admin.enemyLevelKindPatrol': 'Tuần tra',
+  'admin.enemyLevelKindPirate': 'Cướp biển',
+  'admin.enemyLevelKindAssault': 'Tấn công',
+  'admin.enemyLevelKindDefend': 'Phòng thủ',
+  'admin.enemyLevelKindBoss': 'Boss',
 };
 
 

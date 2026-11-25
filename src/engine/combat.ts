@@ -66,6 +66,11 @@ import {
   generateNpcAllocations,
 } from './stats';
 import {
+  clampEnemyLevel,
+  rollEnemyLevelOffset,
+} from './enemyLevel';
+import { isPirateIncidentId } from './pirates';
+import {
   clampShieldDamageMult,
   computeShieldRegen,
   getUnitHitsSinceOwnTurn,
@@ -724,6 +729,17 @@ export function createInitialBattleState(
   };
   const roster = archetypeRosterBySize[rawSquadSize];
   const rawEnemyUnits: CombatUnit[] = [];
+  const hasLevelOverride =
+    adminConfig?.battleLevelOffsetOverride !== undefined &&
+    adminConfig?.battleLevelOffsetOverride !== null;
+  const normalLevelKind =
+    resolvedKind === 'event' && isPirateIncidentId(sourceId)
+      ? 'pirate'
+      : resolvedKind;
+  const normalRolledOffset = hasLevelOverride
+    ? adminConfig!.battleLevelOffsetOverride!
+    : rollEnemyLevelOffset(normalLevelKind, adminConfig?.enemyLevel, rng);
+  let bossRolledOffset: number | null = null;
 
   for (let i = 0; i < effectiveSquadCount; i++) {
     const archetype = roster[i % roster.length];
@@ -737,21 +753,30 @@ export function createInitialBattleState(
       : isStructure
       ? 'Defense Turret'
       : randomItem(archDef.names, rng);
-    const effectiveLevelOffset =
-      adminConfig?.battleLevelOffsetOverride !== undefined &&
-      adminConfig?.battleLevelOffsetOverride !== null
-        ? adminConfig.battleLevelOffsetOverride
-        : sector.levelOffset;
-    const enemyLevel = Math.max(
-      1,
-      activeGear.level +
-        effectiveLevelOffset +
-        (isBoss
-          ? 1
-          : i === 0
-          ? 0
-          : Math.floor(rng() * 2) - (effectiveLevelOffset === 0 ? 1 : 0))
-    );
+    let effectiveLevelOffset: number;
+    if (hasLevelOverride) {
+      effectiveLevelOffset = adminConfig!.battleLevelOffsetOverride!;
+    } else if (isBoss) {
+      if (bossRolledOffset === null) {
+        bossRolledOffset = rollEnemyLevelOffset(
+          'boss',
+          adminConfig?.enemyLevel,
+          rng
+        );
+      }
+      effectiveLevelOffset = bossRolledOffset + sector.levelOffset;
+    } else {
+      effectiveLevelOffset = normalRolledOffset + sector.levelOffset;
+    }
+    const unitJitter = isBoss
+      ? 0
+      : i === 0
+      ? 0
+      : Math.floor(rng() * 2) - (effectiveLevelOffset === 0 ? 1 : 0);
+    const rawEnemyLevel = activeGear.level + effectiveLevelOffset + unitJitter;
+    const enemyLevel = hasLevelOverride
+      ? Math.max(1, rawEnemyLevel)
+      : clampEnemyLevel(rawEnemyLevel, adminConfig?.enemyLevel);
 
     rawEnemyUnits.push(
       buildCombatUnit({

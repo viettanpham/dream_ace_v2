@@ -1929,6 +1929,19 @@ export const EN_TRANSLATIONS = {
   'admin.supplyEconomyMaxUses': 'Max uses per battle (1–20)',
   'admin.supplyEconomySpPriceMult': 'SP price multiplier (1–5)',
   'admin.supplyEconomyHint': 'Applies immediately to battle and supply shop',
+  'admin.enemyLevelTitle': 'Enemy level by battle kind',
+  'admin.enemyLevelHint': 'Offset vs active GEAR level (mission/event use Assault range).',
+  'admin.enemyLevelReset': 'Reset to defaults',
+  'admin.enemyLevelPeakChance': 'Peak chance (%)',
+  'admin.enemyLevelCapOverMax': 'Cap over max level (+)',
+  'admin.enemyLevelMin': 'Min',
+  'admin.enemyLevelMax': 'Max',
+  'admin.enemyLevelPeak': 'Peak',
+  'admin.enemyLevelKindPatrol': 'Patrol',
+  'admin.enemyLevelKindPirate': 'Pirates',
+  'admin.enemyLevelKindAssault': 'Assault',
+  'admin.enemyLevelKindDefend': 'Defend',
+  'admin.enemyLevelKindBoss': 'Boss',
 } as const;
 
 export type TranslationKey = keyof typeof EN_TRANSLATIONS;
