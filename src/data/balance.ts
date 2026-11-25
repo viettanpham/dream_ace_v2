@@ -1,8 +1,10 @@
 import type {
   BattleSpeed,
   ItemRarity,
+  MechClassId,
   SectorDifficulty,
   SkillCategory,
+  SpEconomyConfig,
 } from '../types/game';
 
 /**
@@ -193,12 +195,77 @@ export const COMBAT_FORMULAS = {
   critDamageMultiplier: 1.5,
   defenseMitigationDivisor: 65,
   defendDamageMultiplier: 0.5,
-  attackSpGain: 5,
-  defendSpGain: 12,
+  attackSpGain: 0,
+  defendSpGain: 0,
   defendShieldRestoreRatio: 0.16,
   damageVarianceMin: 0.92,
   damageVarianceMax: 1.08,
 } as const;
+
+export const DEFAULT_SP_ECONOMY_CONFIG: SpEconomyConfig = {
+  regenPerSpirit: 0.3,
+  classFactor: {
+    striker: 1,
+    interceptor: 1,
+    siege: 1,
+    support: 1.3,
+  },
+  costLevelPct: 0.02,
+};
+
+export function cloneSpEconomyConfig(cfg: SpEconomyConfig): SpEconomyConfig {
+  return {
+    regenPerSpirit: cfg.regenPerSpirit,
+    classFactor: { ...cfg.classFactor },
+    costLevelPct: cfg.costLevelPct,
+  };
+}
+
+function clampSpNum(
+  raw: unknown,
+  min: number,
+  max: number,
+  fallback: number
+): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return fallback;
+  return Math.max(min, Math.min(max, raw));
+}
+
+export function sanitizeSpEconomyConfig(raw: unknown): SpEconomyConfig {
+  const obj =
+    raw && typeof raw === 'object' && !Array.isArray(raw)
+      ? (raw as Record<string, unknown>)
+      : {};
+  const rawFactors =
+    obj.classFactor && typeof obj.classFactor === 'object' && !Array.isArray(obj.classFactor)
+      ? (obj.classFactor as Record<string, unknown>)
+      : {};
+  const classIds: MechClassId[] = ['striker', 'interceptor', 'siege', 'support'];
+  const classFactor = { ...DEFAULT_SP_ECONOMY_CONFIG.classFactor };
+  for (const id of classIds) {
+    classFactor[id] = clampSpNum(
+      rawFactors[id],
+      0.1,
+      3,
+      DEFAULT_SP_ECONOMY_CONFIG.classFactor[id]
+    );
+  }
+  return {
+    regenPerSpirit: clampSpNum(
+      obj.regenPerSpirit,
+      0,
+      2,
+      DEFAULT_SP_ECONOMY_CONFIG.regenPerSpirit
+    ),
+    classFactor,
+    costLevelPct: clampSpNum(
+      obj.costLevelPct,
+      0,
+      0.1,
+      DEFAULT_SP_ECONOMY_CONFIG.costLevelPct
+    ),
+  };
+}
 
 export function getGarageUnlockCost(ownedCount: number): number {
   const idx = Math.max(

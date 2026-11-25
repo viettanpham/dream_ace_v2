@@ -923,7 +923,7 @@ export function BattleScreen() {
       } else if (['2', '3', '4', '5', '6', '7'].includes(e.key)) {
         const slotIdx = Number(e.key) - 2;
         const skillId = playerUnit.equippedSkillIds[slotIdx];
-        if (skillId && canUnitUseSkill(playerUnit, skillId).canUse) {
+        if (skillId && canUnitUseSkill(playerUnit, skillId, adminConfig).canUse) {
           e.preventDefault();
           performPlayerAction('skill', skillId);
         }
@@ -1057,7 +1057,7 @@ export function BattleScreen() {
     : undefined;
   const inspectedUsability =
     playerUnit && inspectedSkill
-      ? canUnitUseSkill(playerUnit, inspectedSkill.id)
+      ? canUnitUseSkill(playerUnit, inspectedSkill.id, adminConfig)
       : null;
   const inspectedLv =
     playerUnit && inspectedSkill
@@ -3101,7 +3101,11 @@ export function BattleScreen() {
                         playerSkillIds.slice(0, 6).map((skillId, idx) => {
                           const skill = getSkillById(skillId);
                           if (!skill || !playerUnit) return null;
-                          const usability = canUnitUseSkill(playerUnit, skill.id);
+                          const usability = canUnitUseSkill(
+                            playerUnit,
+                            skill.id,
+                            adminConfig
+                          );
                           const clickable = canPlayerManualAct && usability.canUse;
                           const reasonText = getBattleSkillReason(lang, usability);
                           const lv = playerUnit.skillLevels[skill.id] ?? 1;
@@ -3189,6 +3193,7 @@ export function BattleScreen() {
                         </span>
                       </div>
                       <span className="font-mono-nums text-sky-300 shrink-0">
+                        {inspectedUsability.spCost} SP ·{' '}
                         {getSkillTargetLabel(lang, inspectedSkill.targetType)}
                       </span>
                     </div>
@@ -3332,6 +3337,7 @@ export function BattleScreen() {
         playerUnit={playerUnit}
         playerSkillIds={playerSkillIds}
         canPlayerManualAct={canPlayerManualAct}
+        adminConfig={adminConfig}
         lang={lang}
         t={t}
         onClose={() => setSkillsSheetOpen(false)}

@@ -247,6 +247,7 @@ function buildCombatUnit(params: {
   equipmentBonuses?: StatBlock;
   specialTraits?: ItemSpecialTraits;
   passives?: GearPassiveBonuses;
+  adminConfig?: Partial<AdminConfig>;
 }): CombatUnit {
   const stats = calculateEffectiveStats(
     params.classId,
@@ -262,7 +263,8 @@ function buildCombatUnit(params: {
     params.level,
     stats,
     params.specialTraits,
-    params.passives
+    params.passives,
+    params.adminConfig
   );
 
   const archDef = params.archetype
@@ -598,6 +600,7 @@ export function createInitialBattleState(
     equipmentBonuses: playerEquipBonuses,
     specialTraits: playerTraits,
     passives: playerPassives,
+    adminConfig,
   });
 
   // 2. AI Ally Wingmen (matching effectiveSquadCount - 1)
@@ -647,6 +650,7 @@ export function createInitialBattleState(
         classId: allyClass,
         level: allyLevel,
         allocatedPoints: generateNpcAllocations(allyClass, allyLevel, rng),
+        adminConfig,
       })
     );
   }
@@ -685,6 +689,7 @@ export function createInitialBattleState(
           hiredLv,
           rng
         ),
+        adminConfig,
       }),
     ]);
   }
@@ -768,6 +773,7 @@ export function createInitialBattleState(
           Math.max(1, enemyLevel),
           rng
         ),
+        adminConfig,
       })
     );
   }
@@ -2203,7 +2209,7 @@ function resolveUnitActionCore(
   if (action === 'skill') {
     const requestedSkillId = skillId ?? actor.equippedSkillIds[0];
     const usability = requestedSkillId
-      ? canUnitUseSkill(actor, requestedSkillId)
+      ? canUnitUseSkill(actor, requestedSkillId, adminConfig)
       : null;
     const skill: SkillDefinition | undefined = requestedSkillId
       ? getSkillById(requestedSkillId)
@@ -4039,7 +4045,8 @@ function resolveUnitActionCore(
 export function chooseAiDecision(
   actor: CombatUnit,
   units: CombatUnit[],
-  rng: () => number = Math.random
+  rng: () => number = Math.random,
+  adminConfig?: Partial<AdminConfig>
 ): { action: ActionType; targetId: string | null; skillId?: string } {
   const allies = units.filter((u) => u.side === actor.side && u.alive);
   const enemies = getValidEnemyTargets(units, actor, 'attack');
@@ -4063,7 +4070,8 @@ export function chooseAiDecision(
   const usableSkills = actor.equippedSkillIds
     .map((id) => getSkillById(id))
     .filter(
-      (s): s is SkillDefinition => Boolean(s) && canUnitUseSkill(actor, s!.id).canUse
+      (s): s is SkillDefinition =>
+        Boolean(s) && canUnitUseSkill(actor, s!.id, adminConfig).canUse
     );
 
   // Repair Ship / Support heals injured allies first

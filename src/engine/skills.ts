@@ -1,4 +1,8 @@
-import { BALANCE_CONFIG, getSkillPurchaseCost } from '../data/balance';
+import {
+  BALANCE_CONFIG,
+  getSkillPurchaseCost,
+  sanitizeSpEconomyConfig,
+} from '../data/balance';
 import {
   getOpeningCardById,
   getScaledSkillStats,
@@ -6,6 +10,7 @@ import {
   SKILLS_LIST,
 } from '../data/skills';
 import type {
+  AdminConfig,
   BattleSkillUsability,
   CombatUnit,
   GearUnit,
@@ -350,6 +355,26 @@ export function buyOpeningCard(
   };
 }
 
+export function getEffectiveSpCost(
+  skill: SkillDefinition,
+  unit: Pick<CombatUnit, 'level'> & { statuses?: CombatUnit['statuses'] },
+  admin?: Pick<AdminConfig, 'spEconomy'> | null
+): number {
+  if (skill.spCost <= 0) return 0;
+  const isToggleActive = Boolean(
+    unit.statuses &&
+      ((skill.effectKind === 'toggle_siege_mode' &&
+        unit.statuses.some((s) => s.type === 'siege_mode')) ||
+        (skill.effectKind === 'toggle_siege_defense' &&
+          unit.statuses.some((s) => s.type === 'siege_defense')))
+  );
+  if (isToggleActive) return 0;
+  const cfg = sanitizeSpEconomyConfig(admin?.spEconomy);
+  return Math.round(
+    skill.spCost * (1 + cfg.costLevelPct * Math.max(0, unit.level - 1))
+  );
+}
+
 /**
  * Pure battle usability check for a unit casting `skillId`.
  * Enforces class-lock, bar membership, Silence, Charging lock, Cooldown,
@@ -357,7 +382,8 @@ export function buyOpeningCard(
  */
 export function canUnitUseSkill(
   unit: CombatUnit,
-  skillId: string
+  skillId: string,
+  admin?: Pick<AdminConfig, 'spEconomy'> | null
 ): BattleSkillUsability {
   const skill = getSkillById(skillId);
   if (!skill || skill.category === 'passive') {
@@ -369,12 +395,20 @@ export function canUnitUseSkill(
     };
   }
 
+  const isToggleActive =
+    (skill.effectKind === 'toggle_siege_mode' &&
+      unit.statuses.some((s) => s.type === 'siege_mode')) ||
+    (skill.effectKind === 'toggle_siege_defense' &&
+      unit.statuses.some((s) => s.type === 'siege_defense'));
+
+  const effectiveSpCost = getEffectiveSpCost(skill, unit, admin);
+
   if (!isSkillAllowedForClass(skill, unit.classId)) {
     return {
       canUse: false,
       reason: 'class_mismatch',
       cooldownRemaining: 0,
-      spCost: skill.spCost,
+      spCost: effectiveSpCost,
     };
   }
 
@@ -383,17 +417,10 @@ export function canUnitUseSkill(
       canUse: false,
       reason: 'not_equipped',
       cooldownRemaining: 0,
-      spCost: skill.spCost,
+      spCost: effectiveSpCost,
     };
   }
 
-  const isToggleActive =
-    (skill.effectKind === 'toggle_siege_mode' &&
-      unit.statuses.some((s) => s.type === 'siege_mode')) ||
-    (skill.effectKind === 'toggle_siege_defense' &&
-      unit.statuses.some((s) => s.type === 'siege_defense'));
-
-  const effectiveSpCost = isToggleActive ? 0 : skill.spCost;
   const cd = unit.skillCooldowns[skillId] ?? 0;
 
   if (unit.statuses.some((s) => s.type === 'charging')) {

@@ -1,6 +1,10 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import { BALANCE_CONFIG, getGarageUnlockCost } from '../data/balance';
+import {
+  BALANCE_CONFIG,
+  getGarageUnlockCost,
+  sanitizeSpEconomyConfig,
+} from '../data/balance';
 import { BATTLE_KIND_RULES } from '../data/battleKinds';
 import { sanitizeAutoEquipConfig } from '../data/autoEquipConfig';
 import { EMPTY_STAT_BLOCK, MECH_CLASS_LIST } from '../data/classes';
@@ -3404,7 +3408,12 @@ export const useGameStore = create<GameStoreState>()(
         const tactics = deployedGear.tactics;
 
         // 1. Evaluate Safety Stops before executing Auto turn
-        const safetyEval = evaluateAutoSafety(battle, activeUnit, tactics.safety);
+        const safetyEval = evaluateAutoSafety(
+          battle,
+          activeUnit,
+          tactics.safety,
+          state.adminConfig
+        );
         if (safetyEval.shouldRetreat) {
           set((prev) => ({
             autoBattleEnabled: false,
@@ -3459,7 +3468,13 @@ export const useGameStore = create<GameStoreState>()(
         }
 
         // 2. Evaluate pure Tactics engine (top-to-bottom priority)
-        const choice = chooseAction(battle, activeUnit, tactics, Math.random);
+        const choice = chooseAction(
+          battle,
+          activeUnit,
+          tactics,
+          Math.random,
+          state.adminConfig
+        );
         const autoRuleNumber =
           choice.matchedRuleIndex !== null ? choice.matchedRuleIndex + 1 : 0;
 
@@ -3657,7 +3672,7 @@ export const useGameStore = create<GameStoreState>()(
               targetId: battle.selectedTargetId,
               skillId: undefined,
             }
-          : chooseAiDecision(activeUnit, battle.units);
+          : chooseAiDecision(activeUnit, battle.units, Math.random, state.adminConfig);
 
         const resolution = resolveUnitAction(
           battle.units,
@@ -4548,6 +4563,10 @@ export const useGameStore = create<GameStoreState>()(
             patch.pirates !== undefined
               ? sanitizePiratesConfig(patch.pirates)
               : sanitizePiratesConfig(state.adminConfig.pirates);
+          const nextSpEconomy =
+            patch.spEconomy !== undefined
+              ? sanitizeSpEconomyConfig(patch.spEconomy)
+              : sanitizeSpEconomyConfig(state.adminConfig.spEconomy);
           const nextAdminConfig: AdminConfig = {
             ...state.adminConfig,
             ...patch,
@@ -4556,6 +4575,7 @@ export const useGameStore = create<GameStoreState>()(
             starterSet: nextStarterSet,
             statusDisplayDefaults: nextStatusDefaults,
             pirates: nextPirates,
+            spEconomy: nextSpEconomy,
           };
           let updatedPilot =
             patch.formation &&
@@ -4859,6 +4879,7 @@ export const useGameStore = create<GameStoreState>()(
                 rawAdmin.statusDisplayDefaults
               ),
               ...sanitizeSupplyShopConfig(rawAdmin as Partial<AdminConfig>),
+              spEconomy: sanitizeSpEconomyConfig(rawAdmin.spEconomy),
               pirates: sanitizePiratesConfig(rawAdmin.pirates),
               rewardMultiplier:
                 typeof state.adminConfig.rewardMultiplier === 'number' &&

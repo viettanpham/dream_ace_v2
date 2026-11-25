@@ -14,6 +14,7 @@ import {
 import { BALANCE_CONFIG } from '../data/balance';
 import { getScaledSkillStats, getSkillById } from '../data/skills';
 import {
+  getEffectiveSpCost,
   getRequiredGearLevelForSkillLevel,
   getSkillLearnOrUpgradeCost,
   getSkillsForClass,
@@ -55,6 +56,7 @@ function getCategoryStyle(category: SkillCategory): string {
 export function SkillView() {
   const { lang, t } = useI18n();
   const pilot = useGameStore((s) => s.pilot);
+  const adminConfig = useGameStore((s) => s.adminConfig);
   const learnOrUpgradeSkill = useGameStore((s) => s.learnOrUpgradeSkill);
   const equipSkillToBar = useGameStore((s) => s.equipSkillToBar);
   const unequipSkillFromBar = useGameStore((s) => s.unequipSkillFromBar);
@@ -303,7 +305,7 @@ export function SkillView() {
                         {getSkillName(lang, skill.id)}
                       </div>
                       <div className="text-[11px] font-mono-nums text-sky-300">
-                        Lv.{lv} · {skill.spCost} SP
+                        Lv.{lv} · {getEffectiveSpCost(skill, activeGear, adminConfig)} SP
                       </div>
                     </div>
                   </div>
@@ -572,7 +574,7 @@ export function SkillView() {
                     </div>
                     <div className="text-xs text-slate-400 truncate mt-0.5">
                       {getSkillCategoryLabel(lang, skill.category)} ·{' '}
-                      {skill.spCost} SP ·{' '}
+                      {getEffectiveSpCost(skill, activeGear, adminConfig)} SP ·{' '}
                       {isLearned ? `Lv.${currentLv}` : t('skill.notLearned')}
                     </div>
                   </div>
@@ -666,7 +668,7 @@ export function SkillView() {
 
                     <div className="text-right font-mono-nums shrink-0">
                       <div className="text-xs font-bold text-amber-400">
-                        {skill.spCost} SP
+                        {getEffectiveSpCost(skill, activeGear, adminConfig)} SP
                       </div>
                       <div
                         className={`text-[11px] font-semibold ${
@@ -816,7 +818,11 @@ export function SkillView() {
               ? `${getSkillCategoryLabel(
                   lang,
                   mobileSelectedSkill.category
-                )} · ${mobileSelectedSkill.spCost} SP`
+                )} · ${getEffectiveSpCost(
+                  mobileSelectedSkill,
+                  activeGear,
+                  adminConfig
+                )} SP`
               : undefined
           }
         >

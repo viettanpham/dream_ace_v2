@@ -1,4 +1,9 @@
-import { BALANCE_CONFIG } from '../data/balance';
+import {
+  BALANCE_CONFIG,
+  cloneSpEconomyConfig,
+  DEFAULT_SP_ECONOMY_CONFIG,
+  sanitizeSpEconomyConfig,
+} from '../data/balance';
 import { EMPTY_STAT_BLOCK, MECH_CLASS_LIST } from '../data/classes';
 import {
   BUILTIN_ITEM_REGISTRY_TAG,
@@ -309,6 +314,7 @@ export function createDefaultAdminConfig(): AdminConfig {
     starterSet: cloneStarterSetConfig(DEFAULT_STARTER_SET_CONFIG),
     iconCatalogMods: [],
     shieldRegen: { ...DEFAULT_SHIELD_REGEN_CONFIG },
+    spEconomy: cloneSpEconomyConfig(DEFAULT_SP_ECONOMY_CONFIG),
     shieldCrackedMult: DEFAULT_SHIELD_CRACKED_MULT,
     shieldCrackedTurns: DEFAULT_SHIELD_CRACKED_TURNS,
     shieldDamageOverrides: {},
@@ -653,6 +659,7 @@ export function migrateSaveData(
       rawAdmin.statusDisplayDefaults
     ),
     shieldRegen: sanitizeShieldRegenConfig(rawAdmin.shieldRegen),
+    spEconomy: sanitizeSpEconomyConfig(rawAdmin.spEconomy),
     shieldCrackedMult: sanitizeShieldCrackedMult(rawAdmin.shieldCrackedMult),
     shieldCrackedTurns: sanitizeShieldCrackedTurns(rawAdmin.shieldCrackedTurns),
     shieldDamageOverrides: sanitizeShieldDamageOverrides(

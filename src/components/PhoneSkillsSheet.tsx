@@ -2,7 +2,7 @@ import { getSkillById } from '../data/skills';
 import { canUnitUseSkill } from '../engine/skills';
 import { getBattleSkillReason, getSkillDesc, getSkillName } from '../i18n';
 import type { TranslationKey } from '../i18n/en';
-import type { CombatUnit, Language } from '../types/game';
+import type { AdminConfig, CombatUnit, Language } from '../types/game';
 import { SP_COLOR_TOKENS } from '../utils/battleDisplay';
 import { BottomSheet } from './BottomSheet';
 import { SkillIcon } from './SkillIcon';
@@ -17,6 +17,7 @@ export interface PhoneSkillsSheetProps {
   playerUnit: CombatUnit | null | undefined;
   playerSkillIds: string[];
   canPlayerManualAct: boolean;
+  adminConfig?: Pick<AdminConfig, 'spEconomy'> | null;
   lang: Language;
   t: TranslateFn;
   onClose: () => void;
@@ -28,6 +29,7 @@ export function PhoneSkillsSheet({
   playerUnit,
   playerSkillIds,
   canPlayerManualAct,
+  adminConfig,
   lang,
   t,
   onClose,
@@ -53,7 +55,11 @@ export function PhoneSkillsSheet({
           {playerSkillIds.slice(0, 6).map((skillId) => {
             const skill = getSkillById(skillId);
             if (!skill || !playerUnit) return null;
-            const usability = canUnitUseSkill(playerUnit, skill.id);
+            const usability = canUnitUseSkill(
+              playerUnit,
+              skill.id,
+              adminConfig
+            );
             const clickable = canPlayerManualAct && usability.canUse;
             const isToggleOn = Boolean(usability.isToggleActive);
             const isUsedOnce =

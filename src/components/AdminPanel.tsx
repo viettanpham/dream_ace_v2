@@ -21,7 +21,10 @@ import {
   Wrench,
   X,
 } from 'lucide-react';
-import { BALANCE_CONFIG } from '../data/balance';
+import {
+  BALANCE_CONFIG,
+  sanitizeSpEconomyConfig,
+} from '../data/balance';
 import { MECH_CLASS_LIST } from '../data/classes';
 import {
   cloneFormationConfig,
@@ -1816,6 +1819,106 @@ export function AdminPanel() {
                           className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
                         />
                       </label>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* SP Economy ("Kinh tế SP") */}
+              {(() => {
+                const spCfg = sanitizeSpEconomyConfig(adminConfig.spEconomy);
+                const updateSp = (patch: {
+                  regenPerSpirit?: number;
+                  costLevelPct?: number;
+                  classFactor?: Partial<typeof spCfg.classFactor>;
+                }) => {
+                  adminUpdateConfig({
+                    spEconomy: sanitizeSpEconomyConfig({
+                      ...spCfg,
+                      ...patch,
+                      classFactor: {
+                        ...spCfg.classFactor,
+                        ...(patch.classFactor ?? {}),
+                      },
+                    }),
+                  });
+                };
+                return (
+                  <div
+                    data-testid="admin-sp-economy-section"
+                    className="p-3.5 rounded-lg border border-slate-800 bg-[#0D1422] space-y-3"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-xs font-semibold text-amber-300">
+                        {t('admin.spEconomyTitle')}
+                      </span>
+                      <span className="text-[11px] text-slate-400">
+                        {t('admin.spEconomyNextBattleHint')}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      <label className="space-y-1 block">
+                        <span className="text-[11px] text-slate-400 block">
+                          {t('admin.spEconomyRegenPerSpirit')}
+                        </span>
+                        <input
+                          type="number"
+                          data-testid="admin-sp-regen-per-spirit"
+                          min={0}
+                          max={2}
+                          step={0.05}
+                          value={spCfg.regenPerSpirit}
+                          onChange={(e) =>
+                            updateSp({ regenPerSpirit: Number(e.target.value) })
+                          }
+                          className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                        />
+                      </label>
+
+                      <label className="space-y-1 block">
+                        <span className="text-[11px] text-slate-400 block">
+                          {t('admin.spEconomyCostLevelPct')}
+                        </span>
+                        <input
+                          type="number"
+                          data-testid="admin-sp-cost-level-pct"
+                          min={0}
+                          max={0.1}
+                          step={0.005}
+                          value={spCfg.costLevelPct}
+                          onChange={(e) =>
+                            updateSp({ costLevelPct: Number(e.target.value) })
+                          }
+                          className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                        />
+                      </label>
+
+                      {MECH_CLASS_LIST.map((cls) => (
+                        <label key={cls.id} className="space-y-1 block">
+                          <span className="text-[11px] text-slate-400 block">
+                            {t('admin.spEconomyClassFactor', {
+                              cls: getClassName(lang, cls.id),
+                            })}
+                          </span>
+                          <input
+                            type="number"
+                            data-testid={`admin-sp-factor-${cls.id}`}
+                            min={0.1}
+                            max={3}
+                            step={0.1}
+                            value={spCfg.classFactor[cls.id]}
+                            onChange={(e) =>
+                              updateSp({
+                                classFactor: {
+                                  [cls.id]: Number(e.target.value),
+                                },
+                              })
+                            }
+                            className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                          />
+                        </label>
+                      ))}
                     </div>
                   </div>
                 );

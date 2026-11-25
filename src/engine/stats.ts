@@ -1,4 +1,8 @@
-import { BALANCE_CONFIG, COMBAT_FORMULAS } from '../data/balance';
+import {
+  BALANCE_CONFIG,
+  COMBAT_FORMULAS,
+  sanitizeSpEconomyConfig,
+} from '../data/balance';
 import {
   EMPTY_STAT_BLOCK,
   MECH_CLASSES,
@@ -85,7 +89,8 @@ export function calculateDerivedStats(
   level: number,
   stats: StatBlock,
   specialTraits?: ItemSpecialTraits,
-  passives?: GearPassiveBonuses
+  passives?: GearPassiveBonuses,
+  admin?: Pick<AdminConfig, 'spEconomy'> | null
 ): DerivedStats {
   const cls = MECH_CLASSES[classId];
   const lvl = Math.max(1, level);
@@ -130,6 +135,13 @@ export function calculateDerivedStats(
 
   const skillPower = Math.round(stats.attack * 0.7 + stats.spirit * 0.85);
 
+  const spEco = sanitizeSpEconomyConfig(admin?.spEconomy);
+  const spiritRegen = Math.round(
+    Math.max(0, stats.spirit) *
+      spEco.regenPerSpirit *
+      (spEco.classFactor[classId] ?? 1)
+  );
+
   return {
     maxHp,
     maxShield,
@@ -147,7 +159,9 @@ export function calculateDerivedStats(
     ),
     splashPct: Math.min(40, specialTraits?.splashPct ?? 0),
     spRegenPerTurn:
-      (specialTraits?.spRegenPerTurn ?? 0) + (passives?.spRegenPerTurn ?? 0),
+      spiritRegen +
+      (specialTraits?.spRegenPerTurn ?? 0) +
+      (passives?.spRegenPerTurn ?? 0),
     passiveSkillDmgPct: passives?.skillDmgPct ?? 0,
   };
 }
@@ -158,7 +172,7 @@ export function calculateDerivedStats(
 export function calculateGearPowerRating(
   gear: GearUnit,
   inventory: ItemInstance[],
-  admin?: Pick<AdminConfig, 'extenderLevelsPerSocket'> | null,
+  admin?: Pick<AdminConfig, 'extenderLevelsPerSocket' | 'spEconomy'> | null,
   warehouse: readonly ItemInstance[] = []
 ): number {
   const equipBonuses = sumGearEquipmentStats(gear, inventory, admin, warehouse);
@@ -178,7 +192,8 @@ export function calculateGearPowerRating(
     gear.level,
     stats,
     traits,
-    passives
+    passives,
+    admin
   );
   const totalSkillLevels = Object.values(gear.skillLevels).reduce(
     (sum, lv) => sum + Math.max(0, lv),

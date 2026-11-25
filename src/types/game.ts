@@ -1379,6 +1379,12 @@ export interface ItemLevelsConfig {
   dropDifficultyBonus: Record<SectorDifficulty, number>;
 }
 
+export interface SpEconomyConfig {
+  regenPerSpirit: number;
+  classFactor: Record<MechClassId, number>;
+  costLevelPct: number;
+}
+
 export interface AdminConfig {
   godMode: boolean;
   oneHitKills: boolean;
@@ -1400,6 +1406,7 @@ export interface AdminConfig {
   iconCatalogMods?: IconCatalogModRow[];
   statusDisplayDefaults?: StatusDisplayDefaults;
   shieldRegen?: ShieldRegenConfig;
+  spEconomy?: SpEconomyConfig;
   shieldCrackedMult?: number;
   shieldCrackedTurns?: number;
   shieldDamageOverrides?: Record<string, number>;

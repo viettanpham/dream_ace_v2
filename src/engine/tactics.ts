@@ -2,6 +2,7 @@ import { BALANCE_CONFIG } from '../data/balance';
 import { getSkillById } from '../data/skills';
 import type {
   ActionType,
+  AdminConfig,
   AutoRepeatDefeatRule,
   AutoRepeatSession,
   AutoSafetyConfig,
@@ -1083,7 +1084,8 @@ export interface AutoSafetyEvaluation {
 export function evaluateAutoSafety(
   state: BattleState,
   actor: CombatUnit,
-  safety: AutoSafetyConfig
+  safety: AutoSafetyConfig,
+  adminConfig?: Pick<AdminConfig, 'spEconomy'> | null
 ): AutoSafetyEvaluation {
   const hpPct =
     actor.derived.maxHp > 0 ? (actor.hp / actor.derived.maxHp) * 100 : 0;
@@ -1118,7 +1120,7 @@ export function evaluateAutoSafety(
   if (safety.stopOnEliteReady) {
     const eliteReady = actor.equippedSkillIds.some((sid) => {
       const sk = getSkillById(sid);
-      return sk?.category === 'elite' && canUnitUseSkill(actor, sid).canUse;
+      return sk?.category === 'elite' && canUnitUseSkill(actor, sid, adminConfig).canUse;
     });
     if (eliteReady) {
       return {
@@ -1329,7 +1331,8 @@ function evaluateCondition(
   actor: CombatUnit,
   rule: TacticsRule,
   resolvedTarget: CombatUnit | null,
-  rng: () => number
+  rng: () => number,
+  adminConfig?: Pick<AdminConfig, 'spEconomy'> | null
 ): boolean {
   const { condition } = rule;
   const allies = state.units.filter((u) => u.side === actor.side && u.alive);
@@ -1416,7 +1419,7 @@ function evaluateCondition(
       if (!checkSkillId) return false;
       const sk = getSkillById(checkSkillId);
       if (!sk || !isSkillAllowedForClass(sk, actor.classId)) return false;
-      return canUnitUseSkill(actor, checkSkillId).canUse;
+      return canUnitUseSkill(actor, checkSkillId, adminConfig).canUse;
     }
 
     default:
@@ -1442,7 +1445,8 @@ export function chooseAction(
   state: BattleState,
   actor: CombatUnit,
   tactics: GearTacticsProfile,
-  rng: () => number = Math.random
+  rng: () => number = Math.random,
+  adminConfig?: Pick<AdminConfig, 'spEconomy'> | null
 ): TacticsChoiceResult {
   const rules = (tactics?.rules ?? []).slice(0, BALANCE_CONFIG.maxTacticsRules);
 
@@ -1459,7 +1463,7 @@ export function chooseAction(
       if (!skillDef || !isSkillAllowedForClass(skillDef, actor.classId)) {
         continue;
       }
-      if (!canUnitUseSkill(actor, sid).canUse) {
+      if (!canUnitUseSkill(actor, sid, adminConfig).canUse) {
         continue;
       }
     }
@@ -1472,7 +1476,8 @@ export function chooseAction(
       actor,
       rule,
       targetRes.targetUnit,
-      rng
+      rng,
+      adminConfig
     );
     if (!condMet) continue;
 

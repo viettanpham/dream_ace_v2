@@ -74,8 +74,8 @@ describe('D1-2b — Pre/Post JSON Migration Equality Guard', () => {
 });
 
 describe('D1-2b — JSON Data Schema & Typed Loaders', () => {
-  it('items.json has schemaVersion 1 and 42 valid sys templates, and CURRENT_SAVE_VERSION stays 12', () => {
-    expect(CURRENT_SAVE_VERSION).toBe(12);
+  it('items.json has schemaVersion 1 and 42 valid sys templates, and CURRENT_SAVE_VERSION stays 13', () => {
+    expect(CURRENT_SAVE_VERSION).toBe(13);
     expect(rawItemsJson.schemaVersion).toBe(1);
     expect(Array.isArray(rawItemsJson.templates)).toBe(true);
     expect(rawItemsJson.templates).toHaveLength(42);

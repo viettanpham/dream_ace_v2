@@ -8,6 +8,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { getScaledSkillStats, getSkillById } from '../data/skills';
+import { getEffectiveSpCost } from '../engine/skills';
 import {
   getEffectiveUnitSpeed,
   getTeamColorRole,
@@ -88,6 +89,7 @@ export function UnitDetailSheet({
     (s) => s.adminConfig.statusDisplayDefaults
   );
   const iconMods = useGameStore((s) => s.adminConfig.iconCatalogMods);
+  const spEconomy = useGameStore((s) => s.adminConfig.spEconomy);
   const { settings: statusSettings } =
     useStatusDisplaySettings(adminStatusDefaults);
 
@@ -394,8 +396,10 @@ export function UnitDetailSheet({
                 const skill = getSkillById(skillId);
                 if (!skill) return null;
                 const lv = unit.skillLevels[skillId] ?? 1;
-                const scaled = getScaledSkillStats(skill, lv);
                 const cdRem = unit.skillCooldowns[skillId] ?? 0;
+                const effectiveCost = getEffectiveSpCost(skill, unit, {
+                  spEconomy,
+                });
                 return (
                   <div
                     key={skillId}
@@ -410,7 +414,7 @@ export function UnitDetailSheet({
                           {getSkillName(lang, skill.id)} · Lv.{lv}
                         </span>
                         <span className="text-[11px] font-mono-nums text-amber-300 shrink-0">
-                          {scaled.spCost} SP
+                          {effectiveCost} SP
                           {cdRem > 0 ? ` · CD ${cdRem}` : ''}
                         </span>
                       </div>
