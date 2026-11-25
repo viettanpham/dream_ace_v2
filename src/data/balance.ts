@@ -86,6 +86,7 @@ export const BALANCE_CONFIG = {
   // ---- Randomized Item Rarity Config ----
   rarityAffixCount: {
     common: 0,
+    uncommon: 0,
     rare: 1,
     epic: 2,
     legendary: 3,
@@ -93,6 +94,7 @@ export const BALANCE_CONFIG = {
 
   rarityStatMultiplier: {
     common: 1.0,
+    uncommon: 1.08,
     rare: 1.16,
     epic: 1.34,
     legendary: 1.56,
@@ -100,6 +102,7 @@ export const BALANCE_CONFIG = {
 
   rarityPriceMultiplier: {
     common: 1.0,
+    uncommon: 1.3,
     rare: 1.65,
     epic: 2.75,
     legendary: 4.6,
@@ -114,19 +117,19 @@ export const BALANCE_CONFIG = {
     Standard: {
       perEnemyDropChance: 0.28,
       maxDropsPerBattle: 2,
-      rarityWeights: { common: 64, rare: 26, epic: 8, legendary: 2 },
+      rarityWeights: { common: 42, uncommon: 22, rare: 26, epic: 8, legendary: 2 },
       maxTier: 2,
     },
     Hard: {
       perEnemyDropChance: 0.36,
       maxDropsPerBattle: 3,
-      rarityWeights: { common: 40, rare: 38, epic: 17, legendary: 5 },
+      rarityWeights: { common: 26, uncommon: 14, rare: 38, epic: 17, legendary: 5 },
       maxTier: 3,
     },
     Elite: {
       perEnemyDropChance: 0.45,
       maxDropsPerBattle: 3,
-      rarityWeights: { common: 18, rare: 38, epic: 31, legendary: 13 },
+      rarityWeights: { common: 12, uncommon: 6, rare: 38, epic: 31, legendary: 13 },
       maxTier: 4,
     },
   } as Record<

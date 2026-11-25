@@ -64,10 +64,10 @@ export const SHOP_STOCK_CONFIG: ShopStockConfig = {
   restockEveryNBattles: 1,
   restockOnMonthAdvance: true,
   rarityWeightsByTier: {
-    1: { common: 62, rare: 30, epic: 7, legendary: 1 },
-    2: { common: 50, rare: 36, epic: 12, legendary: 2 },
-    3: { common: 38, rare: 40, epic: 18, legendary: 4 },
-    4: { common: 25, rare: 40, epic: 26, legendary: 9 },
+    1: { common: 40, uncommon: 22, rare: 30, epic: 7, legendary: 1 },
+    2: { common: 32, uncommon: 18, rare: 36, epic: 12, legendary: 2 },
+    3: { common: 25, uncommon: 13, rare: 40, epic: 18, legendary: 4 },
+    4: { common: 16, uncommon: 9, rare: 40, epic: 26, legendary: 9 },
   },
   wpMinOffers: 3,
   wpMaxOffers: 10,
@@ -75,12 +75,14 @@ export const SHOP_STOCK_CONFIG: ShopStockConfig = {
     equipmentCrate: {
       baseWpCostByRarity: {
         common: 35,
+        uncommon: 45,
         rare: 55,
         epic: 95,
         legendary: 160,
       },
       rarityWeights: {
         common: 0,
+        uncommon: 0,
         rare: 55,
         epic: 35,
         legendary: 10,
@@ -103,7 +105,8 @@ export const SHOP_STOCK_CONFIG: ShopStockConfig = {
 };
 
 export const DEFAULT_ADMIN_SHOP_RARITY_WEIGHTS: Record<ItemRarity, number> = {
-  common: 45,
+  common: 29,
+  uncommon: 16,
   rare: 35,
   epic: 15,
   legendary: 5,

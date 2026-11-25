@@ -476,6 +476,7 @@ function convertLegacyItemInstance(
       classRestriction: tpl.classRestriction,
       rarity:
         obj.rarity === 'common' ||
+        obj.rarity === 'uncommon' ||
         obj.rarity === 'rare' ||
         obj.rarity === 'epic' ||
         obj.rarity === 'legendary'
@@ -610,12 +611,22 @@ export function migrateSaveData(
     shopMaxStock: safeMaxStock,
     shopRarityWeights:
       rawWeights && typeof rawWeights === 'object'
-        ? {
-            common: Math.max(0, Number(rawWeights.common) || 0),
-            rare: Math.max(0, Number(rawWeights.rare) || 0),
-            epic: Math.max(0, Number(rawWeights.epic) || 0),
-            legendary: Math.max(0, Number(rawWeights.legendary) || 0),
-          }
+        ? rawWeights.uncommon === undefined &&
+          Number(rawWeights.common) === 45 &&
+          Number(rawWeights.rare) === 35 &&
+          Number(rawWeights.epic) === 15 &&
+          Number(rawWeights.legendary) === 5
+          ? { ...defAdmin.shopRarityWeights }
+          : {
+              common: Math.max(0, Number(rawWeights.common) || 0),
+              uncommon:
+                rawWeights.uncommon !== undefined
+                  ? Math.max(0, Number(rawWeights.uncommon) || 0)
+                  : defAdmin.shopRarityWeights.uncommon,
+              rare: Math.max(0, Number(rawWeights.rare) || 0),
+              epic: Math.max(0, Number(rawWeights.epic) || 0),
+              legendary: Math.max(0, Number(rawWeights.legendary) || 0),
+            }
         : { ...defAdmin.shopRarityWeights },
     shopPriceMultiplier:
       typeof rawAdmin.shopPriceMultiplier === 'number' &&

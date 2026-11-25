@@ -18,7 +18,13 @@ export interface PriceFormulaConfig {
   readonly moduleBase: Record<ModuleFamily, number>;
 }
 
-const RARITIES: readonly ItemRarity[] = ['common', 'rare', 'epic', 'legendary'];
+const RARITIES: readonly ItemRarity[] = [
+  'common',
+  'uncommon',
+  'rare',
+  'epic',
+  'legendary',
+];
 const SUPPLY_FAMILIES: readonly SupplyFamily[] = [
   'hp_kit',
   'shield_kit',
@@ -40,6 +46,7 @@ export const DEFAULT_PRICE_FORMULA: PriceFormulaConfig = {
   tierFactor: [1, 1.74, 2.54, 3.8],
   rarityFactor: {
     common: 1,
+    uncommon: 1.3,
     rare: 1.65,
     epic: 2.75,
     legendary: 4.6,

@@ -25,7 +25,13 @@ interface QuickSellModalProps {
   onSold?: (count: number, credits: number, skippedCount: number) => void;
 }
 
-const RARITY_OPTIONS: ItemRarity[] = ['common', 'rare', 'epic', 'legendary'];
+const RARITY_OPTIONS: ItemRarity[] = [
+  'common',
+  'uncommon',
+  'rare',
+  'epic',
+  'legendary',
+];
 
 function rarityTextClass(rarity: ItemRarity): string {
   switch (rarity) {
@@ -35,6 +41,8 @@ function rarityTextClass(rarity: ItemRarity): string {
       return 'text-purple-300';
     case 'rare':
       return 'text-sky-300';
+    case 'uncommon':
+      return 'text-emerald-300';
     default:
       return 'text-slate-200';
   }

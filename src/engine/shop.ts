@@ -284,6 +284,8 @@ export function buildShopOptionsFromState(
     adminConfig?.shopRarityWeights &&
     (adminConfig.shopRarityWeights.common !==
       DEFAULT_ADMIN_SHOP_RARITY_WEIGHTS.common ||
+      adminConfig.shopRarityWeights.uncommon !==
+        DEFAULT_ADMIN_SHOP_RARITY_WEIGHTS.uncommon ||
       adminConfig.shopRarityWeights.rare !==
         DEFAULT_ADMIN_SHOP_RARITY_WEIGHTS.rare ||
       adminConfig.shopRarityWeights.epic !==

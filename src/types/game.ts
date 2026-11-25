@@ -347,7 +347,7 @@ export type EquipmentSlot =
 
 export type PaperDollSlot = Exclude<EquipmentSlot, 'module'>;
 
-export type ItemRarity = 'common' | 'rare' | 'epic' | 'legendary';
+export type ItemRarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
 
 export interface ItemSpecialTraits {
   critBonusPct?: number;

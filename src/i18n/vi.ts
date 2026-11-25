@@ -515,9 +515,10 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'slotShort.module': 'MÔ-ĐUN',
   'slotShort.extender': 'Ext {n}',
   'rarity.common': 'Thường',
-  'rarity.rare': 'Hiếm',
+  'rarity.uncommon': 'Hiếm',
+  'rarity.rare': 'Chất lượng',
   'rarity.epic': 'Sử thi',
-  'rarity.legendary': 'Huyền thoại',
+  'rarity.legendary': 'Thần thoại',
 
   // Hangar / Stat Allocation labels
   'hangar.callsign': 'Tên phi công',

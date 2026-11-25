@@ -4201,7 +4201,13 @@ export const useGameStore = create<GameStoreState>()(
       adminFillInventory: (count) => {
         const state = get();
         const safeCount = Math.max(1, Math.min(250, Math.floor(count) || 100));
-        const rarities: ItemRarity[] = ['common', 'rare', 'epic', 'legendary'];
+        const rarities: ItemRarity[] = [
+          'common',
+          'uncommon',
+          'rare',
+          'epic',
+          'legendary',
+        ];
         const activeGear = state.pilot.gears[state.pilot.activeGearId];
         const generated: ItemInstance[] = [];
         const now = Date.now();

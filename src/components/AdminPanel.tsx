@@ -96,7 +96,13 @@ type AdminTab =
   | 'formation'
   | 'system';
 
-const RARITY_LIST: ItemRarity[] = ['common', 'rare', 'epic', 'legendary'];
+const RARITY_LIST: ItemRarity[] = [
+  'common',
+  'uncommon',
+  'rare',
+  'epic',
+  'legendary',
+];
 
 export function AdminPanel() {
   const { lang, t } = useI18n();
@@ -1194,7 +1200,7 @@ export function AdminPanel() {
                   <div className="text-[11px] text-slate-400">
                     {t('admin.shopRarityWeights')}
                   </div>
-                  <div className="grid grid-cols-4 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                     {RARITY_LIST.map((r) => (
                       <label key={r} className="space-y-1 block">
                         <span className="text-[10px] uppercase text-slate-400 block">

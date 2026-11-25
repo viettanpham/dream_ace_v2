@@ -79,7 +79,7 @@ export interface GenerateItemOptions {
 /**
  * Generates a randomized ItemInstance from a distinct ItemTemplate.
  * - Base stat rolls scale by tier, required level, and rarity multiplier.
- * - Bonus affixes count = 0 (common), 1 (rare), 2 (epic), 3 (legendary).
+ * - Bonus affixes count = 0 (common), 0 (uncommon), 1 (rare), 2 (epic), 3 (legendary).
  * - Computes rollQuality (0..100%) and affix-based suffixId.
  */
 export function generateItemInstance(
@@ -339,12 +339,12 @@ export function generateShopStock(
 
   const shopRarityWeights: Record<ItemRarity, number> =
     weightTier >= 4
-      ? { common: 25, rare: 40, epic: 26, legendary: 9 }
+      ? { common: 16, uncommon: 9, rare: 40, epic: 26, legendary: 9 }
       : weightTier === 3
-      ? { common: 38, rare: 40, epic: 18, legendary: 4 }
+      ? { common: 25, uncommon: 13, rare: 40, epic: 18, legendary: 4 }
       : weightTier === 2
-      ? { common: 50, rare: 36, epic: 12, legendary: 2 }
-      : { common: 62, rare: 30, epic: 7, legendary: 1 };
+      ? { common: 32, uncommon: 18, rare: 36, epic: 12, legendary: 2 }
+      : { common: 40, uncommon: 22, rare: 30, epic: 7, legendary: 1 };
 
   const stock: ItemInstance[] = [];
   for (let i = 0; i < count; i++) {
@@ -885,14 +885,21 @@ export function pickWeightedRarity(
   weights: Record<ItemRarity, number>,
   rng: () => number = Math.random
 ): ItemRarity {
-  const total =
-    weights.common + weights.rare + weights.epic + weights.legendary;
+  const wCommon = Math.max(0, weights.common || 0);
+  const wUncommon = Math.max(0, weights.uncommon || 0);
+  const wRare = Math.max(0, weights.rare || 0);
+  const wEpic = Math.max(0, weights.epic || 0);
+  const wLegendary = Math.max(0, weights.legendary || 0);
+  const total = wCommon + wUncommon + wRare + wEpic + wLegendary;
+  if (total <= 0) return 'common';
   let roll = rng() * total;
-  if (roll < weights.common) return 'common';
-  roll -= weights.common;
-  if (roll < weights.rare) return 'rare';
-  roll -= weights.rare;
-  if (roll < weights.epic) return 'epic';
+  if (roll < wCommon) return 'common';
+  roll -= wCommon;
+  if (roll < wUncommon) return 'uncommon';
+  roll -= wUncommon;
+  if (roll < wRare) return 'rare';
+  roll -= wRare;
+  if (roll < wEpic) return 'epic';
   return 'legendary';
 }
 
@@ -948,7 +955,7 @@ export function rollBattleItemDrops(
     if (!tpl) continue;
     const rarity = enemy.isBoss
       ? pickWeightedRarity(
-          { common: 0, rare: 20, epic: 55, legendary: 25 },
+          { common: 0, uncommon: 0, rare: 20, epic: 55, legendary: 25 },
           rng
         )
       : pickWeightedRarity(cfg.rarityWeights, rng);

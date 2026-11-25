@@ -20,9 +20,10 @@ import { isFormationConfigDefault } from './formation';
 
 export const RARITY_RANK: Record<ItemRarity, number> = {
   common: 0,
-  rare: 1,
-  epic: 2,
-  legendary: 3,
+  uncommon: 1,
+  rare: 2,
+  epic: 3,
+  legendary: 4,
 };
 
 const STAT_POWER_WEIGHTS = {
@@ -304,6 +305,7 @@ export function isAnyCheatActive(cfg: AdminConfig | undefined | null): boolean {
   if (Math.abs(cfg.shopPriceMultiplier - 1) > 0.001) return true;
   if (
     cfg.shopRarityWeights.common !== DEFAULT_ADMIN_SHOP_RARITY_WEIGHTS.common ||
+    cfg.shopRarityWeights.uncommon !== DEFAULT_ADMIN_SHOP_RARITY_WEIGHTS.uncommon ||
     cfg.shopRarityWeights.rare !== DEFAULT_ADMIN_SHOP_RARITY_WEIGHTS.rare ||
     cfg.shopRarityWeights.epic !== DEFAULT_ADMIN_SHOP_RARITY_WEIGHTS.epic ||
     cfg.shopRarityWeights.legendary !== DEFAULT_ADMIN_SHOP_RARITY_WEIGHTS.legendary

@@ -28,13 +28,20 @@ export const EMPTY_EQUIPPED_SLOT_IDS: EquippedSlotIds = {
   main_weapon: null, sub_weapon: null, armor: null, engine: null, cpu: null, accessory: null, radar: null,
 };
 
-export const RARITY_LIST: ItemRarity[] = ['common', 'rare', 'epic', 'legendary'];
+export const RARITY_LIST: ItemRarity[] = [
+  'common',
+  'uncommon',
+  'rare',
+  'epic',
+  'legendary',
+];
 
 export const RARITY_META: Record<
   ItemRarity,
   { label: string; textClass: string; borderClass: string; bgTintClass: string }
 > = {
   common: { label: 'Common', textClass: 'text-slate-200', borderClass: 'border-slate-700', bgTintClass: 'bg-slate-800/30' },
+  uncommon: { label: 'Uncommon', textClass: 'text-emerald-400', borderClass: 'border-emerald-500/60', bgTintClass: 'bg-emerald-500/10' },
   rare: { label: 'Rare', textClass: 'text-sky-400', borderClass: 'border-sky-500/60', bgTintClass: 'bg-sky-500/10' },
   epic: { label: 'Epic', textClass: 'text-purple-400', borderClass: 'border-purple-500/60', bgTintClass: 'bg-purple-500/10' },
   legendary: { label: 'Legendary', textClass: 'text-amber-400', borderClass: 'border-amber-400/80', bgTintClass: 'bg-amber-500/15' },

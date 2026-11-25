@@ -513,6 +513,7 @@ export const EN_TRANSLATIONS = {
   'slotShort.module': 'MODULE',
   'slotShort.extender': 'Ext {n}',
   'rarity.common': 'Common',
+  'rarity.uncommon': 'Uncommon',
   'rarity.rare': 'Rare',
   'rarity.epic': 'Epic',
   'rarity.legendary': 'Legendary',

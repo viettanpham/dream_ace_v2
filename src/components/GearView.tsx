@@ -105,7 +105,13 @@ type GearSelection =
   | { kind: 'inventory'; instanceId: string }
   | null;
 
-const RARITY_OPTIONS: ItemRarity[] = ['common', 'rare', 'epic', 'legendary'];
+const RARITY_OPTIONS: ItemRarity[] = [
+  'common',
+  'uncommon',
+  'rare',
+  'epic',
+  'legendary',
+];
 const TIER_OPTIONS = [1, 2, 3, 4] as const;
 const SORT_OPTIONS: InventorySortKey[] = [
   'newest',
