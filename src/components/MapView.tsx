@@ -35,7 +35,13 @@ import {
   MAP_LANES,
   SECTORS_CATALOG,
 } from '../data/maps';
-import { calculateSingleEnemyReward } from '../engine/combat';
+import { ENEMY_ARCHETYPE_DEFS } from '../data/pilots';
+import {
+  ARCHETYPE_ROSTER_BY_SIZE,
+  calculateSingleEnemyReward,
+} from '../engine/combat';
+import { clampEnemyLevel, getEnemyLevelBand } from '../engine/enemyLevel';
+import { levelConClass } from '../utils/levelCon';
 import {
   getBattleOptions,
   isAlliedFrontline,
@@ -318,6 +324,10 @@ export function MapView() {
   const [mapInfoOpen, setMapInfoOpen] = useState(false);
   const [mobileBriefingOpen, setMobileBriefingOpen] = useState(false);
   const [preBattleDetailsOpen, setPreBattleDetailsOpen] = useState(false);
+  const [expandedOption, setExpandedOption] = useState<{
+    sectorId: string;
+    key: string;
+  } | null>(null);
   const [hireClass, setHireClass] = useState<MechClassId>('interceptor');
 
   const mapViewportRef = useRef<HTMLDivElement | null>(null);
@@ -378,10 +388,28 @@ export function MapView() {
   const effectiveSquadSize =
     adminConfig.battleSizeOverride ?? selectedSector.squadSize;
   const selectedDropConfig = DROP_CONFIG[selectedSector.difficulty];
-  const estimatedEnemyLevel = Math.max(
-    1,
-    activeGear.level + selectedSector.levelOffset
+  const selectedDefaultBattleOption = selectedDefaultBattleKind
+    ? selectedBattleOptions.find(
+        (opt) => opt.allowed && opt.kind === selectedDefaultBattleKind
+      )
+    : undefined;
+  const defaultLevelBand = getEnemyLevelBand(
+    selectedDefaultBattleKind ?? 'assault',
+    adminConfig.enemyLevel,
+    {
+      sourceId: selectedDefaultBattleOption?.sourceId,
+      hasBoss: selectedSector.hasBoss,
+      forceBoss: Boolean(adminConfig.forceBoss),
+    }
   );
+  const estimatedEnemyLevel =
+    adminConfig.battleLevelOffsetOverride !== undefined &&
+    adminConfig.battleLevelOffsetOverride !== null
+      ? Math.max(1, activeGear.level + adminConfig.battleLevelOffsetOverride)
+      : clampEnemyLevel(
+          activeGear.level + defaultLevelBand.mid + selectedSector.levelOffset,
+          adminConfig.enemyLevel
+        );
 
   const estRegular = calculateSingleEnemyReward(estimatedEnemyLevel, false);
   const estBoss = selectedSector.hasBoss
@@ -1050,36 +1078,208 @@ export function MapView() {
                     ? 'text-rose-400'
                     : 'text-amber-400';
                 const optionSize = opt.sizeOverride ?? effectiveSquadSize;
+                const optionKey = `${opt.kind}_${opt.sourceId ?? 'default'}`;
+                const isExpanded =
+                  expandedOption?.sectorId === selectedSector.id &&
+                  expandedOption.key === optionKey;
+                const toggleExpand = () =>
+                  setExpandedOption((prev) =>
+                    prev?.sectorId === selectedSector.id &&
+                    prev.key === optionKey
+                      ? null
+                      : { sectorId: selectedSector.id, key: optionKey }
+                  );
                 const rowLabel = opt.labelKey
                   ? `${t(opt.labelKey as TranslationKey)} ${optionSize}v${optionSize}`
                   : t(`map.optionLabel.${opt.kind}` as TranslationKey, {
                       size: optionSize,
                     });
+
+                const isBoss =
+                  selectedSector.hasBoss || Boolean(adminConfig.forceBoss);
+                const hasLevelOverride =
+                  adminConfig.battleLevelOffsetOverride !== undefined &&
+                  adminConfig.battleLevelOffsetOverride !== null;
+                const optBand = hasLevelOverride
+                  ? null
+                  : getEnemyLevelBand(opt.kind, adminConfig.enemyLevel, {
+                      sourceId: opt.sourceId,
+                      hasBoss: selectedSector.hasBoss,
+                      forceBoss: Boolean(adminConfig.forceBoss),
+                    });
+                const optMinLv = hasLevelOverride
+                  ? Math.max(
+                      1,
+                      activeGear.level + adminConfig.battleLevelOffsetOverride!
+                    )
+                  : clampEnemyLevel(
+                      activeGear.level +
+                        optBand!.min +
+                        selectedSector.levelOffset,
+                      adminConfig.enemyLevel
+                    );
+                const optMaxLv = hasLevelOverride
+                  ? optMinLv
+                  : clampEnemyLevel(
+                      activeGear.level +
+                        optBand!.max +
+                        selectedSector.levelOffset,
+                      adminConfig.enemyLevel
+                    );
+                const optMidLv = hasLevelOverride
+                  ? optMinLv
+                  : clampEnemyLevel(
+                      activeGear.level +
+                        optBand!.mid +
+                        selectedSector.levelOffset,
+                      adminConfig.enemyLevel
+                    );
+                const maxDiff = optMaxLv - activeGear.level;
+                const rangeColorClass = levelConClass(maxDiff);
+
+                const roster = ARCHETYPE_ROSTER_BY_SIZE[selectedSector.squadSize];
+                const classCounts = new Map<MechClassId, number>();
+                if (roster && roster.length > 0) {
+                  for (let i = 0; i < optionSize; i++) {
+                    const arch = roster[i % roster.length];
+                    const cls = ENEMY_ARCHETYPE_DEFS[arch].classId;
+                    classCounts.set(cls, (classCounts.get(cls) ?? 0) + 1);
+                  }
+                }
+                const mixParts = MECH_CLASS_LIST.flatMap((c) => {
+                  const cnt = classCounts.get(c.id) ?? 0;
+                  return cnt > 0 ? [`${cnt} ${getClassName(lang, c.id)}`] : [];
+                });
+
+                const optRegularReward = calculateSingleEnemyReward(
+                  optMidLv,
+                  false
+                );
+                const optBossReward = isBoss
+                  ? calculateSingleEnemyReward(optMidLv + 1, true)
+                  : null;
+                const optRegularCount = isBoss
+                  ? Math.max(1, optionSize - 1)
+                  : optionSize;
+                const optExp = Math.round(
+                  (optRegularReward.exp * optRegularCount +
+                    (optBossReward?.exp ?? 0)) *
+                    adminConfig.rewardMultiplier
+                );
+                const optCr = Math.round(
+                  (optRegularReward.credits * optRegularCount +
+                    (optBossReward?.credits ?? 0)) *
+                    adminConfig.rewardMultiplier
+                );
+
                 return (
-                  <div
-                    key={`${opt.kind}_${opt.sourceId ?? 'default'}`}
-                    data-testid={`map-option-row-${opt.kind}`}
-                    className="flex items-center justify-between gap-2 rounded border border-slate-800/90 bg-slate-950/80 px-2.5 py-2"
-                  >
-                    <div className="flex items-center gap-2 min-w-0 text-xs font-semibold text-slate-100">
-                      <OptionIcon className={`w-4 h-4 shrink-0 ${iconColor}`} />
-                      <span className="truncate">{rowLabel}</span>
-                    </div>
-                    <button
-                      type="button"
-                      data-testid={`map-option-deploy-${opt.kind}`}
-                      onClick={() => {
-                        setMobileBriefingOpen(false);
-                        startBattle(selectedSector.id, {
-                          kind: opt.kind,
-                          sourceId: opt.sourceId ?? null,
-                        });
+                  <div key={optionKey}>
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      aria-expanded={isExpanded}
+                      data-testid={`map-option-row-${opt.kind}`}
+                      onClick={toggleExpand}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          toggleExpand();
+                        }
                       }}
-                      className="min-h-[36px] px-3 rounded-md bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs inline-flex items-center gap-1 shrink-0 cursor-pointer whitespace-nowrap"
+                      className="flex items-center justify-between gap-2 rounded border border-slate-800/90 bg-slate-950/80 px-2.5 py-2 cursor-pointer hover:border-slate-700 transition-colors"
                     >
-                      <Rocket className="w-3.5 h-3.5 shrink-0" />
-                      <span>{t('map.deployShort')}</span>
-                    </button>
+                      <div className="flex items-center gap-2 min-w-0 text-xs font-semibold text-slate-100">
+                        <OptionIcon
+                          className={`w-4 h-4 shrink-0 ${iconColor}`}
+                        />
+                        <span className="truncate">{rowLabel}</span>
+                        {isExpanded ? (
+                          <ChevronUp className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+                        ) : (
+                          <ChevronDown className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        data-testid={`map-option-deploy-${opt.kind}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setMobileBriefingOpen(false);
+                          startBattle(selectedSector.id, {
+                            kind: opt.kind,
+                            sourceId: opt.sourceId ?? null,
+                          });
+                        }}
+                        onKeyDown={(e) => e.stopPropagation()}
+                        className="min-h-[36px] px-3 rounded-md bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs inline-flex items-center gap-1 shrink-0 cursor-pointer whitespace-nowrap"
+                      >
+                        <Rocket className="w-3.5 h-3.5 shrink-0" />
+                        <span>{t('map.deployShort')}</span>
+                      </button>
+                    </div>
+                    {isExpanded && (
+                      <div
+                        data-testid={`map-option-preview-${opt.kind}`}
+                        className="mt-1 rounded border border-slate-800/90 bg-slate-900/75 px-2.5 py-2 text-[11px] leading-snug space-y-1"
+                      >
+                        <div className="flex flex-wrap items-center gap-x-1">
+                          <span className="text-slate-400 font-semibold">
+                            {t('map.preview.allyLabel')}:
+                          </span>
+                          <span className="text-slate-100 font-mono-nums">
+                            {t('map.preview.shipsLv', {
+                              size: optionSize,
+                              level: activeGear.level,
+                            })}
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-x-1">
+                          <span className="text-slate-400 font-semibold">
+                            {t('map.preview.enemyLabel')}:
+                          </span>
+                          <span
+                            className={`font-mono-nums font-semibold ${rangeColorClass}`}
+                          >
+                            {t('map.preview.shipsLvRange', {
+                              size: optionSize,
+                              min: optMinLv,
+                              max: optMaxLv,
+                            })}
+                          </span>
+                          {isBoss && (
+                            <span className="ml-1 px-1.5 py-0.5 rounded bg-red-950/80 border border-red-500/40 text-red-300 text-[10px] font-bold uppercase">
+                              {t('map.preview.bossTag')}
+                            </span>
+                          )}
+                        </div>
+                        {mixParts.length > 0 && (
+                          <div className="text-slate-300 break-words">
+                            <span className="text-slate-400">
+                              {t('map.preview.mixLabel')}:{' '}
+                            </span>
+                            {mixParts.join(' · ')}
+                          </div>
+                        )}
+                        <div className="flex flex-wrap items-center gap-x-1">
+                          <span className="text-slate-400">
+                            {t('map.preview.rewardLabel')}:
+                          </span>
+                          <span className="font-mono-nums text-emerald-300">
+                            ~{optExp} EXP · ~{optCr.toLocaleString()} CR
+                          </span>
+                        </div>
+                        {maxDiff >= 5 && (
+                          <div
+                            data-testid={`map-option-preview-warn-${opt.kind}`}
+                            className="text-red-400 font-semibold"
+                          >
+                            {t('map.preview.highDangerWarn', {
+                              diff: maxDiff,
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}

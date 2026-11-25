@@ -535,6 +535,21 @@ export function buildTurnQueue(battle: BattleState): TurnQueueView {
   };
 }
 
+export const ARCHETYPE_ROSTER_BY_SIZE: Record<BattleSize, EnemyArchetype[]> = {
+  4: ['gunship', 'drone', 'sniper', 'repair_ship'],
+  6: ['gunship', 'drone', 'gunship', 'sniper', 'repair_ship', 'sniper'],
+  8: [
+    'gunship',
+    'drone',
+    'gunship',
+    'drone',
+    'sniper',
+    'repair_ship',
+    'sniper',
+    'repair_ship',
+  ],
+};
+
 export function createInitialBattleState(
   pilot: PilotAccount,
   sectorId: string,
@@ -713,21 +728,7 @@ export function createInitialBattleState(
   }
 
   // 3. Hostile Squadron (3-row auto-placement with small random variation)
-  const archetypeRosterBySize: Record<BattleSize, EnemyArchetype[]> = {
-    4: ['gunship', 'drone', 'sniper', 'repair_ship'],
-    6: ['gunship', 'drone', 'gunship', 'sniper', 'repair_ship', 'sniper'],
-    8: [
-      'gunship',
-      'drone',
-      'gunship',
-      'drone',
-      'sniper',
-      'repair_ship',
-      'sniper',
-      'repair_ship',
-    ],
-  };
-  const roster = archetypeRosterBySize[rawSquadSize];
+  const roster = ARCHETYPE_ROSTER_BY_SIZE[rawSquadSize];
   const rawEnemyUnits: CombatUnit[] = [];
   const hasLevelOverride =
     adminConfig?.battleLevelOffsetOverride !== undefined &&

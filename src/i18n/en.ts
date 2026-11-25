@@ -1952,6 +1952,14 @@ export const EN_TRANSLATIONS = {
   'admin.supplyLimitDefendAttacker': 'Defend · Enemy',
   'admin.supplyLimitBossEscort': 'Boss · Escorts',
   'admin.supplyLimitBossPlayers': 'Boss · Players',
+  'map.preview.allyLabel': 'ALLY',
+  'map.preview.enemyLabel': 'ENEMY',
+  'map.preview.shipsLv': '{size} ships · Lv {level}',
+  'map.preview.shipsLvRange': '{size} ships · Lv {min}-{max}',
+  'map.preview.bossTag': 'Boss',
+  'map.preview.mixLabel': 'Mix',
+  'map.preview.rewardLabel': 'Est. reward',
+  'map.preview.highDangerWarn': 'Warning: Enemy +{diff} Lv above',
 } as const;
 
 export type TranslationKey = keyof typeof EN_TRANSLATIONS;

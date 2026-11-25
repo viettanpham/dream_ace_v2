@@ -1955,6 +1955,14 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'admin.supplyLimitDefendAttacker': 'Phòng thủ · Địch',
   'admin.supplyLimitBossEscort': 'Boss · Hộ tống',
   'admin.supplyLimitBossPlayers': 'Boss · Phe ta',
+  'map.preview.allyLabel': 'PHE TA',
+  'map.preview.enemyLabel': 'ĐỊCH',
+  'map.preview.shipsLv': '{size} tàu · Lv {level}',
+  'map.preview.shipsLvRange': '{size} tàu · Lv {min}-{max}',
+  'map.preview.bossTag': 'Boss',
+  'map.preview.mixLabel': 'Đội hình',
+  'map.preview.rewardLabel': 'Thưởng ước tính',
+  'map.preview.highDangerWarn': 'Cảnh báo: Địch vượt +{diff} cấp',
 };
 
 

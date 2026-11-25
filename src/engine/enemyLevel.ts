@@ -5,6 +5,7 @@ import type {
   EnemyLevelRange,
   EnemyLevelRangeKind,
 } from '../types/game';
+import { isPirateIncidentId } from './pirates';
 
 export const ENEMY_LEVEL_RANGE_KINDS: readonly EnemyLevelRangeKind[] = [
   'patrol',
@@ -186,4 +187,38 @@ export function clampEnemyLevel(
     getMaxLevel() + safeCfg.enemyLevelCapOverMax
   );
   return Math.max(1, Math.min(maxEnemyLevel, Math.round(rawLevel)));
+}
+
+export interface EnemyLevelBand {
+  min: number;
+  max: number;
+  mid: number;
+}
+
+export interface GetEnemyLevelBandOptions {
+  sourceId?: string | null;
+  hasBoss?: boolean;
+  forceBoss?: boolean;
+}
+
+export function getEnemyLevelBand(
+  kind: EnemyLevelRangeKind | BattleKind,
+  cfg?: Partial<EnemyLevelConfig> | null,
+  opts?: GetEnemyLevelBandOptions
+): EnemyLevelBand {
+  const safeCfg = sanitizeEnemyLevelConfig(cfg);
+  let rangeKey: EnemyLevelRangeKind;
+  if (opts?.hasBoss || opts?.forceBoss || kind === 'boss') {
+    rangeKey = 'boss';
+  } else if (kind === 'event' && isPirateIncidentId(opts?.sourceId)) {
+    rangeKey = 'pirate';
+  } else {
+    rangeKey = resolveEnemyLevelRangeKind(kind);
+  }
+  const range = safeCfg.ranges[rangeKey];
+  return {
+    min: range.min,
+    max: range.max,
+    mid: Math.round((range.min + range.max) / 2),
+  };
 }
