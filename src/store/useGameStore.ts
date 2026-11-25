@@ -93,10 +93,7 @@ import {
 } from '../engine/supplies';
 import { computeSupplyPrice } from '../engine/itemPrice';
 import {
-  addModuleDropsToPilot,
   clearModule as clearModuleEngine,
-  mergeModuleStacks,
-  rollBattleModuleDrops,
   setModule as setModuleEngine,
 } from '../engine/extenders';
 import {
@@ -469,11 +466,13 @@ interface GameStoreState {
   setExtenderModule: (
     gearId: MechClassId,
     index: number,
-    templateId: string | null
+    instanceId: string | null
   ) => {
     ok: boolean;
     reason?: ExtenderEquipFailureReason | 'locked';
     reasonKey?: string | null;
+    conflictSocket?: number;
+    reasonParams?: { socket: number };
   };
   undoQuickSell: () => { ok: boolean; restoredCount: number };
   clearQuickSellUndo: () => void;
@@ -720,12 +719,6 @@ function finalizeBattleOutcome(
     deployedGear.level,
     won
   );
-  const droppedModules = rollBattleModuleDrops(
-    updatedUnits.filter((u) => u.side === 'enemy'),
-    battle.sectorId,
-    deployedGear.level,
-    won
-  );
 
   // Active EXP Boost consumable (+50% EXP for N battles)
   const expBoostActive = (state.pilot.activeExpBoostBattles ?? 0) > 0;
@@ -763,13 +756,8 @@ function finalizeBattleOutcome(
       ? Math.max(0, (state.pilot.activeExpBoostBattles ?? 1) - 1)
       : 0,
   };
-  const moduleGrantResult = addModuleDropsToPilot(
-    pilotWithBaseRewards,
-    droppedModules
-  );
-  const basePilotBeforeConsequences = moduleGrantResult.pilot;
-  const totalCreditsGained =
-    rewards.creditsGained + moduleGrantResult.creditsGained;
+  const basePilotBeforeConsequences = pilotWithBaseRewards;
+  const totalCreditsGained = rewards.creditsGained;
 
   // Freshly captured bases start Damaged (assault only); repelled raids clear alert (defend only); bonus missions paid (assault/defend)
   const baseConseq = applyBattleBaseConsequences(
@@ -844,10 +832,6 @@ function finalizeBattleOutcome(
       totalWarPoints:
         state.autoRepeatSession.totalWarPoints + rewards.warPointsGained,
       totalDrops: [...state.autoRepeatSession.totalDrops, ...droppedItems],
-      totalModuleDrops: mergeModuleStacks(
-        state.autoRepeatSession.totalModuleDrops,
-        droppedModules
-      ),
     };
     if (state.autoRepeatSession.active) {
       const boxCap = getBoxCapacity(state.adminConfig);
@@ -973,7 +957,6 @@ function finalizeBattleOutcome(
         totalEnemies: enemies.length,
         alliesSurviving: aliveAllies.length,
         droppedItems,
-        droppedModules,
       },
     },
   };
@@ -1827,7 +1810,6 @@ export const useGameStore = create<GameStoreState>()(
               totalCredits: 0,
               totalWarPoints: 0,
               totalDrops: [],
-              totalModuleDrops: [],
               stopReason: 'inventory_full',
             },
           });
@@ -1885,7 +1867,6 @@ export const useGameStore = create<GameStoreState>()(
                 totalCredits: 0,
                 totalWarPoints: 0,
                 totalDrops: [],
-                totalModuleDrops: [],
                 stopReason,
               },
             });
@@ -1912,7 +1893,6 @@ export const useGameStore = create<GameStoreState>()(
             totalCredits: 0,
             totalWarPoints: 0,
             totalDrops: [],
-            totalModuleDrops: [],
             stopReason: null,
           },
         });
@@ -2303,7 +2283,7 @@ export const useGameStore = create<GameStoreState>()(
         return { ok: true, rejected };
       },
 
-      setExtenderModule: (gearId, index, templateId) => {
+      setExtenderModule: (gearId, index, instanceId) => {
         const state = get();
         if (isBattleActive(state) || Boolean(state.autoRepeatSession?.active)) {
           return {
@@ -2312,7 +2292,7 @@ export const useGameStore = create<GameStoreState>()(
             reasonKey: 'extender.reason.locked',
           };
         }
-        if (templateId === null) {
+        if (instanceId === null) {
           const cleared = clearModuleEngine(state.pilot, gearId, index);
           if (!cleared.ok) {
             return {
@@ -2328,7 +2308,7 @@ export const useGameStore = create<GameStoreState>()(
           state.pilot,
           gearId,
           index,
-          templateId,
+          instanceId,
           state.adminConfig
         );
         if (!equipped.ok) {
@@ -2336,6 +2316,12 @@ export const useGameStore = create<GameStoreState>()(
             ok: false,
             reason: equipped.reason ?? 'socket_locked',
             reasonKey: equipped.reasonKey,
+            ...(equipped.conflictSocket !== undefined
+              ? {
+                  conflictSocket: equipped.conflictSocket,
+                  reasonParams: equipped.reasonParams,
+                }
+              : {}),
           };
         }
         set({ pilot: equipped.pilot, hasSaveData: true });

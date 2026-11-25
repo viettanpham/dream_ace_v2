@@ -5,23 +5,18 @@ import * as modulesData from '../../data/modules';
 import { EN_TRANSLATIONS } from '../../i18n/en';
 import { VI_TRANSLATIONS } from '../../i18n/vi';
 import { useGameStore } from '../../store/useGameStore';
-import type { CombatUnit, ItemInstance } from '../../types/game';
+import type { ItemInstance } from '../../types/game';
 import {
   generateItemInstance,
-  rollBattleItemDrops,
   sumGearEquipmentStats,
   sumGearSpecialTraits,
 } from '../equipment';
 import {
-  addModuleToPilot,
   canEquipModule,
   getGearModuleSkillGrants,
   getUnlockedExtenderCount,
-  MODULE_STACK_CAP,
-  rollBattleModuleDrops,
   setModule,
 } from '../extenders';
-import { getModuleSellPrice } from '../itemPrice';
 import {
   createFreshCampaignState,
   CURRENT_SAVE_VERSION,
@@ -30,58 +25,14 @@ import {
 import { getStatBreakdown } from '../statBreakdown';
 import { calculateDerivedStats, calculateEffectiveStats } from '../stats';
 
-function createSeededRng(seed = 123456789): () => number {
-  let s = seed >>> 0;
-  return () => {
-    s = (1664525 * s + 1013904223) >>> 0;
-    return s / 0x100000000;
-  };
-}
-
-function makeEnemy(id: string, isBoss = false, alive = false): CombatUnit {
+function makeModInstance(instanceId: string, templateId: string): ItemInstance {
   return {
-    id,
-    name: id,
-    callsign: id,
-    side: 'enemy',
-    row: 'front',
-    isPlayer: false,
-    isBoss,
-    classId: 'striker',
-    level: 5,
-    skillLevel: 1,
-    skillLevels: {},
-    equippedSkillIds: [],
-    skillCooldowns: {},
-    usedOnceSkills: [],
-    stats: { ...EMPTY_STAT_BLOCK },
-    derived: {
-      maxHp: 100,
-      maxShield: 0,
-      maxSp: 50,
-      speed: 10,
-      attackPower: 10,
-      defenseRating: 10,
-      dodgeChance: 0,
-      critChance: 0,
-      skillPower: 10,
-      armorPiercePct: 0,
-      accuracyPct: 0,
-      splashPct: 0,
-      spRegenPerTurn: 0,
-      passiveSkillDmgPct: 0,
-    },
-    hp: alive ? 100 : 0,
-    shield: 0,
-    sp: 0,
-    alive,
-    isDefending: false,
-    statuses: [],
-    animState: 'idle',
+    ...generateItemInstance({ templateId }),
+    instanceId,
   };
 }
 
-describe('EXT1a-2 extender rules, stats, drops & store guard', () => {
+describe('EXT1a-2 extender rules, stats & store guard (converted to instance sockets)', () => {
   beforeEach(() => {
     useGameStore.getState().resetCampaign();
   });
@@ -94,50 +45,58 @@ describe('EXT1a-2 extender rules, stats, drops & store guard', () => {
     const campaign = createFreshCampaignState('Pilot', 'striker');
     const striker = campaign.pilot.gears.striker;
 
-    expect(getUnlockedExtenderCount({ ...striker, level: 1 }, campaign.adminConfig)).toBe(0);
-    expect(getUnlockedExtenderCount({ ...striker, level: 5 }, campaign.adminConfig)).toBe(1);
-    expect(getUnlockedExtenderCount({ ...striker, level: 15 }, campaign.adminConfig)).toBe(2);
-    expect(getUnlockedExtenderCount({ ...striker, level: 45 }, campaign.adminConfig)).toBe(5);
+    expect(getUnlockedExtenderCount({ ...striker, level: 9 }, campaign.adminConfig)).toBe(0);
+    expect(getUnlockedExtenderCount({ ...striker, level: 10 }, campaign.adminConfig)).toBe(1);
+    expect(getUnlockedExtenderCount({ ...striker, level: 20 }, campaign.adminConfig)).toBe(2);
+    expect(getUnlockedExtenderCount({ ...striker, level: 50 }, campaign.adminConfig)).toBe(5);
     expect(
       getUnlockedExtenderCount(
-        { ...striker, level: 5 },
-        { ...campaign.adminConfig, extenderUnlockLevels: [1, 2, 10, 20, 30] }
+        { ...striker, level: 10 },
+        { ...campaign.adminConfig, extenderLevelsPerSocket: 5 }
       )
     ).toBe(2);
 
-    campaign.pilot.modules = [
-      { templateId: 'mod_stat_attack_t1', count: 1 },
-      { templateId: 'mod_stat_attack_t2', count: 1 },
-    ];
+    const modAtk1 = makeModInstance('m_atk1', 'mod_stat_attack_t1');
+    const modAtk2 = makeModInstance('m_atk2', 'mod_stat_attack_t2');
+    campaign.pilot.inventory.push(modAtk1, modAtk2);
+
     expect(
-      canEquipModule(campaign.pilot, 'striker', 0, 'mod_stat_attack_t1', campaign.adminConfig).reason
+      canEquipModule(campaign.pilot, 'striker', 0, modAtk1.instanceId, campaign.adminConfig).reason
     ).toBe('socket_locked');
 
     campaign.pilot.gears.striker.level = 2;
     const customAdmin = {
       ...campaign.adminConfig,
-      extenderUnlockLevels: [1, 15, 25, 35, 45],
+      extenderLevelsPerSocket: 2,
     };
     expect(
-      canEquipModule(campaign.pilot, 'striker', 0, 'mod_stat_attack_t2', customAdmin).reason
+      canEquipModule(campaign.pilot, 'striker', 0, modAtk2.instanceId, customAdmin).reason
     ).toBe('level_too_low');
 
-    campaign.pilot.gears.striker.level = 15;
-    campaign.pilot.modules = [];
+    campaign.pilot.gears.striker.level = 20;
     expect(
-      canEquipModule(campaign.pilot, 'striker', 0, 'mod_stat_attack_t1', campaign.adminConfig).reason
-    ).toBe('not_owned');
+      canEquipModule(campaign.pilot, 'striker', 0, 'missing_mod', campaign.adminConfig).reason
+    ).toBe('not_module');
 
-    campaign.pilot.modules = [
-      { templateId: 'mod_stat_attack_t1', count: 1 },
-      { templateId: 'mod_stat_attack_t2', count: 1 },
-    ];
-    campaign.pilot.gears.striker.extenders = ['mod_stat_attack_t1', null, null, null, null];
+    campaign.pilot.gears.striker.extenders = [modAtk1.instanceId, null, null, null, null];
+    const sameEffect = canEquipModule(
+      campaign.pilot,
+      'striker',
+      1,
+      modAtk2.instanceId,
+      campaign.adminConfig
+    );
+    expect(sameEffect.reason).toBe('same_effect');
+    expect(sameEffect.conflictSocket).toBe(1);
+
     expect(
-      canEquipModule(campaign.pilot, 'striker', 1, 'mod_stat_attack_t2', campaign.adminConfig).reason
-    ).toBe('same_effect');
+      getGearModuleSkillGrants(
+        campaign.pilot.gears.striker,
+        campaign.pilot.inventory,
+        campaign.adminConfig
+      )
+    ).toEqual([]);
 
-    expect(getGearModuleSkillGrants(campaign.pilot.gears.striker, campaign.adminConfig)).toEqual([]);
     const origGetMod = modulesData.getModuleTemplateById;
     vi.spyOn(modulesData, 'getModuleTemplateById').mockImplementation((id) => {
       if (id === 'mod_skill_test_t1') {
@@ -159,13 +118,18 @@ describe('EXT1a-2 extender rules, stats, drops & store guard', () => {
       }
       return origGetMod(id);
     });
-    campaign.pilot.modules.push({ templateId: 'mod_skill_test_t1', count: 1 });
+    const modSkill: ItemInstance = {
+      ...modAtk1,
+      instanceId: 'm_skill_1',
+      templateId: 'mod_skill_test_t1',
+    };
+    campaign.pilot.inventory.push(modSkill);
     expect(
       canEquipModule(
         campaign.pilot,
         'striker',
         1,
-        'mod_skill_test_t1',
+        modSkill.instanceId,
         { ...campaign.adminConfig, maxSkillModulesPerGear: 0 }
       ).reason
     ).toBe('skill_limit');
@@ -173,7 +137,8 @@ describe('EXT1a-2 extender rules, stats, drops & store guard', () => {
     for (const key of [
       'extender.reason.socket_locked',
       'extender.reason.level_too_low',
-      'extender.reason.not_owned',
+      'extender.reason.not_module',
+      'extender.reason.in_other_gear',
       'extender.reason.same_effect',
       'extender.reason.skill_limit',
       'extender.reason.locked',
@@ -183,22 +148,21 @@ describe('EXT1a-2 extender rules, stats, drops & store guard', () => {
     }
   });
 
-  it('2) shared owned count across gears and sanitizer cleans over-owned & same-effect refs', () => {
+  it('2) single-owner instance across gears and sanitizer cleans duplicate & same-effect refs', () => {
     const campaign = createFreshCampaignState('Pilot', 'striker');
-    campaign.pilot.gears.striker.level = 25;
+    campaign.pilot.gears.striker.level = 30;
     campaign.pilot.gears.interceptor.owned = true;
-    campaign.pilot.gears.interceptor.level = 25;
-    campaign.pilot.modules = [
-      { templateId: 'mod_stat_attack_t1', count: 1 },
-      { templateId: 'mod_stat_attack_t2', count: 1 },
-      { templateId: 'mod_stat_defense_t1', count: 1 },
-    ];
+    campaign.pilot.gears.interceptor.level = 30;
+    const modAtk1 = makeModInstance('m_atk1', 'mod_stat_attack_t1');
+    const modAtk2 = makeModInstance('m_atk2', 'mod_stat_attack_t2');
+    const modDef1 = makeModInstance('m_def1', 'mod_stat_defense_t1');
+    campaign.pilot.inventory.push(modAtk1, modAtk2, modDef1);
 
     const equipped = setModule(
       campaign.pilot,
       'striker',
       0,
-      'mod_stat_attack_t1',
+      modAtk1.instanceId,
       campaign.adminConfig
     );
     expect(equipped.ok).toBe(true);
@@ -207,10 +171,10 @@ describe('EXT1a-2 extender rules, stats, drops & store guard', () => {
         equipped.pilot,
         'interceptor',
         0,
-        'mod_stat_attack_t1',
+        modAtk1.instanceId,
         campaign.adminConfig
       ).reason
-    ).toBe('not_owned');
+    ).toBe('in_other_gear');
 
     const rawSave = {
       adminConfig: campaign.adminConfig,
@@ -221,9 +185,9 @@ describe('EXT1a-2 extender rules, stats, drops & store guard', () => {
           striker: {
             ...equipped.pilot.gears.striker,
             extenders: [
-              'mod_stat_attack_t1',
-              'mod_stat_attack_t2',
-              'mod_stat_defense_t1',
+              modAtk1.instanceId,
+              modAtk2.instanceId,
+              modDef1.instanceId,
               null,
               null,
             ],
@@ -231,8 +195,8 @@ describe('EXT1a-2 extender rules, stats, drops & store guard', () => {
           interceptor: {
             ...equipped.pilot.gears.interceptor,
             extenders: [
-              'mod_stat_attack_t1',
-              'mod_stat_defense_t1',
+              modAtk1.instanceId,
+              modDef1.instanceId,
               null,
               null,
               null,
@@ -243,9 +207,9 @@ describe('EXT1a-2 extender rules, stats, drops & store guard', () => {
     };
     const migrated = migrateSaveData(rawSave, CURRENT_SAVE_VERSION);
     expect(migrated.pilot.gears.striker.extenders).toEqual([
-      'mod_stat_attack_t1',
+      modAtk1.instanceId,
       null,
-      'mod_stat_defense_t1',
+      modDef1.instanceId,
       null,
       null,
     ]);
@@ -258,12 +222,19 @@ describe('EXT1a-2 extender rules, stats, drops & store guard', () => {
     ]);
   });
 
-  it('3) unlocked stat + trait modules affect derived/breakdown stats, locked gives 0, caps hold', () => {
+  it('3) unlocked stat + trait module instances affect derived/breakdown stats, locked gives 0, caps hold', () => {
     const campaign = createFreshCampaignState('Pilot', 'striker');
     const gear = campaign.pilot.gears.striker;
     gear.level = 50;
-    const baseBonuses = sumGearEquipmentStats(gear, [], campaign.adminConfig);
-    const baseTraits = sumGearSpecialTraits(gear, [], campaign.adminConfig);
+    const mods = [
+      makeModInstance('m1', 'mod_stat_attack_t2'),
+      makeModInstance('m2', 'mod_trait_accuracyPct_t4'),
+      makeModInstance('m3', 'mod_trait_spRegenPerTurn_t3'),
+      makeModInstance('m4', 'mod_trait_critBonusPct_t4'),
+      makeModInstance('m5', 'mod_trait_armorPiercePct_t4'),
+    ];
+    const baseBonuses = sumGearEquipmentStats(gear, mods, campaign.adminConfig);
+    const baseTraits = sumGearSpecialTraits(gear, mods, campaign.adminConfig);
     const baseEffective = calculateEffectiveStats(
       gear.classId,
       gear.level,
@@ -279,15 +250,9 @@ describe('EXT1a-2 extender rules, stats, drops & store guard', () => {
       baseTraits
     );
 
-    gear.extenders = [
-      'mod_stat_attack_t2',
-      'mod_trait_accuracyPct_t4',
-      'mod_trait_spRegenPerTurn_t3',
-      'mod_trait_critBonusPct_t4',
-      'mod_trait_armorPiercePct_t4',
-    ];
-    const modBonuses = sumGearEquipmentStats(gear, [], campaign.adminConfig);
-    const modTraits = sumGearSpecialTraits(gear, [], campaign.adminConfig);
+    gear.extenders = mods.map((m) => m.instanceId);
+    const modBonuses = sumGearEquipmentStats(gear, mods, campaign.adminConfig);
+    const modTraits = sumGearSpecialTraits(gear, mods, campaign.adminConfig);
     const modEffective = calculateEffectiveStats(
       gear.classId,
       gear.level,
@@ -312,9 +277,9 @@ describe('EXT1a-2 extender rules, stats, drops & store guard', () => {
     expect(modDerived.armorPiercePct).toBe(baseDerived.armorPiercePct + 8);
 
     gear.level = 10;
-    const partialBonuses = sumGearEquipmentStats(gear, [], campaign.adminConfig);
-    const partialTraits = sumGearSpecialTraits(gear, [], campaign.adminConfig);
-    expect(gear.extenders[1]).toBe('mod_trait_accuracyPct_t4');
+    const partialBonuses = sumGearEquipmentStats(gear, mods, campaign.adminConfig);
+    const partialTraits = sumGearSpecialTraits(gear, mods, campaign.adminConfig);
+    expect(gear.extenders[1]).toBe('m2');
     expect(partialBonuses.attack).toBe(baseBonuses.attack + 5);
     expect(partialTraits.accuracyPct).toBe(0);
     expect(partialTraits.spRegenPerTurn).toBe(0);
@@ -326,82 +291,29 @@ describe('EXT1a-2 extender rules, stats, drops & store guard', () => {
       specialTraits: { accuracyPct: 28, critBonusPct: 90, armorPiercePct: 48 },
     };
     gear.equipped.radar = overCapItem.instanceId;
-    const cappedTraits = sumGearSpecialTraits(gear, [overCapItem], campaign.adminConfig);
+    const cappedTraits = sumGearSpecialTraits(gear, [...mods, overCapItem], campaign.adminConfig);
     const cappedDerived = calculateDerivedStats(gear.classId, gear.level, modEffective, cappedTraits);
     expect(cappedDerived.accuracyPct).toBe(BALANCE_CONFIG.maxAccuracyPct);
     expect(cappedDerived.critChance).toBe(COMBAT_FORMULAS.maxCritChance);
     expect(cappedDerived.armorPiercePct).toBe(50);
   });
 
-  it('4) module drops respect difficulty/boss/loss, max 1, tier cap, cap 99 -> CR, and keep item drops identical', () => {
-    const enemies = [makeEnemy('e1', false, false)];
-    const bossEnemies = [makeEnemy('b1', true, false)];
-
-    const countDrops = (list: CombatUnit[], sectorId: string, won: boolean, runs = 2000) => {
-      const rng = createSeededRng(777);
-      let drops = 0;
-      for (let i = 0; i < runs; i++) {
-        const res = rollBattleModuleDrops(list, sectorId, 1, won, rng);
-        expect(res.length).toBeLessThanOrEqual(1);
-        for (const d of res) {
-          const tpl = modulesData.getModuleTemplateById(d.templateId)!;
-          expect(tpl.family === 'stat' || tpl.family === 'trait').toBe(true);
-          if (tpl.family === 'trait') expect(tpl.tier).toBeGreaterThanOrEqual(2);
-          if (sectorId === 'border_outpost') expect(tpl.tier).toBeLessThanOrEqual(2);
-        }
-        drops += res.length;
-      }
-      return drops / runs;
-    };
-
-    const stdWinRate = countDrops(enemies, 'border_outpost', true);
-    const hardWinRate = countDrops(enemies, 'debris_belt', true);
-    const eliteWinRate = countDrops(enemies, 'iron_citadel', true);
-    const bossRate = countDrops(bossEnemies, 'border_outpost', true);
-    const stdLossRate = countDrops(enemies, 'border_outpost', false);
-
-    expect(stdWinRate).toBeGreaterThan(0.04);
-    expect(stdWinRate).toBeLessThan(0.08);
-    expect(hardWinRate).toBeGreaterThan(stdWinRate);
-    expect(eliteWinRate).toBeGreaterThan(hardWinRate);
-    expect(bossRate).toBeGreaterThan(0.32);
-    expect(stdLossRate).toBeLessThan(stdWinRate);
-
-    const rngA = createSeededRng(424242);
-    const itemsOnly = rollBattleItemDrops(enemies, 'debris_belt', 6, true, rngA);
-    const rngB = createSeededRng(424242);
-    const itemsWithModAfter = rollBattleItemDrops(enemies, 'debris_belt', 6, true, rngB);
-    rollBattleModuleDrops(enemies, 'debris_belt', 6, true, rngB);
-    expect(itemsWithModAfter.map((x) => x.templateId)).toEqual(
-      itemsOnly.map((x) => x.templateId)
-    );
-
-    const campaign = createFreshCampaignState('Pilot', 'striker');
-    const tpl = modulesData.getModuleTemplateById('mod_stat_attack_t2')!;
-    campaign.pilot.credits = 100;
-    campaign.pilot.modules = [{ templateId: tpl.id, count: MODULE_STACK_CAP }];
-    const added = addModuleToPilot(campaign.pilot, tpl.id, 1);
-    expect(added.overflow).toBe(1);
-    expect(added.creditsGained).toBe(getModuleSellPrice(tpl));
-    expect(added.pilot.credits).toBe(100 + getModuleSellPrice(tpl));
-    expect(added.pilot.modules).toEqual([{ templateId: tpl.id, count: MODULE_STACK_CAP }]);
-  });
-
   it('5) setExtenderModule works out of battle and is blocked in battle and auto-repeat', () => {
     const store = useGameStore.getState();
+    const modAtk1 = makeModInstance('store_mod_atk1', 'mod_stat_attack_t1');
     useGameStore.setState((s) => ({
       pilot: {
         ...s.pilot,
-        modules: [{ templateId: 'mod_stat_attack_t1', count: 1 }],
+        inventory: [...s.pilot.inventory, modAtk1],
         gears: {
           ...s.pilot.gears,
-          striker: { ...s.pilot.gears.striker, level: 5 },
+          striker: { ...s.pilot.gears.striker, level: 10 },
         },
       },
     }));
 
-    expect(store.setExtenderModule('striker', 0, 'mod_stat_attack_t1').ok).toBe(true);
-    expect(useGameStore.getState().pilot.gears.striker.extenders?.[0]).toBe('mod_stat_attack_t1');
+    expect(store.setExtenderModule('striker', 0, modAtk1.instanceId).ok).toBe(true);
+    expect(useGameStore.getState().pilot.gears.striker.extenders?.[0]).toBe(modAtk1.instanceId);
 
     store.startBattle('border_outpost');
     const inBattleRes = useGameStore
@@ -422,7 +334,6 @@ describe('EXT1a-2 extender rules, stats, drops & store guard', () => {
         totalCredits: 0,
         totalWarPoints: 0,
         totalDrops: [],
-        totalModuleDrops: [],
         stopReason: null,
       },
     });

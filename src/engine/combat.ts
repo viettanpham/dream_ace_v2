@@ -559,12 +559,14 @@ export function createInitialBattleState(
   const playerEquipBonuses = sumGearEquipmentStats(
     activeGear,
     pilot.inventory,
-    adminConfig
+    adminConfig,
+    pilot.warehouse
   );
   const playerTraits = sumGearSpecialTraits(
     activeGear,
     pilot.inventory,
-    adminConfig
+    adminConfig,
+    pilot.warehouse
   );
   const playerPassives = getGearPassiveBonuses(activeGear);
 

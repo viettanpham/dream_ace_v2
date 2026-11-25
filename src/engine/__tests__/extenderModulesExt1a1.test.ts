@@ -78,10 +78,10 @@ describe('TASK EXT1a-1 — Extender modules data, pricing, and Save v12 migratio
     );
   });
 
-  it('3) migration v11 -> v12 fills modules [], extenders 5x null, and default admin values', () => {
-    expect(CURRENT_SAVE_VERSION).toBe(12);
+  it('3) migration v12 -> v13 converts stacks/extenders, drops pilot.modules & extenderUnlockLevels, and fills default admin values', () => {
+    expect(CURRENT_SAVE_VERSION).toBe(13);
     const fresh = createFreshCampaignState('PilotExt', 'striker');
-    expect(fresh.pilot.modules).toEqual([]);
+    expect('modules' in fresh.pilot).toBe(false);
     expect(fresh.pilot.gears.striker.extenders).toEqual([
       null,
       null,
@@ -89,122 +89,150 @@ describe('TASK EXT1a-1 — Extender modules data, pricing, and Save v12 migratio
       null,
       null,
     ]);
-    expect(fresh.adminConfig.extenderUnlockLevels).toEqual([5, 15, 25, 35, 45]);
+    expect(fresh.adminConfig.extenderLevelsPerSocket).toBe(10);
     expect(fresh.adminConfig.maxSkillModulesPerGear).toBe(1);
 
-    const v11Payload = JSON.parse(JSON.stringify(fresh));
-    delete v11Payload.pilot.modules;
-    delete v11Payload.pilot.gears.striker.extenders;
-    delete v11Payload.adminConfig.extenderUnlockLevels;
-    delete v11Payload.adminConfig.maxSkillModulesPerGear;
+    const v12Payload = JSON.parse(JSON.stringify(fresh));
+    v12Payload.pilot.gears.striker.level = 10;
+    v12Payload.pilot.modules = [{ templateId: 'mod_stat_attack_t1', count: 1 }];
+    v12Payload.pilot.gears.striker.extenders = [
+      'mod_stat_attack_t1',
+      null,
+      null,
+      null,
+      null,
+    ];
+    v12Payload.adminConfig.extenderUnlockLevels = [5, 15, 25, 35, 45];
+    delete v12Payload.adminConfig.extenderLevelsPerSocket;
+    delete v12Payload.adminConfig.maxSkillModulesPerGear;
 
-    const migrated = migrateSaveData(v11Payload, 11);
-    expect(migrated.pilot.modules).toEqual([]);
-    expect(migrated.pilot.gears.striker.extenders).toEqual([
-      null,
-      null,
-      null,
-      null,
-      null,
-    ]);
-    expect(migrated.adminConfig.extenderUnlockLevels).toEqual([
-      5, 15, 25, 35, 45,
-    ]);
+    const migrated = migrateSaveData(v12Payload, 12);
+    expect('modules' in migrated.pilot).toBe(false);
+    expect('extenderUnlockLevels' in migrated.adminConfig).toBe(false);
+    expect(migrated.adminConfig.extenderLevelsPerSocket).toBe(10);
     expect(migrated.adminConfig.maxSkillModulesPerGear).toBe(1);
-    expect(migrated.pilot.inventory).toHaveLength(fresh.pilot.inventory.length);
+    const createdMod = migrated.pilot.inventory.find(
+      (it) => it.slot === 'module' && it.templateId === 'mod_stat_attack_t1'
+    );
+    expect(createdMod).toBeDefined();
+    expect(migrated.pilot.gears.striker.extenders).toEqual([
+      createdMod!.instanceId,
+      null,
+      null,
+      null,
+      null,
+    ]);
   });
 
-  it('4) sanitizer cleans current-version save (duplicate merge, clamp, wrong length, unknown ids, bad admin levels)', () => {
+  it('4) sanitizer cleans current-version save (unknown/non-module/duplicate instance ids, wrong length, bad admin levels)', () => {
     const fresh = createFreshCampaignState('PilotSan', 'striker');
+    const modAtk = fresh.pilot.inventory[0]; // non-module starter item
+    const modA = {
+      ...modAtk,
+      instanceId: 'mod_inst_a',
+      templateId: 'mod_stat_attack_t1',
+      slot: 'module' as const,
+      classRestriction: null,
+    };
+    const modB = {
+      ...modAtk,
+      instanceId: 'mod_inst_b',
+      templateId: 'mod_trait_critBonusPct_t2',
+      slot: 'module' as const,
+      classRestriction: null,
+    };
+    const modC = {
+      ...modAtk,
+      instanceId: 'mod_inst_c',
+      templateId: 'mod_stat_fuel_t1',
+      slot: 'module' as const,
+      classRestriction: null,
+    };
+
     const dirtyCurrent = {
       ...fresh,
       pilot: {
         ...fresh.pilot,
-        modules: [
-          { templateId: 'mod_stat_attack_t1', count: 50 },
-          { templateId: 'mod_stat_attack_t1', count: 80 }, // merge & clamp -> 99
-          { templateId: 'mod_trait_accuracyPct_t2', count: 0 }, // clamp min 1
-          { templateId: 'mod_trait_critBonusPct_t2', count: 1 },
-          { templateId: 'mod_stat_fuel_t1', count: 1 },
-          { templateId: 'mod_stat_shield_t1', count: 1 },
-          { templateId: 'unknown_mod_id', count: 5 }, // dropped
-        ],
+        inventory: [...fresh.pilot.inventory, modA, modB, modC],
         gears: {
           ...fresh.pilot.gears,
           striker: {
             ...fresh.pilot.gears.striker,
             extenders: [
-              'mod_stat_attack_t1',
-              'unknown_extender',
-              'mod_trait_critBonusPct_t2',
-            ], // short length 3 -> padded to 5 with unknown -> null
+              modA.instanceId,
+              modAtk.instanceId, // non-module -> dropped
+              'unknown_extender_id', // unknown -> dropped
+              modB.instanceId,
+            ], // short length 4 -> padded to 5
           },
           interceptor: {
             ...fresh.pilot.gears.interceptor,
             extenders: [
-              'mod_stat_fuel_t1',
+              modA.instanceId, // duplicate across gears -> dropped
+              modC.instanceId,
               null,
-              'mod_stat_shield_t1',
               null,
               null,
-              'mod_stat_attack_t4', // index 5 cut off
+              modB.instanceId, // index 5 cut off
             ],
           },
         },
       },
       adminConfig: {
         ...createDefaultAdminConfig(),
-        extenderUnlockLevels: [20, 10, 30, 40, 50], // non-monotonic -> default
+        extenderLevelsPerSocket: 99, // clamped to 50
         maxSkillModulesPerGear: 9, // clamped to 2
       },
     };
 
     const migrated = migrateSaveData(dirtyCurrent, CURRENT_SAVE_VERSION);
-    expect(migrated.pilot.modules).toEqual([
-      { templateId: 'mod_stat_attack_t1', count: 99 },
-      { templateId: 'mod_trait_accuracyPct_t2', count: 1 },
-      { templateId: 'mod_trait_critBonusPct_t2', count: 1 },
-      { templateId: 'mod_stat_fuel_t1', count: 1 },
-      { templateId: 'mod_stat_shield_t1', count: 1 },
-    ]);
     expect(migrated.pilot.gears.striker.extenders).toEqual([
-      'mod_stat_attack_t1',
+      modA.instanceId,
       null,
-      'mod_trait_critBonusPct_t2',
       null,
+      modB.instanceId,
       null,
     ]);
     expect(migrated.pilot.gears.interceptor.extenders).toEqual([
-      'mod_stat_fuel_t1',
       null,
-      'mod_stat_shield_t1',
+      modC.instanceId,
+      null,
       null,
       null,
     ]);
-    expect(migrated.adminConfig.extenderUnlockLevels).toEqual([
-      5, 15, 25, 35, 45,
-    ]);
+    expect(migrated.adminConfig.extenderLevelsPerSocket).toBe(50);
     expect(migrated.adminConfig.maxSkillModulesPerGear).toBe(2);
   });
 
-  it('5) SV1a export/import roundtrip keeps modules and extenders', async () => {
+  it('5) SV1a export/import roundtrip keeps module instances and extenders', async () => {
     const fresh = createFreshCampaignState('PilotRoundtrip', 'striker');
-    fresh.pilot.modules = [
-      { templateId: 'mod_stat_attack_t2', count: 4 },
-      { templateId: 'mod_trait_critBonusPct_t3', count: 2 },
-    ];
+    const modA = {
+      ...fresh.pilot.inventory[0],
+      instanceId: 'rt_mod_atk',
+      templateId: 'mod_stat_attack_t2',
+      slot: 'module' as const,
+      classRestriction: null,
+    };
+    const modB = {
+      ...fresh.pilot.inventory[0],
+      instanceId: 'rt_mod_crit',
+      templateId: 'mod_trait_critBonusPct_t3',
+      slot: 'module' as const,
+      classRestriction: null,
+    };
+    fresh.pilot.inventory.push(modA, modB);
     fresh.pilot.gears.striker.extenders = [
-      'mod_stat_attack_t2',
-      'mod_trait_critBonusPct_t3',
+      modA.instanceId,
+      modB.instanceId,
       null,
       null,
       null,
     ];
-    fresh.adminConfig.extenderUnlockLevels = [1, 10, 20, 30, 40];
+    fresh.adminConfig.extenderLevelsPerSocket = 8;
     fresh.adminConfig.maxSkillModulesPerGear = 2;
 
     const envelope = await buildExportEnvelope(fresh);
-    expect(envelope.saveVersion).toBe(12);
+    expect(envelope.saveVersion).toBe(13);
 
     const parsed = await parseImportEnvelope(JSON.stringify(envelope));
     expect(parsed.ok).toBe(true);
@@ -218,13 +246,10 @@ describe('TASK EXT1a-1 — Extender modules data, pricing, and Save v12 migratio
       decrypted.state,
       parsed.envelope.saveVersion
     );
-    expect(migrated.pilot.modules).toEqual(fresh.pilot.modules);
     expect(migrated.pilot.gears.striker.extenders).toEqual(
       fresh.pilot.gears.striker.extenders
     );
-    expect(migrated.adminConfig.extenderUnlockLevels).toEqual([
-      1, 10, 20, 30, 40,
-    ]);
+    expect(migrated.adminConfig.extenderLevelsPerSocket).toBe(8);
     expect(migrated.adminConfig.maxSkillModulesPerGear).toBe(2);
   });
 });

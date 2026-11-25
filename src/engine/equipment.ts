@@ -377,13 +377,26 @@ export function getGearEquippedInstances(
   return result;
 }
 
+function findModuleTemplateForSocket(
+  instanceId: string,
+  inventory: readonly ItemInstance[],
+  warehouse: readonly ItemInstance[] = []
+): ReturnType<typeof getModuleTemplateById> {
+  const inst =
+    inventory.find((it) => it.instanceId === instanceId) ??
+    warehouse.find((it) => it.instanceId === instanceId);
+  if (!inst || inst.slot !== 'module') return undefined;
+  return getModuleTemplateById(inst.templateId);
+}
+
 /**
  * Sums all effective flat stat bonuses across all equipped slots and unlocked stat extender modules of a GearUnit.
  */
 export function sumGearEquipmentStats(
   gear: GearUnit,
   inventory: ItemInstance[],
-  admin?: Pick<AdminConfig, 'extenderUnlockLevels'> | null
+  admin?: Pick<AdminConfig, 'extenderLevelsPerSocket'> | null,
+  warehouse: readonly ItemInstance[] = []
 ): StatBlock {
   const total: StatBlock = { ...EMPTY_STAT_BLOCK };
   const equippedMap = getGearEquippedInstances(gear, inventory);
@@ -401,9 +414,9 @@ export function sumGearEquipmentStats(
   const extenders = gear.extenders ?? [];
   const limit = Math.min(unlockedCount, extenders.length);
   for (let i = 0; i < limit; i++) {
-    const modId = extenders[i];
-    if (!modId) continue;
-    const tpl = getModuleTemplateById(modId);
+    const modInstanceId = extenders[i];
+    if (!modInstanceId) continue;
+    const tpl = findModuleTemplateForSocket(modInstanceId, inventory, warehouse);
     if (!tpl || tpl.family !== 'stat') continue;
     const statKey = tpl.effectKey as StatKey;
     if (statKey in total) {
@@ -421,7 +434,8 @@ export function sumGearEquipmentStats(
 export function sumGearSpecialTraits(
   gear: GearUnit,
   inventory: ItemInstance[],
-  admin?: Pick<AdminConfig, 'extenderUnlockLevels'> | null
+  admin?: Pick<AdminConfig, 'extenderLevelsPerSocket'> | null,
+  warehouse: readonly ItemInstance[] = []
 ): ItemSpecialTraits {
   const equippedMap = getGearEquippedInstances(gear, inventory);
   let critBonusPct = 0;
@@ -451,9 +465,9 @@ export function sumGearSpecialTraits(
   const extenders = gear.extenders ?? [];
   const limit = Math.min(unlockedCount, extenders.length);
   for (let i = 0; i < limit; i++) {
-    const modId = extenders[i];
-    if (!modId) continue;
-    const tpl = getModuleTemplateById(modId);
+    const modInstanceId = extenders[i];
+    if (!modInstanceId) continue;
+    const tpl = findModuleTemplateForSocket(modInstanceId, inventory, warehouse);
     if (!tpl || tpl.family !== 'trait') continue;
     if (tpl.effectKey === 'critBonusPct') critBonusPct += tpl.value;
     else if (tpl.effectKey === 'armorPiercePct') armorPiercePct += tpl.value;
@@ -474,8 +488,8 @@ export function sumGearSpecialTraits(
 }
 
 /**
- * Checks across all 4 Gears whether an ItemInstance is currently equipped,
- * and returns the Gear's MechClassId (or null if unequipped).
+ * Checks across all Gears whether an ItemInstance is currently equipped
+ * (in paper-doll slots or extender sockets), returning its MechClassId or null.
  */
 export function getItemEquippedByGear(
   gears: Record<MechClassId, GearUnit>,
@@ -488,6 +502,9 @@ export function getItemEquippedByGear(
       if (gear.equipped[slot] === instanceId) {
         return cls.id;
       }
+    }
+    if (gear.extenders?.some((id) => id === instanceId)) {
+      return cls.id;
     }
   }
   return null;
@@ -611,8 +628,25 @@ export function unequipInstanceFromAnyGear(
   if (!owner) return pilot;
   const gear = pilot.gears[owner];
   const slot = EQUIPMENT_SLOTS.find((s) => gear.equipped[s] === instanceId);
-  if (!slot) return pilot;
-  return unequipSlotOnGear(pilot, owner, slot);
+  if (slot) {
+    return unequipSlotOnGear(pilot, owner, slot);
+  }
+  const socketIdx = gear.extenders?.findIndex((id) => id === instanceId) ?? -1;
+  if (socketIdx >= 0) {
+    const nextExtenders = [...(gear.extenders ?? [])];
+    nextExtenders[socketIdx] = null;
+    return {
+      ...pilot,
+      gears: {
+        ...pilot.gears,
+        [owner]: {
+          ...gear,
+          extenders: nextExtenders,
+        },
+      },
+    };
+  }
+  return pilot;
 }
 
 /**

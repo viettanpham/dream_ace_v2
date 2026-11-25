@@ -158,10 +158,11 @@ export function calculateDerivedStats(
 export function calculateGearPowerRating(
   gear: GearUnit,
   inventory: ItemInstance[],
-  admin?: Pick<AdminConfig, 'extenderUnlockLevels'> | null
+  admin?: Pick<AdminConfig, 'extenderLevelsPerSocket'> | null,
+  warehouse: readonly ItemInstance[] = []
 ): number {
-  const equipBonuses = sumGearEquipmentStats(gear, inventory, admin);
-  const traits = sumGearSpecialTraits(gear, inventory, admin);
+  const equipBonuses = sumGearEquipmentStats(gear, inventory, admin, warehouse);
+  const traits = sumGearSpecialTraits(gear, inventory, admin, warehouse);
   const passives = getGearPassiveBonuses(gear);
   const stats = calculateEffectiveStats(
     gear.classId,
@@ -277,7 +278,6 @@ export function createDefaultPilotAccount(
     hiredWingman: null,
     engineerShieldBoost: false,
     activeBonusMission: null,
-    modules: [],
     squadFormation: createDefaultSquadFormation(name, starterClassId),
     formationCustomized: false,
   };

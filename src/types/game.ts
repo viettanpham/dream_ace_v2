@@ -561,17 +561,13 @@ export interface ModuleTemplate {
   registryTag: 'sys' | 'mods';
 }
 
-export interface PilotModuleStack {
-  templateId: string;
-  count: number;
-}
-
 export type ExtenderEquipFailureReason =
   | 'socket_locked'
   | 'level_too_low'
-  | 'not_owned'
+  | 'not_module'
   | 'same_effect'
-  | 'skill_limit';
+  | 'skill_limit'
+  | 'in_other_gear';
 
 export type EquippedSlotIds = Record<PaperDollSlot, string | null>;
 
@@ -756,7 +752,6 @@ export interface AutoRepeatSession {
   totalCredits: number;
   totalWarPoints: number;
   totalDrops: ItemInstance[];
-  totalModuleDrops?: PilotModuleStack[];
   stopReason: AutoStopReason | null;
 }
 
@@ -838,7 +833,6 @@ export interface PilotAccount {
   engineerShieldBoost: boolean;
   activeBonusMission: BonusMissionState | null;
   consumables?: ConsumableItem[];
-  modules?: PilotModuleStack[];
   activeExpBoostBattles?: number;
   activeEnchantBonusPct?: number;
   squadFormation?: SquadFormationUnit[];
@@ -1028,7 +1022,6 @@ export interface BattleSummary {
   totalEnemies: number;
   alliesSurviving: number;
   droppedItems: ItemInstance[];
-  droppedModules?: PilotModuleStack[];
 }
 
 export interface WingmanChatter {
@@ -1402,7 +1395,7 @@ export interface AdminConfig {
   supplyShopMaxTypes?: number;
   supplyShopMinQty?: number;
   supplyShopMaxQty?: number;
-  extenderUnlockLevels?: number[];
+  extenderLevelsPerSocket?: number;
   maxSkillModulesPerGear?: number;
   showRawI18nKeys: boolean;
 }

@@ -1,0 +1,7 @@
+# TASK EXT2a-2 Report
+- Items 1-4 xong (no UI, no module drops): `gear.extenders` giu `instanceId`, `extenderLevelsPerSocket` (default 10, 1-50), `canEquipModule`/`setModule`/`clearModule`, `getItemEquippedByGear` bao ve ban/quick-sell/enchant, `sumGearEquipmentStats`/`sumGearSpecialTraits` doc socket mo khoa, xoa he stack/drop cu, migrate v12->v13.
+- Files changed (code): `src/types/game.ts`, `src/i18n/vi.ts`, `src/i18n/en.ts`, `src/engine/extenders.ts`, `src/engine/equipment.ts`, `src/engine/stats.ts`, `src/engine/combat.ts`, `src/engine/migration.ts`, `src/store/useGameStore.ts`, `docs/CODEMAP.md`.
+- Save version: `12 -> 13` (`src/engine/migration.ts`); `src/engine/saveExport.ts` va `src/engine/cloudSave.ts` da dung dong `CURRENT_SAVE_VERSION` (chap nhan v12 & v13, chan >= v14).
+- Old tests changed/deleted: `extenderModulesExt1a1.test.ts` (doi test 3-5 sang v13/instance); `extenderRulesExt1a2.test.ts` (xoa test 4 stack drop/cap 99, doi test 1/2/3/5 sang instance); `saveV10Migration.test.ts` (cap nhat assert 12->13 va future v14); them moi `extenderRulesExt2a2.test.ts` (5 test).
+- Test: `npx tsc --noEmit` PASS; `npx vitest run --reporter=dot` 8 files lien quan (`extenderModulesExt1a1`, `extenderRulesExt1a2`, `extenderRulesExt2a2`, `moduleItemsExt2a1`, `engine`, `saveV10Migration`, `saveExport`, `cloudSave`) -> 8 files / 77 tests PASS.
+- NOT checked: full test suite, production build, browser.

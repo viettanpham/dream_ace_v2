@@ -65,7 +65,7 @@ describe('W1a-1 — Save v10 (warehouse, warehouseCapacity, worldClock + migrati
   });
 
   it('1) bumps CURRENT_SAVE_VERSION to 10 and includes defaults in createDefaultPilotAccount, createFreshCampaignState, and createDefaultAdminConfig', () => {
-    expect(CURRENT_SAVE_VERSION).toBe(12);
+    expect(CURRENT_SAVE_VERSION).toBe(13);
 
     const defaultPilot = createDefaultPilotAccount('Ace', 'striker');
     expect(defaultPilot.warehouse).toEqual([]);
@@ -233,7 +233,7 @@ describe('W1a-1 — Save v10 (warehouse, warehouseCapacity, worldClock + migrati
     const v10Envelope = await buildExportEnvelope(
       useGameStore.getState().exportSaveStateSnapshot()
     );
-    expect(v10Envelope.saveVersion).toBe(12);
+    expect(v10Envelope.saveVersion).toBe(13);
 
     // Parse & import v10
     const parsedV10 = await parseImportEnvelope(JSON.stringify(v10Envelope));
@@ -300,8 +300,11 @@ describe('W1a-1 — Save v10 (warehouse, warehouseCapacity, worldClock + migrati
     expect(afterV9.pilot.worldClock).toEqual(createDefaultWorldClock());
     expect(afterV9.adminConfig.warehouseCapacity).toBe(500);
 
-    // Newer-than-current (v13) is refused
-    const v11Check = validateImportSaveVersion(13, CURRENT_SAVE_VERSION);
+    // Newer-than-current (v14) is refused
+    const v11Check = validateImportSaveVersion(
+      CURRENT_SAVE_VERSION + 1,
+      CURRENT_SAVE_VERSION
+    );
     expect(v11Check.ok).toBe(false);
     if (!v11Check.ok) {
       expect(v11Check.error.code).toBe('VERSION_TOO_NEW');
@@ -309,7 +312,7 @@ describe('W1a-1 — Save v10 (warehouse, warehouseCapacity, worldClock + migrati
     const v11Envelope = await buildExportEnvelope(
       useGameStore.getState().exportSaveStateSnapshot(),
       undefined,
-      { saveVersion: 13 }
+      { saveVersion: CURRENT_SAVE_VERSION + 1 }
     );
     const parsedV11 = await parseImportEnvelope(JSON.stringify(v11Envelope));
     expect(parsedV11.ok).toBe(true);

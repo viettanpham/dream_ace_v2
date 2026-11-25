@@ -16,16 +16,18 @@ import {
   LEGACY_SKILL_ID_MAP,
 } from '../data/skills';
 import { SUPPLY_TEMPLATES } from '../data/consumables';
+import { getModuleTemplateById } from '../data/modules';
 import {
+  DEFAULT_EXTENDER_LEVELS_PER_SOCKET,
   DEFAULT_EXTENDER_SLOT_COUNT,
-  DEFAULT_EXTENDER_UNLOCK_LEVELS,
   DEFAULT_MAX_SKILL_MODULES_PER_GEAR,
-  MODULE_STACK_CAP,
-  sanitizeExtenderUnlockLevels,
+  getUnlockedExtenderCount,
+  MAX_EXTENDER_LEVELS_PER_SOCKET,
+  MIN_EXTENDER_LEVELS_PER_SOCKET,
+  sanitizeExtenderLevelsPerSocket,
   sanitizeGearExtenders,
   sanitizeGearExtendersAcrossPilot,
   sanitizeMaxSkillModulesPerGear,
-  sanitizePilotModules,
 } from './extenders';
 import {
   DEFAULT_ADMIN_SHOP_RARITY_WEIGHTS,
@@ -44,7 +46,6 @@ import type {
   Language,
   MechClassId,
   PilotAccount,
-  PilotModuleStack,
   QuickSellFilterConfig,
   ShopItemListing,
   StarterSetConfig,
@@ -74,7 +75,7 @@ import {
   DEFAULT_STARTER_SET_CONFIG,
   sanitizeStarterSetConfig,
 } from '../data/starterConfig';
-import { generateItemInstance } from './equipment';
+import { generateItemInstance, getSellPrice } from './equipment';
 import {
   createDefaultSquadFormation,
   migrateLegacySquadFormation,
@@ -120,18 +121,18 @@ import { sanitizeStatusDisplayDefaults } from '../utils/statusDisplayPrefs';
 
 export { createDefaultWorldClock };
 
-export const CURRENT_SAVE_VERSION = 12;
+export const CURRENT_SAVE_VERSION = 13;
 
 export {
+  DEFAULT_EXTENDER_LEVELS_PER_SOCKET,
   DEFAULT_EXTENDER_SLOT_COUNT,
-  DEFAULT_EXTENDER_UNLOCK_LEVELS,
   DEFAULT_MAX_SKILL_MODULES_PER_GEAR,
-  MODULE_STACK_CAP,
-  sanitizeExtenderUnlockLevels,
+  MAX_EXTENDER_LEVELS_PER_SOCKET,
+  MIN_EXTENDER_LEVELS_PER_SOCKET,
+  sanitizeExtenderLevelsPerSocket,
   sanitizeGearExtenders,
   sanitizeGearExtendersAcrossPilot,
   sanitizeMaxSkillModulesPerGear,
-  sanitizePilotModules,
 };
 
 export const DEFAULT_BOX_CAPACITY = 100;
@@ -306,7 +307,7 @@ export function createDefaultAdminConfig(): AdminConfig {
     supplyShopMaxTypes: DEFAULT_SUPPLY_SHOP_MAX_TYPES,
     supplyShopMinQty: DEFAULT_SUPPLY_SHOP_MIN_QTY,
     supplyShopMaxQty: DEFAULT_SUPPLY_SHOP_MAX_QTY,
-    extenderUnlockLevels: [...DEFAULT_EXTENDER_UNLOCK_LEVELS],
+    extenderLevelsPerSocket: DEFAULT_EXTENDER_LEVELS_PER_SOCKET,
     maxSkillModulesPerGear: DEFAULT_MAX_SKILL_MODULES_PER_GEAR,
     showRawI18nKeys: false,
   };
@@ -325,7 +326,6 @@ export function createFreshCampaignState(
   const basePilot: PilotAccount = {
     ...createDefaultPilotAccount(name, starterClassId, []),
     consumables: [],
-    modules: [],
     activeExpBoostBattles: 0,
     activeEnchantBonusPct: 0,
   };
@@ -626,8 +626,8 @@ export function migrateSaveData(
     supplyLoadoutSlots: sanitizeSupplyLoadoutSlots(rawAdmin.supplyLoadoutSlots),
     supplyUsesPerTurn: sanitizeSupplyUsesPerTurn(rawAdmin.supplyUsesPerTurn),
     ...sanitizeSupplyShopConfig(rawAdmin as Partial<AdminConfig>),
-    extenderUnlockLevels: sanitizeExtenderUnlockLevels(
-      rawAdmin.extenderUnlockLevels
+    extenderLevelsPerSocket: sanitizeExtenderLevelsPerSocket(
+      rawAdmin.extenderLevelsPerSocket
     ),
     maxSkillModulesPerGear: sanitizeMaxSkillModulesPerGear(
       rawAdmin.maxSkillModulesPerGear
@@ -667,21 +667,14 @@ export function migrateSaveData(
 
     const invIds = new Set<string>();
     const rawInventory: ItemInstance[] = [];
-    if (version >= CURRENT_SAVE_VERSION) {
-      for (const it of convertedInventory) {
-        if (invIds.has(it.instanceId)) continue;
-        invIds.add(it.instanceId);
-        rawInventory.push(it);
-      }
-    } else {
-      for (const it of convertedInventory) {
-        invIds.add(it.instanceId);
-        rawInventory.push(it);
-      }
+    for (const it of convertedInventory) {
+      if (invIds.has(it.instanceId)) continue;
+      invIds.add(it.instanceId);
+      rawInventory.push(it);
     }
 
     const rawWarehouse: ItemInstance[] = [];
-    if (version >= CURRENT_SAVE_VERSION && Array.isArray(rawPilot.warehouse)) {
+    if (version >= 10 && Array.isArray(rawPilot.warehouse)) {
       const warehouseIds = new Set<string>();
       for (const entry of rawPilot.warehouse) {
         const converted = convertLegacyItemInstance(entry, rng);
@@ -694,7 +687,7 @@ export function migrateSaveData(
     }
 
     const sanitizedWorldClock =
-      version < CURRENT_SAVE_VERSION
+      version < 10
         ? createDefaultWorldClock()
         : sanitizeWorldClock(rawPilot.worldClock);
 
@@ -880,15 +873,119 @@ export function migrateSaveData(
       rawPilot.formationCustomized
     );
 
-    const sanitizedModules = sanitizePilotModules(rawPilot.modules);
+    let migratedCredits = Math.max(0, Number(rawPilot.credits) || 0);
+
+    if (version < 13) {
+      const boxCap = adminConfig.boxCapacity ?? DEFAULT_BOX_CAPACITY;
+      const whCap = adminConfig.warehouseCapacity ?? DEFAULT_WAREHOUSE_CAPACITY;
+      const usedInstanceIds = new Set<string>([
+        ...invIds,
+        ...rawWarehouse.map((it) => it.instanceId),
+      ]);
+      const createdByTemplateId = new Map<string, ItemInstance[]>();
+
+      const rawModules = (rawPilot as Record<string, unknown>).modules;
+      if (Array.isArray(rawModules)) {
+        const mergedStacks = new Map<string, number>();
+        for (const entry of rawModules) {
+          if (!entry || typeof entry !== 'object') continue;
+          const rawEntry = entry as { templateId?: unknown; count?: unknown };
+          const templateId =
+            typeof rawEntry.templateId === 'string'
+              ? rawEntry.templateId.trim()
+              : '';
+          if (!templateId || !getModuleTemplateById(templateId)) continue;
+          if (
+            typeof rawEntry.count !== 'number' ||
+            !Number.isFinite(rawEntry.count)
+          ) {
+            continue;
+          }
+          const clamped = Math.max(1, Math.min(99, Math.round(rawEntry.count)));
+          const prev = mergedStacks.get(templateId) ?? 0;
+          mergedStacks.set(templateId, Math.min(99, prev + clamped));
+        }
+
+        for (const [templateId, count] of mergedStacks.entries()) {
+          for (let k = 0; k < count; k++) {
+            const inst = generateItemInstance({ templateId }, rng);
+            if (usedInstanceIds.has(inst.instanceId)) {
+              inst.instanceId = `${inst.instanceId}_${usedInstanceIds.size}`;
+            }
+            usedInstanceIds.add(inst.instanceId);
+
+            if (rawInventory.length < boxCap) {
+              rawInventory.push(inst);
+              const queue = createdByTemplateId.get(templateId) ?? [];
+              queue.push(inst);
+              createdByTemplateId.set(templateId, queue);
+            } else if (rawWarehouse.length < whCap) {
+              rawWarehouse.push(inst);
+              const queue = createdByTemplateId.get(templateId) ?? [];
+              queue.push(inst);
+              createdByTemplateId.set(templateId, queue);
+            } else {
+              migratedCredits += getSellPrice(inst);
+            }
+          }
+        }
+      }
+
+      for (const cls of MECH_CLASS_LIST) {
+        const gear = gears[cls.id];
+        if (!gear) continue;
+        const unlockedCount = getUnlockedExtenderCount(gear, adminConfig);
+        const seenEffectOnGear = new Set<string>();
+        const seenSkillOnGear = new Set<string>();
+        const convertedExtenders: (string | null)[] = Array(
+          DEFAULT_EXTENDER_SLOT_COUNT
+        ).fill(null);
+
+        for (let i = 0; i < DEFAULT_EXTENDER_SLOT_COUNT; i++) {
+          const val = gear.extenders?.[i] ?? null;
+          if (!val || i >= unlockedCount) {
+            convertedExtenders[i] = null;
+            continue;
+          }
+          const tpl = getModuleTemplateById(val);
+          if (tpl) {
+            const effKey = `${tpl.family}:${tpl.effectKey}`;
+            if (
+              seenEffectOnGear.has(effKey) ||
+              (tpl.skillId && seenSkillOnGear.has(tpl.skillId))
+            ) {
+              convertedExtenders[i] = null;
+              continue;
+            }
+            const assigned = createdByTemplateId.get(val)?.shift();
+            if (assigned) {
+              convertedExtenders[i] = assigned.instanceId;
+              seenEffectOnGear.add(effKey);
+              if (tpl.skillId) {
+                seenSkillOnGear.add(tpl.skillId);
+              }
+            }
+          } else {
+            convertedExtenders[i] = val;
+          }
+        }
+
+        gears[cls.id] = {
+          ...gear,
+          extenders: convertedExtenders,
+        };
+      }
+    }
+
     const sanitizedGears = sanitizeGearExtendersAcrossPilot(
       gears,
-      sanitizedModules
+      rawInventory,
+      rawWarehouse
     );
 
     const migratedPilot: PilotAccount = {
       name: pilotNameClean,
-      credits: Math.max(0, Number(rawPilot.credits) || 0),
+      credits: migratedCredits,
       warPoints: Math.max(0, Number(rawPilot.warPoints) || 0),
       ownedOpeningCards,
       inventory: rawInventory,
@@ -904,7 +1001,6 @@ export function migrateSaveData(
       engineerShieldBoost: Boolean(rawPilot.engineerShieldBoost),
       activeBonusMission: rawPilot.activeBonusMission ?? null,
       consumables: rawConsumables,
-      modules: sanitizedModules,
       activeExpBoostBattles: Math.max(
         0,
         Number(rawPilot.activeExpBoostBattles) || 0
@@ -1085,7 +1181,6 @@ export function migrateSaveData(
     engineerShieldBoost: false,
     activeBonusMission: null,
     consumables: [],
-    modules: [],
     activeExpBoostBattles: 0,
     activeEnchantBonusPct: 0,
     squadFormation: createDefaultSquadFormation(
