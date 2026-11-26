@@ -98,6 +98,7 @@ import {
   type GearPaperDollSlotKey,
 } from './GearSlotTile';
 import { GearSwapPicker } from './GearSwapPicker';
+import { GearSocketRow, ModuleSocketList } from './ModuleSocketList';
 import { QuickSellModal } from './QuickSellModal';
 import { SupplyLoadoutBar } from './SupplyLoadoutBar';
 
@@ -205,6 +206,7 @@ export function GearView() {
   const [confirmBulkRare, setConfirmBulkRare] = useState(false);
   const [quickSellOpen, setQuickSellOpen] = useState(false);
   const [swapPickerSlot, setSwapPickerSlot] = useState<PaperDollSlot | null>(null);
+  const [swapPickerSocketIndex, setSwapPickerSocketIndex] = useState<number | null>(null);
   const [autoEquipPlan, setAutoEquipPlan] = useState<AutoEquipPlan | null>(
     null
   );
@@ -328,21 +330,45 @@ export function GearView() {
   ]);
 
   const currentEquipBonuses = useMemo(
-    () => sumGearEquipmentStats(activeGear, pilot.inventory),
-    [activeGear, pilot.inventory]
+    () =>
+      sumGearEquipmentStats(
+        activeGear,
+        pilot.inventory,
+        adminConfig,
+        pilot.warehouse
+      ),
+    [activeGear, pilot.inventory, adminConfig, pilot.warehouse]
   );
   const currentEquipTraits = useMemo(
-    () => sumGearSpecialTraits(activeGear, pilot.inventory),
-    [activeGear, pilot.inventory]
+    () =>
+      sumGearSpecialTraits(
+        activeGear,
+        pilot.inventory,
+        adminConfig,
+        pilot.warehouse
+      ),
+    [activeGear, pilot.inventory, adminConfig, pilot.warehouse]
   );
 
   const previewEquipBonuses = useMemo(
-    () => sumGearEquipmentStats(previewGear, pilot.inventory),
-    [previewGear, pilot.inventory]
+    () =>
+      sumGearEquipmentStats(
+        previewGear,
+        pilot.inventory,
+        adminConfig,
+        pilot.warehouse
+      ),
+    [previewGear, pilot.inventory, adminConfig, pilot.warehouse]
   );
   const previewEquipTraits = useMemo(
-    () => sumGearSpecialTraits(previewGear, pilot.inventory),
-    [previewGear, pilot.inventory]
+    () =>
+      sumGearSpecialTraits(
+        previewGear,
+        pilot.inventory,
+        adminConfig,
+        pilot.warehouse
+      ),
+    [previewGear, pilot.inventory, adminConfig, pilot.warehouse]
   );
 
   const passiveBonuses = useMemo(
@@ -403,8 +429,14 @@ export function GearView() {
   );
 
   const powerRating = useMemo(
-    () => calculateGearPowerRating(activeGear, pilot.inventory),
-    [activeGear, pilot.inventory]
+    () =>
+      calculateGearPowerRating(
+        activeGear,
+        pilot.inventory,
+        adminConfig,
+        pilot.warehouse
+      ),
+    [activeGear, pilot.inventory, adminConfig, pilot.warehouse]
   );
 
   const statDeltas: StatBlock = useMemo(() => {
@@ -1016,18 +1048,18 @@ export function GearView() {
                     >
                       {t('shop.unequipShortcut')}
                     </button>
-                    <button
-                      type="button"
-                      data-testid="detail-swap-btn"
-                      onClick={() => {
-                        if (activeDetailInstance.slot !== 'module') {
-                          setSwapPickerSlot(activeDetailInstance.slot);
+                    {activeDetailInstance.slot !== 'module' && (
+                      <button
+                        type="button"
+                        data-testid="detail-swap-btn"
+                        onClick={() =>
+                          setSwapPickerSlot(activeDetailInstance.slot as PaperDollSlot)
                         }
-                      }}
-                      className="px-2 py-0.5 rounded bg-emerald-500/25 hover:bg-emerald-500/40 text-emerald-100 font-bold cursor-pointer"
-                    >
-                      {t('gear.swapBtn')}
-                    </button>
+                        className="px-2 py-0.5 rounded bg-emerald-500/25 hover:bg-emerald-500/40 text-emerald-100 font-bold cursor-pointer"
+                      >
+                        {t('gear.swapBtn')}
+                      </button>
+                    )}
                   </span>
                 )}
                 {isLocked && (
@@ -1044,6 +1076,7 @@ export function GearView() {
           </div>
 
         {/* Action Buttons (>= 44px height) */}
+        {activeDetailInstance.slot !== 'module' && (
         <div className="flex flex-wrap items-center gap-2 pb-3 border-b border-slate-800/80">
           {selection?.kind === 'inventory' &&
             activeDetailOwnerGear !== activeGear.classId && (
@@ -1148,6 +1181,7 @@ export function GearView() {
             </>
           )}
         </div>
+        )}
 
           <p className="text-sm lg:text-xs text-slate-300 leading-relaxed">
             {getItemInstanceDesc(lang, activeDetailInstance)}
@@ -1191,7 +1225,7 @@ export function GearView() {
           </div>
 
           {/* Live +/- Comparison Block */}
-          {isPreviewActive && (
+          {isPreviewActive && activeDetailInstance.slot !== 'module' && (
             <div className="rounded border border-slate-800 bg-[#080C14] p-3 space-y-1.5">
               <div className="text-xs font-semibold text-amber-300">
                 {t('gear.comparisonHeading')}
@@ -1221,8 +1255,14 @@ export function GearView() {
             </div>
           )}
 
+          {activeDetailInstance.slot === 'module' && (
+            <ModuleSocketList moduleInstance={activeDetailInstance} />
+          )}
+
           {/* Cannot-Equip Inline Warning */}
-          {activeValidation && !activeValidation.canEquip && (
+          {activeValidation &&
+            !activeValidation.canEquip &&
+            activeDetailInstance.slot !== 'module' && (
             <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-red-400 bg-red-500/10 border border-red-500/30 rounded px-3 py-2">
               <div className="flex items-center gap-1.5 min-w-0">
                 <Ban className="w-4 h-4 shrink-0" />
@@ -1695,6 +1735,13 @@ export function GearView() {
           <div className="lg:hidden relative z-10 w-full pt-2 border-t border-slate-800/80">
             <SupplyLoadoutBar variant="phone" gear={activeGear} />
           </div>
+
+          <GearSocketRow
+            onSelectSocket={(idx) => {
+              setSwapPickerSlot(null);
+              setSwapPickerSocketIndex(idx);
+            }}
+          />
         </section>
 
         {/* Collapsible Desktop Stats Bar (>= lg) */}
@@ -2964,9 +3011,13 @@ export function GearView() {
 
       {/* Quick Swap / Pick Modal */}
       <GearSwapPicker
-        open={swapPickerSlot !== null}
-        slot={swapPickerSlot}
-        onClose={() => setSwapPickerSlot(null)}
+        open={swapPickerSlot !== null || swapPickerSocketIndex !== null}
+        slot={swapPickerSocketIndex !== null ? 'module' : swapPickerSlot}
+        socketIndex={swapPickerSocketIndex ?? undefined}
+        onClose={() => {
+          setSwapPickerSlot(null);
+          setSwapPickerSocketIndex(null);
+        }}
         onEquipped={(equippedSlot) => { setSelection({ kind: 'slot', slot: equippedSlot }); setConfirmingSellId(null); }}
       />
     </div>

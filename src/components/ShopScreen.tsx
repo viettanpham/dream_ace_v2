@@ -16,7 +16,7 @@ import {
   Unlock,
 } from 'lucide-react';
 import { MECH_CLASS_LIST, STAT_KEYS } from '../data/classes';
-import { EQUIPMENT_SLOTS, RARITY_META, SHOP_CONFIG } from '../data/items';
+import { ITEM_SLOTS, RARITY_META, SHOP_CONFIG } from '../data/items';
 import { getBoxCapacity } from '../engine/migration';
 import { SHOP_STOCK_CONFIG } from '../data/shopConfig';
 import { getSkillById, OPENING_CARDS_LIST } from '../data/skills';
@@ -151,7 +151,7 @@ export function ShopScreen() {
 
   const slotStockCounts = useMemo(() => {
     const counts = {} as Record<EquipmentSlot, { avail: number; total: number }>;
-    for (const slot of EQUIPMENT_SLOTS) {
+    for (const slot of ITEM_SLOTS) {
       counts[slot] = { avail: 0, total: 0 };
     }
     for (const item of shopStock) {
@@ -202,7 +202,7 @@ export function ShopScreen() {
 
   const sellSlotCounts = useMemo(() => {
     const counts = {} as Record<EquipmentSlot, number>;
-    for (const slot of EQUIPMENT_SLOTS) {
+    for (const slot of ITEM_SLOTS) {
       counts[slot] = 0;
     }
     for (const inst of pilot.inventory) {
@@ -569,7 +569,7 @@ export function ShopScreen() {
                 </span>
               </button>
 
-              {EQUIPMENT_SLOTS.map((slot) => {
+              {ITEM_SLOTS.map((slot) => {
                 const counts = slotStockCounts[slot];
                 return (
                   <button
@@ -1229,7 +1229,9 @@ export function ShopScreen() {
                             >
                               {getItemInstanceName(lang, item)}
                             </span>
-                            {!validation.canEquip && !isSoldOut && (
+                            {!validation.canEquip &&
+                              formatEquipValidationReason(lang, validation) &&
+                              !isSoldOut && (
                               <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                             )}
                           </div>

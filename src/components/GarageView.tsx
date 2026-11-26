@@ -125,6 +125,7 @@ export function GarageView() {
   const { lang, t } = useI18n();
   const isPhone = useIsPhoneViewport();
   const pilot = useGameStore((s) => s.pilot);
+  const adminConfig = useGameStore((s) => s.adminConfig);
   const setPilotName = useGameStore((s) => s.setPilotName);
   const selectActiveGear = useGameStore((s) => s.selectActiveGear);
   const buyGear = useGameStore((s) => s.buyGear);
@@ -184,19 +185,37 @@ export function GarageView() {
   const spentTotal = getTotalSpentPoints(activeGear.allocatedPoints);
 
   const activePower = useMemo(
-    () => calculateGearPowerRating(activeGear, pilot.inventory),
-    [activeGear, pilot.inventory]
+    () =>
+      calculateGearPowerRating(
+        activeGear,
+        pilot.inventory,
+        adminConfig,
+        pilot.warehouse
+      ),
+    [activeGear, pilot.inventory, adminConfig, pilot.warehouse]
   );
   const activeNextExp = getExpForNextLevel(activeGear.level);
 
   const equipBonuses = useMemo(
-    () => sumGearEquipmentStats(activeGear, pilot.inventory),
-    [activeGear, pilot.inventory]
+    () =>
+      sumGearEquipmentStats(
+        activeGear,
+        pilot.inventory,
+        adminConfig,
+        pilot.warehouse
+      ),
+    [activeGear, pilot.inventory, adminConfig, pilot.warehouse]
   );
 
   const equipTraits = useMemo(
-    () => sumGearSpecialTraits(activeGear, pilot.inventory),
-    [activeGear, pilot.inventory]
+    () =>
+      sumGearSpecialTraits(
+        activeGear,
+        pilot.inventory,
+        adminConfig,
+        pilot.warehouse
+      ),
+    [activeGear, pilot.inventory, adminConfig, pilot.warehouse]
   );
 
   const passiveBonuses = useMemo(
@@ -776,7 +795,12 @@ export function GarageView() {
           {MECH_CLASS_LIST.map((cls) => {
             const gear = pilot.gears[cls.id];
             const isSelected = pilot.activeGearId === cls.id;
-            const power = calculateGearPowerRating(gear, pilot.inventory);
+            const power = calculateGearPowerRating(
+              gear,
+              pilot.inventory,
+              adminConfig,
+              pilot.warehouse
+            );
             const nextExp = getExpForNextLevel(gear.level);
             const canAfford = pilot.credits >= nextGearPrice;
 
