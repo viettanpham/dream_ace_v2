@@ -104,10 +104,14 @@ import {
 import { AdminCapacityField } from './AdminCapacityField';
 import { PirateAdminBlock } from './admin/PirateAdminBlock';
 import {
+  CARD_POPUP_ZONE_MAX_PCT,
+  CARD_POPUP_ZONE_MIN_PCT,
   resolveCardPopupConfig,
   sanitizeCardPopupFlightMs,
   sanitizeCardPopupMaxConcurrent,
   sanitizeCardPopupStaggerMs,
+  sanitizeCardPopupZoneHeightPct,
+  sanitizeCardPopupZoneWidthPct,
 } from '../utils/cardPopupQueue';
 import {
   resolveRadarPopupConfig,
@@ -155,6 +159,72 @@ const RARITY_LIST: ItemRarity[] = [
   'epic',
   'legendary',
 ];
+
+function CardPopupZoneDraftInput({
+  label,
+  value,
+  testId,
+  sanitize,
+  onCommit,
+}: {
+  label: string;
+  value: number;
+  testId: string;
+  sanitize: (raw: unknown) => number;
+  onCommit: (next: number) => void;
+}) {
+  const [draft, setDraft] = useState<string>(() => String(value));
+
+  useEffect(() => {
+    setDraft(String(value));
+  }, [value]);
+
+  const commit = () => {
+    const trimmed = draft.trim();
+    const num = trimmed === '' ? Number.NaN : Number(trimmed);
+    const rounded = Math.round(num);
+    if (
+      !Number.isFinite(num) ||
+      rounded < CARD_POPUP_ZONE_MIN_PCT ||
+      rounded > CARD_POPUP_ZONE_MAX_PCT
+    ) {
+      setDraft(String(value));
+      return;
+    }
+    const clean = sanitize(rounded);
+    setDraft(String(clean));
+    if (clean !== value) {
+      onCommit(clean);
+    }
+  };
+
+  return (
+    <label className="space-y-1 block">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[11px] text-slate-400 truncate">{label}</span>
+        <span className="text-[10px] font-mono-nums text-slate-500 shrink-0">
+          {CARD_POPUP_ZONE_MIN_PCT}-{CARD_POPUP_ZONE_MAX_PCT}
+        </span>
+      </div>
+      <input
+        type="number"
+        data-testid={testId}
+        min={CARD_POPUP_ZONE_MIN_PCT}
+        max={CARD_POPUP_ZONE_MAX_PCT}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            commit();
+          }
+        }}
+        className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+      />
+    </label>
+  );
+}
 
 export function AdminPanel() {
   const { lang, t } = useI18n();
@@ -2726,6 +2796,27 @@ export function AdminPanel() {
                           className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
                         />
                       </label>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <CardPopupZoneDraftInput
+                        label={t('admin.cardPopupZoneWidthPct')}
+                        value={cardPopupCfg.zoneWidthPct}
+                        testId="admin-card-popup-zone-width"
+                        sanitize={sanitizeCardPopupZoneWidthPct}
+                        onCommit={(zoneWidthPct) =>
+                          adminUpdateConfig({ cardPopupZoneWidthPct: zoneWidthPct })
+                        }
+                      />
+                      <CardPopupZoneDraftInput
+                        label={t('admin.cardPopupZoneHeightPct')}
+                        value={cardPopupCfg.zoneHeightPct}
+                        testId="admin-card-popup-zone-height"
+                        sanitize={sanitizeCardPopupZoneHeightPct}
+                        onCommit={(zoneHeightPct) =>
+                          adminUpdateConfig({ cardPopupZoneHeightPct: zoneHeightPct })
+                        }
+                      />
                     </div>
 
                     {(() => {

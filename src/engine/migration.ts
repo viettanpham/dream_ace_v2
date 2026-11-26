@@ -15,9 +15,13 @@ import {
   DEFAULT_CARD_POPUP_FLIGHT_MS,
   DEFAULT_CARD_POPUP_MAX_CONCURRENT,
   DEFAULT_CARD_POPUP_STAGGER_MS,
+  DEFAULT_CARD_POPUP_ZONE_HEIGHT_PCT,
+  DEFAULT_CARD_POPUP_ZONE_WIDTH_PCT,
   sanitizeCardPopupFlightMs,
   sanitizeCardPopupMaxConcurrent,
   sanitizeCardPopupStaggerMs,
+  sanitizeCardPopupZoneHeightPct,
+  sanitizeCardPopupZoneWidthPct,
 } from '../utils/cardPopupQueue';
 import {
   cloneTurnPhaseConfig,
@@ -383,6 +387,8 @@ export function createDefaultAdminConfig(): AdminConfig {
     cardPopupStaggerMs: DEFAULT_CARD_POPUP_STAGGER_MS,
     cardPopupFlightMs: DEFAULT_CARD_POPUP_FLIGHT_MS,
     cardPopupMaxConcurrent: DEFAULT_CARD_POPUP_MAX_CONCURRENT,
+    cardPopupZoneWidthPct: DEFAULT_CARD_POPUP_ZONE_WIDTH_PCT,
+    cardPopupZoneHeightPct: DEFAULT_CARD_POPUP_ZONE_HEIGHT_PCT,
     radarPopupStartScalePct: DEFAULT_RADAR_POPUP_START_SCALE_PCT,
     radarPopupSmallScalePct: DEFAULT_RADAR_POPUP_SMALL_SCALE_PCT,
     radarPopupLargeScalePct: DEFAULT_RADAR_POPUP_LARGE_SCALE_PCT,
@@ -760,6 +766,12 @@ export function migrateSaveData(
     cardPopupFlightMs: sanitizeCardPopupFlightMs(rawAdmin.cardPopupFlightMs),
     cardPopupMaxConcurrent: sanitizeCardPopupMaxConcurrent(
       rawAdmin.cardPopupMaxConcurrent
+    ),
+    cardPopupZoneWidthPct: sanitizeCardPopupZoneWidthPct(
+      rawAdmin.cardPopupZoneWidthPct
+    ),
+    cardPopupZoneHeightPct: sanitizeCardPopupZoneHeightPct(
+      rawAdmin.cardPopupZoneHeightPct
     ),
     radarPopupStartScalePct: sanitizeRadarPopupStartScalePct(
       rawAdmin.radarPopupStartScalePct

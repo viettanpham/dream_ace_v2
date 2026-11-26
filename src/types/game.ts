@@ -1500,6 +1500,8 @@ export interface AdminConfig {
   cardPopupStaggerMs?: number;
   cardPopupFlightMs?: number;
   cardPopupMaxConcurrent?: number;
+  cardPopupZoneWidthPct?: number;
+  cardPopupZoneHeightPct?: number;
   radarPopupStartScalePct?: number;
   radarPopupSmallScalePct?: number;
   radarPopupLargeScalePct?: number;

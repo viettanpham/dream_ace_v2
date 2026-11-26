@@ -422,7 +422,11 @@
   }
   100% {
     opacity: 1;
-    transform: translate3d(-50%, -50%, 0);
+    transform: translate3d(
+      calc(-50% + var(--card-pop-ex, 0px)),
+      calc(-50% + var(--card-pop-ey, 0px)),
+      0
+    );
   }
 }
 

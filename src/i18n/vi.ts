@@ -1784,6 +1784,8 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'admin.cardPopupStaggerMs': 'Giãn cách số kế (ms, >= 0)',
   'admin.cardPopupFlightMs': 'Thời gian bay vào giữa (ms, >= 1)',
   'admin.cardPopupMaxConcurrent': 'Số bay tối đa cùng lúc (>= 1)',
+  'admin.cardPopupZoneWidthPct': 'Vùng đáp trung tâm — Rộng (%)',
+  'admin.cardPopupZoneHeightPct': 'Vùng đáp trung tâm — Cao (%)',
   'admin.radarPopupSubtitle':
     'Số nổi Radar (dùng chung thời gian bay ở trên): cỡ đầu %, cỡ cuối khi ít/đông tàu và ngưỡng số tàu sống.',
   'admin.radarPopupStartScalePct': 'Radar: Cỡ bắt đầu (%, 20–300)',

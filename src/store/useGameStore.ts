@@ -257,6 +257,8 @@ import {
   sanitizeCardPopupFlightMs,
   sanitizeCardPopupMaxConcurrent,
   sanitizeCardPopupStaggerMs,
+  sanitizeCardPopupZoneHeightPct,
+  sanitizeCardPopupZoneWidthPct,
 } from '../utils/cardPopupQueue';
 import {
   sanitizeRadarPopupBigMaxUnits,
@@ -5151,6 +5153,16 @@ export const useGameStore = create<GameStoreState>()(
                 ? patch.cardPopupMaxConcurrent
                 : state.adminConfig.cardPopupMaxConcurrent
             ),
+            cardPopupZoneWidthPct: sanitizeCardPopupZoneWidthPct(
+              patch.cardPopupZoneWidthPct !== undefined
+                ? patch.cardPopupZoneWidthPct
+                : state.adminConfig.cardPopupZoneWidthPct
+            ),
+            cardPopupZoneHeightPct: sanitizeCardPopupZoneHeightPct(
+              patch.cardPopupZoneHeightPct !== undefined
+                ? patch.cardPopupZoneHeightPct
+                : state.adminConfig.cardPopupZoneHeightPct
+            ),
             radarPopupStartScalePct: sanitizeRadarPopupStartScalePct(
               patch.radarPopupStartScalePct !== undefined
                 ? patch.radarPopupStartScalePct
@@ -5506,6 +5518,12 @@ export const useGameStore = create<GameStoreState>()(
               ),
               cardPopupMaxConcurrent: sanitizeCardPopupMaxConcurrent(
                 rawAdmin.cardPopupMaxConcurrent
+              ),
+              cardPopupZoneWidthPct: sanitizeCardPopupZoneWidthPct(
+                rawAdmin.cardPopupZoneWidthPct
+              ),
+              cardPopupZoneHeightPct: sanitizeCardPopupZoneHeightPct(
+                rawAdmin.cardPopupZoneHeightPct
               ),
               radarPopupStartScalePct: sanitizeRadarPopupStartScalePct(
                 rawAdmin.radarPopupStartScalePct

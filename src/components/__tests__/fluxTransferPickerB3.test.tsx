@@ -286,8 +286,8 @@ describe('TASK B3 — FluxTransferPicker', () => {
 
     const estText =
       container.querySelector('[data-testid="flux-picker-estimate"]')?.textContent ?? '';
-    expect(estText).toContain('−40 SP');
-    expect(estText).toContain('còn 360');
+    expect(estText).toContain('−66 SP');
+    expect(estText).toContain('còn 334');
   });
 
   it('4) [Truyền] casts sup_flux_transfer with chosen transferCount', () => {

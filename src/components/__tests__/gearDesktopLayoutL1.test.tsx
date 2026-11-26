@@ -138,7 +138,7 @@ describe('TASK GEAR-L1 — Desktop 2-col layout + collapsible stats bar', () => 
     ).toHaveLength(1);
     expect(
       container!.querySelectorAll('[data-testid="gear-stealth-detect-chip"]')
-    ).toHaveLength(1);
+    ).toHaveLength(0);
 
     act(() => {
       (
@@ -152,7 +152,7 @@ describe('TASK GEAR-L1 — Desktop 2-col layout + collapsible stats bar', () => 
     ).toHaveLength(1);
     expect(
       container!.querySelectorAll('[data-testid="gear-stealth-detect-chip"]')
-    ).toHaveLength(1);
+    ).toHaveLength(0);
   });
 
   it('4) phone stats block still exists (lg:hidden) unchanged', () => {

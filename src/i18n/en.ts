@@ -1781,6 +1781,8 @@ export const EN_TRANSLATIONS = {
   'admin.cardPopupStaggerMs': 'Popup stagger (ms, >= 0)',
   'admin.cardPopupFlightMs': 'Flight duration (ms, >= 1)',
   'admin.cardPopupMaxConcurrent': 'Max concurrent popups (>= 1)',
+  'admin.cardPopupZoneWidthPct': 'Center landing zone — Width (%)',
+  'admin.cardPopupZoneHeightPct': 'Center landing zone — Height (%)',
   'admin.radarPopupSubtitle':
     'Radar floating labels (reuses flight duration above): start scale %, final scales for small vs crowded battles, and alive-unit threshold.',
   'admin.radarPopupStartScalePct': 'Radar: Start scale (%, 20–300)',

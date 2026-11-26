@@ -114,9 +114,9 @@ describe('TASK RAD1b — GEAR live Radar tile + Accuracy / Stealth UI text', () 
     const enLines = formatItemTraitsList('en', hunter);
 
     expect(viLines).toContain('Chính xác +8%');
-    expect(viLines).toContain('Dò tàng hình');
+    expect(viLines).not.toContain('Dò tàng hình');
     expect(enLines).toContain('Accuracy +8%');
-    expect(enLines).toContain('Stealth detect');
+    expect(enLines).not.toContain('Stealth detect');
   });
 
   it('3) accuracy row and stealth chip are hidden at 0 and shown with a radar equipped in GearView and GarageView', () => {
@@ -159,8 +159,7 @@ describe('TASK RAD1b — GEAR live Radar tile + Accuracy / Stealth UI text', () 
     expect(gearAcc?.textContent).toContain('Chính xác');
     expect(gearAcc?.textContent).toContain('8%');
     expect(gearAcc?.getAttribute('title')).toBe('Giảm né tránh của mục tiêu 8 điểm');
-    expect(gearChip?.textContent).toContain('Dò tàng hình');
-    expect(gearChip?.getAttribute('title')).toBe('Tấn công được mục tiêu đang tàng hình');
+    expect(gearChip).toBeNull();
 
     act(() => {
       root!.render(createElement(GarageView));
@@ -169,7 +168,7 @@ describe('TASK RAD1b — GEAR live Radar tile + Accuracy / Stealth UI text', () 
     const garageChip = container!.querySelector('[data-testid="garage-stealth-detect-chip"]');
     expect(garageAcc?.textContent).toContain('Chính xác');
     expect(garageAcc?.textContent).toContain('8%');
-    expect(garageChip?.textContent).toContain('Dò tàng hình');
+    expect(garageChip).toBeNull();
   });
 
   it('4) equip preview shows delta for accuracy when selecting an unequipped radar item', () => {
@@ -203,8 +202,8 @@ describe('TASK RAD1b — GEAR live Radar tile + Accuracy / Stealth UI text', () 
     expect(previewAcc?.textContent).toContain('8%');
     expect(previewAcc?.textContent).toContain('+8');
     expect(
-      container!.querySelector('[data-testid="gear-stealth-detect-chip"]')?.textContent
-    ).toContain('Dò tàng hình');
+      container!.querySelector('[data-testid="gear-stealth-detect-chip"]')
+    ).toBeNull();
   });
 
   it('5) cargo tab RADAR is present from EQUIPMENT_SLOTS', () => {

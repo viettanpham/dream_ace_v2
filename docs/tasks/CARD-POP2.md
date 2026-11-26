@@ -1,0 +1,19 @@
+TASK CARD-POP2 — Popup thẻ: điểm đáp ngẫu nhiên trong vùng trung tâm (Admin) + icon cho số. Model: Hydrogen. If this prompt looks cut off, STOP and tell me the last words you can see.
+
+STEP A (resume): save this prompt verbatim to docs/tasks/CARD-POP2.md, checklist docs/tasks/CARD-POP2.progress.md, tick items, final report docs/tasks/CARD-POP2.report.md and print it. On retry continue from the first unticked item.
+
+TOKEN SAVING: read docs/CODEMAP.md first; grep by symbol, open only line ranges; BattleUnitCard.tsx and AdminPanel.tsx are big: NEVER read them whole. One item at a time. Related tests + tsc only. Do not enable Firebase. CURRENT_SAVE_VERSION unchanged (new admin fields are sanitized in migration.ts like cardPopup*). New strings vi.ts AND en.ts. UI only, no engine change.
+
+ITEM 0 (audit + stale tests): (a) report in at most 6 lines why a card may show NO popup: skipAnimations (what sets it?), effectsMode off/compact, reduced motion (renders at center without flight), perfMode, popup lifetime flight+450ms at speed 2x; fix only if one is plainly a bug. (b) update the 3 stale tests (fluxTransferPickerB3, gearDesktopLayoutL1 ~:141, gearRadarRad1b): change expectations only, add no new tests for them.
+
+ITEM 1 (zone): Admin fields cardPopupZoneWidthPct / cardPopupZoneHeightPct (default 60 / 45, sanitized integer 20..100) in types/game.ts + migration defaults + sanitize; Admin block next to the cardPopup* fields (AdminPanel ~2680-2740) with a draft input that applies on blur/Enter, invalid input reverts, hint "20-100". Keep pickCardPopupStartPoint (cardPopupQueue.ts ~138, edge start). Add pickCardPopupEndPoint(zone, cardW, cardH, activeEndPoints, popupSizeEstimate, rng): 6 random candidates inside the centered zone (card center +- zoneW/2 and zoneH/2, clamped inside the card with the existing 9px inset), pick the candidate with the largest minimum distance to the end points of popups still active on that card (none active => first candidate). Store the end offset in ActiveCardPopup; in BattleUnitCard (~543-640) pass CSS vars --card-pop-ex / --card-pop-ey; in index.css @keyframes card-popup-flight (~411) the 100% frame translates to (calc(-50% + var(--card-pop-ex, 0px)), calc(-50% + var(--card-pop-ey, 0px))) instead of the center (default 0 keeps old behavior). Reduced-motion mode may keep the center. Popups stay clipped inside the card.
+
+ITEM 2 (icons): in the BattleUnitCard popup render show icon + number: tone damage/crit = HP icon + "-232"; heal "+N HP" = HP-plus icon + "+N"; shield "+N SHD" = shield icon + "+N"; SP text "+N SP" = SP icon + "+N"; "SPLASH -N" keeps the word SPLASH + HP icon. Other texts (REDLINE FURY!, evade, buff/status labels) unchanged. Use the SAME icon source and colors as the HP / shield / SP bars on the card (grep iconCatalog and the bar icons); icon 12px for small tones, 14px otherwise; crit keeps its bigger size and amber color; data-testid damage-popup kept.
+
+HARD LIMITS: popup never leaves the card; no change to card size or layout; no horizontal overflow; flight and settle timings unchanged; BattleUnitCard.tsx grows at most ~40 lines.
+
+TESTS: write at most 4 small tests in total; do not add tests beyond these; do not refactor existing tests: (1) the end point stays inside the zone and inside the card for zone 20% and 100%; (2) candidate choice prefers the point far from an active popup; (3) sanitize defaults 60/45 and clamps 20..100; (4) a damage popup renders an icon + "-232" and "REDLINE FURY!" stays plain text.
+
+CHECKS: tsc --noEmit first, then ONLY cardPopup* / cardStatusPop tests + the new test + the 3 fixed tests with --reporter=dot; print at most 15 lines; on a failure re-run only the failing file. NO full vitest, NO production build.
+
+REPORT (max 12 lines + the ITEM 0 audit lines): items done + files changed; one test line; NOT checked in a real browser (popup placement on 6v6 cards, icon size on phone).

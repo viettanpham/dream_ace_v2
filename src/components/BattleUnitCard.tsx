@@ -27,8 +27,10 @@ import {
   CARD_POPUP_SETTLE_MS,
   createCardPopupQueueState,
   getCardPopupArrow,
+  getCardPopupSymbol,
   getNextCardPopupQueueWakeupMs,
   isSpPopupText,
+  parseCardPopupDisplay,
   resolveCardPopupConfig,
   syncCardPopupQueue,
   type CardPopupQueueState,
@@ -118,7 +120,7 @@ function getPopupColor(
   text: string = ''
 ): string {
   if (isSpPopupText(text) && (tone === 'buff' || tone === 'heal')) {
-    return 'text-amber-300';
+    return SP_COLOR_TOKENS.textClass;
   }
   switch (tone) {
     case 'crit':
@@ -255,6 +257,12 @@ export const BattleUnitCard = memo(function BattleUnitCard({
   const cardPopupMaxConcurrent = useGameStore(
     (s) => s.adminConfig.cardPopupMaxConcurrent
   );
+  const cardPopupZoneWidthPct = useGameStore(
+    (s) => s.adminConfig.cardPopupZoneWidthPct
+  );
+  const cardPopupZoneHeightPct = useGameStore(
+    (s) => s.adminConfig.cardPopupZoneHeightPct
+  );
   const iconMods = useGameStore((s) => s.adminConfig.iconCatalogMods);
   const { settings: statusSettings, activeUnitRows } =
     useStatusDisplaySettings(adminStatusDefaults);
@@ -279,8 +287,16 @@ export const BattleUnitCard = memo(function BattleUnitCard({
         cardPopupStaggerMs,
         cardPopupFlightMs,
         cardPopupMaxConcurrent,
+        cardPopupZoneWidthPct,
+        cardPopupZoneHeightPct,
       }),
-    [cardPopupStaggerMs, cardPopupFlightMs, cardPopupMaxConcurrent]
+    [
+      cardPopupStaggerMs,
+      cardPopupFlightMs,
+      cardPopupMaxConcurrent,
+      cardPopupZoneWidthPct,
+      cardPopupZoneHeightPct,
+    ]
   );
 
   const [popupQueue, setPopupQueue] = useState<CardPopupQueueState>(() => {
@@ -554,8 +570,28 @@ export const BattleUnitCard = memo(function BattleUnitCard({
               const isSmall =
                 isCompactPopupTone(pop.tone) && !isSpPopupText(pop.text);
               const arrow = getCardPopupArrow(pop);
+              const display = parseCardPopupDisplay(pop);
+              const iconPx = isSmall ? 12 : 14;
               const colorClass = getPopupColor(pop.tone, pop.text);
               const sizeClass = isSmall ? 'text-[12px]' : 'text-[15px]';
+              const innerContent = (
+                <>
+                  {arrow === 'up' && <span aria-hidden="true">↑</span>}
+                  {arrow === 'down' && <span aria-hidden="true">↓</span>}
+                  {display.iconKind && (
+                    <span
+                      data-testid="card-popup-icon"
+                      data-popup-icon-kind={display.iconKind}
+                      className="material-symbols-outlined leading-none select-none shrink-0"
+                      style={{ fontSize: `${iconPx}px` }}
+                      aria-hidden="true"
+                    >
+                      {getCardPopupSymbol(display.iconKind, iconMods)}
+                    </span>
+                  )}
+                  <span>{display.displayText}</span>
+                </>
+              );
 
               if (resolvedReducedMotion) {
                 return (
@@ -570,21 +606,22 @@ export const BattleUnitCard = memo(function BattleUnitCard({
                       maxWidth: 'calc(100% - 16px)',
                       animationDuration: '600ms',
                     }}
-                    className={`pointer-events-none absolute truncate font-display font-bold tracking-wide drop-shadow-[0_1px_3px_rgba(0,0,0,0.95)] anim-card-popup-reduced ${sizeClass} ${colorClass}`}
+                    className={`pointer-events-none absolute inline-flex items-center gap-0.5 truncate font-display font-bold tracking-wide drop-shadow-[0_1px_3px_rgba(0,0,0,0.95)] anim-card-popup-reduced ${sizeClass} ${colorClass}`}
                   >
-                    {arrow === 'up' && <span aria-hidden="true">↑ </span>}
-                    {arrow === 'down' && <span aria-hidden="true">↓ </span>}
-                    {pop.text}
+                    {innerContent}
                   </div>
                 );
               }
 
+              const ep = item.endPoint;
               const flightStyle = {
                 left: '50%',
                 top: '50%',
                 maxWidth: 'calc(100% - 16px)',
                 '--card-pop-dx': `${sp.offsetFromCenterX}px`,
                 '--card-pop-dy': `${sp.offsetFromCenterY}px`,
+                '--card-pop-ex': `${ep.offsetFromCenterX}px`,
+                '--card-pop-ey': `${ep.offsetFromCenterY}px`,
                 animationDuration: `${cardPopupCfg.flightMs}ms`,
               } as CSSProperties;
 
@@ -596,6 +633,8 @@ export const BattleUnitCard = memo(function BattleUnitCard({
                   data-popup-edge={sp.edge}
                   data-popup-start-x={Math.round(sp.x)}
                   data-popup-start-y={Math.round(sp.y)}
+                  data-popup-end-x={Math.round(ep.x)}
+                  data-popup-end-y={Math.round(ep.y)}
                   style={flightStyle}
                   className={`pointer-events-none absolute truncate font-display font-bold tracking-wide drop-shadow-[0_1px_3px_rgba(0,0,0,0.95)] anim-card-popup-flight ${sizeClass} ${colorClass}`}
                 >
@@ -606,9 +645,7 @@ export const BattleUnitCard = memo(function BattleUnitCard({
                     }}
                     className="inline-flex items-center gap-0.5 anim-card-popup-pop-fade"
                   >
-                    {arrow === 'up' && <span aria-hidden="true">↑</span>}
-                    {arrow === 'down' && <span aria-hidden="true">↓</span>}
-                    <span>{pop.text}</span>
+                    {innerContent}
                   </span>
                 </div>
               );

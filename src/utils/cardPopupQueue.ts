@@ -1,10 +1,20 @@
-import type { BattleSpeed, FloatingPopup } from '../types/game';
+import { getCatalogRow } from '../data/iconCatalog';
+import type {
+  BattleSpeed,
+  FloatingPopup,
+  IconCatalogModRow,
+} from '../types/game';
 import { shouldSkipRadarFloatingLabels } from './battleDisplay';
 import type { BattleEffectsMode } from './battleVfx';
 
 export const DEFAULT_CARD_POPUP_STAGGER_MS = 100;
 export const DEFAULT_CARD_POPUP_FLIGHT_MS = 200;
 export const DEFAULT_CARD_POPUP_MAX_CONCURRENT = 4;
+export const DEFAULT_CARD_POPUP_ZONE_WIDTH_PCT = 60;
+export const DEFAULT_CARD_POPUP_ZONE_HEIGHT_PCT = 45;
+export const CARD_POPUP_ZONE_MIN_PCT = 20;
+export const CARD_POPUP_ZONE_MAX_PCT = 100;
+export const CARD_POPUP_END_CANDIDATES = 6;
 export const CARD_POPUP_SETTLE_MS = 450;
 export const CARD_POPUP_INSET_PX = 9;
 export const CARD_POPUP_QUEUE_OVERFLOW_LIMIT = 8;
@@ -18,9 +28,16 @@ export interface CardPopupConfig {
   staggerMs: number;
   flightMs: number;
   maxConcurrent: number;
+  zoneWidthPct: number;
+  zoneHeightPct: number;
 }
 
-export interface CardPopupQueueOptions extends CardPopupConfig {
+export interface CardPopupQueueOptions {
+  staggerMs: number;
+  flightMs: number;
+  maxConcurrent: number;
+  zoneWidthPct?: number;
+  zoneHeightPct?: number;
   battleSpeed?: BattleSpeed;
   effectsMode?: BattleEffectsMode;
 }
@@ -41,9 +58,19 @@ export interface CardPopupStartPoint {
   toCenterY: number;
 }
 
+export interface CardPopupEndPoint {
+  x: number;
+  y: number;
+  centerX: number;
+  centerY: number;
+  offsetFromCenterX: number;
+  offsetFromCenterY: number;
+}
+
 export interface ActiveCardPopup {
   popup: FloatingPopup;
   startPoint: CardPopupStartPoint;
+  endPoint: CardPopupEndPoint;
   startedAtMs: number;
   expiresAtMs: number;
 }
@@ -76,15 +103,37 @@ export function sanitizeCardPopupMaxConcurrent(raw?: unknown): number {
   return Math.max(1, Math.round(raw));
 }
 
+function sanitizeCardPopupZonePct(raw: unknown, fallback: number): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) {
+    return fallback;
+  }
+  return Math.max(
+    CARD_POPUP_ZONE_MIN_PCT,
+    Math.min(CARD_POPUP_ZONE_MAX_PCT, Math.round(raw))
+  );
+}
+
+export function sanitizeCardPopupZoneWidthPct(raw?: unknown): number {
+  return sanitizeCardPopupZonePct(raw, DEFAULT_CARD_POPUP_ZONE_WIDTH_PCT);
+}
+
+export function sanitizeCardPopupZoneHeightPct(raw?: unknown): number {
+  return sanitizeCardPopupZonePct(raw, DEFAULT_CARD_POPUP_ZONE_HEIGHT_PCT);
+}
+
 export function resolveCardPopupConfig(raw?: {
   cardPopupStaggerMs?: unknown;
   cardPopupFlightMs?: unknown;
   cardPopupMaxConcurrent?: unknown;
+  cardPopupZoneWidthPct?: unknown;
+  cardPopupZoneHeightPct?: unknown;
 } | null): CardPopupConfig {
   return {
     staggerMs: sanitizeCardPopupStaggerMs(raw?.cardPopupStaggerMs),
     flightMs: sanitizeCardPopupFlightMs(raw?.cardPopupFlightMs),
     maxConcurrent: sanitizeCardPopupMaxConcurrent(raw?.cardPopupMaxConcurrent),
+    zoneWidthPct: sanitizeCardPopupZoneWidthPct(raw?.cardPopupZoneWidthPct),
+    zoneHeightPct: sanitizeCardPopupZoneHeightPct(raw?.cardPopupZoneHeightPct),
   };
 }
 
@@ -118,6 +167,65 @@ export function getCardPopupArrow(
     return 'down';
   }
   return null;
+}
+
+export type CardPopupIconKind = 'hp' | 'hp_plus' | 'shield' | 'sp';
+
+export interface CardPopupDisplayInfo {
+  iconKind: CardPopupIconKind | null;
+  displayText: string;
+}
+
+export function parseCardPopupDisplay(
+  popup: Pick<FloatingPopup, 'tone' | 'text'>
+): CardPopupDisplayInfo {
+  const trimmed = popup.text.trim();
+  const spMatch = isSpPopupText(trimmed)
+    ? /^\+(\d+)\s*SP$/i.exec(trimmed)
+    : null;
+  if (spMatch) {
+    return { iconKind: 'sp', displayText: `+${spMatch[1]}` };
+  }
+
+  if (popup.tone === 'damage' || popup.tone === 'crit') {
+    const dmgMatch = /^(-\d+)$/.exec(trimmed);
+    if (dmgMatch) {
+      return { iconKind: 'hp', displayText: dmgMatch[1] };
+    }
+    const splashMatch = /^SPLASH\s+(-\d+)$/i.exec(trimmed);
+    if (splashMatch) {
+      return { iconKind: 'hp', displayText: `SPLASH ${splashMatch[1]}` };
+    }
+    return { iconKind: null, displayText: popup.text };
+  }
+
+  if (popup.tone === 'heal') {
+    const healMatch = /^\+(\d+)\s*HP$/i.exec(trimmed);
+    if (healMatch) {
+      return { iconKind: 'hp_plus', displayText: `+${healMatch[1]}` };
+    }
+    return { iconKind: null, displayText: popup.text };
+  }
+
+  if (popup.tone === 'shield') {
+    const shdMatch = /^\+(\d+)\s*SHD$/i.exec(trimmed);
+    if (shdMatch) {
+      return { iconKind: 'shield', displayText: `+${shdMatch[1]}` };
+    }
+    return { iconKind: null, displayText: popup.text };
+  }
+
+  return { iconKind: null, displayText: popup.text };
+}
+
+export function getCardPopupSymbol(
+  kind: CardPopupIconKind,
+  iconMods?: readonly IconCatalogModRow[] | null
+): string {
+  if (kind === 'hp') return getCatalogRow('SS01', iconMods)?.symbol ?? 'health_cross';
+  if (kind === 'hp_plus') return 'heart_plus';
+  if (kind === 'shield') return getCatalogRow('BS05', iconMods)?.symbol ?? 'security';
+  return getCatalogRow('SS02', iconMods)?.symbol ?? 'bolt';
 }
 
 export function shouldShowCardPopup(
@@ -197,6 +305,122 @@ export function pickCardPopupStartPoint(
     toCenterX: centerX - x,
     toCenterY: centerY - y,
   };
+}
+
+export function pickCardPopupEndPoint(
+  zone: { widthPct?: number; heightPct?: number } = {},
+  cardW: number = CARD_POPUP_FALLBACK_WIDTH_PX,
+  cardH: number = CARD_POPUP_FALLBACK_HEIGHT_PX,
+  activeEndPoints: readonly Pick<CardPopupEndPoint, 'x' | 'y'>[] = [],
+  popupSizeEstimate: { width?: number; height?: number } = {},
+  rng: () => number = Math.random
+): CardPopupEndPoint {
+  const safeW = Math.max(
+    24,
+    Number.isFinite(cardW) ? cardW : CARD_POPUP_FALLBACK_WIDTH_PX
+  );
+  const safeH = Math.max(
+    24,
+    Number.isFinite(cardH) ? cardH : CARD_POPUP_FALLBACK_HEIGHT_PX
+  );
+  const centerX = safeW / 2;
+  const centerY = safeH / 2;
+
+  const zoneW = (sanitizeCardPopupZoneWidthPct(zone.widthPct) / 100) * safeW;
+  const zoneH = (sanitizeCardPopupZoneHeightPct(zone.heightPct) / 100) * safeH;
+
+  const estW = Math.max(
+    0,
+    typeof popupSizeEstimate.width === 'number' &&
+      Number.isFinite(popupSizeEstimate.width)
+      ? popupSizeEstimate.width
+      : 0
+  );
+  const estH = Math.max(
+    0,
+    typeof popupSizeEstimate.height === 'number' &&
+      Number.isFinite(popupSizeEstimate.height)
+      ? popupSizeEstimate.height
+      : 0
+  );
+  const halfW = estW / 2;
+  const halfH = estH / 2;
+
+  const rawCardMinX = CARD_POPUP_INSET_PX + halfW;
+  const rawCardMaxX = safeW - CARD_POPUP_INSET_PX - halfW;
+  const cardMinX = rawCardMinX <= rawCardMaxX ? rawCardMinX : centerX;
+  const cardMaxX = rawCardMinX <= rawCardMaxX ? rawCardMaxX : centerX;
+
+  const rawCardMinY = CARD_POPUP_INSET_PX + halfH;
+  const rawCardMaxY = safeH - CARD_POPUP_INSET_PX - halfH;
+  const cardMinY = rawCardMinY <= rawCardMaxY ? rawCardMinY : centerY;
+  const cardMaxY = rawCardMinY <= rawCardMaxY ? rawCardMaxY : centerY;
+
+  let minX = Math.max(cardMinX, centerX - zoneW / 2);
+  let maxX = Math.min(cardMaxX, centerX + zoneW / 2);
+  if (minX > maxX) {
+    minX = centerX;
+    maxX = centerX;
+  }
+
+  let minY = Math.max(cardMinY, centerY - zoneH / 2);
+  let maxY = Math.min(cardMaxY, centerY + zoneH / 2);
+  if (minY > maxY) {
+    minY = centerY;
+    maxY = centerY;
+  }
+
+  const candidates: CardPopupEndPoint[] = [];
+  for (let i = 0; i < CARD_POPUP_END_CANDIDATES; i++) {
+    const rx = Math.min(1, Math.max(0, rng()));
+    const ry = Math.min(1, Math.max(0, rng()));
+    const x = minX + rx * (maxX - minX);
+    const y = minY + ry * (maxY - minY);
+    candidates.push({
+      x,
+      y,
+      centerX,
+      centerY,
+      offsetFromCenterX: x - centerX,
+      offsetFromCenterY: y - centerY,
+    });
+  }
+
+  if (activeEndPoints.length === 0) {
+    return candidates[0];
+  }
+
+  let best = candidates[0];
+  let bestMinDistSq = -1;
+  for (const c of candidates) {
+    let minDistSq = Infinity;
+    for (const p of activeEndPoints) {
+      const dx = c.x - p.x;
+      const dy = c.y - p.y;
+      const distSq = dx * dx + dy * dy;
+      if (distSq < minDistSq) {
+        minDistSq = distSq;
+      }
+    }
+    if (minDistSq > bestMinDistSq) {
+      bestMinDistSq = minDistSq;
+      best = c;
+    }
+  }
+  return best;
+}
+
+function estimatePopupBoxSize(popup: Pick<FloatingPopup, 'tone' | 'text'>): {
+  width: number;
+  height: number;
+} {
+  const isSmall =
+    (popup.tone === 'buff' || popup.tone === 'status') &&
+    !isSpPopupText(popup.text);
+  const charW = isSmall ? 7 : 8.5;
+  const width = Math.max(36, Math.round(popup.text.trim().length * charW + 20));
+  const height = isSmall ? 18 : 22;
+  return { width, height };
 }
 
 function parseCoalesceNumber(
@@ -315,6 +539,10 @@ export function syncCardPopupQueue(
 
   let lastLaunchAtMs = state.lastLaunchAtMs;
   const nextActive = [...active];
+  const zoneCfg = {
+    widthPct: sanitizeCardPopupZoneWidthPct(options.zoneWidthPct),
+    heightPct: sanitizeCardPopupZoneHeightPct(options.zoneHeightPct),
+  };
 
   while (nextActive.length < maxConcurrent && pending.length > 0) {
     if (
@@ -331,9 +559,18 @@ export function syncCardPopupQueue(
       cardSize.height,
       rng
     );
+    const endPoint = pickCardPopupEndPoint(
+      zoneCfg,
+      cardSize.width,
+      cardSize.height,
+      nextActive.map((a) => a.endPoint),
+      estimatePopupBoxSize(nextPopup),
+      rng
+    );
     nextActive.push({
       popup: nextPopup,
       startPoint,
+      endPoint,
       startedAtMs: nowMs,
       expiresAtMs: nowMs + totalDurationMs,
     });
