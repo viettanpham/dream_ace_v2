@@ -128,6 +128,23 @@ describe('TASK CS-UI — SupplyLoadoutBar ("Túi vật tư") + Picker', () => {
       root!.render(createElement(SupplyLoadoutBar, { variant: 'desktop', gear }));
     });
 
+    const slot0 = container!.querySelector(
+      '[data-testid="supply-slot-desktop-0"]'
+    ) as HTMLButtonElement;
+    act(() => {
+      slot0.click();
+    });
+
+    expect(
+      container!.querySelector('[data-testid="supply-picker-desktop"]')
+    ).not.toBeNull();
+    const hpT1OnSlot0 = container!.querySelector(
+      '[data-testid="supply-picker-item-desktop-sup_hp_t1"]'
+    ) as HTMLButtonElement;
+    expect(hpT1OnSlot0).not.toBeNull();
+    expect(hpT1OnSlot0.disabled).toBe(true);
+    expect(hpT1OnSlot0.textContent).toContain('Đã mang');
+
     const slot1 = container!.querySelector(
       '[data-testid="supply-slot-desktop-1"]'
     ) as HTMLButtonElement;
@@ -144,7 +161,7 @@ describe('TASK CS-UI — SupplyLoadoutBar ("Túi vật tư") + Picker', () => {
 
     const hpT1Row = container!.querySelector(
       '[data-testid="supply-picker-item-desktop-sup_hp_t1"]'
-    ) as HTMLButtonElement;
+    );
     const spT1Row = container!.querySelector(
       '[data-testid="supply-picker-item-desktop-sup_sp_t1"]'
     ) as HTMLButtonElement;
@@ -155,9 +172,7 @@ describe('TASK CS-UI — SupplyLoadoutBar ("Túi vật tư") + Picker', () => {
       '[data-testid="supply-picker-item-desktop-sup_shield_t1"]'
     );
 
-    expect(hpT1Row).not.toBeNull();
-    expect(hpT1Row.disabled).toBe(true);
-    expect(hpT1Row.textContent).toContain('Đã mang');
+    expect(hpT1Row).toBeNull();
     expect(spT1Row).not.toBeNull();
     expect(spT1Row.disabled).toBe(false);
     expect(spT1Row.textContent).toContain('SP +100');

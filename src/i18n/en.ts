@@ -1237,6 +1237,7 @@ export const EN_TRANSLATIONS = {
   'supply.alreadyEquipped': 'Equipped',
   'supply.lockedHint': 'Cannot change during battle',
   'supply.emptyOwned': 'No matching supplies owned',
+  'supply.emptyOtherFamily': 'No other supply types available',
   'supply.effect.healHp': 'HP +{pct}%',
   'supply.effect.healHpFlat': 'HP +{val}',
   'supply.effect.restoreShield': 'Shield +{pct}%',

@@ -1239,6 +1239,7 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'supply.alreadyEquipped': 'Đã mang',
   'supply.lockedHint': 'Không đổi được khi đang đánh',
   'supply.emptyOwned': 'Chưa có vật tư phù hợp trong túi',
+  'supply.emptyOtherFamily': 'Không còn vật tư khác loại',
   'supply.effect.healHp': 'HP +{pct}%',
   'supply.effect.healHpFlat': 'HP +{val}',
   'supply.effect.restoreShield': 'Khiên +{pct}%',

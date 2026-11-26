@@ -59,7 +59,11 @@ export const DEFAULT_SUPPLY_ECONOMY_CONFIG: SupplyEconomyConfig = {
   limitMult: { ...DEFAULT_SUPPLY_LIMIT_MULT },
 };
 
-export type SupplyRejectReason = 'unknown' | 'duplicate' | 'over_slots';
+export type SupplyRejectReason =
+  | 'unknown'
+  | 'duplicate'
+  | 'family_duplicate'
+  | 'over_slots';
 
 export interface SupplyLoadoutReject {
   id: string;
@@ -389,13 +393,28 @@ export function setSupplyLoadout(
   cfg?: Pick<AdminConfig, 'supplyLoadoutSlots'> | null
 ): { gear: GearUnit; rejected: SupplyLoadoutReject[] } {
   const maxSlots = sanitizeSupplyLoadoutSlots(cfg?.supplyLoadoutSlots);
+  const prevIds = Array.isArray(gear.supplyLoadout) ? gear.supplyLoadout : [];
+  const prevIdSet = new Set(prevIds);
+  const prevCountByFamily = new Map<string, number>();
+  for (const prevId of prevIds) {
+    const prevTpl = getSupplyTemplateById(prevId);
+    if (prevTpl) {
+      prevCountByFamily.set(
+        prevTpl.family,
+        (prevCountByFamily.get(prevTpl.family) ?? 0) + 1
+      );
+    }
+  }
+
   const seen = new Set<string>();
   const accepted: string[] = [];
   const rejected: SupplyLoadoutReject[] = [];
+  const nextFamilyItems = new Map<string, { id: string; isNew: boolean }[]>();
 
   for (const rawId of ids) {
     const id = typeof rawId === 'string' ? rawId.trim() : '';
-    if (!id || !getSupplyTemplateById(id)) {
+    const tpl = id ? getSupplyTemplateById(id) : undefined;
+    if (!id || !tpl) {
       rejected.push({ id: String(rawId ?? ''), reason: 'unknown' });
       continue;
     }
@@ -407,8 +426,34 @@ export function setSupplyLoadout(
       rejected.push({ id, reason: 'over_slots' });
       continue;
     }
+
+    const famList = nextFamilyItems.get(tpl.family) ?? [];
+    const isNew = !prevIdSet.has(id);
+    const prevFamCount = prevCountByFamily.get(tpl.family) ?? 0;
+    const hasAnyNewInFamily = isNew || famList.some((item) => item.isNew);
+    const exceedsLegacyPreservation =
+      famList.length >= 1 &&
+      (hasAnyNewInFamily || famList.length + 1 > prevFamCount);
+
+    if (exceedsLegacyPreservation) {
+      const rejectId = isNew
+        ? id
+        : famList.find((item) => item.isNew)?.id ?? id;
+      rejected.push({ id: rejectId, reason: 'family_duplicate' });
+      continue;
+    }
+
     seen.add(id);
+    famList.push({ id, isNew });
+    nextFamilyItems.set(tpl.family, famList);
     accepted.push(id);
+  }
+
+  if (rejected.some((r) => r.reason === 'family_duplicate')) {
+    return {
+      gear,
+      rejected,
+    };
   }
 
   return {

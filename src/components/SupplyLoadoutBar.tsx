@@ -156,9 +156,21 @@ export function SupplyLoadoutBar({ variant, gear }: SupplyLoadoutBarProps) {
     return map;
   }, [consumables]);
 
+  const otherSlotFamilies = useMemo(() => {
+    const families = new Set<SupplyTemplate['family']>();
+    if (openSlotIndex === null) return families;
+    loadoutIds.forEach((id, idx) => {
+      if (idx === openSlotIndex) return;
+      const tpl = getSupplyTemplateById(id);
+      if (tpl) families.add(tpl.family);
+    });
+    return families;
+  }, [loadoutIds, openSlotIndex]);
+
   const pickerTemplates = useMemo(() => {
     return SUPPLY_TEMPLATES.filter((tpl) => {
       if (tpl.unlockLevel > gear.level) return false;
+      if (otherSlotFamilies.has(tpl.family)) return false;
       const stock = stockByTemplateId.get(tpl.id) ?? 0;
       return stock > 0 || loadoutSet.has(tpl.id);
     }).sort((a, b) => {
@@ -168,7 +180,7 @@ export function SupplyLoadoutBar({ variant, gear }: SupplyLoadoutBarProps) {
       if (a.tier !== b.tier) return a.tier - b.tier;
       return a.id.localeCompare(b.id);
     });
-  }, [gear.level, stockByTemplateId, loadoutSet]);
+  }, [gear.level, otherSlotFamilies, stockByTemplateId, loadoutSet]);
 
   const handleChooseTemplate = (templateId: string | null) => {
     if (openSlotIndex === null) return;
@@ -216,7 +228,9 @@ export function SupplyLoadoutBar({ variant, gear }: SupplyLoadoutBarProps) {
 
         {pickerTemplates.length === 0 ? (
           <div className="px-2 py-3 text-center text-xs text-slate-400">
-            {t('supply.emptyOwned')}
+            {otherSlotFamilies.size > 0
+              ? t('supply.emptyOtherFamily')
+              : t('supply.emptyOwned')}
           </div>
         ) : (
           pickerTemplates.map((tpl) => {

@@ -2452,6 +2452,9 @@ export const useGameStore = create<GameStoreState>()(
           ids,
           state.adminConfig
         );
+        if (rejected.some((r) => r.reason === 'family_duplicate')) {
+          return { ok: false, rejected };
+        }
         set({
           pilot: {
             ...state.pilot,
