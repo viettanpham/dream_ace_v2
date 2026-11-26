@@ -7,6 +7,7 @@ import { formatSupplyEffectSummary, getSupplyName } from './SupplyLoadoutBar';
 
 export interface SupplyTradeConfirmProps {
   mode: 'buy' | 'sell';
+  currency?: 'CR' | 'WP';
   template: SupplyTemplate | null;
   qty: number;
   unitPrice: number;
@@ -18,6 +19,7 @@ export interface SupplyTradeConfirmProps {
 
 export function SupplyTradeConfirm({
   mode,
+  currency = 'CR',
   template,
   qty,
   unitPrice,
@@ -30,9 +32,11 @@ export function SupplyTradeConfirm({
   if (!template) return null;
 
   const isBuy = mode === 'buy';
+  const isWp = isBuy && currency === 'WP';
+  const unitLabel = isWp ? 'WP' : 'CR';
   const total = Math.max(0, Math.round(unitPrice * qty));
-  const afterCredits = isBuy ? credits - total : credits + total;
-  const isInsufficient = isBuy && afterCredits < 0;
+  const afterBalance = isBuy ? credits - total : credits + total;
+  const isInsufficient = isBuy && afterBalance < 0;
   const iconRow = getCatalogRow(template.iconId, iconCatalogMods) ?? null;
 
   const footer = (
@@ -42,7 +46,9 @@ export function SupplyTradeConfirm({
           data-testid="supply-confirm-reason"
           className="text-xs font-medium text-rose-400"
         >
-          {t('shop.supplyConfirmInsufficient')}
+          {isWp
+            ? t('shop.supplyConfirmInsufficientWp')
+            : t('shop.supplyConfirmInsufficient')}
         </p>
       )}
       <div className="flex items-center justify-end gap-2">
@@ -60,9 +66,11 @@ export function SupplyTradeConfirm({
           disabled={isInsufficient}
           onClick={onConfirm}
           className={`min-h-[40px] px-4 rounded-lg border text-sm font-semibold transition-colors cursor-pointer disabled:border-slate-700 disabled:bg-slate-900 disabled:text-slate-500 disabled:cursor-not-allowed ${
-            isBuy
-              ? 'border-amber-500/60 bg-amber-500/20 hover:bg-amber-500/30 text-amber-100'
-              : 'border-emerald-500/60 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-100'
+            isWp
+              ? 'border-purple-500/60 bg-purple-500/20 hover:bg-purple-500/30 text-purple-100'
+              : isBuy
+                ? 'border-amber-500/60 bg-amber-500/20 hover:bg-amber-500/30 text-amber-100'
+                : 'border-emerald-500/60 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-100'
           }`}
         >
           {isBuy
@@ -121,7 +129,7 @@ export function SupplyTradeConfirm({
               {t('shop.supplyConfirmUnitPrice')}
             </span>
             <span className="font-mono-nums text-slate-200">
-              {unitPrice.toLocaleString()} CR
+              {unitPrice.toLocaleString()} {unitLabel}
             </span>
           </div>
           <div className="pt-1.5 border-t border-slate-800/80 flex items-center justify-between gap-2 text-sm font-bold">
@@ -129,20 +137,26 @@ export function SupplyTradeConfirm({
             <span
               data-testid="supply-confirm-total"
               className={`font-mono-nums ${
-                isBuy ? 'text-amber-300' : 'text-emerald-300'
+                isWp
+                  ? 'text-purple-300'
+                  : isBuy
+                    ? 'text-amber-300'
+                    : 'text-emerald-300'
               }`}
             >
-              {total.toLocaleString()} CR
+              {total.toLocaleString()} {unitLabel}
             </span>
           </div>
           <div className="pt-1.5 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2">
             <span className="text-slate-400">
-              {t('shop.supplyConfirmCreditsCurrent')} →{' '}
-              {t('shop.supplyConfirmCreditsAfter')}
+              {isWp
+                ? t('shop.supplyConfirmWpCurrent')
+                : t('shop.supplyConfirmCreditsCurrent')}{' '}
+              → {t('shop.supplyConfirmCreditsAfter')}
             </span>
             <span className="font-mono-nums">
               <span className="text-slate-300">
-                {credits.toLocaleString()} CR
+                {credits.toLocaleString()} {unitLabel}
               </span>
               <span className="mx-1.5 text-slate-500">→</span>
               <span
@@ -153,7 +167,7 @@ export function SupplyTradeConfirm({
                     : 'text-slate-100 font-semibold'
                 }
               >
-                {afterCredits.toLocaleString()} CR
+                {afterBalance.toLocaleString()} {unitLabel}
               </span>
             </span>
           </div>

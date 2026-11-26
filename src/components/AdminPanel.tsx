@@ -61,7 +61,24 @@ import {
   sanitizeShieldRegenConfig,
 } from '../engine/shieldRegen';
 import {
-  MAX_SUPPLY_SHOP_QTY, MAX_SUPPLY_SHOP_TYPES, MIN_SUPPLY_SHOP_QTY, MIN_SUPPLY_SHOP_TYPES, sanitizeSupplyShopConfig,
+  MAX_SUPPLY_SHOP_MAX_REFRESHES,
+  MAX_SUPPLY_SHOP_QTY,
+  MAX_SUPPLY_SHOP_REFRESH_BASE_COST,
+  MAX_SUPPLY_SHOP_TYPES,
+  MAX_SUPPLY_WP_DUP_WEIGHT,
+  MAX_SUPPLY_WP_MAX_COPIES,
+  MAX_SUPPLY_WP_MIN_TIER,
+  MAX_SUPPLY_WP_PRICE_DIVISOR,
+  MIN_SUPPLY_SHOP_MAX_REFRESHES,
+  MIN_SUPPLY_SHOP_QTY,
+  MIN_SUPPLY_SHOP_REFRESH_BASE_COST,
+  MIN_SUPPLY_SHOP_TYPES,
+  MIN_SUPPLY_WP_DUP_WEIGHT,
+  MIN_SUPPLY_WP_MAX_COPIES,
+  MIN_SUPPLY_WP_MIN_TIER,
+  MIN_SUPPLY_WP_PRICE_DIVISOR,
+  sanitizeSupplyShopConfig,
+  sanitizeSupplyShopExtraConfig,
 } from '../engine/shop';
 import {
   getBoxCapacity,
@@ -2319,13 +2336,26 @@ export function AdminPanel() {
               {/* Supply Shop ("Cửa hàng vật tư") */}
               {(() => {
                 const supCfg = sanitizeSupplyShopConfig(adminConfig);
+                const supExtraCfg = sanitizeSupplyShopExtraConfig(adminConfig);
                 const updateSup = (patch: Partial<typeof supCfg>) =>
                   adminUpdateConfig(sanitizeSupplyShopConfig({ ...supCfg, ...patch }));
+                const updateSupExtra = (patch: Partial<typeof supExtraCfg>) =>
+                  adminUpdateConfig(
+                    sanitizeSupplyShopExtraConfig({ ...supExtraCfg, ...patch })
+                  );
                 const fields: Array<[keyof typeof supCfg, string, number, number, string]> = [
                   ['supplyShopMinTypes', t('admin.supplyShopMinTypes'), MIN_SUPPLY_SHOP_TYPES, MAX_SUPPLY_SHOP_TYPES, 'admin-supply-shop-min-types'],
                   ['supplyShopMaxTypes', t('admin.supplyShopMaxTypes'), MIN_SUPPLY_SHOP_TYPES, MAX_SUPPLY_SHOP_TYPES, 'admin-supply-shop-max-types'],
                   ['supplyShopMinQty', t('admin.supplyShopMinQty'), MIN_SUPPLY_SHOP_QTY, MAX_SUPPLY_SHOP_QTY, 'admin-supply-shop-min-qty'],
                   ['supplyShopMaxQty', t('admin.supplyShopMaxQty'), MIN_SUPPLY_SHOP_QTY, MAX_SUPPLY_SHOP_QTY, 'admin-supply-shop-max-qty'],
+                ];
+                const extraFields: Array<[keyof typeof supExtraCfg, string, number, number, number, string]> = [
+                  ['supplyShopMaxRefreshes', t('admin.supplyShopMaxRefreshes'), MIN_SUPPLY_SHOP_MAX_REFRESHES, MAX_SUPPLY_SHOP_MAX_REFRESHES, 1, 'admin-supply-shop-max-refreshes'],
+                  ['supplyShopRefreshBaseCost', t('admin.supplyShopRefreshBaseCost'), MIN_SUPPLY_SHOP_REFRESH_BASE_COST, MAX_SUPPLY_SHOP_REFRESH_BASE_COST, 100, 'admin-supply-shop-refresh-base-cost'],
+                  ['supplyWpPriceDivisor', t('admin.supplyWpPriceDivisor'), MIN_SUPPLY_WP_PRICE_DIVISOR, MAX_SUPPLY_WP_PRICE_DIVISOR, 1, 'admin-supply-shop-wp-price-divisor'],
+                  ['supplyWpMinTier', t('admin.supplyWpMinTier'), MIN_SUPPLY_WP_MIN_TIER, MAX_SUPPLY_WP_MIN_TIER, 1, 'admin-supply-shop-wp-min-tier'],
+                  ['supplyWpDupWeight', t('admin.supplyWpDupWeight'), MIN_SUPPLY_WP_DUP_WEIGHT, MAX_SUPPLY_WP_DUP_WEIGHT, 0.05, 'admin-supply-shop-wp-dup-weight'],
+                  ['supplyWpMaxCopies', t('admin.supplyWpMaxCopies'), MIN_SUPPLY_WP_MAX_COPIES, MAX_SUPPLY_WP_MAX_COPIES, 1, 'admin-supply-shop-wp-max-copies'],
                 ];
                 return (
                   <div data-testid="admin-supply-shop-section" className="p-3.5 rounded-lg border border-slate-800 bg-[#0D1422] space-y-2.5">
@@ -2355,6 +2385,23 @@ export function AdminPanel() {
                             max={max}
                             value={supCfg[key]}
                             onChange={(e) => updateSup({ [key]: Number(e.target.value) })}
+                            className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                          />
+                        </label>
+                      ))}
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      {extraFields.map(([key, label, min, max, step, testId]) => (
+                        <label key={key} className="space-y-1 block">
+                          <span className="text-[11px] text-slate-400 block">{label}</span>
+                          <input
+                            type="number"
+                            data-testid={testId}
+                            min={min}
+                            max={max}
+                            step={step}
+                            value={supExtraCfg[key]}
+                            onChange={(e) => updateSupExtra({ [key]: Number(e.target.value) })}
                             className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
                           />
                         </label>

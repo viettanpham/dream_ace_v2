@@ -2895,18 +2895,6 @@ export const useGameStore = create<GameStoreState>()(
           return { ok: false, cost };
         }
         const activeGear = state.pilot.gears[state.pilot.activeGearId];
-        const maxLevel = getMaxGearLevel(state.pilot);
-        const nextSupplyStock = generateSupplyShopStock(
-          maxLevel,
-          state.adminConfig,
-          SUPPLY_TEMPLATES
-        );
-        const nextSupplyStockWp = generateSupplyShopStockWp(
-          maxLevel,
-          state.adminConfig,
-          nextSupplyStock.length,
-          SUPPLY_TEMPLATES
-        );
         soundFx.playClick();
         set({
           pilot: {
@@ -2917,8 +2905,6 @@ export const useGameStore = create<GameStoreState>()(
             activeGear.level,
             buildShopOptionsFromState(state.pilot, state.adminConfig)
           ),
-          supplyShopStock: nextSupplyStock,
-          supplyShopStockWp: nextSupplyStockWp,
           battlesUntilRestock: SHOP_STOCK_CONFIG.restockEveryNBattles,
           hasSaveData: true,
         });
