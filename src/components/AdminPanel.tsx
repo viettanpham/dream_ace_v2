@@ -80,7 +80,9 @@ import {
 } from '../engine/turnPhase';
 import {
   MAX_PRESTAGE_COUNTDOWN_SEC,
+  MAX_PRESTAGE_GROUP_FROM_SIZE,
   MIN_PRESTAGE_COUNTDOWN_SEC,
+  MIN_PRESTAGE_GROUP_FROM_SIZE,
   sanitizePrestageConfig,
 } from '../engine/prestage';
 import { AdminCapacityField } from './AdminCapacityField';
@@ -2270,6 +2272,40 @@ export function AdminPanel() {
                         rangeHintText={t('admin.capacityRangeHint', {
                           min: MIN_PRESTAGE_COUNTDOWN_SEC,
                           max: MAX_PRESTAGE_COUNTDOWN_SEC,
+                        })}
+                        formatAppliedText={(n) =>
+                          t('admin.capacityApplied', { n })
+                        }
+                      />
+                      <AdminCapacityField
+                        label={t('admin.prestageGroupFromSize')}
+                        min={MIN_PRESTAGE_GROUP_FROM_SIZE}
+                        max={MAX_PRESTAGE_GROUP_FROM_SIZE}
+                        storedValue={prestageCfg.groupFromSize}
+                        usedCount={0}
+                        inputTestId="admin-prestage-group-from-size-input"
+                        applyTestId="admin-prestage-group-from-size-apply"
+                        hintTestId="admin-prestage-group-from-size-hint"
+                        appliedTestId="admin-prestage-group-from-size-applied"
+                        overCapacityText=""
+                        sanitize={(raw) =>
+                          sanitizePrestageConfig({
+                            ...prestageCfg,
+                            groupFromSize: raw,
+                          }).groupFromSize
+                        }
+                        onApply={(groupFromSize) =>
+                          adminUpdateConfig({
+                            prestage: {
+                              ...prestageCfg,
+                              groupFromSize,
+                            },
+                          })
+                        }
+                        applyLabel={t('admin.capacityApply')}
+                        rangeHintText={t('admin.capacityRangeHint', {
+                          min: MIN_PRESTAGE_GROUP_FROM_SIZE,
+                          max: MAX_PRESTAGE_GROUP_FROM_SIZE,
                         })}
                         formatAppliedText={(n) =>
                           t('admin.capacityApplied', { n })

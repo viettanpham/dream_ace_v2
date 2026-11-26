@@ -1998,6 +1998,23 @@ export const EN_TRANSLATIONS = {
   'battle.turnStep.step2Full': 'Next buff counts as main action',
   'admin.prestageEnabled': 'Pre-stage gate at battle start (free buffs & wait)',
   'admin.prestageCountdownSec': 'Pre-stage auto-engage countdown (sec)',
+  'admin.prestageGroupFromSize': 'Group Pre-stage when side exceeds (GEARs)',
+  'prestage.title': 'Battle Prep',
+  'prestage.overviewDesktop': 'Overview: ALLY {ally} GEAR | ENEMY {enemy} GEAR',
+  'prestage.overviewPhone': 'Allies {ally} | Enemies {enemy}',
+  'prestage.mixPrefix': 'mix: {mix}',
+  'prestage.sideAlly': 'Allies',
+  'prestage.sideEnemy': 'Enemies',
+  'prestage.tabAlly': 'Allies',
+  'prestage.tabEnemy': 'Enemies',
+  'prestage.commanderEmpty': 'No commander',
+  'prestage.classGroupLine': '{className} ×{count}  Lv {min}~{max} (Avg {avg})',
+  'prestage.supplyBagTitle': 'Supply Bag',
+  'prestage.supplyBagEmpty': 'Empty',
+  'prestage.enemyStatusHidden': '(hidden)',
+  'prestage.enemyIntelNone': 'No intel',
+  'prestage.confirm': 'Engage',
+  'prestage.confirmCountdown': 'Engage ({sec}s)',
 } as const;
 
 export type TranslationKey = keyof typeof EN_TRANSLATIONS;

@@ -102,6 +102,7 @@ import {
 import { BattleMoreActionsMenu } from './BattleMoreActionsMenu';
 import { BattleRadarView } from './BattleRadarView';
 import { BattleResultDialog } from './BattleResultDialog';
+import { PrestageDialog } from './PrestageDialog';
 import { CombatLogPopupSheet, PhoneUnitDetailSheet } from './BattleSheets';
 import { BattleStatsModal } from './BattleStatsModal';
 import { BattleUnitCard } from './BattleUnitCard';
@@ -169,6 +170,7 @@ export function BattleScreen() {
   const returnToHangar = useGameStore((s) => s.returnToHangar);
   const startBattle = useGameStore((s) => s.startBattle);
   const reloadBattle = useGameStore((s) => s.reloadBattle);
+  const confirmPrestage = useGameStore((s) => s.confirmPrestage);
   const setBattleSpeed = useGameStore((s) => s.setBattleSpeed);
   const setBattleViewMode = useGameStore((s) => s.setBattleViewMode);
   const toggleSkipAnimations = useGameStore((s) => s.toggleSkipAnimations);
@@ -3509,6 +3511,19 @@ export function BattleScreen() {
           />
         )}
       </ErrorBoundary>
+
+      {/* ==================== PRE-STAGE DIALOG ==================== */}
+      {battle.prestage?.active && !battle.summary && (
+        <PrestageDialog
+          battle={battle}
+          supplyRows={battleSupplyView.rows}
+          adminConfig={adminConfig}
+          autoLoopActive={Boolean(autoRepeatSession?.active)}
+          lang={lang}
+          t={t}
+          onConfirm={confirmPrestage}
+        />
+      )}
 
       {/* ==================== VICTORY / DEFEAT / RETREAT RESULTS MODAL ==================== */}
       <ErrorBoundary

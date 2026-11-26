@@ -1496,6 +1496,7 @@ export interface TurnPhaseConfig {
 export interface PrestageConfig {
   enabled: boolean;
   countdownSec: number;
+  groupFromSize?: number;
 }
 
 export interface PrestageState {

@@ -2001,6 +2001,23 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'battle.turnStep.step2Full': 'Buff tiếp theo tính là hành động chính',
   'admin.prestageEnabled': 'Bật Pre-stage đầu trận (buff sẵn & chờ xác nhận)',
   'admin.prestageCountdownSec': 'Đếm ngược tự vào trận (giây)',
+  'admin.prestageGroupFromSize': 'Gom nhóm Pre-stage khi mỗi phe hơn (GEAR)',
+  'prestage.title': 'Chuẩn bị trận',
+  'prestage.overviewDesktop': 'Tổng quan: TA {ally} GEAR | ĐỊCH {enemy} GEAR',
+  'prestage.overviewPhone': 'Ta {ally} | Địch {enemy}',
+  'prestage.mixPrefix': 'gồm: {mix}',
+  'prestage.sideAlly': 'Phe ta',
+  'prestage.sideEnemy': 'Phe địch',
+  'prestage.tabAlly': 'Ta',
+  'prestage.tabEnemy': 'Địch',
+  'prestage.commanderEmpty': 'Chưa có chỉ huy',
+  'prestage.classGroupLine': '{className} ×{count}  Lv {min}~{max} (TB {avg})',
+  'prestage.supplyBagTitle': 'Túi vật tư',
+  'prestage.supplyBagEmpty': 'Trống',
+  'prestage.enemyStatusHidden': '(ẩn)',
+  'prestage.enemyIntelNone': 'Không có tình báo',
+  'prestage.confirm': 'Vào trận',
+  'prestage.confirmCountdown': 'Vào trận ({sec}s)',
 };
 
 

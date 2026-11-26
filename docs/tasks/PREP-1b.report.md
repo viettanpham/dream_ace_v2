@@ -1,0 +1,10 @@
+# Báo cáo TASK PREP-1b — Dialog "Chuẩn bị trận"
+- **STEP 0**: Mount dialog tại `src/components/BattleScreen.tsx:3516` (`battle.prestage?.active && !battle.summary`); icon buff dùng `CatalogIcon` + `getCatalogRowForStatus` (`StatusChip.tsx` tham chiếu); túi vật tư đọc từ `battleSupplyView.rows` (`getBattleSupplyRows()` dòng 603); tên class qua `getClassName(lang, classId)` (`Striker/Interceptor/Siege/Support`); cờ loop đọc từ `Boolean(autoRepeatSession?.active)` (`BattleScreen.tsx:153`).
+- **ITEMS ĐÃ XONG**:
+  - **ITEM 1**: Thêm `buildPrestageSummary()`, `shouldUseGroupedPrestage()`, `groupFromSize` (`4..50`, mặc định `10`) trong `src/engine/prestage.ts`, `src/types/game.ts`, và ô nhập `AdminCapacityField` trong `src/components/AdminPanel.tsx`.
+  - **ITEM 2**: Tạo `src/components/PrestageDialog.tsx` (desktop modal `max-w-[640px] max-h-[80vh]` 2 cột `Ta | Địch`; phone `BottomSheet` `max-h-[86dvh]` tab `[Ta | Địch]`; chế độ list 28px & grouped theo class; bên địch ẩn buff và hiện `"Không có tình báo"`), gắn vào `BattleScreen.tsx`, thêm chuỗi `vi.ts` + `en.ts`.
+  - **ITEM 3**: Đếm ngược auto loop `"Vào trận ({sec}s)"`, `countdownSec === 0` tự xác nhận và không render dialog, bật `DEFAULT_PRESTAGE_CONFIG.enabled = true`.
+- **FILES ĐÃ ĐỔI**: `src/types/game.ts`, `src/engine/prestage.ts`, `src/components/PrestageDialog.tsx`, `src/components/BattleScreen.tsx`, `src/components/AdminPanel.tsx`, `src/i18n/vi.ts`, `src/i18n/en.ts`, `src/components/__tests__/prestageDialog.test.tsx`, `docs/CODEMAP.md`, `docs/tasks/PREP-1b.{md,progress.md,report.md}`.
+- **KIỂM THỬ**: PASS — `npx vitest run src/engine/__tests__/prestage.test.ts src/components/__tests__/prestageDialog.test.tsx --reporter=dot` (2 files, 10/10 tests pass) + `npx tsc --noEmit` (0 lỗi); không chạy full vitest hay build.
+- **CHƯA KIỂM TRÊN TRÌNH DUYỆT THẬT (NOT VERIFIED)**: Responsive phone `320/360/390`, desktop modal ở `768+`, grouped mode với `24` và `50` GEAR, và hiển thị đếm ngược loop thực tế.
+- **BƯỚC TIẾP THEO**: Kiểm tra trực quan trên trình duyệt ở các viewport trên trước khi mở task UI/Combat kế tiếp.
