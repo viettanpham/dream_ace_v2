@@ -87,15 +87,17 @@ function makeDummyUnit(overrides: Partial<CombatUnit> = {}): CombatUnit {
 }
 
 describe('TASK CS1 — Battle Supply Data, Price Formula, Save v11 & Pure Rules', () => {
-  it('1) loads 12 valid sys supply templates (hp/shield/sp x T1-T4) and drops bad rows with console.warn', () => {
-    expect(SUPPLY_TEMPLATES).toHaveLength(15);
+  it('1) loads 16 valid sys supply templates (hp/shield/sp x T1-T5 + utility) and drops bad rows with console.warn', () => {
+    expect(SUPPLY_TEMPLATES).toHaveLength(16);
     const catalogIds = new Set(
       (rawIconCatalog as Array<{ id: string }>).map((row) => row.id)
     );
     for (const tpl of SUPPLY_TEMPLATES) {
       expect(tpl.registryTag).toBe('sys');
-      expect(tpl.cooldownTurns).toBe(tpl.family === 'sp_kit' ? 3 : 2);
-      expect(tpl.perBattleLimit).toBe(5);
+      expect(tpl.cooldownTurns).toBe(
+        tpl.family === 'utility' ? 4 : tpl.family === 'sp_kit' ? 3 : 2
+      );
+      expect(tpl.perBattleLimit).toBe(tpl.family === 'utility' ? 2 : 5);
       expect(catalogIds.has(tpl.iconId)).toBe(true);
     }
 
@@ -149,12 +151,13 @@ describe('TASK CS1 — Battle Supply Data, Price Formula, Save v11 & Pure Rules'
     warnSpy.mockRestore();
   });
 
-  it('2) computes all 12 supply prices strictly from formula and lets priceOverride win', () => {
+  it('2) computes all 16 supply prices strictly from formula and lets priceOverride win', () => {
     expect(PRICE_FORMULA.consumableBase).toEqual({
       hp_kit: 30,
       shield_kit: 30,
       sp_kit: 36,
       buff: 60,
+      utility: 50,
     });
 
     const expected: Record<string, number> = {
@@ -173,15 +176,27 @@ describe('TASK CS1 — Battle Supply Data, Price Formula, Save v11 & Pure Rules'
       sup_sp_t3: 140,
       sup_sp_t4: 220,
       sup_sp_t5: 320,
+      sup_scan_t1: 50,
     };
 
     for (const tpl of SUPPLY_TEMPLATES) {
-      const val = tpl.effects[0].value;
-      const mult = tpl.family === 'sp_kit' ? 2 : 1;
-      const formulaPrice = Math.max(
-        PRICE_FORMULA.minPrice,
-        Math.round(val / 5) * mult
-      );
+      const eff = tpl.effects[0];
+      const isFlatRestore =
+        eff.kind === 'heal_hp' ||
+        eff.kind === 'restore_shield' ||
+        eff.kind === 'restore_sp';
+      const formulaPrice = isFlatRestore
+        ? Math.max(
+            PRICE_FORMULA.minPrice,
+            Math.round(eff.value / 5) * (tpl.family === 'sp_kit' ? 2 : 1)
+          )
+        : Math.max(
+            PRICE_FORMULA.minPrice,
+            Math.round(
+              PRICE_FORMULA.consumableBase[tpl.family] *
+                (PRICE_FORMULA.tierFactor[tpl.tier - 1] ?? 1)
+            )
+          );
       expect(computeSupplyPrice(tpl)).toBe(formulaPrice);
       expect(computeSupplyPrice(tpl)).toBe(expected[tpl.id]);
     }

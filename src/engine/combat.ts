@@ -215,7 +215,34 @@ function removeStatus(
   return statuses.filter((s) => s.type !== type);
 }
 
-function buildNpcSkillLoadout(
+export const NPC_ROLE_SKILL_PRIORITY: Record<MechClassId, readonly string[]> = {
+  striker: [
+    'str_hotload_shells',
+    'str_deadeye_link',
+    'str_viper_sweep',
+    'str_ordnance_amp',
+  ],
+  interceptor: [
+    'int_sabot_burst',
+    'int_snap_riposte',
+    'int_mach_surge',
+    'int_afterburn_slip',
+  ],
+  siege: [
+    'sge_anchor_protocol',
+    'sge_bastion_lock',
+    'sge_grav_bolas',
+    'sge_aegis_sunder',
+  ],
+  support: [
+    'sup_nanite_mend',
+    'sup_lidar_sweep',
+    'sup_flux_transfer',
+    'sup_war_hymn',
+  ],
+};
+
+export function buildNpcSkillLoadout(
   classId: MechClassId,
   level: number
 ): { equippedSkillIds: string[]; skillLevels: Record<string, number> } {
@@ -225,10 +252,28 @@ function buildNpcSkillLoadout(
       s.category === 'normal' &&
       s.unlockLevel <= level
   );
-  const picked =
-    unlocked.length > 0
-      ? unlocked.slice(0, 3).map((s) => s.id)
-      : [...CLASS_STARTER_SKILLS[classId]];
+  let picked: string[] = [];
+  if (unlocked.length > 0) {
+    const unlockedIds = new Set(unlocked.map((s) => s.id));
+    const seen = new Set<string>();
+    const priorityIds = NPC_ROLE_SKILL_PRIORITY[classId] ?? [];
+    for (const id of priorityIds) {
+      if (picked.length >= MAX_ACTIVE_SKILL_BAR) break;
+      if (unlockedIds.has(id) && !seen.has(id)) {
+        picked.push(id);
+        seen.add(id);
+      }
+    }
+    for (const skill of unlocked) {
+      if (picked.length >= MAX_ACTIVE_SKILL_BAR) break;
+      if (!seen.has(skill.id)) {
+        picked.push(skill.id);
+        seen.add(skill.id);
+      }
+    }
+  } else {
+    picked = [...CLASS_STARTER_SKILLS[classId]].slice(0, MAX_ACTIVE_SKILL_BAR);
+  }
   const lv = Math.min(5, Math.max(1, Math.ceil(level / 5)));
   const skillLevels: Record<string, number> = {};
   for (const id of picked) {

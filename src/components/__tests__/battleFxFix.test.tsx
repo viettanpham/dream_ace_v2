@@ -209,6 +209,7 @@ describe('FX-fix: Battle VFX lifetime & persistence across x1..x10', () => {
           fxEvents: [],
           popups: [],
           explodedUnitIds: [],
+          prestage: { active: false, appliedByUnit: {} },
         },
       });
 
@@ -308,6 +309,7 @@ describe('FX-fix: Battle VFX lifetime & persistence across x1..x10', () => {
         selectedTargetId: enemy.id,
         fxEvents: [],
         popups: [],
+        prestage: { active: false, appliedByUnit: {} },
       },
     });
 
