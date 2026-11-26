@@ -152,7 +152,7 @@ export function BattleResultDialog({
                   </div>
                   <div className="text-[12px] font-mono-nums text-slate-400 mt-0.5">
                     {summary.newLevel >= getMaxLevel()
-                      ? t('summary.maxLevelReached')
+                      ? t('summary.maxLevelReached', { level: getMaxLevel() })
                       : t('summary.battlesToNext', {
                           count: summary.battlesToNextLevel,
                           next: summary.newLevel + 1,

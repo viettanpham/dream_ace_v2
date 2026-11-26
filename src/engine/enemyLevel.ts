@@ -181,6 +181,7 @@ export function clampEnemyLevel(
   rawLevel: number,
   cfg?: Partial<EnemyLevelConfig> | null
 ): number {
+  if (!Number.isFinite(rawLevel)) return 1;
   const safeCfg = sanitizeEnemyLevelConfig(cfg);
   const maxEnemyLevel = Math.max(
     1,

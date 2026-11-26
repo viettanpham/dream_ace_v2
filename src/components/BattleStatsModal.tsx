@@ -397,7 +397,7 @@ export function BattleStatsModal({
                   </div>
                   <div className="text-[11px] font-mono-nums text-slate-500">
                     {summary.newLevel >= getMaxLevel()
-                      ? t('summary.maxLevelReached')
+                      ? t('summary.maxLevelReached', { level: getMaxLevel() })
                       : t('summary.battlesToNext', {
                           count: summary.battlesToNextLevel,
                           next: summary.newLevel + 1,

@@ -34,7 +34,7 @@ import { createDefaultTacticsForClass } from './tactics';
  * Formula: Math.round(60 * level^1.4)
  */
 export function getExpForNextLevel(level: number): number {
-  const lvl = Math.max(1, level);
+  const lvl = Number.isFinite(level) ? Math.max(1, Math.floor(level)) : 1;
   return Math.round(
     BALANCE_CONFIG.expBase * Math.pow(lvl, BALANCE_CONFIG.expExponent)
   );

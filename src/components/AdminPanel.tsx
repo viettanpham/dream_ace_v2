@@ -26,8 +26,6 @@ import { EnemyLevelAdminBlock } from './admin/EnemyLevelAdminBlock';
 import {
   BALANCE_CONFIG,
   getMaxLevel,
-  MAX_ADMIN_MAX_LEVEL,
-  MIN_ADMIN_MAX_LEVEL,
   sanitizeFluxTransferConfig,
   sanitizeMaxLevel,
   sanitizeSpEconomyConfig,
@@ -206,9 +204,11 @@ export function AdminPanel() {
   );
 
   // Pilot tab inputs
+  const storedMaxLevel = sanitizeMaxLevel(adminConfig.maxLevel);
   const [levelInput, setLevelInput] = useState(
     String(pilot.gears[pilot.activeGearId].level)
   );
+  const [maxLevelInput, setMaxLevelInput] = useState(String(storedMaxLevel));
   const [expInput, setExpInput] = useState('500');
   const [pointsInput, setPointsInput] = useState('10');
   const [creditsInput, setCreditsInput] = useState('5000');
@@ -251,6 +251,10 @@ export function AdminPanel() {
     setLevelInput(String(pilot.gears[pilot.activeGearId].level));
     setMonthInput(String(pilot.campaignMonth));
   }, [pilot.activeGearId, pilot.gears, pilot.campaignMonth, open]);
+
+  useEffect(() => {
+    setMaxLevelInput(String(storedMaxLevel));
+  }, [storedMaxLevel, open]);
 
   useEffect(() => {
     if (!open) return;
@@ -433,13 +437,13 @@ export function AdminPanel() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="p-3 rounded-lg border border-slate-800 bg-[#0D1422] space-y-2">
                   <div className="text-xs font-semibold text-slate-300">
-                    {t('admin.setLevel')} (1–{getMaxLevel()})
+                    {t('admin.setLevel')} (1–{storedMaxLevel})
                   </div>
                   <div className="flex gap-2">
                     <input
                       type="number"
                       min={1}
-                      max={getMaxLevel()}
+                      max={storedMaxLevel}
                       value={levelInput}
                       onChange={(e) => setLevelInput(e.target.value)}
                       className="flex-1 h-9 px-2.5 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
@@ -457,29 +461,60 @@ export function AdminPanel() {
                       {t('admin.apply')}
                     </button>
                   </div>
-                  <label className="pt-1.5 border-t border-slate-800/80 space-y-1 block">
-                    <span className="text-[11px] font-semibold text-slate-300 block">
-                      {t('admin.maxLevelLabel')}
-                    </span>
-                    <input
-                      type="number"
-                      data-testid="admin-max-level-input"
-                      min={MIN_ADMIN_MAX_LEVEL}
-                      max={MAX_ADMIN_MAX_LEVEL}
-                      step={1}
-                      value={sanitizeMaxLevel(adminConfig.maxLevel)}
-                      onChange={(e) => {
-                        const v = Number(e.target.value);
-                        if (Number.isFinite(v)) {
-                          adminUpdateConfig({ maxLevel: sanitizeMaxLevel(v) });
-                        }
-                      }}
-                      className="w-full h-8 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
-                    />
-                    <span className="text-[10px] text-slate-400 block leading-snug">
-                      {t('admin.maxLevelHint')}
-                    </span>
-                  </label>
+                  {(() => {
+                    const trimmed = maxLevelInput.trim();
+                    const isWhole = /^\d+$/.test(trimmed);
+                    const parsed = isWhole ? Number(trimmed) : Number.NaN;
+                    const isValid =
+                      isWhole && Number.isSafeInteger(parsed) && parsed >= 1;
+                    const canApply = isValid && parsed !== storedMaxLevel;
+                    const handleApplyMaxLevel = () => {
+                      if (!canApply) return;
+                      const nextMax = sanitizeMaxLevel(parsed);
+                      adminUpdateConfig({ maxLevel: nextMax });
+                      setMaxLevelInput(String(nextMax));
+                      flash(`${t('admin.maxLevelLabel')}: ${nextMax}`);
+                    };
+                    return (
+                      <div className="pt-1.5 border-t border-slate-800/80 space-y-1">
+                        <label
+                          htmlFor="admin-max-level-input"
+                          className="text-[11px] font-semibold text-slate-300 block"
+                        >
+                          {t('admin.maxLevelLabel')}
+                        </label>
+                        <div className="flex gap-2">
+                          <input
+                            id="admin-max-level-input"
+                            type="number"
+                            data-testid="admin-max-level-input"
+                            step={1}
+                            value={maxLevelInput}
+                            onChange={(e) => setMaxLevelInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleApplyMaxLevel();
+                              }
+                            }}
+                            className="flex-1 h-8 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                          />
+                          <button
+                            type="button"
+                            data-testid="admin-max-level-apply"
+                            disabled={!canApply}
+                            onClick={handleApplyMaxLevel}
+                            className="h-8 px-3 rounded bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-slate-950 font-bold text-xs cursor-pointer shrink-0"
+                          >
+                            {t('admin.apply')}
+                          </button>
+                        </div>
+                        <span className="text-[10px] text-slate-400 block leading-snug">
+                          {t('admin.maxLevelHint')}
+                        </span>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 <div className="p-3 rounded-lg border border-slate-800 bg-[#0D1422] space-y-2">
@@ -728,7 +763,7 @@ export function AdminPanel() {
                     <input
                       type="number"
                       min={1}
-                      max={50}
+                      max={storedMaxLevel}
                       placeholder="Auto"
                       value={genReqLevel}
                       onChange={(e) => setGenReqLevel(e.target.value)}

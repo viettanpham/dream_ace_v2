@@ -20,7 +20,9 @@ export function LevelBadge({
   className = '',
 }: LevelBadgeProps) {
   const { t } = useI18n();
-  const safeLevel = Math.max(1, Math.round(level));
+  const safeLevel = Number.isFinite(level)
+    ? Math.max(1, Math.round(level))
+    : 1;
   const frameClass = isLeader
     ? 'border-emerald-500/70 bg-emerald-500/10'
     : side === 'ally'

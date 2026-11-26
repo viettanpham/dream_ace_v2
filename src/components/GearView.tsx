@@ -20,6 +20,7 @@ import {
   X,
 } from 'lucide-react';
 import { sanitizeAutoEquipConfig } from '../data/autoEquipConfig';
+import { sanitizeMaxLevel } from '../data/balance';
 import {
   EMPTY_STAT_BLOCK,
   MECH_CLASSES,
@@ -153,6 +154,7 @@ export function GearView() {
   const { lang, t } = useI18n();
   const pilot = useGameStore((s) => s.pilot);
   const adminConfig = useGameStore((s) => s.adminConfig);
+  const currentMaxLevel = sanitizeMaxLevel(adminConfig?.maxLevel);
   const filterState = useGameStore((s) => s.inventoryFilterState);
   const quickSellUndo = useGameStore((s) => s.quickSellUndo);
   const autoEquipUndo = useGameStore((s) => s.autoEquipUndo);
@@ -2277,7 +2279,7 @@ export function GearView() {
                         <input
                           type="number"
                           min={1}
-                          max={50}
+                          max={currentMaxLevel}
                           placeholder="Min"
                           value={filterState.minLevel ?? ''}
                           onChange={(e) =>
@@ -2294,7 +2296,7 @@ export function GearView() {
                         <input
                           type="number"
                           min={1}
-                          max={50}
+                          max={currentMaxLevel}
                           placeholder="Max"
                           value={filterState.maxLevel ?? ''}
                           onChange={(e) =>

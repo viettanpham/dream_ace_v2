@@ -8,6 +8,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
+import { sanitizeMaxLevel } from '../data/balance';
 import { getSellPrice } from '../engine/equipment';
 import { calculateItemPowerScore } from '../engine/inventory';
 import {
@@ -52,6 +53,7 @@ export function QuickSellModal({ open, onClose, onSold }: QuickSellModalProps) {
   const { lang, t } = useI18n();
   const pilot = useGameStore((s) => s.pilot);
   const config = useGameStore((s) => s.quickSellConfig);
+  const maxLevel = useGameStore((s) => sanitizeMaxLevel(s.adminConfig?.maxLevel));
   const setQuickSellConfig = useGameStore((s) => s.setQuickSellConfig);
   const executeQuickSell = useGameStore((s) => s.executeQuickSell);
   const screen = useGameStore((s) => s.screen);
@@ -318,7 +320,7 @@ export function QuickSellModal({ open, onClose, onSold }: QuickSellModalProps) {
               <input
                 type="number"
                 min={1}
-                max={50}
+                max={maxLevel}
                 placeholder={t('qs.anyOption')}
                 value={config.maxRequiredLevel ?? ''}
                 onChange={(e) =>
