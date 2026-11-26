@@ -1,0 +1,6 @@
+# SHOP-V2b Report
+- Hoàn thành: ITEM 0 (`refreshShopStock()` chỉ làm mới gear shop), ITEM 1 (`SupplyShopPanel` thanh làm mới `{k}/{max}` + `KHU CREDIT` + `KHU WP` dùng `buySupplyWp` + `SupplyTradeConfirm` hỗ trợ `currency: 'CR' | 'WP'`), ITEM 2 (nút `[MAX]` ở cả 2 khu), ITEM 3 (`BÁN LẠI` giữ `+N CR` không có text chỉ nhận CR + 6 ô Admin CP `supplyShop*`/`supplyWp*`).
+- Files thay đổi: `src/components/SupplyShopPanel.tsx`, `src/components/SupplyTradeConfirm.tsx`, `src/components/AdminPanel.tsx`, `src/store/useGameStore.ts`, `src/i18n/vi.ts`, `src/i18n/en.ts`, `src/components/__tests__/supplyShopUiCs3b.test.tsx`, `src/components/__tests__/supplyShopV2b.test.tsx`, `docs/CODEMAP.md`, `docs/tasks/SHOP-V2b.{progress.md,report.md}`.
+- Ghi chú cập nhật test cũ: `supplyShopUiCs3b.test.tsx` cập nhật 2 assertion đã lỗi thời (`supply-shop-panel` vẫn render khi chỉ khu CREDIT trống; `supplyShopMaxTypes` mặc định 10 từ SHOP-V2a).
+- Kiểm thử: `npx vitest run src/components/__tests__/supplyShopUiCs3b.test.tsx src/components/__tests__/supplyShopConfirm.test.tsx src/components/__tests__/supplyShopV2b.test.tsx --reporter=dot` PASS (3 files, 14/14 tests); `npx tsc --noEmit` PASS (0 lỗi). Full vitest & build không chạy theo scope.
+- Chưa kiểm tra trên trình duyệt thật: desktop tab (1440x900) và phone (360px).

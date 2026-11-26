@@ -179,13 +179,12 @@ describe('TASK CS3b — Shop tab "Vật tư" + Admin CP block "Cửa hàng vật
       container!.querySelector('[data-testid="supply-reason-sup_hp_t1"]')?.textContent
     ).toContain('Thiếu CR');
 
-    // Empty stock + 0 owned renders one text line only
+    // Empty CREDIT stock + 0 owned renders empty line cleanly without sell section
     act(() => {
       useGameStore.setState({ supplyShopStock: [] });
       root!.render(createElement(ShopScreen));
     });
     expect(container!.querySelector('[data-testid="supply-shop-empty"]')).not.toBeNull();
-    expect(container!.querySelector('[data-testid="supply-shop-panel"]')).toBeNull();
     expect(container!.querySelector('[data-testid="supply-sell-section"]')).toBeNull();
   });
 
@@ -317,10 +316,10 @@ describe('TASK CS3b — Shop tab "Vật tư" + Admin CP block "Cửa hàng vật
     )!;
 
     act(() => {
-      setInputValue(minTypes, '9'); // > current max (5) -> fixes maxTypes = 9
+      setInputValue(minTypes, '11'); // > current max (10) -> fixes maxTypes = 11
     });
-    expect(useGameStore.getState().adminConfig.supplyShopMinTypes).toBe(9);
-    expect(useGameStore.getState().adminConfig.supplyShopMaxTypes).toBe(9);
+    expect(useGameStore.getState().adminConfig.supplyShopMinTypes).toBe(11);
+    expect(useGameStore.getState().adminConfig.supplyShopMaxTypes).toBe(11);
 
     act(() => {
       setInputValue(maxTypes, '99'); // clamped to 12

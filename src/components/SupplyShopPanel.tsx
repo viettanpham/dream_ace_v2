@@ -369,7 +369,11 @@ export function SupplyShopPanel({ onNotice }: SupplyShopPanelProps) {
     return (
       <div
         key={rowKey}
-        data-testid={`${testIdPrefix}-row-${rowKey}`}
+        data-testid={
+          testIdPrefix === 'supply'
+            ? `supply-buy-row-${rowKey}`
+            : `${testIdPrefix}-row-${rowKey}`
+        }
         data-sold-out={isSoldOut ? 'true' : 'false'}
         className={`py-2.5 first:pt-1 last:pb-1 flex flex-col sm:flex-row sm:items-center justify-between gap-2 min-w-0 ${
           isSoldOut ? 'opacity-50' : ''
