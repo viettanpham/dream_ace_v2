@@ -1747,6 +1747,12 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'admin.statusDefaultsDesktopRows': 'Hàng đơn vị (Máy tính, 1–5)',
   'admin.statusDefaultsPlayerPhoneRows': 'Hàng người chơi (Điện thoại, 1–2)',
   'admin.statusDefaultsPlayerDesktopRows': 'Hàng người chơi (Máy tính, 1–2)',
+  'admin.cardPopupTitle': 'Hiệu ứng / Số bay thẻ (Card)',
+  'admin.cardPopupSubtitle':
+    'Cấu hình độ trễ nối đuôi, thời gian bay từ mép vào giữa thẻ và số lượng bay cùng lúc.',
+  'admin.cardPopupStaggerMs': 'Giãn cách số kế (ms, >= 0)',
+  'admin.cardPopupFlightMs': 'Thời gian bay vào giữa (ms, >= 1)',
+  'admin.cardPopupMaxConcurrent': 'Số bay tối đa cùng lúc (>= 1)',
   'iconCatalog.title': 'Bảng icon',
   'iconCatalog.subtitle': 'Chỉ xem · {total} biểu tượng trong 8 nhóm',
   'iconCatalog.tagSys': 'sys',

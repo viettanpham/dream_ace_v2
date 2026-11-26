@@ -102,6 +102,12 @@ import {
 } from '../engine/prestage';
 import { AdminCapacityField } from './AdminCapacityField';
 import { PirateAdminBlock } from './admin/PirateAdminBlock';
+import {
+  resolveCardPopupConfig,
+  sanitizeCardPopupFlightMs,
+  sanitizeCardPopupMaxConcurrent,
+  sanitizeCardPopupStaggerMs,
+} from '../utils/cardPopupQueue';
 import type {
   BattleSize,
   CombatRow,
@@ -2622,6 +2628,88 @@ export function AdminPanel() {
                               playerDesktopRows: clampPlayerStatusRows(
                                 e.target.value,
                                 effDefaults.playerDesktopRows
+                              ),
+                            })
+                          }
+                          className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Card VFX / Floating Popups */}
+              {(() => {
+                const cardPopupCfg = resolveCardPopupConfig(adminConfig);
+                return (
+                  <div
+                    data-testid="admin-card-popup-section"
+                    className="p-3.5 rounded-lg border border-slate-800 bg-[#0D1422] space-y-2.5"
+                  >
+                    <div className="min-w-0">
+                      <div className="text-xs font-bold uppercase tracking-wider text-sky-300">
+                        {t('admin.cardPopupTitle')}
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">
+                        {t('admin.cardPopupSubtitle')}
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <label className="space-y-1 block">
+                        <span className="text-[11px] text-slate-400 block">
+                          {t('admin.cardPopupStaggerMs')}
+                        </span>
+                        <input
+                          type="number"
+                          data-testid="admin-card-popup-stagger"
+                          min={0}
+                          value={cardPopupCfg.staggerMs}
+                          onChange={(e) =>
+                            adminUpdateConfig({
+                              cardPopupStaggerMs: sanitizeCardPopupStaggerMs(
+                                Number(e.target.value)
+                              ),
+                            })
+                          }
+                          className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                        />
+                      </label>
+
+                      <label className="space-y-1 block">
+                        <span className="text-[11px] text-slate-400 block">
+                          {t('admin.cardPopupFlightMs')}
+                        </span>
+                        <input
+                          type="number"
+                          data-testid="admin-card-popup-flight"
+                          min={1}
+                          value={cardPopupCfg.flightMs}
+                          onChange={(e) =>
+                            adminUpdateConfig({
+                              cardPopupFlightMs: sanitizeCardPopupFlightMs(
+                                Number(e.target.value)
+                              ),
+                            })
+                          }
+                          className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                        />
+                      </label>
+
+                      <label className="space-y-1 block">
+                        <span className="text-[11px] text-slate-400 block">
+                          {t('admin.cardPopupMaxConcurrent')}
+                        </span>
+                        <input
+                          type="number"
+                          data-testid="admin-card-popup-max"
+                          min={1}
+                          value={cardPopupCfg.maxConcurrent}
+                          onChange={(e) =>
+                            adminUpdateConfig({
+                              cardPopupMaxConcurrent: sanitizeCardPopupMaxConcurrent(
+                                Number(e.target.value)
                               ),
                             })
                           }

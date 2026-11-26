@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import {
   formatStatusChipShortValue,
@@ -304,9 +305,12 @@ export function FixedStatusArea({
       );
     }
 
+    const typeCounts = new Map<string, number>();
     return (
       <div className="space-y-2">
-        {sorted.map((st, idx) => {
+        {sorted.map((st) => {
+          const occ = typeCounts.get(st.type) ?? 0;
+          typeCounts.set(st.type, occ + 1);
           const catalogRow = getCatalogRowForStatus(st.type, iconMods);
           const visualKind = getStatusVisualKind(st, catalogRow);
           const detail = formatStatusEffectDetail(lang, st, unit);
@@ -315,7 +319,7 @@ export function FixedStatusArea({
 
           return (
             <div
-              key={`${st.type}-${idx}`}
+              key={`${st.type}-${occ}`}
               data-testid={`status-detail-item-${st.type}`}
               className={`rounded-lg border pl-4 pr-3 py-2.5 flex items-start gap-2.5 ${
                 visualKind === 'debuff'
@@ -449,24 +453,31 @@ export function FixedStatusArea({
             {t('statusUi.areaEmpty')}
           </div>
         ) : (
-          visibleStatuses.map((st, idx) => (
-            <StatusChip
-              key={`${st.type}-${idx}`}
-              status={st}
-              lang={lang}
-              unit={unit}
-              badgeLayout={badgeLayout}
-              iconMods={iconMods}
-              size={compact ? 'bar' : 'sm'}
-              showLabel={showLabels}
-              allowStack={false}
-              stacks={1}
-              testId={chipTestIdPrefix ? `${chipTestIdPrefix}-${idx}` : undefined}
-              labelTestId={
-                labelTestIdPrefix ? `${labelTestIdPrefix}-${idx}` : undefined
-              }
-            />
-          ))
+          (() => {
+            const chipCounts = new Map<string, number>();
+            return visibleStatuses.map((st, idx) => {
+              const occ = chipCounts.get(st.type) ?? 0;
+              chipCounts.set(st.type, occ + 1);
+              return (
+                <StatusChip
+                  key={`${st.type}-${occ}`}
+                  status={st}
+                  lang={lang}
+                  unit={unit}
+                  badgeLayout={badgeLayout}
+                  iconMods={iconMods}
+                  size={compact ? 'bar' : 'sm'}
+                  showLabel={showLabels}
+                  allowStack={false}
+                  stacks={1}
+                  testId={chipTestIdPrefix ? `${chipTestIdPrefix}-${idx}` : undefined}
+                  labelTestId={
+                    labelTestIdPrefix ? `${labelTestIdPrefix}-${idx}` : undefined
+                  }
+                />
+              );
+            });
+          })()
         )}
 
         {overflowCount > 0 && (
@@ -483,20 +494,29 @@ export function FixedStatusArea({
         )}
       </div>
 
-      {/* Responsive full effect list: BottomSheet on phone <= 640px, Popover Modal on desktop > 640px */}
-      {isPhone ? (
-        <BottomSheet
-          open={detailOpen}
-          onClose={() => setDetailOpen(false)}
-          title={unitTitle ? `${unitTitle} — ${t('statusUi.popoverTitle')}` : t('statusUi.popoverTitle')}
-        >
-          <div data-testid="status-area-sheet-body" onClick={(e) => e.stopPropagation()}>
-            {renderDetailList()}
-          </div>
-        </BottomSheet>
-      ) : (
-        detailOpen && (
+      {/* Responsive full effect list: BottomSheet on phone <= 640px, Popover Modal on desktop > 640px (portaled to document.body to escape card transforms/overflow) */}
+      {(() => {
+        const modalNode = isPhone ? (
+          <BottomSheet
+            key="status-area-phone-sheet"
+            open={detailOpen}
+            onClose={() => setDetailOpen(false)}
+            title={
+              unitTitle
+                ? `${unitTitle} — ${t('statusUi.popoverTitle')}`
+                : t('statusUi.popoverTitle')
+            }
+          >
+            <div
+              data-testid="status-area-sheet-body"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {renderDetailList()}
+            </div>
+          </BottomSheet>
+        ) : detailOpen ? (
           <div
+            key="status-area-popover-backdrop"
             data-testid="status-area-popover-backdrop"
             onClick={(e) => {
               e.stopPropagation();
@@ -506,10 +526,12 @@ export function FixedStatusArea({
             className="fixed inset-0 z-50 bg-black/55 flex items-center justify-center p-4"
           >
             <div
+              key="status-area-popover"
               role="dialog"
               aria-modal="true"
               data-testid="status-area-popover"
               onClick={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
               className="w-full max-w-md max-h-[80vh] flex flex-col rounded-xl border border-slate-700 bg-[#0A101B] text-slate-100 shadow-2xl overflow-hidden"
             >
               <div className="px-3.5 py-2.5 border-b border-slate-800 bg-[#0E1624] flex items-center justify-between gap-2 shrink-0">
@@ -536,8 +558,13 @@ export function FixedStatusArea({
               </div>
             </div>
           </div>
-        )
-      )}
+        ) : null;
+
+        if (!modalNode) return null;
+        return typeof document !== 'undefined'
+          ? createPortal(modalNode, document.body)
+          : modalNode;
+      })()}
     </>
   );
 }

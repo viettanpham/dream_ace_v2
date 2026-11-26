@@ -408,6 +408,67 @@
   animation: float-popup-reduced 700ms linear both;
 }
 
+@keyframes card-popup-flight {
+  0% {
+    opacity: 0;
+    transform: translate3d(
+      calc(-50% + var(--card-pop-dx, 0px)),
+      calc(-50% + var(--card-pop-dy, 0px)),
+      0
+    );
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(-50%, -50%, 0);
+  }
+}
+
+@keyframes card-popup-pop-fade {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  35% {
+    opacity: 1;
+    transform: scale(1.18);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+}
+
+@keyframes card-popup-reduced {
+  0% {
+    opacity: 0;
+    transform: translate3d(-50%, -50%, 0);
+  }
+  15%,
+  75% {
+    opacity: 1;
+    transform: translate3d(-50%, -50%, 0);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(-50%, -50%, 0);
+  }
+}
+
+.anim-card-popup-flight {
+  animation: card-popup-flight 200ms cubic-bezier(0.2, 0.8, 0.25, 1) both;
+}
+
+.anim-card-popup-pop-fade {
+  animation: card-popup-pop-fade 450ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.anim-card-popup-reduced {
+  animation: card-popup-reduced 600ms linear both;
+}
+
 @keyframes radar-sweep {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }

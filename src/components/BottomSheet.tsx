@@ -56,11 +56,14 @@ export function BottomSheet({
       className={`fixed inset-0 ${zIndexClass} flex items-end md:items-center justify-center bg-slate-950/75 backdrop-blur-sm`}
       role="dialog"
       aria-modal="true"
+      onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => {
+        e.stopPropagation();
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
+        onClick={(e) => e.stopPropagation()}
         className={`${panelSizeClasses} flex flex-col rounded-t-2xl md:rounded-xl border-t md:border border-slate-700/90 bg-[#0B111C] text-slate-100 shadow-2xl overflow-hidden pb-safe`}
       >
         {/* Mobile grab handle */}

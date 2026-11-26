@@ -12,6 +12,14 @@ import {
   sanitizeStealthConfig,
 } from '../data/balance';
 import {
+  DEFAULT_CARD_POPUP_FLIGHT_MS,
+  DEFAULT_CARD_POPUP_MAX_CONCURRENT,
+  DEFAULT_CARD_POPUP_STAGGER_MS,
+  sanitizeCardPopupFlightMs,
+  sanitizeCardPopupMaxConcurrent,
+  sanitizeCardPopupStaggerMs,
+} from '../utils/cardPopupQueue';
+import {
   cloneTurnPhaseConfig,
   DEFAULT_TURN_PHASE_CONFIG,
   sanitizeTurnPhaseConfig,
@@ -357,6 +365,9 @@ export function createDefaultAdminConfig(): AdminConfig {
     autoEquip: cloneAutoEquipConfig(DEFAULT_AUTO_EQUIP_CONFIG),
     starterSet: cloneStarterSetConfig(DEFAULT_STARTER_SET_CONFIG),
     iconCatalogMods: [],
+    cardPopupStaggerMs: DEFAULT_CARD_POPUP_STAGGER_MS,
+    cardPopupFlightMs: DEFAULT_CARD_POPUP_FLIGHT_MS,
+    cardPopupMaxConcurrent: DEFAULT_CARD_POPUP_MAX_CONCURRENT,
     shieldRegen: { ...DEFAULT_SHIELD_REGEN_CONFIG },
     spEconomy: cloneSpEconomyConfig(DEFAULT_SP_ECONOMY_CONFIG),
     fluxTransfer: cloneFluxTransferConfig(DEFAULT_FLUX_TRANSFER_CONFIG),
@@ -724,6 +735,11 @@ export function migrateSaveData(
       : [],
     statusDisplayDefaults: sanitizeStatusDisplayDefaults(
       rawAdmin.statusDisplayDefaults
+    ),
+    cardPopupStaggerMs: sanitizeCardPopupStaggerMs(rawAdmin.cardPopupStaggerMs),
+    cardPopupFlightMs: sanitizeCardPopupFlightMs(rawAdmin.cardPopupFlightMs),
+    cardPopupMaxConcurrent: sanitizeCardPopupMaxConcurrent(
+      rawAdmin.cardPopupMaxConcurrent
     ),
     shieldRegen: sanitizeShieldRegenConfig(rawAdmin.shieldRegen),
     spEconomy: sanitizeSpEconomyConfig(rawAdmin.spEconomy),

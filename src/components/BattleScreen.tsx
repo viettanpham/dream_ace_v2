@@ -1636,7 +1636,6 @@ export function BattleScreen() {
         autoActive={unit.isPlayer && autoBattleEnabled}
         showStatusLabels={fxSettings.showStatusLabels}
         popups={battle.popups.filter((p) => p.unitId === unit.id)}
-        suppressPopups={showActionStage}
         stageFxRole={stageFxRole}
         stageFxColor={stageFxRole === 'target' ? latestCardFxToneColor : null}
         stageFxKey={latestCardFx?.id ?? null}

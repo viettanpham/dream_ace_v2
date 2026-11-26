@@ -1744,6 +1744,12 @@ export const EN_TRANSLATIONS = {
   'admin.statusDefaultsDesktopRows': 'Unit rows (Desktop, 1–5)',
   'admin.statusDefaultsPlayerPhoneRows': 'Player rows (Phone, 1–2)',
   'admin.statusDefaultsPlayerDesktopRows': 'Player rows (Desktop, 1–2)',
+  'admin.cardPopupTitle': 'Card VFX / Floating Popups',
+  'admin.cardPopupSubtitle':
+    'Configure popup stagger delay, edge-to-center flight duration, and max concurrent popups per card.',
+  'admin.cardPopupStaggerMs': 'Popup stagger (ms, >= 0)',
+  'admin.cardPopupFlightMs': 'Flight duration (ms, >= 1)',
+  'admin.cardPopupMaxConcurrent': 'Max concurrent popups (>= 1)',
   'iconCatalog.title': 'Icon Catalog',
   'iconCatalog.subtitle': 'Read-only · {total} symbols in 8 groups',
   'iconCatalog.tagSys': 'sys',

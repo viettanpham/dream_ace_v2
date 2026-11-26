@@ -1479,6 +1479,9 @@ export interface AdminConfig {
   starterSet?: StarterSetConfig;
   iconCatalogMods?: IconCatalogModRow[];
   statusDisplayDefaults?: StatusDisplayDefaults;
+  cardPopupStaggerMs?: number;
+  cardPopupFlightMs?: number;
+  cardPopupMaxConcurrent?: number;
   shieldRegen?: ShieldRegenConfig;
   spEconomy?: SpEconomyConfig;
   fluxTransfer?: FluxTransferConfig;

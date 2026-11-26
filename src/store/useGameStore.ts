@@ -247,6 +247,11 @@ import type {
   TacticsRule,
   WpMarketOffer,
 } from '../types/game';
+import {
+  sanitizeCardPopupFlightMs,
+  sanitizeCardPopupMaxConcurrent,
+  sanitizeCardPopupStaggerMs,
+} from '../utils/cardPopupQueue';
 import { soundFx } from '../utils/sound';
 
 export const ENABLE_ADMIN_CP: boolean =
@@ -5095,6 +5100,21 @@ export const useGameStore = create<GameStoreState>()(
             autoEquip: nextAutoEquip,
             starterSet: nextStarterSet,
             statusDisplayDefaults: nextStatusDefaults,
+            cardPopupStaggerMs: sanitizeCardPopupStaggerMs(
+              patch.cardPopupStaggerMs !== undefined
+                ? patch.cardPopupStaggerMs
+                : state.adminConfig.cardPopupStaggerMs
+            ),
+            cardPopupFlightMs: sanitizeCardPopupFlightMs(
+              patch.cardPopupFlightMs !== undefined
+                ? patch.cardPopupFlightMs
+                : state.adminConfig.cardPopupFlightMs
+            ),
+            cardPopupMaxConcurrent: sanitizeCardPopupMaxConcurrent(
+              patch.cardPopupMaxConcurrent !== undefined
+                ? patch.cardPopupMaxConcurrent
+                : state.adminConfig.cardPopupMaxConcurrent
+            ),
             pirates: nextPirates,
             spEconomy: nextSpEconomy,
             fluxTransfer: nextFluxTransfer,
@@ -5417,6 +5437,15 @@ export const useGameStore = create<GameStoreState>()(
               starterSet: sanitizeStarterSetConfig(rawAdmin.starterSet),
               statusDisplayDefaults: sanitizeStatusDisplayDefaults(
                 rawAdmin.statusDisplayDefaults
+              ),
+              cardPopupStaggerMs: sanitizeCardPopupStaggerMs(
+                rawAdmin.cardPopupStaggerMs
+              ),
+              cardPopupFlightMs: sanitizeCardPopupFlightMs(
+                rawAdmin.cardPopupFlightMs
+              ),
+              cardPopupMaxConcurrent: sanitizeCardPopupMaxConcurrent(
+                rawAdmin.cardPopupMaxConcurrent
               ),
               ...sanitizeSupplyShopConfig(rawAdmin as Partial<AdminConfig>),
               ...sanitizeSupplyShopExtraConfig(rawAdmin as Partial<AdminConfig>),
