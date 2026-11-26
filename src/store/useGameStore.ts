@@ -117,6 +117,7 @@ import {
   sanitizeSupplyEconomyConfig,
   sanitizeSupplyLoadout,
   sanitizeSupplyLoadoutSlots,
+  sanitizeSupplyScanCount,
   setSupplyLoadout as setSupplyLoadoutEngine,
   SUPPLY_STACK_CAP,
   tickBattleSupplyForUnit,
@@ -3177,6 +3178,10 @@ export const useGameStore = create<GameStoreState>()(
           })
           .filter((c) => c.quantity > 0);
 
+        const isScan = res.revealedNames !== undefined;
+        const revealedIds = res.revealedUnitIds ?? [];
+        const revealedNames = res.revealedNames ?? [];
+
         const skipVisualFx = state.skipAnimations;
         const muteSound = state.skipAnimations || state.battleSpeed >= 10;
         const cue: 'heal' | 'shield' =
@@ -3209,18 +3214,27 @@ export const useGameStore = create<GameStoreState>()(
             tone: 'buff',
           });
         }
+        for (const revId of revealedIds) {
+          newPopups.push({
+            id: `pop_sup_rev_${revId}_${uidSuffix}`,
+            unitId: revId,
+            text: 'REVEALED!',
+            tone: 'status',
+          });
+        }
 
         const allyUnits = battle.units.filter((u) => u.side === activeUnit.side);
         const slotIdx = Math.max(
           0,
           allyUnits.findIndex((u) => u.id === activeUnit.id)
         );
-        const fxTone: CombatFxTone =
-          res.gains.hp > 0 || template.family === 'hp_kit'
-            ? 'heal'
-            : res.gains.shield > 0 || template.family === 'shield_kit'
-            ? 'shield'
-            : 'sp';
+        const fxTone: CombatFxTone = isScan
+          ? 'sp'
+          : res.gains.hp > 0 || template.family === 'hp_kit'
+          ? 'heal'
+          : res.gains.shield > 0 || template.family === 'shield_kit'
+          ? 'shield'
+          : 'sp';
         const fxAccentHex =
           fxTone === 'heal' ? '#10B981' : '#38BDF8';
         const supplyFx: CombatFxEvent = {
@@ -3243,15 +3257,28 @@ export const useGameStore = create<GameStoreState>()(
               round: battle.round,
               actorName: activeUnit.name,
               actorSide: activeUnit.side,
-              tag: fxTone === 'shield' ? 'SHIELD' : 'HEAL',
-              templateKey: 'log.useSupply',
-              params: {
-                actor: activeUnit.name,
-                templateId: template.id,
-                hp: res.gains.hp,
-                shield: res.gains.shield,
-                sp: res.gains.sp,
-              },
+              tag: isScan ? 'STATUS' : fxTone === 'shield' ? 'SHIELD' : 'HEAL',
+              templateKey: isScan
+                ? revealedNames.length > 0
+                  ? 'log.supplyScanReveal'
+                  : 'log.supplyScanNone'
+                : 'log.useSupply',
+              params: isScan
+                ? {
+                    actor: activeUnit.name,
+                    templateId: template.id,
+                    revealed: revealedNames.length,
+                    ...(revealedNames.length > 0
+                      ? { revealedNames: revealedNames.join(', ') }
+                      : {}),
+                  }
+                : {
+                    actor: activeUnit.name,
+                    templateId: template.id,
+                    hp: res.gains.hp,
+                    shield: res.gains.shield,
+                    sp: res.gains.sp,
+                  },
             },
           ],
           activeUnit
@@ -4844,6 +4871,11 @@ export const useGameStore = create<GameStoreState>()(
             spEconomy: nextSpEconomy,
             fluxTransfer: nextFluxTransfer,
             supplyEconomy: nextSupplyEconomy,
+            supplyScanCount: sanitizeSupplyScanCount(
+              patch.supplyScanCount !== undefined
+                ? patch.supplyScanCount
+                : state.adminConfig.supplyScanCount
+            ),
             enemyLevel: nextEnemyLevel,
             turnPhase: nextTurnPhase,
             prestage: nextPrestage,
@@ -5158,6 +5190,7 @@ export const useGameStore = create<GameStoreState>()(
               spEconomy: sanitizeSpEconomyConfig(rawAdmin.spEconomy),
               fluxTransfer: sanitizeFluxTransferConfig(rawAdmin.fluxTransfer),
               supplyEconomy: sanitizeSupplyEconomyConfig(rawAdmin.supplyEconomy),
+              supplyScanCount: sanitizeSupplyScanCount(rawAdmin.supplyScanCount),
               enemyLevel: sanitizeEnemyLevelConfig(rawAdmin.enemyLevel),
               pirates: sanitizePiratesConfig(rawAdmin.pirates),
               stealth: sanitizeStealthConfig(rawAdmin.stealth),

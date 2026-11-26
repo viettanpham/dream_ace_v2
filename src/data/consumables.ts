@@ -14,6 +14,7 @@ export const SUPPLY_TEMPLATE_FAMILIES: readonly SupplyFamily[] = [
   'shield_kit',
   'sp_kit',
   'buff',
+  'utility',
 ];
 
 export const SUPPLY_EFFECT_KINDS: readonly SupplyEffectKind[] = [
@@ -23,6 +24,7 @@ export const SUPPLY_EFFECT_KINDS: readonly SupplyEffectKind[] = [
   'heal_hp',
   'restore_shield',
   'restore_sp',
+  'reveal_stealth_front',
 ];
 
 const VALID_FAMILY_SET = new Set<string>(SUPPLY_TEMPLATE_FAMILIES);

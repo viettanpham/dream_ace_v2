@@ -148,11 +148,13 @@ import {
   cloneSupplyEconomyConfig,
   DEFAULT_SUPPLY_ECONOMY_CONFIG,
   DEFAULT_SUPPLY_LOADOUT_SLOTS,
+  DEFAULT_SUPPLY_SCAN_COUNT,
   DEFAULT_SUPPLY_USES_PER_TURN,
   sanitizeConsumables,
   sanitizeSupplyEconomyConfig,
   sanitizeSupplyLoadout,
   sanitizeSupplyLoadoutSlots,
+  sanitizeSupplyScanCount,
   sanitizeSupplyUsesPerTurn,
 } from './supplies';
 import {
@@ -353,6 +355,7 @@ export function createDefaultAdminConfig(): AdminConfig {
     noticeDurationSec: DEFAULT_NOTICE_DURATION_SEC,
     supplyLoadoutSlots: DEFAULT_SUPPLY_LOADOUT_SLOTS,
     supplyUsesPerTurn: DEFAULT_SUPPLY_USES_PER_TURN,
+    supplyScanCount: DEFAULT_SUPPLY_SCAN_COUNT,
     supplyShopMinTypes: DEFAULT_SUPPLY_SHOP_MIN_TYPES,
     supplyShopMaxTypes: DEFAULT_SUPPLY_SHOP_MAX_TYPES,
     supplyShopMinQty: DEFAULT_SUPPLY_SHOP_MIN_QTY,
@@ -713,6 +716,7 @@ export function migrateSaveData(
     noticeDurationSec: sanitizeNoticeDurationSec(rawAdmin.noticeDurationSec),
     supplyLoadoutSlots: sanitizeSupplyLoadoutSlots(rawAdmin.supplyLoadoutSlots),
     supplyUsesPerTurn: sanitizeSupplyUsesPerTurn(rawAdmin.supplyUsesPerTurn),
+    supplyScanCount: sanitizeSupplyScanCount(rawAdmin.supplyScanCount),
     ...sanitizeSupplyShopConfig(rawAdmin as Partial<AdminConfig>),
     extenderLevelsPerSocket: sanitizeExtenderLevelsPerSocket(
       rawAdmin.extenderLevelsPerSocket

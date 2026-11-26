@@ -1,3 +1,4 @@
+import { FORMATION_ROWS } from '../data/formationConfig';
 import { getSupplyTemplateById } from '../data/consumables';
 import type {
   AdminConfig,
@@ -38,6 +39,10 @@ export const MAX_SUPPLY_SP_PRICE_MULT = 5;
 
 export const MIN_SUPPLY_LIMIT_MULT = 1;
 export const MAX_SUPPLY_LIMIT_MULT = 10;
+
+export const DEFAULT_SUPPLY_SCAN_COUNT = 1;
+export const MIN_SUPPLY_SCAN_COUNT = 1;
+export const MAX_SUPPLY_SCAN_COUNT = 5;
 
 export const DEFAULT_SUPPLY_LIMIT_MULT: SupplyLimitMultConfig = {
   assaultAttacker: 2,
@@ -116,6 +121,27 @@ export function sanitizeSupplyUsesPerTurn(raw: unknown): number {
     MAX_SUPPLY_USES_PER_TURN,
     DEFAULT_SUPPLY_USES_PER_TURN
   );
+}
+
+export function sanitizeSupplyScanCount(raw: unknown): number {
+  return clampFiniteInt(
+    raw,
+    MIN_SUPPLY_SCAN_COUNT,
+    MAX_SUPPLY_SCAN_COUNT,
+    DEFAULT_SUPPLY_SCAN_COUNT
+  );
+}
+
+export function isAutoSupplyAllowed(
+  template: Pick<SupplyTemplate, 'family'> | null | undefined
+): boolean {
+  return Boolean(template && template.family !== 'utility');
+}
+
+export function filterAutoOrNpcSupplies(
+  templates: readonly SupplyTemplate[]
+): SupplyTemplate[] {
+  return templates.filter((tpl) => isAutoSupplyAllowed(tpl));
 }
 
 export function sanitizeSupplyLimitMult(raw?: unknown): SupplyLimitMultConfig {
@@ -498,8 +524,12 @@ export interface ApplyBattleSupplyUseInput {
   template: SupplyTemplate;
   stock: number;
   isOwnTurn: boolean;
-  cfg?: Pick<AdminConfig, 'supplyUsesPerTurn' | 'supplyEconomy'> | null;
+  cfg?: Pick<
+    AdminConfig,
+    'supplyUsesPerTurn' | 'supplyEconomy' | 'supplyScanCount'
+  > | null;
   kind?: BattleKind | null;
+  rng?: () => number;
 }
 
 export type ApplyBattleSupplyUseResult =
@@ -514,6 +544,8 @@ export type ApplyBattleSupplyUseResult =
       units: CombatUnit[];
       supplyByUnit: Record<string, BattleSupplyUnitState>;
       gains: SupplyEffectGains;
+      revealedUnitIds?: string[];
+      revealedNames?: string[];
     };
 
 export function tickSupplyState(
@@ -560,6 +592,7 @@ export function applyBattleSupplyUse({
   isOwnTurn,
   cfg,
   kind,
+  rng,
 }: ApplyBattleSupplyUseInput): ApplyBattleSupplyUseResult {
   const unitIdx = units.findIndex((u) => u.id === unitId);
   const unit = unitIdx >= 0 ? units[unitIdx] : undefined;
@@ -593,7 +626,51 @@ export function applyBattleSupplyUse({
   }
 
   const { unit: nextUnit, gains } = applySupplyEffects(unit, template.effects);
-  const nextUnits = units.map((u, idx) => (idx === unitIdx ? nextUnit : u));
+  let nextUnits = units.map((u, idx) => (idx === unitIdx ? nextUnit : u));
+
+  const scanEff = template.effects.find(
+    (e) => e.kind === 'reveal_stealth_front'
+  );
+  let revealedUnitIds: string[] | undefined;
+  let revealedNames: string[] | undefined;
+
+  if (scanEff) {
+    const scanCount =
+      cfg?.supplyScanCount !== undefined
+        ? sanitizeSupplyScanCount(cfg.supplyScanCount)
+        : sanitizeSupplyScanCount(scanEff.value);
+    const frontRows = new Set(FORMATION_ROWS.slice(0, 2));
+    const candidates = nextUnits.filter(
+      (u) =>
+        u.side !== unit.side &&
+        u.alive &&
+        frontRows.has(u.row) &&
+        u.statuses.some((s) => s.type === 'stealth' && s.turnsRemaining > 0)
+    );
+    const rand = rng ?? Math.random;
+    const pool = [...candidates];
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.min(i, Math.floor(rand() * (i + 1)));
+      const tmp = pool[i];
+      pool[i] = pool[j];
+      pool[j] = tmp;
+    }
+    const picked = pool.slice(0, Math.min(scanCount, pool.length));
+    const pickedIds = new Set(picked.map((u) => u.id));
+    revealedUnitIds = picked.map((u) => u.id);
+    revealedNames = picked.map((u) => u.name);
+
+    if (pickedIds.size > 0) {
+      nextUnits = nextUnits.map((u) => {
+        if (!pickedIds.has(u.id)) return u;
+        return {
+          ...u,
+          statuses: u.statuses.filter((s) => s.type !== 'stealth'),
+          revealedThisRound: true,
+        };
+      });
+    }
+  }
 
   const prevCounts = prevState?.usedCountsByTemplate ?? {};
   const prevCooldowns = prevState?.cooldownsByTemplate ?? {};
@@ -617,6 +694,7 @@ export function applyBattleSupplyUse({
       [unitId]: nextUnitState,
     },
     gains,
+    ...(scanEff ? { revealedUnitIds, revealedNames } : {}),
   };
 }
 
@@ -654,6 +732,7 @@ function formatRawEffects(effects: readonly SupplyEffect[]): string {
       if (eff.kind === 'restore_shield_pct') return `SHD +${eff.value}%`;
       if (eff.kind === 'restore_shield') return `SHD +${eff.value}`;
       if (eff.kind === 'restore_sp_pct') return `SP +${eff.value}%`;
+      if (eff.kind === 'reveal_stealth_front') return `Scan x${eff.value}`;
       return `SP +${eff.value}`;
     })
     .join(', ');

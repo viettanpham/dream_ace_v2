@@ -783,6 +783,18 @@ function formatCombatLogBody(
       });
     }
 
+    case 'log.supplyScanReveal': {
+      const names = String(p.revealedNames ?? '').trim();
+      if (!names) {
+        return translate(lang, 'log.supplyScanNone');
+      }
+      return translate(lang, 'log.supplyScanReveal', { names });
+    }
+
+    case 'log.supplyScanNone': {
+      return translate(lang, 'log.supplyScanNone');
+    }
+
     case 'log.evade': {
       const actionText = formatActionParam(lang, p);
       return translate(lang, 'log.evade', {

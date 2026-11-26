@@ -4,12 +4,15 @@ import {
   DEFAULT_SUPPLY_ECONOMY_CONFIG,
   MAX_SUPPLY_LIMIT_MULT,
   MAX_SUPPLY_MAX_USES_PER_BATTLE,
+  MAX_SUPPLY_SCAN_COUNT,
   MAX_SUPPLY_SP_PRICE_MULT,
   MIN_SUPPLY_LIMIT_MULT,
   MIN_SUPPLY_MAX_USES_PER_BATTLE,
+  MIN_SUPPLY_SCAN_COUNT,
   MIN_SUPPLY_SP_PRICE_MULT,
   sanitizeSupplyEconomyConfig,
   sanitizeSupplyLimitMult,
+  sanitizeSupplyScanCount,
 } from '../../engine/supplies';
 import { useI18n } from '../../i18n';
 import { useGameStore } from '../../store/useGameStore';
@@ -27,9 +30,11 @@ const LIMIT_MULT_FIELDS = [
 export function SupplyEconomyAdminBlock() {
   const { t } = useI18n();
   const supplyEconomy = useGameStore((s) => s.adminConfig.supplyEconomy);
+  const supplyScanCount = useGameStore((s) => s.adminConfig.supplyScanCount);
   const adminUpdateConfig = useGameStore((s) => s.adminUpdateConfig);
 
   const cfg = sanitizeSupplyEconomyConfig(supplyEconomy);
+  const scanCount = sanitizeSupplyScanCount(supplyScanCount);
   const limitMult = sanitizeSupplyLimitMult(cfg.limitMult);
 
   const updateCfg = (patch: Partial<typeof cfg>) => {
@@ -115,6 +120,29 @@ export function SupplyEconomyAdminBlock() {
             onChange={(e) => {
               const v = Number(e.target.value);
               if (Number.isFinite(v)) updateCfg({ spPriceMult: v });
+            }}
+            className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+          />
+        </label>
+
+        <label className="space-y-1 block">
+          <span className="text-[11px] text-slate-400 block">
+            {t('admin.supplyScanCount')}
+          </span>
+          <input
+            type="number"
+            data-testid="admin-supply-scan-count"
+            min={MIN_SUPPLY_SCAN_COUNT}
+            max={MAX_SUPPLY_SCAN_COUNT}
+            step={1}
+            value={scanCount}
+            onChange={(e) => {
+              const v = Number(e.target.value);
+              if (Number.isFinite(v)) {
+                adminUpdateConfig({
+                  supplyScanCount: sanitizeSupplyScanCount(v),
+                });
+              }
             }}
             className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
           />

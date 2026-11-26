@@ -24,7 +24,8 @@
     "hp_kit": 30,
     "shield_kit": 30,
     "sp_kit": 36,
-    "buff": 60
+    "buff": 60,
+    "utility": 50
   },
   "moduleBase": {
     "stat": 120,

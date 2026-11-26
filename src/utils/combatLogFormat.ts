@@ -859,6 +859,36 @@ export function parseStructuredCombatLogRow(
       };
     }
 
+    case 'log.supplyScanReveal':
+    case 'log.supplyScanNone': {
+      const tplId = String(p.templateId ?? 'sup_scan_t1');
+      const supplyKey = `supply.${tplId}.name` as Parameters<typeof translate>[1];
+      const supplyLabelRaw = translate(lang, supplyKey);
+      const supplyName =
+        supplyLabelRaw === supplyKey ? tplId : supplyLabelRaw;
+      const revealed = Number(p.revealed ?? 0);
+      const revealedNames = String(p.revealedNames ?? '').trim();
+      return {
+        id: entry.id,
+        round,
+        turnLabel,
+        faction,
+        actorName: actorFromParams,
+        autoBadge,
+        actionKind: 'buff',
+        actionLabel: supplyName,
+        targetName: revealedNames || null,
+        valueText: revealed > 0 ? `${revealed}` : null,
+        valueTone: 'buff',
+        fallbackText,
+        sentence: fallbackText,
+        spCost: null,
+        isStrong: false,
+        strongTone: null,
+        ...avatarMeta,
+      };
+    }
+
     case 'log.buffApplied': {
       const usedSkill = skillLabel || translate(lang, 'log.actionStatus');
       const sentence = isVi

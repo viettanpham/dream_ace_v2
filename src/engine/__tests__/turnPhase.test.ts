@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getSkillById } from '../../data/skills';
 import { useGameStore } from '../../store/useGameStore';
 import type { CombatUnit } from '../../types/game';
@@ -21,6 +21,10 @@ function seedBattle(opts?: {
     ...baseAdmin,
     turnPhase: {
       maxStep2PerTurn: opts?.maxStep2PerTurn ?? 1,
+    },
+    prestage: {
+      enabled: false,
+      countdownSec: baseAdmin.prestage?.countdownSec ?? 5,
     },
   };
   const classId = opts?.classId ?? 'striker';
@@ -171,7 +175,12 @@ describe('TASK TURN-PH — 3-step turn phase engine, player, AI & Admin', () => 
     const before = useGameStore.getState().battle!;
     const enemyId = before.turnOrder[0];
 
-    useGameStore.getState().performAiTurn();
+    const rngSpy = vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    try {
+      useGameStore.getState().performAiTurn();
+    } finally {
+      rngSpy.mockRestore();
+    }
     const after = useGameStore.getState().battle!;
     expect(after.activeTurnIndex).not.toBe(0);
     expect(after.turnStep2Used).toBe(0);

@@ -151,7 +151,14 @@ describe('TASK ST-A1 — Lidar Sweep N-target & revealedThisRound rule', () => {
 
   it('3) a revealed unit cannot use phase shroud until the round wraps, then can', () => {
     const campaign = createFreshCampaignState();
-    const adminConfig = createDefaultAdminConfig();
+    const baseAdmin = createDefaultAdminConfig();
+    const adminConfig = {
+      ...baseAdmin,
+      prestage: {
+        enabled: false,
+        countdownSec: baseAdmin.prestage?.countdownSec ?? 5,
+      },
+    };
     const pilot = { ...campaign.pilot, activeGearId: 'striker' as const };
     const battle = createInitialBattleState(pilot, 'border_outpost', undefined, undefined, adminConfig);
 
@@ -215,7 +222,14 @@ describe('TASK ST-A1 — Lidar Sweep N-target & revealedThisRound rule', () => {
 
   it('5) after a Lidar cast the turn is not ended (TURN-PH step 2) and the next decision can attack', () => {
     const campaign = createFreshCampaignState();
-    const adminConfig = createDefaultAdminConfig();
+    const baseAdmin = createDefaultAdminConfig();
+    const adminConfig = {
+      ...baseAdmin,
+      prestage: {
+        enabled: false,
+        countdownSec: baseAdmin.prestage?.countdownSec ?? 5,
+      },
+    };
     const pilot = { ...campaign.pilot, activeGearId: 'support' as const };
     const battle = createInitialBattleState(pilot, 'border_outpost', undefined, undefined, adminConfig);
     const playerIdx = battle.units.findIndex((u) => u.isPlayer);

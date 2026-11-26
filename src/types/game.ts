@@ -432,7 +432,7 @@ export type ConsumableKind =
   | 'exp_boost'
   | 'battle_supply';
 
-export type SupplyFamily = 'hp_kit' | 'shield_kit' | 'sp_kit' | 'buff';
+export type SupplyFamily = 'hp_kit' | 'shield_kit' | 'sp_kit' | 'buff' | 'utility';
 
 export type SupplyEffectKind =
   | 'heal_hp_pct'
@@ -440,7 +440,8 @@ export type SupplyEffectKind =
   | 'restore_sp_pct'
   | 'heal_hp'
   | 'restore_shield'
-  | 'restore_sp';
+  | 'restore_sp'
+  | 'reveal_stealth_front';
 
 export interface SupplyEffect {
   kind: SupplyEffectKind;
@@ -993,6 +994,8 @@ export type CombatLogTemplateKey =
   | 'log.invalidTarget'
   | 'log.autoRepeatStopped'
   | 'log.useSupply'
+  | 'log.supplyScanReveal'
+  | 'log.supplyScanNone'
   | 'log.prestageConfirm';
 
 export interface CombatLogEntry {
@@ -1479,6 +1482,7 @@ export interface AdminConfig {
   noticeDurationSec?: number;
   supplyLoadoutSlots?: number;
   supplyUsesPerTurn?: number;
+  supplyScanCount?: number;
   supplyShopMinTypes?: number;
   supplyShopMaxTypes?: number;
   supplyShopMinQty?: number;

@@ -61,6 +61,9 @@ export function formatSupplyEffects(
       if (eff.kind === 'restore_sp_pct') {
         return t('supply.effect.restoreSp', { pct: eff.value });
       }
+      if (eff.kind === 'reveal_stealth_front') {
+        return t('supply.effect.revealStealthFront', { count: eff.value });
+      }
       return t('supply.effect.restoreSpFlat', { val: eff.value });
     })
     .join(', ');

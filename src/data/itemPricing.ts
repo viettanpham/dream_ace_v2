@@ -30,6 +30,7 @@ const SUPPLY_FAMILIES: readonly SupplyFamily[] = [
   'shield_kit',
   'sp_kit',
   'buff',
+  'utility',
 ];
 const MODULE_FAMILIES: readonly ModuleFamily[] = ['stat', 'trait', 'skill'];
 
@@ -60,6 +61,7 @@ export const DEFAULT_PRICE_FORMULA: PriceFormulaConfig = {
     shield_kit: 30,
     sp_kit: 36,
     buff: 60,
+    utility: 50,
   },
   moduleBase: {
     stat: 120,

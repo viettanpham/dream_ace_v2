@@ -165,6 +165,17 @@
       "cooldownTurns": 3,
       "perBattleLimit": 5,
       "registryTag": "sys"
+    },
+    {
+      "id": "sup_scan_t1",
+      "family": "utility",
+      "tier": 1,
+      "unlockLevel": 5,
+      "iconId": "CC10",
+      "effects": [{ "kind": "reveal_stealth_front", "value": 1 }],
+      "cooldownTurns": 4,
+      "perBattleLimit": 2,
+      "registryTag": "sys"
     }
   ]
 }
