@@ -475,6 +475,7 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'battle.skillReason.blocked_by_siege': 'Không thể dùng khi đang bật Neo Pháo',
   'battle.skillReason.insufficient_sp': 'Không đủ SP (cần {cost} SP)',
   'battle.skillReason.flux_min_sp': 'Cần tối thiểu {cost} SP',
+  'battle.skillReason.used_this_turn': 'Đã dùng trong lượt này',
   'battle.skillReason.class_mismatch': 'Sai lớp Gear',
   'battle.skillReason.not_equipped': 'Chưa lắp trên thanh kỹ năng',
 
@@ -1985,6 +1986,8 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'map.preview.rewardLabel': 'Thưởng ước tính',
   'map.preview.highDangerWarn': 'Cảnh báo: Địch vượt +{diff} cấp',
   'battle.levelBadge': 'Cấp {level}',
+  'admin.turnPhaseTitle': 'Lượt 3 bước',
+  'admin.turnPhaseMaxStep2': 'Số skill bước 2 (buff) tối đa mỗi lượt',
 };
 
 

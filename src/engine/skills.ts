@@ -384,7 +384,8 @@ export function getEffectiveSpCost(
 export function canUnitUseSkill(
   unit: CombatUnit,
   skillId: string,
-  admin?: Pick<AdminConfig, 'spEconomy' | 'fluxTransfer'> | null
+  admin?: Pick<AdminConfig, 'spEconomy' | 'fluxTransfer'> | null,
+  turnLockedSkillIds?: readonly string[]
 ): BattleSkillUsability {
   const skill = getSkillById(skillId);
   if (!skill || skill.category === 'passive') {
@@ -448,6 +449,16 @@ export function canUnitUseSkill(
     return {
       canUse: false,
       reason: 'already_used',
+      cooldownRemaining: cd,
+      spCost: effectiveSpCost,
+      isToggleActive,
+    };
+  }
+
+  if (turnLockedSkillIds?.includes(skillId)) {
+    return {
+      canUse: false,
+      reason: 'used_this_turn',
       cooldownRemaining: cd,
       spCost: effectiveSpCost,
       isToggleActive,

@@ -8,6 +8,11 @@ import {
   sanitizeMaxLevel,
   sanitizeSpEconomyConfig,
 } from '../data/balance';
+import {
+  cloneTurnPhaseConfig,
+  DEFAULT_TURN_PHASE_CONFIG,
+  sanitizeTurnPhaseConfig,
+} from './turnPhase';
 import { EMPTY_STAT_BLOCK, MECH_CLASS_LIST } from '../data/classes';
 import {
   BUILTIN_ITEM_REGISTRY_TAG,
@@ -348,6 +353,7 @@ export function createDefaultAdminConfig(): AdminConfig {
     maxSkillModulesPerGear: DEFAULT_MAX_SKILL_MODULES_PER_GEAR,
     itemLevels: cloneItemLevelsConfig(DEFAULT_ITEM_LEVELS_CONFIG),
     pirates: clonePiratesConfig(DEFAULT_PIRATES_CONFIG),
+    turnPhase: cloneTurnPhaseConfig(DEFAULT_TURN_PHASE_CONFIG),
     showRawI18nKeys: false,
   };
 }
@@ -706,6 +712,7 @@ export function migrateSaveData(
     ),
     itemLevels: sanitizeItemLevelsConfig(rawAdmin.itemLevels),
     pirates: sanitizePiratesConfig(rawAdmin.pirates),
+    turnPhase: sanitizeTurnPhaseConfig(rawAdmin.turnPhase),
     showRawI18nKeys: Boolean(rawAdmin.showRawI18nKeys),
   };
 

@@ -942,7 +942,15 @@ export function BattleScreen() {
       } else if (['2', '3', '4', '5', '6', '7'].includes(e.key)) {
         const slotIdx = Number(e.key) - 2;
         const skillId = playerUnit.equippedSkillIds[slotIdx];
-        if (skillId && canUnitUseSkill(playerUnit, skillId, adminConfig).canUse) {
+        if (
+          skillId &&
+          canUnitUseSkill(
+            playerUnit,
+            skillId,
+            adminConfig,
+            battle.turnLockedSkillIds
+          ).canUse
+        ) {
           e.preventDefault();
           handleManualSkillTrigger(skillId);
         }
@@ -1077,7 +1085,12 @@ export function BattleScreen() {
     : undefined;
   const inspectedUsability =
     playerUnit && inspectedSkill
-      ? canUnitUseSkill(playerUnit, inspectedSkill.id, adminConfig)
+      ? canUnitUseSkill(
+          playerUnit,
+          inspectedSkill.id,
+          adminConfig,
+          battle.turnLockedSkillIds
+        )
       : null;
   const inspectedLv =
     playerUnit && inspectedSkill
@@ -3141,7 +3154,8 @@ export function BattleScreen() {
                           const usability = canUnitUseSkill(
                             playerUnit,
                             skill.id,
-                            adminConfig
+                            adminConfig,
+                            battle.turnLockedSkillIds
                           );
                           const clickable = canPlayerManualAct && usability.canUse;
                           const reasonText = getBattleSkillReason(lang, usability);
@@ -3379,6 +3393,7 @@ export function BattleScreen() {
         playerSkillIds={playerSkillIds}
         canPlayerManualAct={canPlayerManualAct}
         adminConfig={adminConfig}
+        turnLockedSkillIds={battle.turnLockedSkillIds}
         lang={lang}
         t={t}
         onClose={() => setSkillsSheetOpen(false)}

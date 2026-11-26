@@ -29,6 +29,7 @@ import {
   getValidEnemyTargets,
   pickFluxCount,
   reconcileRemainingTurnOrder,
+  resolveMultiStepTurn,
   resolveUnitAction,
   sortTurnOrder,
 } from '../engine/combat';
@@ -37,6 +38,10 @@ import {
   buildAutoEquipPlan,
   undoAutoEquipSnapshot,
 } from '../engine/autoEquip';
+import {
+  evaluateTurnPhaseAfterAction,
+  sanitizeTurnPhaseConfig,
+} from '../engine/turnPhase';
 import {
   equipItemOnGear,
   generateItemInstance,
@@ -3277,6 +3282,8 @@ export const useGameStore = create<GameStoreState>()(
             ? battle.selectedAllyTargetId ?? activeUnit.id
             : battle.selectedTargetId;
 
+        const turnStep2Used = battle.turnStep2Used ?? 0;
+        const turnLockedSkillIds = battle.turnLockedSkillIds ?? [];
         const resolution = resolveUnitAction(
           battle.units,
           activeUnit.id,
@@ -3286,7 +3293,11 @@ export const useGameStore = create<GameStoreState>()(
           state.adminConfig,
           Math.random,
           skillId,
-          clampedTransferCount
+          clampedTransferCount,
+          {
+            skipTurnStartTicks: turnStep2Used > 0,
+            turnLockedSkillIds,
+          }
         );
         playCue(resolution.soundCue, muteSound);
 
@@ -3344,6 +3355,66 @@ export const useGameStore = create<GameStoreState>()(
           return;
         }
 
+        const actorAfter = resolution.updatedUnits.find(
+          (u) => u.id === activeUnit.id
+        );
+        const didCastSkill =
+          action === 'skill' &&
+          Boolean(skillId) &&
+          resolution.events.some(
+            (ev) =>
+              ev.type === 'skill_cast' &&
+              ev.actorId === activeUnit.id &&
+              ev.skillId === skillId
+          );
+        const phaseOutcome = evaluateTurnPhaseAfterAction({
+          skill: skillDef,
+          didCastSkill,
+          actorAlive: Boolean(actorAfter?.alive),
+          aliveEnemiesCount: aliveEnemies.length,
+          aliveAlliesCount: aliveAllies.length,
+          turnStep2Used,
+          turnLockedSkillIds,
+          cfg: state.adminConfig.turnPhase,
+        });
+
+        const playerNext = resolution.updatedUnits.find((u) => u.isPlayer);
+        const validFrontEnemies = playerNext
+          ? getValidEnemyTargets(resolution.updatedUnits, playerNext, 'attack')
+          : aliveEnemies;
+        const currentTargetStillAlive = aliveEnemies.some(
+          (e) => e.id === battle.selectedTargetId
+        );
+        const currentAllyStillAlive = aliveAllies.some(
+          (a) => a.id === battle.selectedAllyTargetId
+        );
+
+        if (phaseOutcome.keepTurn) {
+          set({
+            battle: {
+              ...battle,
+              units: resolution.updatedUnits,
+              log: nextLog,
+              events: nextEvents,
+              popups: nextPopups,
+              fxEvents: nextFx,
+              explodedUnitIds: nextExploded,
+              selectedTargetId: currentTargetStillAlive
+                ? battle.selectedTargetId
+                : validFrontEnemies[0]?.id ?? aliveEnemies[0]?.id ?? null,
+              selectedAllyTargetId: currentAllyStillAlive
+                ? battle.selectedAllyTargetId
+                : aliveAllies[0]?.id ?? null,
+              lastPlayerTargetId: targetedEnemy,
+              turnStep2Used: phaseOutcome.nextTurnStep2Used,
+              turnLockedSkillIds: phaseOutcome.nextTurnLockedSkillIds,
+              autoStopNotice: null,
+              isResolving: false,
+            },
+          });
+          return;
+        }
+
         // Reconcile upcoming units in current round by live Speed DESC
         const reconciledOrder = reconcileRemainingTurnOrder(
           battle.turnOrder,
@@ -3377,17 +3448,6 @@ export const useGameStore = create<GameStoreState>()(
           );
         }
 
-        const playerNext = resolution.updatedUnits.find((u) => u.isPlayer);
-        const validFrontEnemies = playerNext
-          ? getValidEnemyTargets(resolution.updatedUnits, playerNext, 'attack')
-          : aliveEnemies;
-        const currentTargetStillAlive = aliveEnemies.some(
-          (e) => e.id === battle.selectedTargetId
-        );
-        const currentAllyStillAlive = aliveAllies.some(
-          (a) => a.id === battle.selectedAllyTargetId
-        );
-
         const nextSupplyByUnit = tickBattleSupplyForUnit(
           battle.supplyByUnit,
           activeUnit.id
@@ -3415,6 +3475,8 @@ export const useGameStore = create<GameStoreState>()(
               ? battle.selectedAllyTargetId
               : aliveAllies[0]?.id ?? null,
             lastPlayerTargetId: targetedEnemy,
+            turnStep2Used: 0,
+            turnLockedSkillIds: [],
             autoStopNotice: null,
             isResolving: false,
           },
@@ -3495,73 +3557,90 @@ export const useGameStore = create<GameStoreState>()(
           return;
         }
 
-        // 2. Evaluate pure Tactics engine (top-to-bottom priority)
-        let choice = chooseAction(
-          battle,
-          activeUnit,
-          tactics,
-          Math.random,
-          state.adminConfig
-        );
-        let autoTransferCount: number | undefined;
-        const chosenSkillDef =
-          choice.action === 'skill' && choice.skillId
-            ? getSkillById(choice.skillId)
-            : undefined;
-        if (chosenSkillDef?.effectKind === 'sp_transfer') {
-          const fluxCfg = sanitizeFluxTransferConfig(state.adminConfig.fluxTransfer);
-          const pressure = computeFluxBattlePressure(battle.units, activeUnit.side);
-          const count = pickFluxCount(
-            battle.units,
-            activeUnit.id,
-            { ...fluxCfg, spEconomy: state.adminConfig.spEconomy },
-            pressure,
-            Math.random
-          );
-          if (count > 0) {
-            autoTransferCount = count;
-          } else {
-            const validEnemies = getValidEnemyTargets(
-              battle.units,
-              activeUnit,
-              'attack'
-            );
-            const fallbackEnemy = [...validEnemies].sort((a, b) => a.hp - b.hp)[0];
-            choice = fallbackEnemy
-              ? {
-                  action: 'attack',
-                  targetId: fallbackEnemy.id,
-                  matchedRuleIndex: null,
-                }
-              : {
-                  action: 'defend',
-                  targetId: null,
-                  matchedRuleIndex: null,
-                };
-          }
-        }
-        const autoRuleNumber =
-          choice.matchedRuleIndex !== null ? choice.matchedRuleIndex + 1 : 0;
-
+        // 2. Evaluate pure Tactics engine with multi-step support (step 2 buffs + step 3 main action)
         const skipVisualFx = state.skipAnimations;
         const muteSound = state.skipAnimations || state.battleSpeed >= 10;
-        const resolution = resolveUnitAction(
-          battle.units,
-          activeUnit.id,
-          choice.action,
-          choice.targetId,
-          battle.round,
-          state.adminConfig,
-          Math.random,
-          choice.skillId,
-          autoTransferCount
-        );
+        const resolution = resolveMultiStepTurn({
+          units: battle.units,
+          actorId: activeUnit.id,
+          round: battle.round,
+          adminConfig: state.adminConfig,
+          rng: Math.random,
+          initialTurnStep2Used: battle.turnStep2Used ?? 0,
+          initialTurnLockedSkillIds: battle.turnLockedSkillIds ?? [],
+          chooseNextDecision: (curUnits, curActor, lockedSkillIds) => {
+            let choice = chooseAction(
+              {
+                ...battle,
+                units: curUnits,
+                turnLockedSkillIds: lockedSkillIds,
+              },
+              curActor,
+              tactics,
+              Math.random,
+              state.adminConfig
+            );
+            let autoTransferCount: number | undefined;
+            const chosenSkillDef =
+              choice.action === 'skill' && choice.skillId
+                ? getSkillById(choice.skillId)
+                : undefined;
+            if (chosenSkillDef?.effectKind === 'sp_transfer') {
+              const fluxCfg = sanitizeFluxTransferConfig(
+                state.adminConfig.fluxTransfer
+              );
+              const pressure = computeFluxBattlePressure(curUnits, curActor.side);
+              const count = pickFluxCount(
+                curUnits,
+                curActor.id,
+                { ...fluxCfg, spEconomy: state.adminConfig.spEconomy },
+                pressure,
+                Math.random
+              );
+              if (count > 0) {
+                autoTransferCount = count;
+              } else {
+                const validEnemies = getValidEnemyTargets(
+                  curUnits,
+                  curActor,
+                  'attack'
+                );
+                const fallbackEnemy = [...validEnemies].sort(
+                  (a, b) => a.hp - b.hp
+                )[0];
+                choice = fallbackEnemy
+                  ? {
+                      action: 'attack',
+                      targetId: fallbackEnemy.id,
+                      matchedRuleIndex: null,
+                    }
+                  : {
+                      action: 'defend',
+                      targetId: null,
+                      matchedRuleIndex: null,
+                    };
+              }
+            }
+            return {
+              action: choice.action,
+              targetId: choice.targetId,
+              skillId: choice.skillId,
+              transferCount: autoTransferCount,
+              matchedRuleIndex: choice.matchedRuleIndex,
+            };
+          },
+        });
         playCue(resolution.soundCue, muteSound);
 
+        const autoRuleNumber =
+          resolution.lastMatchedRuleIndex !== null
+            ? resolution.lastMatchedRuleIndex + 1
+            : 0;
+        const lastTargetId = resolution.lastDecision?.targetId ?? null;
         const targetedEnemy =
-          choice.targetId &&
-          battle.units.some((u) => u.id === choice.targetId && u.side === 'enemy')
-            ? choice.targetId
+          lastTargetId &&
+          battle.units.some((u) => u.id === lastTargetId && u.side === 'enemy')
+            ? lastTargetId
             : battle.lastPlayerTargetId;
 
         const aliveEnemies = resolution.updatedUnits.filter(
@@ -3587,8 +3666,8 @@ export const useGameStore = create<GameStoreState>()(
           : [...battle.popups, ...resolution.popups].slice(-18);
         const nextFx = skipVisualFx
           ? []
-          : resolution.fxEvent
-          ? [...battle.fxEvents, resolution.fxEvent].slice(-12)
+          : resolution.fxEvents.length > 0
+          ? [...battle.fxEvents, ...resolution.fxEvents].slice(-12)
           : battle.fxEvents;
         const nextExploded = skipVisualFx
           ? []
@@ -3682,6 +3761,8 @@ export const useGameStore = create<GameStoreState>()(
               ? battle.selectedAllyTargetId
               : aliveAllies[0]?.id ?? null,
             lastPlayerTargetId: targetedEnemy,
+            turnStep2Used: 0,
+            turnLockedSkillIds: [],
             autoStopNotice: null,
             isResolving: false,
           },
@@ -3719,6 +3800,8 @@ export const useGameStore = create<GameStoreState>()(
               turnOrder: nextTurnOrder,
               activeTurnIndex: finalTurnIndex,
               round: wrappedRound ? battle.round + 1 : battle.round,
+              turnStep2Used: 0,
+              turnLockedSkillIds: [],
             },
           });
           return;
@@ -3732,31 +3815,28 @@ export const useGameStore = create<GameStoreState>()(
 
         const skipVisualFx = state.skipAnimations;
         const muteSound = state.skipAnimations || state.battleSpeed >= 10;
-        const decision: {
-          action: ActionType;
-          targetId: string | null;
-          skillId?: string;
-          transferCount?: number;
-        } = playerIsCharging
-          ? {
-              action: 'attack' as ActionType,
-              targetId: battle.selectedTargetId,
-              skillId: undefined,
-              transferCount: undefined,
-            }
-          : chooseAiDecision(activeUnit, battle.units, Math.random, state.adminConfig);
-
-        const resolution = resolveUnitAction(
-          battle.units,
-          activeUnit.id,
-          decision.action,
-          decision.targetId,
-          battle.round,
-          state.adminConfig,
-          Math.random,
-          decision.skillId,
-          decision.transferCount
-        );
+        const resolution = resolveMultiStepTurn({
+          units: battle.units,
+          actorId: activeUnit.id,
+          round: battle.round,
+          adminConfig: state.adminConfig,
+          rng: Math.random,
+          initialTurnStep2Used: battle.turnStep2Used ?? 0,
+          initialTurnLockedSkillIds: battle.turnLockedSkillIds ?? [],
+          chooseNextDecision: (curUnits, curActor, lockedSkillIds) =>
+            playerIsCharging
+              ? {
+                  action: 'attack',
+                  targetId: battle.selectedTargetId,
+                }
+              : chooseAiDecision(
+                  curActor,
+                  curUnits,
+                  Math.random,
+                  state.adminConfig,
+                  lockedSkillIds
+                ),
+        });
         playCue(resolution.soundCue, muteSound);
 
         const aliveEnemies = resolution.updatedUnits.filter(
@@ -3778,8 +3858,8 @@ export const useGameStore = create<GameStoreState>()(
           : [...battle.popups, ...resolution.popups].slice(-18);
         const nextFx = skipVisualFx
           ? []
-          : resolution.fxEvent
-          ? [...battle.fxEvents, resolution.fxEvent].slice(-12)
+          : resolution.fxEvents.length > 0
+          ? [...battle.fxEvents, ...resolution.fxEvents].slice(-12)
           : battle.fxEvents;
         const nextExploded = skipVisualFx
           ? []
@@ -3892,6 +3972,8 @@ export const useGameStore = create<GameStoreState>()(
             selectedAllyTargetId: currentAllyStillAlive
               ? battle.selectedAllyTargetId
               : aliveAllies[0]?.id ?? null,
+            turnStep2Used: 0,
+            turnLockedSkillIds: [],
           },
         });
       },
@@ -4652,6 +4734,10 @@ export const useGameStore = create<GameStoreState>()(
             patch.enemyLevel !== undefined
               ? sanitizeEnemyLevelConfig(patch.enemyLevel)
               : sanitizeEnemyLevelConfig(state.adminConfig.enemyLevel);
+          const nextTurnPhase =
+            patch.turnPhase !== undefined
+              ? sanitizeTurnPhaseConfig(patch.turnPhase)
+              : sanitizeTurnPhaseConfig(state.adminConfig.turnPhase);
           const nextMaxLevel =
             patch.maxLevel !== undefined
               ? sanitizeMaxLevel(patch.maxLevel)
@@ -4670,6 +4756,7 @@ export const useGameStore = create<GameStoreState>()(
             fluxTransfer: nextFluxTransfer,
             supplyEconomy: nextSupplyEconomy,
             enemyLevel: nextEnemyLevel,
+            turnPhase: nextTurnPhase,
           };
           let updatedPilot =
             patch.formation &&

@@ -1419,7 +1419,12 @@ function evaluateCondition(
       if (!checkSkillId) return false;
       const sk = getSkillById(checkSkillId);
       if (!sk || !isSkillAllowedForClass(sk, actor.classId)) return false;
-      return canUnitUseSkill(actor, checkSkillId, adminConfig).canUse;
+      return canUnitUseSkill(
+        actor,
+        checkSkillId,
+        adminConfig,
+        state.turnLockedSkillIds
+      ).canUse;
     }
 
     default:
@@ -1446,7 +1451,7 @@ export function chooseAction(
   actor: CombatUnit,
   tactics: GearTacticsProfile,
   rng: () => number = Math.random,
-  adminConfig?: Pick<AdminConfig, 'spEconomy'> | null
+  adminConfig?: Pick<AdminConfig, 'spEconomy' | 'fluxTransfer'> | null
 ): TacticsChoiceResult {
   const rules = (tactics?.rules ?? []).slice(0, BALANCE_CONFIG.maxTacticsRules);
 
@@ -1463,7 +1468,10 @@ export function chooseAction(
       if (!skillDef || !isSkillAllowedForClass(skillDef, actor.classId)) {
         continue;
       }
-      if (!canUnitUseSkill(actor, sid, adminConfig).canUse) {
+      if (
+        !canUnitUseSkill(actor, sid, adminConfig, state.turnLockedSkillIds)
+          .canUse
+      ) {
         continue;
       }
     }

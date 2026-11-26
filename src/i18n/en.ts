@@ -473,6 +473,7 @@ export const EN_TRANSLATIONS = {
   'battle.skillReason.blocked_by_siege': 'Blocked while Anchor Siege Mode is ON',
   'battle.skillReason.insufficient_sp': 'Insufficient SP (need {cost} SP)',
   'battle.skillReason.flux_min_sp': 'Need {cost} SP min',
+  'battle.skillReason.used_this_turn': 'Already used this turn',
   'battle.skillReason.class_mismatch': 'Class mismatch',
   'battle.skillReason.not_equipped': 'Not slotted on Skill Bar',
 
@@ -1982,6 +1983,8 @@ export const EN_TRANSLATIONS = {
   'map.preview.rewardLabel': 'Est. reward',
   'map.preview.highDangerWarn': 'Warning: Enemy +{diff} Lv above',
   'battle.levelBadge': 'Level {level}',
+  'admin.turnPhaseTitle': '3-Step Turn',
+  'admin.turnPhaseMaxStep2': 'Max step-2 (buff) skills per turn',
 } as const;
 
 export type TranslationKey = keyof typeof EN_TRANSLATIONS;

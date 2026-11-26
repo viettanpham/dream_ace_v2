@@ -72,6 +72,11 @@ import {
   sanitizeNoticeDurationSec,
   sanitizeWarehouseCapacity,
 } from '../engine/migration';
+import {
+  MAX_MAX_STEP2_PER_TURN,
+  MIN_MAX_STEP2_PER_TURN,
+  sanitizeTurnPhaseConfig,
+} from '../engine/turnPhase';
 import { AdminCapacityField } from './AdminCapacityField';
 import { PirateAdminBlock } from './admin/PirateAdminBlock';
 import type {
@@ -2114,6 +2119,50 @@ export function AdminPanel() {
                         </div>
                       );
                     })()}
+                  </div>
+                );
+              })()}
+
+              {/* 3-Step Turn ("Lượt 3 bước") */}
+              {(() => {
+                const tpCfg = sanitizeTurnPhaseConfig(adminConfig.turnPhase);
+                return (
+                  <div
+                    data-testid="admin-turn-phase-section"
+                    className="p-3.5 rounded-lg border border-slate-800 bg-[#0D1422] space-y-2.5"
+                  >
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-200">
+                      {t('admin.turnPhaseTitle')}
+                    </h4>
+                    <AdminCapacityField
+                      label={t('admin.turnPhaseMaxStep2')}
+                      min={MIN_MAX_STEP2_PER_TURN}
+                      max={MAX_MAX_STEP2_PER_TURN}
+                      storedValue={tpCfg.maxStep2PerTurn}
+                      usedCount={0}
+                      inputTestId="admin-turn-phase-max-step2-input"
+                      applyTestId="admin-turn-phase-max-step2-apply"
+                      hintTestId="admin-turn-phase-max-step2-hint"
+                      appliedTestId="admin-turn-phase-max-step2-applied"
+                      overCapacityText=""
+                      sanitize={(raw) =>
+                        sanitizeTurnPhaseConfig({ maxStep2PerTurn: raw })
+                          .maxStep2PerTurn
+                      }
+                      onApply={(maxStep2PerTurn) =>
+                        adminUpdateConfig({
+                          turnPhase: { maxStep2PerTurn },
+                        })
+                      }
+                      applyLabel={t('admin.capacityApply')}
+                      rangeHintText={t('admin.capacityRangeHint', {
+                        min: MIN_MAX_STEP2_PER_TURN,
+                        max: MAX_MAX_STEP2_PER_TURN,
+                      })}
+                      formatAppliedText={(n) =>
+                        t('admin.capacityApplied', { n })
+                      }
+                    />
                   </div>
                 );
               })()}

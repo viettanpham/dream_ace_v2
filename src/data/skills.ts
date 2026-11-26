@@ -398,6 +398,7 @@ export const SKILLS_LIST: SkillDefinition[] = [
     cooldown: 3,
     targetType: 'all_enemies',
     effectKind: 'scan_reveal',
+    phaseOverride: 'step2',
     buffMagnitude: 0.15, // +15% dmg taken for 2 turns
     duration: 2,
   },

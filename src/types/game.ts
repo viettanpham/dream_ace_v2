@@ -182,6 +182,7 @@ export interface SkillDefinition {
   spAmount?: number; // e.g., +20 SP / +10 SP
   oncePerBattle?: boolean;
   isToggle?: boolean;
+  phaseOverride?: 'step2' | 'step3';
   openingCardId?: string;
 }
 
@@ -225,7 +226,8 @@ export interface BattleSkillUsability {
     | 'already_used'
     | 'blocked_by_siege'
     | 'insufficient_sp'
-    | 'flux_min_sp';
+    | 'flux_min_sp'
+    | 'used_this_turn';
   cooldownRemaining: number;
   spCost: number;
   isToggleActive?: boolean;
@@ -1210,6 +1212,8 @@ export interface BattleState {
   fxEvents: CombatFxEvent[];
   explodedUnitIds: string[];
   supplyByUnit?: Record<string, BattleSupplyUnitState>;
+  turnStep2Used?: number;
+  turnLockedSkillIds?: string[];
   isResolving: boolean;
   summary: BattleSummary | null;
 }
@@ -1469,7 +1473,12 @@ export interface AdminConfig {
   maxSkillModulesPerGear?: number;
   itemLevels?: ItemLevelsConfig;
   pirates?: PiratesConfig;
+  turnPhase?: TurnPhaseConfig;
   showRawI18nKeys: boolean;
+}
+
+export interface TurnPhaseConfig {
+  maxStep2PerTurn: number;
 }
 
 export interface FluxTransferLevelRule {

@@ -90,6 +90,10 @@ import {
   sanitizeShieldCrackedTurns,
   sanitizeShieldRegenConfig,
 } from './shieldRegen';
+import {
+  evaluateTurnPhaseAfterAction,
+  sanitizeTurnPhaseConfig,
+} from './turnPhase';
 
 let uidCounter = 1;
 function nextId(prefix: string): string {
@@ -867,6 +871,8 @@ export function createInitialBattleState(
     fxEvents: [],
     explodedUnitIds: [],
     supplyByUnit: {},
+    turnStep2Used: 0,
+    turnLockedSkillIds: [],
     isResolving: false,
     summary: null,
   };
@@ -1096,7 +1102,7 @@ function applyDamageToUnit(
     tag: 'ATTACK' | 'SKILL';
     isCounter?: boolean;
     isSplash?: boolean;
-    adminConfig?: AdminConfig;
+    adminConfig?: Partial<AdminConfig>;
     rng?: () => number;
     events?: BattleEvent[];
   }
@@ -1951,16 +1957,22 @@ export function resolveSpTransfer(
   };
 }
 
+export interface ResolveUnitActionOptions {
+  skipTurnStartTicks?: boolean;
+  turnLockedSkillIds?: readonly string[];
+}
+
 export function resolveUnitAction(
   units: CombatUnit[],
   actorId: string,
   action: ActionType,
   targetId: string | null,
   round: number,
-  adminConfig?: AdminConfig,
+  adminConfig?: Partial<AdminConfig>,
   rng: () => number = Math.random,
   skillId?: string,
-  transferCount?: number
+  transferCount?: number,
+  options?: ResolveUnitActionOptions
 ): ActionResolution {
   const events: BattleEvent[] = [];
   const result = resolveUnitActionCore(
@@ -1973,7 +1985,8 @@ export function resolveUnitAction(
     adminConfig,
     rng,
     skillId,
-    transferCount
+    transferCount,
+    options
   );
 
   // Automatically record any buffs applied/refreshed during this turn
@@ -2023,10 +2036,11 @@ function resolveUnitActionCore(
   targetId: string | null,
   round: number,
   events: BattleEvent[],
-  adminConfig?: AdminConfig,
+  adminConfig?: Partial<AdminConfig>,
   rng: () => number = Math.random,
   skillId?: string,
-  transferCount?: number
+  transferCount?: number,
+  options?: ResolveUnitActionOptions
 ): Omit<ActionResolution, 'events'> {
   const originalActor = units.find((u) => u.id === actorId);
   if (!originalActor || !originalActor.alive) {
@@ -2040,13 +2054,16 @@ function resolveUnitActionCore(
     };
   }
 
-  events.push({
-    id: nextId('ev'),
-    round,
-    turn: 0,
-    actorId,
-    type: 'turn_start',
-  });
+  const skipTurnStartTicks = Boolean(options?.skipTurnStartTicks);
+  if (!skipTurnStartTicks) {
+    events.push({
+      id: nextId('ev'),
+      round,
+      turn: 0,
+      actorId,
+      type: 'turn_start',
+    });
+  }
 
   const cls = MECH_CLASSES[originalActor.classId];
   const fromSlotIndex = getSlotIndex(units, originalActor.id);
@@ -2064,199 +2081,205 @@ function resolveUnitActionCore(
   const destroyedUnitIds: string[] = [];
 
   // ---- Start-of-turn: Cooldown tick, Passive SP regen, Regen HoT, Burn DoT, Status tick ----
-  let actor: CombatUnit = {
-    ...nextUnits[actorIdx],
-    skillCooldowns: decrementCooldowns(nextUnits[actorIdx].skillCooldowns),
-  };
-
-  if (actor.derived.spRegenPerTurn > 0) {
-    actor = {
-      ...actor,
-      sp: Math.min(actor.derived.maxSp, actor.sp + actor.derived.spRegenPerTurn),
-    };
-  }
+  let actor: CombatUnit = skipTurnStartTicks
+    ? { ...nextUnits[actorIdx] }
+    : {
+        ...nextUnits[actorIdx],
+        skillCooldowns: decrementCooldowns(nextUnits[actorIdx].skillCooldowns),
+      };
 
   // Capture whether shield_break is active on this own turn before status tick decrements it
   const shieldBreakAtTurnStart = hasStatus(actor, 'shield_break');
-
-  // Passive per-turn Shield Regeneration (next to SP regen, before status tick)
   const shieldRegenCfg = sanitizeShieldRegenConfig(adminConfig?.shieldRegen);
-  if (shieldRegenCfg.enabled) {
-    const shieldRegen = computeShieldRegen(actor, shieldRegenCfg);
-    if (shieldRegen.amount > 0) {
+
+  if (!skipTurnStartTicks) {
+    if (actor.derived.spRegenPerTurn > 0) {
       actor = {
         ...actor,
-        shield: Math.min(
-          actor.derived.maxShield,
-          actor.shield + shieldRegen.amount
-        ),
+        sp: Math.min(actor.derived.maxSp, actor.sp + actor.derived.spRegenPerTurn),
       };
-      events.push({
-        id: nextId('ev'),
-        round,
-        turn: 0,
-        actorId: actor.id,
-        targetId: actor.id,
-        type: 'shield_grant',
-        amount: shieldRegen.amount,
-        flags: { isRegen: true },
-      });
-      if (
-        actor.derived.maxShield > 0 &&
-        shieldRegen.amount >= actor.derived.maxShield * 0.01
-      ) {
+    }
+
+    // Passive per-turn Shield Regeneration (next to SP regen, before status tick)
+    if (shieldRegenCfg.enabled) {
+      const shieldRegen = computeShieldRegen(actor, shieldRegenCfg);
+      if (shieldRegen.amount > 0) {
+        actor = {
+          ...actor,
+          shield: Math.min(
+            actor.derived.maxShield,
+            actor.shield + shieldRegen.amount
+          ),
+        };
+        events.push({
+          id: nextId('ev'),
+          round,
+          turn: 0,
+          actorId: actor.id,
+          targetId: actor.id,
+          type: 'shield_grant',
+          amount: shieldRegen.amount,
+          flags: { isRegen: true },
+        });
+        if (
+          actor.derived.maxShield > 0 &&
+          shieldRegen.amount >= actor.derived.maxShield * 0.01
+        ) {
+          popups.push({
+            id: nextId('pop'),
+            unitId: actor.id,
+            text: `SHD +${shieldRegen.amount}`,
+            tone: 'shield',
+          });
+        }
+        logs.push({
+          id: nextId('log'),
+          round,
+          actorName: actor.name,
+          actorSide: actor.side,
+          tag: 'SHIELD',
+          templateKey: 'log.shieldRegen',
+          params: {
+            target: actor.name,
+            amount: shieldRegen.amount,
+            reason: shieldRegen.reason,
+            multPct: shieldRegen.multPct,
+            hits: shieldRegen.hits,
+            classId: actor.classId,
+          },
+        });
+      }
+      if (getUnitHitsSinceOwnTurn(actor) > 0) {
+        actor = { ...actor, hitsSinceOwnTurn: 0 };
+      }
+    }
+
+    // Healing Field HoT tick
+    const regenSt = getStatus(actor, 'regen_hp');
+    if (regenSt) {
+      const healAmt = Math.min(
+        actor.derived.maxHp - actor.hp,
+        Math.max(4, Math.round(actor.derived.maxHp * (regenSt.magnitude ?? 0.1)))
+      );
+      if (healAmt > 0) {
+        actor = { ...actor, hp: actor.hp + healAmt };
+        events.push({
+          id: nextId('ev'),
+          round,
+          turn: 0,
+          actorId: actor.id,
+          targetId: actor.id,
+          type: 'heal',
+          amount: healAmt,
+          skillId: regenSt.sourceSkillId,
+          flags: { isRegen: true },
+        });
         popups.push({
           id: nextId('pop'),
           unitId: actor.id,
-          text: `SHD +${shieldRegen.amount}`,
-          tone: 'shield',
+          text: `+${healAmt} HP`,
+          tone: 'heal',
+        });
+        logs.push({
+          id: nextId('log'),
+          round,
+          actorName: actor.name,
+          actorSide: actor.side,
+          tag: 'HEAL',
+          templateKey: 'log.regenTick',
+          params: { target: actor.name, amount: healAmt },
         });
       }
-      logs.push({
-        id: nextId('log'),
-        round,
-        actorName: actor.name,
-        actorSide: actor.side,
-        tag: 'SHIELD',
-        templateKey: 'log.shieldRegen',
-        params: {
-          target: actor.name,
-          amount: shieldRegen.amount,
-          reason: shieldRegen.reason,
-          multPct: shieldRegen.multPct,
-          hits: shieldRegen.hits,
-          classId: actor.classId,
-        },
-      });
     }
-    if (getUnitHitsSinceOwnTurn(actor) > 0) {
-      actor = { ...actor, hitsSinceOwnTurn: 0 };
-    }
-  }
 
-  // Healing Field HoT tick
-  const regenSt = getStatus(actor, 'regen_hp');
-  if (regenSt) {
-    const healAmt = Math.min(
-      actor.derived.maxHp - actor.hp,
-      Math.max(4, Math.round(actor.derived.maxHp * (regenSt.magnitude ?? 0.1)))
-    );
-    if (healAmt > 0) {
-      actor = { ...actor, hp: actor.hp + healAmt };
-      events.push({
-        id: nextId('ev'),
-        round,
-        turn: 0,
-        actorId: actor.id,
-        targetId: actor.id,
-        type: 'heal',
-        amount: healAmt,
-        skillId: regenSt.sourceSkillId,
-        flags: { isRegen: true },
-      });
-      popups.push({
-        id: nextId('pop'),
-        unitId: actor.id,
-        text: `+${healAmt} HP`,
-        tone: 'heal',
-      });
-      logs.push({
-        id: nextId('log'),
-        round,
-        actorName: actor.name,
-        actorSide: actor.side,
-        tag: 'HEAL',
-        templateKey: 'log.regenTick',
-        params: { target: actor.name, amount: healAmt },
-      });
-    }
-  }
-
-  // Burn DoT tick
-  if (hasStatus(actor, 'burn')) {
-    const burnDmg =
-      adminConfig?.godMode && actor.isPlayer
-        ? 0
-        : Math.max(
-            5,
-            Math.round(actor.derived.maxHp * BALANCE_CONFIG.burnDamageRatio)
-          );
-    const nextHp = Math.max(0, actor.hp - burnDmg);
-    const burnedOut = nextHp <= 0;
-    actor = {
-      ...actor,
-      hp: nextHp,
-      alive: !burnedOut,
-      animState: burnedOut ? 'destroyed' : 'hit',
-    };
-    if (burnDmg > 0) {
-      events.push({
-        id: nextId('ev'),
-        round,
-        turn: 0,
-        actorId: actor.id,
-        targetId: actor.id,
-        type: 'damage',
-        amount: burnDmg,
-        shieldAbsorbed: 0,
-        hpDamage: burnDmg,
-        flags: { isBurn: true, kill: burnedOut },
-      });
-      popups.push({
-        id: nextId('pop'),
-        unitId: actor.id,
-        text: `BURN -${burnDmg}`,
-        tone: 'status',
-      });
-      logs.push({
-        id: nextId('log'),
-        round,
-        actorName: actor.name,
-        actorSide: actor.side,
-        tag: 'STATUS',
-        templateKey: 'log.burnTick',
-        params: { target: actor.name, damage: burnDmg },
-      });
-    }
-    if (burnedOut) {
-      destroyedUnitIds.push(actor.id);
-      events.push({
-        id: nextId('ev'),
-        round,
-        turn: 0,
-        actorId: actor.id,
-        targetId: actor.id,
-        type: 'kill',
-        flags: { isBurn: true, kill: true },
-      });
-      logs.push({
-        id: nextId('log'),
-        round,
-        actorName: actor.name,
-        actorSide: actor.side,
-        tag: 'KO',
-        templateKey: 'log.destroyed',
-        params: { target: actor.name, classId: actor.classId },
-      });
+    // Burn DoT tick
+    if (hasStatus(actor, 'burn')) {
+      const burnDmg =
+        adminConfig?.godMode && actor.isPlayer
+          ? 0
+          : Math.max(
+              5,
+              Math.round(actor.derived.maxHp * BALANCE_CONFIG.burnDamageRatio)
+            );
+      const nextHp = Math.max(0, actor.hp - burnDmg);
+      const burnedOut = nextHp <= 0;
+      actor = {
+        ...actor,
+        hp: nextHp,
+        alive: !burnedOut,
+        animState: burnedOut ? 'destroyed' : 'hit',
+      };
+      if (burnDmg > 0) {
+        events.push({
+          id: nextId('ev'),
+          round,
+          turn: 0,
+          actorId: actor.id,
+          targetId: actor.id,
+          type: 'damage',
+          amount: burnDmg,
+          shieldAbsorbed: 0,
+          hpDamage: burnDmg,
+          flags: { isBurn: true, kill: burnedOut },
+        });
+        popups.push({
+          id: nextId('pop'),
+          unitId: actor.id,
+          text: `BURN -${burnDmg}`,
+          tone: 'status',
+        });
+        logs.push({
+          id: nextId('log'),
+          round,
+          actorName: actor.name,
+          actorSide: actor.side,
+          tag: 'STATUS',
+          templateKey: 'log.burnTick',
+          params: { target: actor.name, damage: burnDmg },
+        });
+      }
+      if (burnedOut) {
+        destroyedUnitIds.push(actor.id);
+        events.push({
+          id: nextId('ev'),
+          round,
+          turn: 0,
+          actorId: actor.id,
+          targetId: actor.id,
+          type: 'kill',
+          flags: { isBurn: true, kill: true },
+        });
+        logs.push({
+          id: nextId('log'),
+          round,
+          actorName: actor.name,
+          actorSide: actor.side,
+          tag: 'KO',
+          templateKey: 'log.destroyed',
+          params: { target: actor.name, classId: actor.classId },
+        });
+      }
     }
   }
 
   // Check if releasing a charged shot (str_solar_capacitor) BEFORE ticking statuses
   const chargingSt = getStatus(actor, 'charging');
 
-  // Tick down active non-permanent status durations (99 = toggle/until-attack)
-  actor = {
-    ...actor,
-    statuses: actor.alive
-      ? actor.statuses
-          .map((s) =>
-            s.turnsRemaining >= 90
-              ? s
-              : { ...s, turnsRemaining: s.turnsRemaining - 1 }
-          )
-          .filter((s) => s.turnsRemaining > 0)
-      : [],
-  };
+  if (!skipTurnStartTicks) {
+    // Tick down active non-permanent status durations (99 = toggle/until-attack)
+    actor = {
+      ...actor,
+      statuses: actor.alive
+        ? actor.statuses
+            .map((s) =>
+              s.turnsRemaining >= 90
+                ? s
+                : { ...s, turnsRemaining: s.turnsRemaining - 1 }
+            )
+            .filter((s) => s.turnsRemaining > 0)
+        : [],
+    };
+  }
   nextUnits[actorIdx] = actor;
 
   if (!actor.alive) {
@@ -2422,7 +2445,12 @@ function resolveUnitActionCore(
   if (action === 'skill') {
     const requestedSkillId = skillId ?? actor.equippedSkillIds[0];
     const usability = requestedSkillId
-      ? canUnitUseSkill(actor, requestedSkillId, adminConfig)
+      ? canUnitUseSkill(
+          actor,
+          requestedSkillId,
+          adminConfig,
+          options?.turnLockedSkillIds
+        )
       : null;
     const skill: SkillDefinition | undefined = requestedSkillId
       ? getSkillById(requestedSkillId)
@@ -4478,7 +4506,8 @@ export function chooseAiDecision(
   actor: CombatUnit,
   units: CombatUnit[],
   rng: () => number = Math.random,
-  adminConfig?: Partial<AdminConfig>
+  adminConfig?: Partial<AdminConfig>,
+  turnLockedSkillIds?: readonly string[]
 ): { action: ActionType; targetId: string | null; skillId?: string; transferCount?: number } {
   const allies = units.filter((u) => u.side === actor.side && u.alive);
   const enemies = getValidEnemyTargets(units, actor, 'attack');
@@ -4503,7 +4532,8 @@ export function chooseAiDecision(
     .map((id) => getSkillById(id))
     .filter(
       (s): s is SkillDefinition =>
-        Boolean(s) && canUnitUseSkill(actor, s!.id, adminConfig).canUse
+        Boolean(s) &&
+        canUnitUseSkill(actor, s!.id, adminConfig, turnLockedSkillIds).canUse
     );
 
   // Repair Ship / Support heals injured allies first
@@ -4595,6 +4625,180 @@ export function chooseAiDecision(
   }
 
   return { action: 'attack', targetId: target.id };
+}
+
+export interface TurnDecision {
+  action: ActionType;
+  targetId: string | null;
+  skillId?: string;
+  transferCount?: number;
+  matchedRuleIndex?: number | null;
+}
+
+export interface MultiStepTurnResolution extends ActionResolution {
+  decisionsCount: number;
+  step2SkillIds: string[];
+  fxEvents: CombatFxEvent[];
+  lastDecision: TurnDecision | null;
+  lastMatchedRuleIndex: number | null;
+}
+
+export function resolveMultiStepTurn(params: {
+  units: CombatUnit[];
+  actorId: string;
+  round: number;
+  adminConfig?: Partial<AdminConfig>;
+  rng?: () => number;
+  initialTurnStep2Used?: number;
+  initialTurnLockedSkillIds?: readonly string[];
+  chooseNextDecision: (
+    currentUnits: CombatUnit[],
+    currentActor: CombatUnit,
+    turnLockedSkillIds: string[],
+    stepIndex: number
+  ) => TurnDecision | null | undefined;
+}): MultiStepTurnResolution {
+  const {
+    units,
+    actorId,
+    round,
+    adminConfig,
+    rng = Math.random,
+    initialTurnStep2Used = 0,
+    initialTurnLockedSkillIds = [],
+    chooseNextDecision,
+  } = params;
+
+  const turnPhaseCfg = sanitizeTurnPhaseConfig(adminConfig?.turnPhase);
+  const baseStep2Used = Math.max(0, Math.floor(initialTurnStep2Used || 0));
+  const maxSteps = Math.max(1, turnPhaseCfg.maxStep2PerTurn - baseStep2Used + 1);
+
+  let currentUnits = units;
+  let step2Used = baseStep2Used;
+  let lockedSkillIds: string[] = [...initialTurnLockedSkillIds];
+  const step2SkillIds: string[] = [];
+  const logEntries: CombatLogEntry[] = [];
+  const events: BattleEvent[] = [];
+  const popups: FloatingPopup[] = [];
+  const fxEvents: CombatFxEvent[] = [];
+  const destroyedUnitIds: string[] = [];
+  let lastFxEvent: CombatFxEvent | null = null;
+  let lastSoundCue: ActionResolution['soundCue'] = 'defend';
+  let lastDecision: TurnDecision | null = null;
+  let lastMatchedRuleIndex: number | null = null;
+  let decisionsCount = 0;
+
+  for (let stepIdx = 0; stepIdx < maxSteps; stepIdx++) {
+    const currentActor = currentUnits.find((u) => u.id === actorId);
+    const hasAliveEnemies = currentUnits.some(
+      (u) => currentActor && u.side !== currentActor.side && u.alive
+    );
+    const hasAliveAllies = currentUnits.some(
+      (u) => currentActor && u.side === currentActor.side && u.alive
+    );
+    if (!currentActor || !currentActor.alive || !hasAliveEnemies || !hasAliveAllies) {
+      break;
+    }
+
+    const picked = chooseNextDecision(
+      currentUnits,
+      currentActor,
+      lockedSkillIds,
+      stepIdx
+    );
+    const decision: TurnDecision = picked ?? {
+      action: 'defend',
+      targetId: null,
+    };
+    decisionsCount += 1;
+    lastDecision = decision;
+    lastMatchedRuleIndex = decision.matchedRuleIndex ?? null;
+
+    const skillDef =
+      decision.action === 'skill' && decision.skillId
+        ? getSkillById(decision.skillId)
+        : undefined;
+
+    const res = resolveUnitAction(
+      currentUnits,
+      actorId,
+      decision.action,
+      decision.targetId,
+      round,
+      adminConfig,
+      rng,
+      decision.skillId,
+      decision.transferCount,
+      {
+        skipTurnStartTicks: stepIdx > 0 || baseStep2Used > 0,
+        turnLockedSkillIds: lockedSkillIds,
+      }
+    );
+
+    currentUnits = res.updatedUnits;
+    logEntries.push(...res.logEntries);
+    events.push(...res.events);
+    popups.push(...res.popups);
+    destroyedUnitIds.push(...res.destroyedUnitIds);
+    if (res.fxEvent) {
+      fxEvents.push(res.fxEvent);
+      lastFxEvent = res.fxEvent;
+    }
+    lastSoundCue = res.soundCue;
+
+    const actorAfter = currentUnits.find((u) => u.id === actorId);
+    const aliveEnemiesCount = currentUnits.filter(
+      (u) => u.side === 'enemy' && u.alive
+    ).length;
+    const aliveAlliesCount = currentUnits.filter(
+      (u) => u.side === 'ally' && u.alive
+    ).length;
+    const didCastSkill =
+      decision.action === 'skill' &&
+      Boolean(decision.skillId) &&
+      res.events.some(
+        (ev) =>
+          ev.type === 'skill_cast' &&
+          ev.actorId === actorId &&
+          ev.skillId === decision.skillId
+      );
+
+    const phaseOutcome = evaluateTurnPhaseAfterAction({
+      skill: skillDef,
+      didCastSkill,
+      actorAlive: Boolean(actorAfter?.alive),
+      aliveEnemiesCount,
+      aliveAlliesCount,
+      turnStep2Used: step2Used,
+      turnLockedSkillIds: lockedSkillIds,
+      cfg: turnPhaseCfg,
+    });
+
+    if (!phaseOutcome.keepTurn) {
+      break;
+    }
+
+    if (decision.skillId) {
+      step2SkillIds.push(decision.skillId);
+    }
+    step2Used = phaseOutcome.nextTurnStep2Used;
+    lockedSkillIds = phaseOutcome.nextTurnLockedSkillIds;
+  }
+
+  return {
+    updatedUnits: currentUnits,
+    logEntries,
+    events,
+    popups,
+    fxEvent: lastFxEvent,
+    fxEvents,
+    destroyedUnitIds,
+    soundCue: lastSoundCue,
+    decisionsCount,
+    step2SkillIds,
+    lastDecision,
+    lastMatchedRuleIndex,
+  };
 }
 
 /**

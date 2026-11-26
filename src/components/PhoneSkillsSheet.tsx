@@ -17,7 +17,8 @@ export interface PhoneSkillsSheetProps {
   playerUnit: CombatUnit | null | undefined;
   playerSkillIds: string[];
   canPlayerManualAct: boolean;
-  adminConfig?: Pick<AdminConfig, 'spEconomy'> | null;
+  adminConfig?: Pick<AdminConfig, 'spEconomy' | 'fluxTransfer'> | null;
+  turnLockedSkillIds?: readonly string[];
   lang: Language;
   t: TranslateFn;
   onClose: () => void;
@@ -30,6 +31,7 @@ export function PhoneSkillsSheet({
   playerSkillIds,
   canPlayerManualAct,
   adminConfig,
+  turnLockedSkillIds,
   lang,
   t,
   onClose,
@@ -58,7 +60,8 @@ export function PhoneSkillsSheet({
             const usability = canUnitUseSkill(
               playerUnit,
               skill.id,
-              adminConfig
+              adminConfig,
+              turnLockedSkillIds
             );
             const clickable = canPlayerManualAct && usability.canUse;
             const isToggleOn = Boolean(usability.isToggleActive);
