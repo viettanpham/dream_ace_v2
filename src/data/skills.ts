@@ -394,7 +394,7 @@ export const SKILLS_LIST: SkillDefinition[] = [
     category: 'normal',
     icon: 'radar',
     unlockLevel: 6,
-    spCost: 10,
+    spCost: 20,
     cooldown: 3,
     targetType: 'all_enemies',
     effectKind: 'scan_reveal',

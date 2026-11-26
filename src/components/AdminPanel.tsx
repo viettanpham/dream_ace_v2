@@ -31,6 +31,7 @@ import {
   sanitizeFluxTransferConfig,
   sanitizeMaxLevel,
   sanitizeSpEconomyConfig,
+  sanitizeStealthConfig,
 } from '../data/balance';
 import { MECH_CLASS_LIST } from '../data/classes';
 import {
@@ -2116,6 +2117,59 @@ export function AdminPanel() {
                               </div>
                             ))}
                           </div>
+                        </div>
+                      );
+                    })()}
+
+                    {(() => {
+                      const stealthCfg = sanitizeStealthConfig(adminConfig.stealth);
+                      const updateStealth = (patch: Partial<typeof stealthCfg>) =>
+                        adminUpdateConfig({
+                          stealth: sanitizeStealthConfig({
+                            ...stealthCfg,
+                            ...patch,
+                          }),
+                        });
+                      return (
+                        <div className="pt-2 border-t border-slate-800/80 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <label className="space-y-1 block">
+                            <span className="text-[11px] text-slate-400 block">
+                              {t('admin.stealthLidarDetectMin')}
+                            </span>
+                            <input
+                              type="number"
+                              data-testid="admin-stealth-lidar-min"
+                              min={1}
+                              max={10}
+                              step={1}
+                              value={stealthCfg.lidarDetectMin}
+                              onChange={(e) =>
+                                updateStealth({
+                                  lidarDetectMin: Number(e.target.value),
+                                })
+                              }
+                              className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                            />
+                          </label>
+                          <label className="space-y-1 block">
+                            <span className="text-[11px] text-slate-400 block">
+                              {t('admin.stealthLidarDetectMax')}
+                            </span>
+                            <input
+                              type="number"
+                              data-testid="admin-stealth-lidar-max"
+                              min={1}
+                              max={10}
+                              step={1}
+                              value={stealthCfg.lidarDetectMax}
+                              onChange={(e) =>
+                                updateStealth({
+                                  lidarDetectMax: Number(e.target.value),
+                                })
+                              }
+                              className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                            />
+                          </label>
                         </div>
                       );
                     })()}

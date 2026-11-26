@@ -489,6 +489,21 @@ export function canUnitUseSkill(
     };
   }
 
+  // Revealed this round blocks re-entering stealth until next round
+  if (
+    (skill.effectKind === 'stealth_turns' ||
+      skill.effectKind === 'stealth_until_attack') &&
+    unit.revealedThisRound
+  ) {
+    return {
+      canUse: false,
+      reason: 'revealed_this_round',
+      cooldownRemaining: cd,
+      spCost: effectiveSpCost,
+      isToggleActive,
+    };
+  }
+
   if (unit.sp < effectiveSpCost) {
     return {
       canUse: false,

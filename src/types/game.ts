@@ -227,7 +227,8 @@ export interface BattleSkillUsability {
     | 'blocked_by_siege'
     | 'insufficient_sp'
     | 'flux_min_sp'
-    | 'used_this_turn';
+    | 'used_this_turn'
+    | 'revealed_this_round';
   cooldownRemaining: number;
   spCost: number;
   isToggleActive?: boolean;
@@ -918,6 +919,7 @@ export interface CombatUnit {
   alive: boolean;
   statuses: ActiveStatusEffect[];
   hitsSinceOwnTurn?: number;
+  revealedThisRound?: boolean;
   animState: UnitAnimState;
 }
 
@@ -974,6 +976,7 @@ export type CombatLogTemplateKey =
   | 'log.charging'
   | 'log.counterAttack'
   | 'log.scanReveal'
+  | 'log.scanRevealNone'
   | 'log.invincibleBlock'
   | 'log.silencedBlocked'
   | 'log.wingmanChat'
@@ -1474,7 +1477,13 @@ export interface AdminConfig {
   itemLevels?: ItemLevelsConfig;
   pirates?: PiratesConfig;
   turnPhase?: TurnPhaseConfig;
+  stealth?: StealthConfig;
   showRawI18nKeys: boolean;
+}
+
+export interface StealthConfig {
+  lidarDetectMin: number;
+  lidarDetectMax: number;
 }
 
 export interface TurnPhaseConfig {

@@ -7,6 +7,7 @@ import {
   sanitizeFluxTransferConfig,
   sanitizeMaxLevel,
   sanitizeSpEconomyConfig,
+  sanitizeStealthConfig,
   setRuntimeMaxLevel,
 } from '../data/balance';
 import { BATTLE_KIND_RULES } from '../data/battleKinds';
@@ -22,6 +23,7 @@ import { getSkillById, OPENING_CARDS_LIST } from '../data/skills';
 import {
   calculateBattleRewards,
   chooseAiDecision,
+  clearRevealedFlags,
   computeFluxBattlePressure,
   createInitialBattleState,
   createRoundHpSnapshot,
@@ -3427,6 +3429,7 @@ export const useGameStore = create<GameStoreState>()(
           battle.activeTurnIndex
         );
 
+        let finalUnits = resolution.updatedUnits;
         let nextTurnOrder = reconciledOrder;
         let finalTurnIndex = nextIndex;
         const nextRound = wrappedRound ? battle.round + 1 : battle.round;
@@ -3436,15 +3439,16 @@ export const useGameStore = create<GameStoreState>()(
           resolution.updatedUnits
         );
         if (wrappedRound) {
-          nextTurnOrder = sortTurnOrder(resolution.updatedUnits);
+          finalUnits = clearRevealedFlags(resolution.updatedUnits);
+          nextTurnOrder = sortTurnOrder(finalUnits);
           const firstAliveIdx = nextTurnOrder.findIndex((id) =>
-            resolution.updatedUnits.some((u) => u.id === id && u.alive)
+            finalUnits.some((u) => u.id === id && u.alive)
           );
           finalTurnIndex = Math.max(0, firstAliveIdx);
           nextSnapshots = appendRoundSnapshot(
             nextSnapshots,
             nextRound,
-            resolution.updatedUnits
+            finalUnits
           );
         }
 
@@ -3456,7 +3460,7 @@ export const useGameStore = create<GameStoreState>()(
         set({
           battle: {
             ...battle,
-            units: resolution.updatedUnits,
+            units: finalUnits,
             supplyByUnit: nextSupplyByUnit,
             turnCounter: nextTurnCounter,
             log: nextLog,
@@ -3706,6 +3710,7 @@ export const useGameStore = create<GameStoreState>()(
           battle.activeTurnIndex
         );
 
+        let finalUnits = resolution.updatedUnits;
         let nextTurnOrder = reconciledOrder;
         let finalTurnIndex = nextIndex;
         const nextRound = wrappedRound ? battle.round + 1 : battle.round;
@@ -3715,15 +3720,16 @@ export const useGameStore = create<GameStoreState>()(
           resolution.updatedUnits
         );
         if (wrappedRound) {
-          nextTurnOrder = sortTurnOrder(resolution.updatedUnits);
+          finalUnits = clearRevealedFlags(resolution.updatedUnits);
+          nextTurnOrder = sortTurnOrder(finalUnits);
           const firstAliveIdx = nextTurnOrder.findIndex((id) =>
-            resolution.updatedUnits.some((u) => u.id === id && u.alive)
+            finalUnits.some((u) => u.id === id && u.alive)
           );
           finalTurnIndex = Math.max(0, firstAliveIdx);
           nextSnapshots = appendRoundSnapshot(
             nextSnapshots,
             nextRound,
-            resolution.updatedUnits
+            finalUnits
           );
         }
 
@@ -3742,7 +3748,7 @@ export const useGameStore = create<GameStoreState>()(
         set({
           battle: {
             ...battle,
-            units: resolution.updatedUnits,
+            units: finalUnits,
             supplyByUnit: nextSupplyByUnit,
             turnCounter: nextTurnCounter,
             log: nextLog,
@@ -3783,20 +3789,23 @@ export const useGameStore = create<GameStoreState>()(
             battle.units,
             battle.activeTurnIndex
           );
+          let nextUnits = battle.units;
           let nextTurnOrder = battle.turnOrder;
           let finalTurnIndex = nextIndex;
           if (wrappedRound) {
-            nextTurnOrder = sortTurnOrder(battle.units);
+            nextUnits = clearRevealedFlags(battle.units);
+            nextTurnOrder = sortTurnOrder(nextUnits);
             finalTurnIndex = Math.max(
               0,
               nextTurnOrder.findIndex((id) =>
-                battle.units.some((u) => u.id === id && u.alive)
+                nextUnits.some((u) => u.id === id && u.alive)
               )
             );
           }
           set({
             battle: {
               ...battle,
+              units: nextUnits,
               turnOrder: nextTurnOrder,
               activeTurnIndex: finalTurnIndex,
               round: wrappedRound ? battle.round + 1 : battle.round,
@@ -3899,6 +3908,7 @@ export const useGameStore = create<GameStoreState>()(
           battle.activeTurnIndex
         );
 
+        let finalUnits = resolution.updatedUnits;
         let nextTurnOrder = reconciledOrder;
         let finalTurnIndex = nextIndex;
         const nextRound = wrappedRound ? battle.round + 1 : battle.round;
@@ -3908,15 +3918,16 @@ export const useGameStore = create<GameStoreState>()(
           resolution.updatedUnits
         );
         if (wrappedRound) {
-          nextTurnOrder = sortTurnOrder(resolution.updatedUnits);
+          finalUnits = clearRevealedFlags(resolution.updatedUnits);
+          nextTurnOrder = sortTurnOrder(finalUnits);
           const firstAliveIdx = nextTurnOrder.findIndex((id) =>
-            resolution.updatedUnits.some((u) => u.id === id && u.alive)
+            finalUnits.some((u) => u.id === id && u.alive)
           );
           finalTurnIndex = Math.max(0, firstAliveIdx);
           nextSnapshots = appendRoundSnapshot(
             nextSnapshots,
             nextRound,
-            resolution.updatedUnits
+            finalUnits
           );
         }
 
@@ -3940,9 +3951,9 @@ export const useGameStore = create<GameStoreState>()(
           };
         }
 
-        const playerNext = resolution.updatedUnits.find((u) => u.isPlayer);
+        const playerNext = finalUnits.find((u) => u.isPlayer);
         const validFrontEnemies = playerNext
-          ? getValidEnemyTargets(resolution.updatedUnits, playerNext, 'attack')
+          ? getValidEnemyTargets(finalUnits, playerNext, 'attack')
           : aliveEnemies;
         const currentTargetStillAlive = aliveEnemies.some(
           (e) => e.id === battle.selectedTargetId
@@ -3954,7 +3965,7 @@ export const useGameStore = create<GameStoreState>()(
         set({
           battle: {
             ...battle,
-            units: resolution.updatedUnits,
+            units: finalUnits,
             turnCounter: nextTurnCounter,
             log: nextLog,
             events: nextEvents,
@@ -4738,6 +4749,10 @@ export const useGameStore = create<GameStoreState>()(
             patch.turnPhase !== undefined
               ? sanitizeTurnPhaseConfig(patch.turnPhase)
               : sanitizeTurnPhaseConfig(state.adminConfig.turnPhase);
+          const nextStealth =
+            patch.stealth !== undefined
+              ? sanitizeStealthConfig(patch.stealth)
+              : sanitizeStealthConfig(state.adminConfig.stealth);
           const nextMaxLevel =
             patch.maxLevel !== undefined
               ? sanitizeMaxLevel(patch.maxLevel)
@@ -4757,6 +4772,7 @@ export const useGameStore = create<GameStoreState>()(
             supplyEconomy: nextSupplyEconomy,
             enemyLevel: nextEnemyLevel,
             turnPhase: nextTurnPhase,
+            stealth: nextStealth,
           };
           let updatedPilot =
             patch.formation &&
@@ -5069,6 +5085,7 @@ export const useGameStore = create<GameStoreState>()(
               supplyEconomy: sanitizeSupplyEconomyConfig(rawAdmin.supplyEconomy),
               enemyLevel: sanitizeEnemyLevelConfig(rawAdmin.enemyLevel),
               pirates: sanitizePiratesConfig(rawAdmin.pirates),
+              stealth: sanitizeStealthConfig(rawAdmin.stealth),
               rewardMultiplier:
                 typeof state.adminConfig.rewardMultiplier === 'number' &&
                 Number.isFinite(state.adminConfig.rewardMultiplier) &&

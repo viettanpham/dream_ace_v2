@@ -1,6 +1,7 @@
 import {
   BALANCE_CONFIG,
   COMBAT_FORMULAS,
+  computeLidarDetectCount,
   DEFAULT_FLUX_TRANSFER_CONFIG,
   getFluxMinPerAlly,
   getFluxPlannedAmountEach,
@@ -3424,15 +3425,42 @@ function resolveUnitActionCore(
           const enemies = nextUnits.filter(
             (u) => u.side !== act.side && u.alive
           );
+          const stealthedIndices: number[] = [];
+          for (let i = 0; i < enemies.length; i++) {
+            const eIdx = nextUnits.findIndex((u) => u.id === enemies[i].id);
+            if (eIdx !== -1 && hasStatus(nextUnits[eIdx], 'stealth')) {
+              stealthedIndices.push(eIdx);
+            }
+          }
+          for (let i = stealthedIndices.length - 1; i > 0; i--) {
+            const j = Math.floor(rng() * (i + 1));
+            const tmp = stealthedIndices[i];
+            stealthedIndices[i] = stealthedIndices[j];
+            stealthedIndices[j] = tmp;
+          }
+          const detectLimit = computeLidarDetectCount(
+            skillLv,
+            adminConfig?.stealth,
+            BALANCE_CONFIG.skillMaxLevel
+          );
+          const revealedUnitIds = new Set<string>(
+            stealthedIndices
+              .slice(0, detectLimit)
+              .map((idx) => nextUnits[idx].id)
+          );
+
           let revealedCount = 0;
+          const revealedNames: string[] = [];
           const slotIndices: number[] = [];
           for (const enemy of enemies) {
             const eIdx = nextUnits.findIndex((u) => u.id === enemy.id);
             slotIndices.push(getSlotIndex(units, enemy.id));
             let stList = nextUnits[eIdx].statuses;
-            if (hasStatus(nextUnits[eIdx], 'stealth')) {
+            const shouldReveal = revealedUnitIds.has(enemy.id);
+            if (shouldReveal) {
               stList = removeStatus(stList, 'stealth');
               revealedCount += 1;
+              revealedNames.push(enemy.name);
               popups.push({
                 id: nextId('pop'),
                 unitId: enemy.id,
@@ -3446,7 +3474,11 @@ function resolveUnitActionCore(
               magnitude: scaled.buffMagnitude,
               sourceSkillId: skill.id,
             });
-            nextUnits[eIdx] = { ...nextUnits[eIdx], statuses: stList };
+            nextUnits[eIdx] = {
+              ...nextUnits[eIdx],
+              statuses: stList,
+              ...(shouldReveal ? { revealedThisRound: true } : {}),
+            };
             popups.push({
               id: nextId('pop'),
               unitId: enemy.id,
@@ -3460,11 +3492,15 @@ function resolveUnitActionCore(
             actorName: act.name,
             actorSide: act.side,
             tag: 'STATUS',
-            templateKey: 'log.scanReveal',
+            templateKey:
+              revealedNames.length > 0 ? 'log.scanReveal' : 'log.scanRevealNone',
             params: {
               actor: act.name,
               skillId: skill.id,
               revealed: revealedCount,
+              ...(revealedNames.length > 0
+                ? { revealedNames: revealedNames.join(', ') }
+                : {}),
             },
           });
           return {
@@ -4799,6 +4835,12 @@ export function resolveMultiStepTurn(params: {
     lastDecision,
     lastMatchedRuleIndex,
   };
+}
+
+export function clearRevealedFlags(units: CombatUnit[]): CombatUnit[] {
+  return units.map((u) =>
+    u.revealedThisRound ? { ...u, revealedThisRound: false } : u
+  );
 }
 
 /**

@@ -474,6 +474,7 @@ export const EN_TRANSLATIONS = {
   'battle.skillReason.insufficient_sp': 'Insufficient SP (need {cost} SP)',
   'battle.skillReason.flux_min_sp': 'Need {cost} SP min',
   'battle.skillReason.used_this_turn': 'Already used this turn',
+  'battle.skillReason.revealed_this_round': 'Just revealed — wait for next round',
   'battle.skillReason.class_mismatch': 'Class mismatch',
   'battle.skillReason.not_equipped': 'Not slotted on Skill Bar',
 
@@ -695,7 +696,8 @@ export const EN_TRANSLATIONS = {
   'log.stanceToggle': '{actor} switched {skill} {state}.',
   'log.charging': '{actor} begins charging {skill} — impact imminent next turn!',
   'log.counterAttack': '{target} executes Snap-Turn Riposte against {actor} for {damage}!',
-  'log.scanReveal': '{actor} sweeps with {skill}, revealing {revealed} cloaked craft & exposing hostiles!',
+  'log.scanReveal': '{actor} sweeps with {skill}, revealing {revealedNames} & exposing hostiles!',
+  'log.scanRevealNone': '{actor} sweeps with {skill}, finding no cloaked craft & exposing hostiles!',
   'log.invincibleBlock': '{target} stasis barrier negates all damage from {actor}!',
   'log.silencedBlocked': '{actor} is Silenced and cannot fire skills — defaults to Primary Lasers.',
   'log.unitMovesRow': '{actor} moves to {row}.',
@@ -1985,6 +1987,8 @@ export const EN_TRANSLATIONS = {
   'battle.levelBadge': 'Level {level}',
   'admin.turnPhaseTitle': '3-Step Turn',
   'admin.turnPhaseMaxStep2': 'Max step-2 (buff) skills per turn',
+  'admin.stealthLidarDetectMin': 'Lidar detect min (1–10)',
+  'admin.stealthLidarDetectMax': 'Lidar detect max (1–10)',
 } as const;
 
 export type TranslationKey = keyof typeof EN_TRANSLATIONS;

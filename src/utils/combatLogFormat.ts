@@ -966,12 +966,19 @@ export function parseStructuredCombatLogRow(
       };
     }
 
-    case 'log.scanReveal': {
+    case 'log.scanReveal':
+    case 'log.scanRevealNone': {
       const revealed = Number(p.revealed ?? 0);
+      const revealedNames = String(p.revealedNames ?? '').trim();
       const usedSkill = skillLabel || getSkillName(lang, 'sup_lidar_sweep');
-      const sentence = isVi
-        ? `${actorFromParams} dùng ${usedSkill}, phát hiện ${revealed} mục tiêu tàng hình`
-        : `${actorFromParams} uses ${usedSkill}, revealing ${revealed} cloaked craft`;
+      const sentence =
+        revealedNames.length > 0
+          ? isVi
+            ? `${actorFromParams} dùng ${usedSkill}, phát hiện ${revealedNames}`
+            : `${actorFromParams} uses ${usedSkill}, revealing ${revealedNames}`
+          : isVi
+          ? `${actorFromParams} dùng ${usedSkill}, không phát hiện tàng hình`
+          : `${actorFromParams} uses ${usedSkill}, no cloaked targets`;
       return {
         id: entry.id,
         round,
@@ -981,7 +988,7 @@ export function parseStructuredCombatLogRow(
         autoBadge,
         actionKind: 'buff',
         actionLabel: usedSkill,
-        targetName: null,
+        targetName: revealedNames || null,
         valueText: revealed > 0 ? `${revealed}` : null,
         valueTone: 'buff',
         fallbackText,

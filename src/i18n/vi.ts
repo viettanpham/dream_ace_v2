@@ -476,6 +476,7 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'battle.skillReason.insufficient_sp': 'Không đủ SP (cần {cost} SP)',
   'battle.skillReason.flux_min_sp': 'Cần tối thiểu {cost} SP',
   'battle.skillReason.used_this_turn': 'Đã dùng trong lượt này',
+  'battle.skillReason.revealed_this_round': 'Vừa bị lộ diện — chờ round sau',
   'battle.skillReason.class_mismatch': 'Sai lớp Gear',
   'battle.skillReason.not_equipped': 'Chưa lắp trên thanh kỹ năng',
 
@@ -697,7 +698,8 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'log.stanceToggle': '{actor} chuyển trạng thái {skill}: {state}.',
   'log.charging': '{actor} bắt đầu tụ năng {skill} — sẽ tự khai hỏa vào lượt sau!',
   'log.counterAttack': '{target} kích hoạt Lật Cánh Phản Đòn lên {actor} gây {damage}!',
-  'log.scanReveal': '{actor} quét {skill}, phát hiện {revealed} tàu tàng hình & làm bại lộ địch!',
+  'log.scanReveal': '{actor} quét {skill}, phát hiện {revealedNames} & làm bại lộ địch!',
+  'log.scanRevealNone': '{actor} quét {skill}, không phát hiện tàng hình & làm bại lộ địch!',
   'log.invincibleBlock': 'Lồng Stasis của {target} chặn đứng toàn bộ sát thương từ {actor}!',
   'log.silencedBlocked': '{actor} đang bị Câm lặng không thể dùng kỹ năng — chuyển sang Pháo Chính.',
   'log.unitMovesRow': '{actor} di chuyển sang {row}.',
@@ -1988,6 +1990,8 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'battle.levelBadge': 'Cấp {level}',
   'admin.turnPhaseTitle': 'Lượt 3 bước',
   'admin.turnPhaseMaxStep2': 'Số skill bước 2 (buff) tối đa mỗi lượt',
+  'admin.stealthLidarDetectMin': 'Lidar phát hiện tối thiểu (1–10)',
+  'admin.stealthLidarDetectMax': 'Lidar phát hiện tối đa (1–10)',
 };
 
 

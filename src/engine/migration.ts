@@ -2,11 +2,14 @@ import {
   BALANCE_CONFIG,
   cloneFluxTransferConfig,
   cloneSpEconomyConfig,
+  cloneStealthConfig,
   DEFAULT_FLUX_TRANSFER_CONFIG,
   DEFAULT_SP_ECONOMY_CONFIG,
+  DEFAULT_STEALTH_CONFIG,
   sanitizeFluxTransferConfig,
   sanitizeMaxLevel,
   sanitizeSpEconomyConfig,
+  sanitizeStealthConfig,
 } from '../data/balance';
 import {
   cloneTurnPhaseConfig,
@@ -354,6 +357,7 @@ export function createDefaultAdminConfig(): AdminConfig {
     itemLevels: cloneItemLevelsConfig(DEFAULT_ITEM_LEVELS_CONFIG),
     pirates: clonePiratesConfig(DEFAULT_PIRATES_CONFIG),
     turnPhase: cloneTurnPhaseConfig(DEFAULT_TURN_PHASE_CONFIG),
+    stealth: cloneStealthConfig(DEFAULT_STEALTH_CONFIG),
     showRawI18nKeys: false,
   };
 }
@@ -713,6 +717,7 @@ export function migrateSaveData(
     itemLevels: sanitizeItemLevelsConfig(rawAdmin.itemLevels),
     pirates: sanitizePiratesConfig(rawAdmin.pirates),
     turnPhase: sanitizeTurnPhaseConfig(rawAdmin.turnPhase),
+    stealth: sanitizeStealthConfig(rawAdmin.stealth),
     showRawI18nKeys: Boolean(rawAdmin.showRawI18nKeys),
   };
 

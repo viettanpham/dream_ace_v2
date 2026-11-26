@@ -269,6 +269,67 @@ export function sanitizeSpEconomyConfig(raw: unknown): SpEconomyConfig {
   };
 }
 
+export const DEFAULT_STEALTH_CONFIG = {
+  lidarDetectMin: 1,
+  lidarDetectMax: 5,
+} as const;
+
+export function cloneStealthConfig(cfg: {
+  lidarDetectMin: number;
+  lidarDetectMax: number;
+}) {
+  return {
+    lidarDetectMin: cfg.lidarDetectMin,
+    lidarDetectMax: cfg.lidarDetectMax,
+  };
+}
+
+export function sanitizeStealthConfig(raw: unknown): {
+  lidarDetectMin: number;
+  lidarDetectMax: number;
+} {
+  const obj =
+    raw && typeof raw === 'object' && !Array.isArray(raw)
+      ? (raw as Record<string, unknown>)
+      : {};
+  const clampInt = (val: unknown, min: number, max: number, fallback: number) => {
+    const n = typeof val === 'number' && Number.isFinite(val) ? Math.round(val) : fallback;
+    return Math.max(min, Math.min(max, n));
+  };
+  const lidarDetectMin = clampInt(
+    obj.lidarDetectMin,
+    1,
+    10,
+    DEFAULT_STEALTH_CONFIG.lidarDetectMin
+  );
+  const rawMax = clampInt(
+    obj.lidarDetectMax,
+    1,
+    10,
+    DEFAULT_STEALTH_CONFIG.lidarDetectMax
+  );
+  const lidarDetectMax = Math.max(lidarDetectMin, rawMax);
+  return {
+    lidarDetectMin,
+    lidarDetectMax,
+  };
+}
+
+export function computeLidarDetectCount(
+  skillLevel: number,
+  stealthCfg?: unknown,
+  skillMaxLevel: number = BALANCE_CONFIG.skillMaxLevel
+): number {
+  const cfg = sanitizeStealthConfig(stealthCfg);
+  const maxLv = Math.max(1, Math.round(skillMaxLevel));
+  const lv = Math.max(1, Math.min(maxLv, Math.round(skillLevel || 1)));
+  if (maxLv <= 1) return Math.round(cfg.lidarDetectMin);
+  return Math.round(
+    cfg.lidarDetectMin +
+      ((cfg.lidarDetectMax - cfg.lidarDetectMin) * (lv - 1)) / (maxLv - 1)
+  );
+}
+
 export const DEFAULT_FLUX_TRANSFER_LEVELS: readonly FluxTransferLevelRule[] = [
   { targets: 3, pct: 3, fee: 10 },
   { targets: 4, pct: 4, fee: 8 },

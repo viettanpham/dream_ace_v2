@@ -927,10 +927,26 @@ function formatCombatLogBody(
 
     case 'log.scanReveal': {
       const skillId = String(p.skillId ?? 'sup_lidar_sweep');
+      const revealedNames = String(p.revealedNames ?? '').trim();
+      if (!revealedNames) {
+        return translate(lang, 'log.scanRevealNone', {
+          actor: String(p.actor ?? ''),
+          skill: getSkillName(lang, skillId),
+        });
+      }
       return translate(lang, 'log.scanReveal', {
         actor: String(p.actor ?? ''),
         skill: getSkillName(lang, skillId),
         revealed: Number(p.revealed ?? 0),
+        revealedNames,
+      });
+    }
+
+    case 'log.scanRevealNone': {
+      const skillId = String(p.skillId ?? 'sup_lidar_sweep');
+      return translate(lang, 'log.scanRevealNone', {
+        actor: String(p.actor ?? ''),
+        skill: getSkillName(lang, skillId),
       });
     }
 
