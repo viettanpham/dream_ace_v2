@@ -1458,6 +1458,14 @@ export interface EnemyLevelConfig {
   enemyLevelCapOverMax: number;
 }
 
+export type ModuleDropEffectKey = StatKey | ModuleTraitKey;
+
+export interface ModuleDropConfig {
+  factor: number;
+  shopCount: number;
+  effectWeights: Record<ModuleDropEffectKey, number>;
+}
+
 export interface AdminConfig {
   godMode: boolean;
   oneHitKills: boolean;
@@ -1514,6 +1522,7 @@ export interface AdminConfig {
   extenderLevelsPerSocket?: number;
   maxSkillModulesPerGear?: number;
   itemLevels?: ItemLevelsConfig;
+  moduleDrop?: ModuleDropConfig;
   pirates?: PiratesConfig;
   turnPhase?: TurnPhaseConfig;
   prestage?: PrestageConfig;

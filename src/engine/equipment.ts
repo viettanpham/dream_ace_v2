@@ -24,6 +24,7 @@ import {
   sanitizeItemLevelsConfig,
 } from './itemLevels';
 import { computeItemPrice, computeModulePrice, countNonZeroTraits } from './itemPrice';
+import { pickEligibleModuleTemplate, sanitizeModuleDropConfig } from './moduleDrop';
 import type {
   AdminConfig,
   CombatUnit,
@@ -39,6 +40,7 @@ import type {
   ItemSpecialTraits,
   ItemTemplate,
   MechClassId,
+  ModuleDropConfig,
   PaperDollSlot,
   PilotAccount,
   StatBlock,
@@ -314,7 +316,8 @@ export function generateShopStock(
   referenceLevel: number,
   count: number = BALANCE_CONFIG.shopStockSize,
   rng: () => number = Math.random,
-  itemLevels?: ItemLevelsConfig
+  itemLevels?: ItemLevelsConfig,
+  moduleDrop?: ModuleDropConfig
 ): ItemInstance[] {
   const levelCfg = itemLevels
     ? sanitizeItemLevelsConfig(itemLevels)
@@ -379,6 +382,41 @@ export function generateShopStock(
       )
     );
   }
+
+  const moduleCfg = sanitizeModuleDropConfig(moduleDrop);
+  if (moduleCfg.shopCount > 0) {
+    const moduleTemplates = ITEM_TEMPLATES.filter((t) => t.slot === 'module');
+    const eligibleModules = getShopEligibleTemplatesForSlot(
+      moduleTemplates,
+      'module',
+      referenceLevel,
+      levelCfg
+    );
+    const usedIds = new Set<string>();
+    for (let i = 0; i < moduleCfg.shopCount; i++) {
+      const remaining = eligibleModules.filter((t) => !usedIds.has(t.id));
+      if (remaining.length === 0) break;
+      const modTpl = pickEligibleModuleTemplate(
+        remaining,
+        moduleCfg.effectWeights,
+        rng
+      );
+      if (!modTpl) break;
+      usedIds.add(modTpl.id);
+      stock.push(
+        generateItemInstance(
+          {
+            templateId: modTpl.id,
+            tier: modTpl.tier,
+            statPowerLevel: getEffectiveTemplateRequiredLevel(modTpl, levelCfg),
+            itemLevels: levelCfg,
+          },
+          rng
+        )
+      );
+    }
+  }
+
   return stock;
 }
 
@@ -912,7 +950,8 @@ export function rollBattleItemDrops(
   gearLevel: number,
   won: boolean,
   rng: () => number = Math.random,
-  itemLevels?: ItemLevelsConfig
+  itemLevels?: ItemLevelsConfig,
+  moduleDrop?: ModuleDropConfig
 ): ItemInstance[] {
   const sector = getSectorById(sectorId);
   const cfg = DROP_CONFIG[sector.difficulty];
@@ -997,6 +1036,50 @@ export function rollBattleItemDrops(
             rng
           )
         );
+      }
+    }
+  }
+
+  // EXT2b: Roll at most 1 module per battle AFTER normal drops + pity so normal drop RNG is unchanged
+  const moduleCfg = sanitizeModuleDropConfig(moduleDrop);
+  if (moduleCfg.factor > 0) {
+    const moduleTemplates = ITEM_TEMPLATES.filter((t) => t.slot === 'module');
+    const modulePools = getDropSlotPools(
+      moduleTemplates,
+      ['module'],
+      gearLevel,
+      sector.difficulty,
+      levelCfg
+    );
+    const eligibleModules = modulePools[0]?.templates ?? [];
+    if (eligibleModules.length > 0) {
+      for (const enemy of destroyedEnemies) {
+        const effectiveChance = enemy.isBoss
+          ? 1.0
+          : won
+          ? cfg.perEnemyDropChance
+          : cfg.perEnemyDropChance * 0.45;
+        if (rng() < effectiveChance * moduleCfg.factor) {
+          const modTpl = pickEligibleModuleTemplate(
+            eligibleModules,
+            moduleCfg.effectWeights,
+            rng
+          );
+          if (modTpl) {
+            drops.push(
+              generateItemInstance(
+                {
+                  templateId: modTpl.id,
+                  tier: modTpl.tier,
+                  isNew: true,
+                  itemLevels: levelCfg,
+                },
+                rng
+              )
+            );
+          }
+          break;
+        }
       }
     }
   }

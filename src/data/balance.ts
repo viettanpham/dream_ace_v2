@@ -146,15 +146,6 @@ export const BALANCE_CONFIG = {
     }
   > ,
 
-  // ---- Extender Module Drop Rates ----
-  moduleDropConfig: {
-    Standard: 0.06,
-    Hard: 0.12,
-    Elite: 0.2,
-    bossBonus: 0.3,
-    lossFactor: 0.45,
-  } as const,
-
   // ---- Status Effects ----
   burnDamageRatio: 0.08, // 8% of Max HP per turn
   slowSpeedPenalty: 0.3, // -30% Turn Speed

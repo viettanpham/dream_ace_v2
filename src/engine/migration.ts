@@ -29,6 +29,11 @@ import {
   DEFAULT_PRESTAGE_CONFIG,
   sanitizePrestageConfig,
 } from './prestage';
+import {
+  cloneModuleDropConfig,
+  DEFAULT_MODULE_DROP_CONFIG,
+  sanitizeModuleDropConfig,
+} from './moduleDrop';
 import { EMPTY_STAT_BLOCK, MECH_CLASS_LIST } from '../data/classes';
 import {
   BUILTIN_ITEM_REGISTRY_TAG,
@@ -409,6 +414,7 @@ export function createDefaultAdminConfig(): AdminConfig {
     extenderLevelsPerSocket: DEFAULT_EXTENDER_LEVELS_PER_SOCKET,
     maxSkillModulesPerGear: DEFAULT_MAX_SKILL_MODULES_PER_GEAR,
     itemLevels: cloneItemLevelsConfig(DEFAULT_ITEM_LEVELS_CONFIG),
+    moduleDrop: cloneModuleDropConfig(DEFAULT_MODULE_DROP_CONFIG),
     pirates: clonePiratesConfig(DEFAULT_PIRATES_CONFIG),
     turnPhase: cloneTurnPhaseConfig(DEFAULT_TURN_PHASE_CONFIG),
     prestage: clonePrestageConfig(DEFAULT_PRESTAGE_CONFIG),
@@ -801,6 +807,7 @@ export function migrateSaveData(
       rawAdmin.maxSkillModulesPerGear
     ),
     itemLevels: sanitizeItemLevelsConfig(rawAdmin.itemLevels),
+    moduleDrop: sanitizeModuleDropConfig(rawAdmin.moduleDrop),
     pirates: sanitizePiratesConfig(rawAdmin.pirates),
     turnPhase: sanitizeTurnPhaseConfig(rawAdmin.turnPhase),
     prestage: sanitizePrestageConfig(rawAdmin.prestage),

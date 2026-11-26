@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { SupplyEconomyAdminBlock } from './admin/SupplyEconomyAdminBlock';
 import { EnemyLevelAdminBlock } from './admin/EnemyLevelAdminBlock';
+import { ModuleDropAdminBlock } from './ModuleDropAdminBlock';
 import {
   BALANCE_CONFIG,
   getMaxLevel,
@@ -1411,6 +1412,8 @@ export function AdminPanel() {
                   {t('admin.shopForceAddBtn')}
                 </button>
               </div>
+
+              <ModuleDropAdminBlock />
             </div>
           )}
 

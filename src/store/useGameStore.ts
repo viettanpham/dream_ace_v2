@@ -110,6 +110,7 @@ import {
   spawnOnMonth,
 } from '../engine/pirates';
 import { sanitizeEnemyLevelConfig } from '../engine/enemyLevel';
+import { sanitizeModuleDropConfig } from '../engine/moduleDrop';
 import {
   addSupplyToConsumables,
   applyBattleSupplyUse,
@@ -789,7 +790,8 @@ function finalizeBattleOutcome(
     deployedGear.level,
     won,
     Math.random,
-    state.adminConfig?.itemLevels
+    state.adminConfig?.itemLevels,
+    state.adminConfig?.moduleDrop
   );
 
   // Active EXP Boost consumable (+50% EXP for N battles)
@@ -5151,6 +5153,10 @@ export const useGameStore = create<GameStoreState>()(
                 : state.adminConfig.supplyScanCount
             ),
             enemyLevel: nextEnemyLevel,
+            moduleDrop:
+              patch.moduleDrop !== undefined
+                ? sanitizeModuleDropConfig(patch.moduleDrop)
+                : sanitizeModuleDropConfig(state.adminConfig.moduleDrop),
             turnPhase: nextTurnPhase,
             prestage: nextPrestage,
             stealth: nextStealth,
@@ -5492,6 +5498,7 @@ export const useGameStore = create<GameStoreState>()(
               supplyEconomy: sanitizeSupplyEconomyConfig(rawAdmin.supplyEconomy),
               supplyScanCount: sanitizeSupplyScanCount(rawAdmin.supplyScanCount),
               enemyLevel: sanitizeEnemyLevelConfig(rawAdmin.enemyLevel),
+              moduleDrop: sanitizeModuleDropConfig(rawAdmin.moduleDrop),
               pirates: sanitizePiratesConfig(rawAdmin.pirates),
               stealth: sanitizeStealthConfig(rawAdmin.stealth),
               rewardMultiplier:

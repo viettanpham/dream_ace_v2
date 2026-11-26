@@ -12,6 +12,7 @@ import type {
   ItemLevelsConfig,
   ItemRarity,
   ItemTemplate,
+  ModuleDropConfig,
   PaperDollSlot,
   PilotAccount,
   ShopItemListing,
@@ -30,6 +31,7 @@ import {
   getShopEligibleTemplatesForSlot,
   sanitizeItemLevelsConfig,
 } from './itemLevels';
+import { pickEligibleModuleTemplate, sanitizeModuleDropConfig } from './moduleDrop';
 import { SUPPLY_STACK_CAP } from './supplies';
 
 let wpOfferSeq = 1;
@@ -89,6 +91,7 @@ export interface CategorizedShopOptions {
   priceMultiplier?: number;
   shipyardBonus?: boolean;
   itemLevels?: ItemLevelsConfig;
+  moduleDrop?: ModuleDropConfig;
 }
 
 /**
@@ -176,6 +179,43 @@ export function generateCategorizedShopStock(
           tier: pickedTpl.tier,
           statPowerLevel: getEffectiveTemplateRequiredLevel(pickedTpl, levelCfg),
           rarity,
+          itemLevels: levelCfg,
+        },
+        rng
+      );
+      stock.push({
+        ...item,
+        price: Math.max(PRICE_FORMULA.minPrice, Math.round(item.price * priceMult)),
+        soldOut: false,
+      });
+    }
+  }
+
+  const moduleCfg = sanitizeModuleDropConfig(options.moduleDrop);
+  if (moduleCfg.shopCount > 0) {
+    const moduleTemplates = ITEM_TEMPLATES.filter((t) => t.slot === 'module');
+    const eligibleModules = getShopEligibleTemplatesForSlot(
+      moduleTemplates,
+      'module',
+      referenceLevel,
+      levelCfg
+    );
+    const usedIds = new Set<string>();
+    for (let i = 0; i < moduleCfg.shopCount; i++) {
+      const remaining = eligibleModules.filter((t) => !usedIds.has(t.id));
+      if (remaining.length === 0) break;
+      const modTpl = pickEligibleModuleTemplate(
+        remaining,
+        moduleCfg.effectWeights,
+        rng
+      );
+      if (!modTpl) break;
+      usedIds.add(modTpl.id);
+      const item = generateItemInstance(
+        {
+          templateId: modTpl.id,
+          tier: modTpl.tier,
+          statPowerLevel: getEffectiveTemplateRequiredLevel(modTpl, levelCfg),
           itemLevels: levelCfg,
         },
         rng
@@ -306,6 +346,7 @@ export function buildShopOptionsFromState(
     priceMultiplier: adminConfig?.shopPriceMultiplier ?? 1.0,
     shipyardBonus: hasOperationalShipyard(pilot),
     itemLevels: adminConfig?.itemLevels,
+    moduleDrop: adminConfig?.moduleDrop,
   };
 }
 

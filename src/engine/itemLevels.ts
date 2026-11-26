@@ -5,7 +5,6 @@ import type {
   ItemLevelKind,
   ItemLevelsConfig,
   ItemTemplate,
-  PaperDollSlot,
   SectorDifficulty,
 } from '../types/game';
 
@@ -138,7 +137,7 @@ export function getEffectiveTemplateRequiredLevel(
 
 export function getShopEligibleTemplatesForSlot(
   templates: readonly ItemTemplate[],
-  slot: PaperDollSlot,
+  slot: EquipmentSlot,
   referenceLevel: number,
   cfg: ItemLevelsConfig = DEFAULT_ITEM_LEVELS_CONFIG
 ): ItemTemplate[] {
@@ -170,13 +169,13 @@ export function getShopEligibleTemplatesForSlot(
 }
 
 export interface DropSlotPool {
-  slot: PaperDollSlot;
+  slot: EquipmentSlot;
   templates: ItemTemplate[];
 }
 
 export function getDropSlotPools(
   templates: readonly ItemTemplate[],
-  slots: readonly PaperDollSlot[],
+  slots: readonly EquipmentSlot[],
   gearLevel: number,
   difficulty: SectorDifficulty,
   cfg: ItemLevelsConfig = DEFAULT_ITEM_LEVELS_CONFIG
