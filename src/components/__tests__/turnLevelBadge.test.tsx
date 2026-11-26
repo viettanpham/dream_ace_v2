@@ -200,4 +200,124 @@ describe('TASK TURN-LV — Level badge in the battle turn order', () => {
       expect(row.querySelectorAll('[data-testid="level-badge"]')).toHaveLength(1);
     }
   });
+
+  it('4) enemy badge has red border/bg tint and keeps level-con text class', () => {
+    act(() => {
+      root.render(
+        createElement(
+          'div',
+          null,
+          createElement(LevelBadge, { level: 30, refLevel: 25, side: 'enemy' }),
+          createElement(LevelBadge, { level: 20, refLevel: 25, side: 'enemy' })
+        )
+      );
+    });
+
+    const badges = container.querySelectorAll('[data-testid="level-badge"]');
+    expect(badges[0].className).toContain('border-rose-500/70');
+    expect(badges[0].className).toContain('bg-rose-500/10');
+    expect(badges[0].className).toContain('text-red-400');
+    expect(badges[1].className).toContain('border-rose-500/70');
+    expect(badges[1].className).toContain('text-sky-400');
+  });
+
+  it('5) ally badge is blue and leader badge is green', () => {
+    act(() => {
+      root.render(
+        createElement(
+          'div',
+          null,
+          createElement(LevelBadge, { level: 25, refLevel: 25, side: 'ally' }),
+          createElement(LevelBadge, {
+            level: 25,
+            refLevel: 25,
+            side: 'ally',
+            isLeader: true,
+          })
+        )
+      );
+    });
+
+    const badges = container.querySelectorAll('[data-testid="level-badge"]');
+    expect(badges[0].className).toContain('border-sky-500/70');
+    expect(badges[0].className).toContain('bg-sky-500/10');
+    expect(badges[0].className).toContain('text-slate-300');
+    expect(badges[1].className).toContain('border-emerald-500/70');
+    expect(badges[1].className).toContain('bg-emerald-500/10');
+    expect(badges[1].className).toContain('text-emerald-200');
+  });
+
+  it('6) TurnQueueBar renders no side icon and no [TA]/side tag in acting row across variants', () => {
+    const units = [
+      makeUnit('a_player', 'Kira', 95, 'ally', 25, { isPlayer: true }),
+      makeUnit('a_wing', 'Dax', 82, 'ally', 24),
+      makeUnit('e_sniper', 'Void Sniper', 71, 'enemy', 26),
+    ];
+    const battle = makeBattle(units, 0);
+
+    for (const variant of ['sidebar', 'phone', 'default'] as const) {
+      act(() => {
+        root.render(
+          createElement(TurnQueueBar, {
+            battle,
+            battleSpeed: 1,
+            skipAnimations: false,
+            enrageBonusPct: 0,
+            variant,
+            targetName: 'Void Sniper',
+          })
+        );
+      });
+
+      expect(container.querySelector('[data-team-shape]')).toBeNull();
+      const acting = container.querySelector(
+        '[data-testid="turn-queue-acting-chip"], [data-testid="turn-queue-chip"][data-acting="true"]'
+      )!;
+      expect(acting.textContent).not.toContain('[TA]');
+      expect(acting.textContent).not.toContain('[ĐỊCH]');
+      expect(acting.textContent).not.toContain('[BOSS]');
+
+      if (variant === 'sidebar') {
+        const badges = container.querySelectorAll('[data-testid="level-badge"]');
+        expect(badges[0].className).toContain('border-emerald-500/70');
+      }
+    }
+  });
+
+  it('7) badge data-side attribute stays present across sides', () => {
+    const units = [
+      makeUnit('a_player', 'Kira', 95, 'ally', 25, { isPlayer: true }),
+      makeUnit('a_wing', 'Dax', 82, 'ally', 24),
+      makeUnit('e_sniper', 'Void Sniper', 71, 'enemy', 26),
+    ];
+    const battle = makeBattle(units, 0);
+
+    act(() => {
+      root.render(
+        createElement(TurnQueueBar, {
+          battle,
+          battleSpeed: 1,
+          skipAnimations: false,
+          enrageBonusPct: 0,
+          variant: 'sidebar',
+        })
+      );
+    });
+
+    const badges = Array.from(
+      container.querySelectorAll('[data-testid="level-badge"]')
+    );
+    expect(badges.length).toBeGreaterThanOrEqual(3);
+    for (const badge of badges) {
+      expect(['ally', 'enemy']).toContain(badge.getAttribute('data-side'));
+    }
+    expect(badges.slice(0, 3).map((b) => b.getAttribute('data-side'))).toEqual([
+      'ally',
+      'ally',
+      'enemy',
+    ]);
+    expect(badges[0].className).toContain('border-emerald-500/70');
+    expect(badges[1].className).toContain('border-sky-500/70');
+    expect(badges[2].className).toContain('border-rose-500/70');
+  });
 });

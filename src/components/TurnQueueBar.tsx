@@ -75,76 +75,10 @@ function getClassGlyph(classId: MechClassId): string {
   }
 }
 
-function getTeamHexColor(role: TeamColorRole): string {
-  switch (role) {
-    case 'me':
-      return '#22c55e';
-    case 'ally':
-      return '#38bdf8';
-    case 'boss':
-      return '#f97316';
-    case 'enemy':
-    default:
-      return '#ef4444';
-  }
-}
-
-function TeamShapeIcon({ role }: { role: TeamColorRole }) {
-  const color = getTeamHexColor(role);
-  return (
-    <svg
-      width="12"
-      height="12"
-      viewBox="0 0 12 12"
-      className="shrink-0"
-      aria-hidden="true"
-      data-team-shape={role}
-    >
-      {role === 'me' && (
-        <polygon
-          points="6,1 10.5,3.5 10.5,8.5 6,11 1.5,8.5 1.5,3.5"
-          fill={color}
-          fillOpacity="0.28"
-          stroke={color}
-          strokeWidth="1.4"
-        />
-      )}
-      {role === 'ally' && (
-        <circle
-          cx="6"
-          cy="6"
-          r="4.4"
-          fill={color}
-          fillOpacity="0.26"
-          stroke={color}
-          strokeWidth="1.4"
-        />
-      )}
-      {role === 'enemy' && (
-        <polygon
-          points="6,1 11,6 6,11 1,6"
-          fill={color}
-          fillOpacity="0.28"
-          stroke={color}
-          strokeWidth="1.4"
-        />
-      )}
-      {role === 'boss' && (
-        <polygon
-          points="3.5,1 8.5,1 11,3.5 11,8.5 8.5,11 3.5,11 1,8.5 1,3.5"
-          fill={color}
-          fillOpacity="0.32"
-          stroke={color}
-          strokeWidth="1.4"
-        />
-      )}
-    </svg>
-  );
-}
-
 function ConveyorChip({
   entry,
   refLevel,
+  isLeader,
   isActive,
   compactPhone,
   animateShift,
@@ -152,6 +86,7 @@ function ConveyorChip({
 }: {
   entry: TurnQueueEntry;
   refLevel: number;
+  isLeader: boolean;
   isActive: boolean;
   compactPhone: boolean;
   animateShift: boolean;
@@ -202,17 +137,7 @@ function ConveyorChip({
           ▼
         </span>
 
-        <div className="flex items-center justify-between gap-1 text-[10px] font-bold tracking-wider uppercase">
-          <span
-            className="px-1 rounded-sm leading-tight truncate"
-            style={{
-              backgroundColor: 'rgba(15, 23, 42, 0.88)',
-              color: teamColor,
-              border: `1px solid ${teamColor}`,
-            }}
-          >
-            {compactPhone ? getClassGlyph(entry.classId) : teamTag}
-          </span>
+        <div className="flex items-center justify-end gap-1 text-[10px] font-bold tracking-wider uppercase">
           <span className="text-amber-200 truncate">{t('queue.actingNow')}</span>
         </div>
 
@@ -223,6 +148,7 @@ function ConveyorChip({
                 level={entry.level}
                 refLevel={refLevel}
                 side={entry.side}
+                isLeader={isLeader}
               />
             )}
             <span
@@ -290,16 +216,11 @@ function ConveyorChip({
         </div>
       ) : (
         <div className="flex items-center justify-between gap-1 text-[12px] leading-tight">
-          <span
-            className="text-[12px] font-bold shrink-0"
-            style={{ color: teamColor }}
-          >
-            {teamTag}
-          </span>
           <LevelBadge
             level={entry.level}
             refLevel={refLevel}
             side={entry.side}
+            isLeader={isLeader}
           />
           <span
             data-testid="turn-queue-chip-name"
@@ -472,7 +393,11 @@ export function TurnQueueBar({
   );
   const currentRoundChips = queue.current;
   const nextRoundChips = queue.next;
-  const refLevel = battle.units.find((u) => u.isPlayer)?.level ?? 1;
+  const playerUnit = battle.units.find((u) => u.isPlayer);
+  const refLevel = playerUnit?.level ?? 1;
+  const playerUnitId = playerUnit?.id ?? null;
+  const isEntryLeader = (entry: TurnQueueEntry) =>
+    playerUnitId ? entry.unitId === playerUnitId : entry.teamRole === 'me';
   const targetUnit =
     targetName && upcomingData.actingEntry
       ? battle.units.find(
@@ -605,16 +530,11 @@ export function TurnQueueBar({
                 style={{ borderLeftWidth: '3px', borderLeftColor: color }}
               >
                 <div className="min-w-0 flex items-center gap-1.5">
-                  <span
-                    className="text-[12px] font-bold shrink-0"
-                    style={{ color }}
-                  >
-                    {getTeamTagLabel(lang, entry.teamRole)}
-                  </span>
                   <LevelBadge
                     level={entry.level}
                     refLevel={refLevel}
                     side={entry.side}
+                    isLeader={isEntryLeader(entry)}
                   />
                   <span className="text-[13px] font-semibold text-slate-100 truncate">
                     {entry.name}
@@ -646,16 +566,11 @@ export function TurnQueueBar({
                 style={{ borderLeftWidth: '3px', borderLeftColor: color }}
               >
                 <div className="min-w-0 flex items-center gap-1.5">
-                  <span
-                    className="text-[12px] font-bold shrink-0"
-                    style={{ color }}
-                  >
-                    {getTeamTagLabel(lang, entry.teamRole)}
-                  </span>
                   <LevelBadge
                     level={entry.level}
                     refLevel={refLevel}
                     side={entry.side}
+                    isLeader={isEntryLeader(entry)}
                   />
                   <span className="text-[13px] text-slate-200 truncate">
                     {entry.name}
@@ -742,11 +657,11 @@ export function TurnQueueBar({
                 borderColor: 'var(--turn-active)',
               }}
             >
-              <TeamShapeIcon role={actingEntry.teamRole} />
               <LevelBadge
                 level={actingEntry.level}
                 refLevel={refLevel}
                 side={actingEntry.side}
+                isLeader={isEntryLeader(actingEntry)}
               />
               <span data-testid="turn-queue-acting-name">{actingLabel}</span>
             </button>
@@ -775,11 +690,11 @@ export function TurnQueueBar({
                   entry.phase === 'next_round' ? 'opacity-80' : ''
                 }`}
               >
-                <TeamShapeIcon role={entry.teamRole} />
                 <LevelBadge
                   level={entry.level}
                   refLevel={refLevel}
                   side={entry.side}
+                  isLeader={isEntryLeader(entry)}
                 />
                 <span data-testid="turn-queue-chip-name">{item.shortName}</span>
               </button>
@@ -892,17 +807,6 @@ export function TurnQueueBar({
               className="w-full h-[36px] min-h-[36px] max-h-[36px] shrink-0 px-2.5 rounded-lg border bg-amber-400/15 hover:bg-amber-400/20 flex items-center justify-between gap-2 text-left cursor-pointer transition-colors"
             >
               <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                <TeamShapeIcon role={actingEntry.teamRole} />
-                <span
-                  className="px-1.5 py-0.5 rounded text-[11px] font-mono-nums font-bold shrink-0"
-                  style={{
-                    backgroundColor: 'rgba(15, 23, 42, 0.9)',
-                    color: getTeamCssVar(actingEntry.teamRole),
-                    border: `1px solid ${getTeamCssVar(actingEntry.teamRole)}`,
-                  }}
-                >
-                  {getTeamTagLabel(lang, actingEntry.teamRole)}
-                </span>
                 <div
                   data-testid="turn-queue-acting-name"
                   className="flex items-center gap-1 flex-1 min-w-0 text-[13px] font-bold text-amber-100"
@@ -911,6 +815,7 @@ export function TurnQueueBar({
                     level={actingEntry.level}
                     refLevel={refLevel}
                     side={actingEntry.side}
+                    isLeader={isEntryLeader(actingEntry)}
                   />
                   <span
                     data-testid="turn-queue-acting-attacker"
@@ -939,6 +844,7 @@ export function TurnQueueBar({
                           level={targetUnit.level}
                           refLevel={refLevel}
                           side={targetUnit.side}
+                          isLeader={targetUnit.isPlayer}
                         />
                       )}
                       <span
@@ -1059,11 +965,11 @@ export function TurnQueueBar({
                       >
                         {item.order}
                       </span>
-                      <TeamShapeIcon role={entry.teamRole} />
                       <LevelBadge
                         level={entry.level}
                         refLevel={refLevel}
                         side={entry.side}
+                        isLeader={isEntryLeader(entry)}
                       />
                       <span
                         data-testid="turn-queue-chip-name"
@@ -1156,6 +1062,7 @@ export function TurnQueueBar({
             key={`cur-${entry.unitId}`}
             entry={entry}
             refLevel={refLevel}
+            isLeader={isEntryLeader(entry)}
             isActive={idx === 0 && !battle.summary}
             compactPhone={isPhone}
             animateShift={animateShift}
@@ -1177,6 +1084,7 @@ export function TurnQueueBar({
             key={`next-${entry.unitId}`}
             entry={entry}
             refLevel={refLevel}
+            isLeader={isEntryLeader(entry)}
             isActive={false}
             compactPhone={isPhone}
             animateShift={animateShift}

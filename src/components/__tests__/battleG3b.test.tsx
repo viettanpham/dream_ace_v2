@@ -962,7 +962,8 @@ describe('G3b + RM2 Components — Split ring (stroke 4), thin inner SP ring, 3 
         )
     ).toEqual(['1', '2', '3', '4', '5']);
     for (const row of rows) {
-      expect(row.querySelector('[data-team-shape]')).not.toBeNull();
+      expect(row.querySelector('[data-team-shape]')).toBeNull();
+      expect(row.querySelector('[data-testid="level-badge"]')).not.toBeNull();
     }
     expect(
       container!.querySelector('[data-testid="turn-queue-overflow"]')?.textContent
