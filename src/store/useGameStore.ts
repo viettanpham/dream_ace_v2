@@ -1220,9 +1220,33 @@ function launchBattleForSector(
     return;
   }
 
+  const loopAutoConfirmPrestage =
+    Boolean(state.autoRepeatSession?.active) &&
+    Boolean(battleState.prestage?.active);
+  const initialBattle = loopAutoConfirmPrestage
+    ? {
+        ...battleState,
+        prestage: {
+          ...battleState.prestage!,
+          active: false,
+        },
+        log: [
+          ...battleState.log,
+          {
+            id: `log_prestage_${Date.now()}_${battleState.turnCounter}`,
+            round: battleState.round,
+            actorName: 'SYSTEM',
+            tag: 'SYSTEM' as const,
+            templateKey: 'log.prestageConfirm' as const,
+            params: {},
+          },
+        ],
+      }
+    : battleState;
+
   set({
     selectedSectorId: targetSectorId,
-    battle: battleState,
+    battle: initialBattle,
     screen: 'BATTLE',
     hasSaveData: true,
     battleLaunchToast: null,
@@ -2031,6 +2055,8 @@ export const useGameStore = create<GameStoreState>()(
             kind: resolvedKind,
             sourceId: resolvedSourceId,
           });
+        } else if (state.battle.prestage?.active) {
+          get().confirmPrestage();
         }
       },
 

@@ -4,7 +4,11 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EMPTY_STAT_BLOCK } from '../../data/classes';
 import { createDefaultAdminConfig, createFreshCampaignState } from '../../engine/migration';
-import { buildPrestageSummary } from '../../engine/prestage';
+import {
+  buildAllySupplyBagSummary,
+  buildPrestageSummary,
+} from '../../engine/prestage';
+import type { BattleSupplyRow } from '../../engine/supplies';
 import { translate } from '../../i18n';
 import type { TranslationKey } from '../../i18n/en';
 import { useGameStore } from '../../store/useGameStore';
@@ -297,9 +301,8 @@ describe('TASK PREP-1b — PrestageDialog & buildPrestageSummary', () => {
     expect(enemyRow?.textContent).not.toContain('Tăng DEF');
   });
 
-  it('5) auto loop countdown decrements and confirms after N seconds, and countdownSec 0 confirms immediately', () => {
-    vi.useFakeTimers();
-    const onConfirm = vi.fn();
+  it('5) autoLoopActive skips PrestageDialog immediately even with countdownSec > 0, while manual and 1-battle AUTO still show it', () => {
+    const onConfirmLoop3 = vi.fn();
     const units = [
       makeUnit('a1', 'Ally1', 'ally', 'striker', 10, { isPlayer: true }),
       makeUnit('e1', 'Enemy1', 'enemy', 'interceptor', 10),
@@ -318,44 +321,238 @@ describe('TASK PREP-1b — PrestageDialog & buildPrestageSummary', () => {
           autoLoopActive: true,
           lang: 'vi',
           t,
-          onConfirm,
+          onConfirm: onConfirmLoop3,
         })
       );
     });
 
-    expect(container.querySelector('[data-testid="prestage-confirm-btn"]')?.textContent).toBe('Vào trận (3s)');
-    expect(onConfirm).not.toHaveBeenCalled();
+    expect(container.querySelector('[data-testid="prestage-dialog"]')).toBeNull();
+    expect(onConfirmLoop3).toHaveBeenCalledTimes(1);
 
-    act(() => {
-      vi.advanceTimersByTime(2000);
+    // 1-battle AUTO (autoBattleEnabled: true, no autoRepeatSession) still renders PrestageDialog
+    useGameStore.setState({
+      autoBattleEnabled: true,
+      autoRepeatSession: null,
+      adminConfig: cfg3,
+      battle: makeBattle(units),
     });
-    expect(container.querySelector('[data-testid="prestage-confirm-btn"]')?.textContent).toBe('Vào trận (1s)');
-    expect(onConfirm).not.toHaveBeenCalled();
-
     act(() => {
-      vi.advanceTimersByTime(1000);
+      root.render(createElement(BattleScreen));
     });
-    expect(onConfirm).toHaveBeenCalledTimes(1);
+    expect(container.querySelector('[data-testid="prestage-dialog"]')).not.toBeNull();
+  });
 
-    const onConfirmZero = vi.fn();
-    const cfg0 = {
-      ...createDefaultAdminConfig(),
-      prestage: { enabled: true, countdownSec: 0, groupFromSize: 10 },
+  it('6) buildAllySupplyBagSummary merges team supplyByUnit + player supplyRows by family+tier, sorts by family then tier, and shows empty state', () => {
+    const units = [
+      makeUnit('a1', 'Leader', 'ally', 'striker', 10, { isPlayer: true }),
+      makeUnit('a2', 'Wingman', 'ally', 'support', 10),
+      makeUnit('e1', 'Enemy1', 'enemy', 'interceptor', 10),
+    ];
+    const playerRows: BattleSupplyRow[] = [
+      {
+        slotIndex: 0,
+        templateId: 'sup_shield_t2',
+        iconId: 'BS05',
+        name: 'Shield T2',
+        nameKey: null,
+        effectSummary: '',
+        effects: [],
+        stock: 8,
+        usedCount: 0,
+        limit: 5,
+        ok: true,
+        reason: null,
+        reasonKey: null,
+      },
+      {
+        slotIndex: 1,
+        templateId: 'sup_hp_t4',
+        iconId: 'SS01',
+        name: 'HP T4',
+        nameKey: null,
+        effectSummary: '',
+        effects: [],
+        stock: 5,
+        usedCount: 0,
+        limit: 5,
+        ok: true,
+        reason: null,
+        reasonKey: null,
+      },
+      {
+        slotIndex: 2,
+        templateId: 'sup_hp_t3',
+        iconId: 'SS01',
+        name: 'HP T3',
+        nameKey: null,
+        effectSummary: '',
+        effects: [],
+        stock: 10,
+        usedCount: 0,
+        limit: 5,
+        ok: true,
+        reason: null,
+        reasonKey: null,
+      },
+    ];
+    const supplyByUnit = {
+      a2: {
+        usedThisTurn: 0,
+        usedCountsByTemplate: {},
+        cooldownsByTemplate: {},
+        stockByTemplate: { sup_hp_t3: 6 },
+      },
+      e1: {
+        usedThisTurn: 0,
+        usedCountsByTemplate: {},
+        cooldownsByTemplate: {},
+        stockByTemplate: { sup_sp_t5: 99 },
+      },
     };
+
+    const merged = buildAllySupplyBagSummary(units, supplyByUnit, playerRows);
+    expect(merged).toEqual([
+      { family: 'hp_kit', tier: 3, count: 16 },
+      { family: 'hp_kit', tier: 4, count: 5 },
+      { family: 'shield_kit', tier: 2, count: 8 },
+    ]);
+
     act(() => {
       root.render(
         createElement(PrestageDialog, {
-          battle: makeBattle(units, { turnCounter: 1 }),
-          supplyRows: [],
-          adminConfig: cfg0,
-          autoLoopActive: true,
+          battle: makeBattle(units, { supplyByUnit }),
+          supplyRows: playerRows,
+          adminConfig: createDefaultAdminConfig(),
+          autoLoopActive: false,
           lang: 'vi',
           t,
-          onConfirm: onConfirmZero,
+          onConfirm: () => {},
         })
       );
     });
+    expect(
+      container.querySelector('[data-testid="prestage-ally-supply-strip"]')?.textContent
+    ).toBe('Túi vật tư (cả phe): HP T3 x16 · HP T4 x5 · Khiên T2 x8');
+
+    // Empty bag renders "Trống"
+    act(() => {
+      root.render(
+        createElement(PrestageDialog, {
+          battle: makeBattle(units),
+          supplyRows: [],
+          adminConfig: createDefaultAdminConfig(),
+          autoLoopActive: false,
+          lang: 'vi',
+          t,
+          onConfirm: () => {},
+        })
+      );
+    });
+    expect(
+      container.querySelector('[data-testid="prestage-ally-supply-strip"]')?.textContent
+    ).toBe('Túi vật tư (cả phe): Trống');
+  });
+
+  it('7) renders buff chips without "Buff:" prefix, omits buff line when unit has no buff, shows header count, and removes sub-12px classes', () => {
+    const units = [
+      makeUnit('a1', 'Leader', 'ally', 'striker', 10, {
+        isPlayer: true,
+        statuses: [
+          { type: 'atk_up', turnsRemaining: 3, magnitude: 0.42 },
+          { type: 'eva_up', turnsRemaining: 3, magnitude: 0.375 },
+        ],
+      }),
+      makeUnit('a2', 'NoBuffAlly', 'ally', 'support', 10, {
+        statuses: [],
+      }),
+      makeUnit('e1', 'Enemy1', 'enemy', 'interceptor', 10),
+    ];
+
+    act(() => {
+      root.render(
+        createElement(PrestageDialog, {
+          battle: makeBattle(units),
+          supplyRows: [],
+          adminConfig: createDefaultAdminConfig(),
+          autoLoopActive: false,
+          lang: 'vi',
+          t,
+          onConfirm: () => {},
+        })
+      );
+    });
+
+    const dialog = container.querySelector('[data-testid="prestage-dialog"]');
+    expect(dialog).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="prestage-buff-count"]')?.textContent
+    ).toBe('Buff đầu trận đã áp dụng: 2');
+
+    const a1Buffs = container.querySelector('[data-testid="prestage-unit-buffs-a1"]');
+    expect(a1Buffs?.textContent).toContain('⬆+42% ATK');
+    expect(a1Buffs?.textContent).toContain('⬆+15% EVA');
+    expect(a1Buffs?.textContent).not.toContain('Buff:');
+
+    const a2Row = container.querySelector('[data-testid="prestage-row-a2"]');
+    expect(container.querySelector('[data-testid="prestage-unit-buffs-a2"]')).toBeNull();
+    expect(a2Row?.textContent).not.toContain('Không buff');
+    expect(dialog?.innerHTML).not.toMatch(/text-\[(9|10|11)px\]/);
+
+    // Verify phone portrait 360px BottomSheet also renders >=12px text, buff header, and team supply strip
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      writable: true,
+      value: 360,
+    });
+    act(() => {
+      root.render(
+        createElement(PrestageDialog, {
+          battle: makeBattle(units),
+          supplyRows: [],
+          adminConfig: createDefaultAdminConfig(),
+          autoLoopActive: false,
+          lang: 'vi',
+          t,
+          onConfirm: () => {},
+        })
+      );
+    });
+    const phoneDialog = container.querySelector('[data-testid="prestage-dialog"]');
+    expect(phoneDialog).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="prestage-buff-count"]')?.textContent
+    ).toBe('Buff đầu trận đã áp dụng: 2');
+    expect(phoneDialog?.innerHTML).not.toMatch(/text-\[(9|10|11)px\]/);
+  });
+
+  it('8) startAutoRepeat loop skips PrestageDialog on BattleScreen while keeping prestage buffs applied', () => {
+    const fresh = createFreshCampaignState('Vance', 'striker', () => 0.5);
+    fresh.pilot.gears.striker.equippedSkillBar = ['gen_hull_brace'];
+    fresh.pilot.gears.striker.skillLevels = { gen_hull_brace: 1 };
+    const adminConfig = {
+      ...createDefaultAdminConfig(),
+      prestage: { enabled: true, countdownSec: 3, groupFromSize: 10 },
+    };
+    useGameStore.setState({
+      pilot: fresh.pilot,
+      adminConfig,
+      screen: 'HANGAR',
+      battle: null,
+      autoRepeatSession: null,
+    });
+
+    act(() => {
+      useGameStore.getState().startAutoRepeat(5, 'border_outpost');
+    });
+    act(() => {
+      root.render(createElement(BattleScreen));
+    });
+
+    const battle = useGameStore.getState().battle!;
+    expect(battle).not.toBeNull();
+    expect(battle.prestage?.active).toBe(false);
     expect(container.querySelector('[data-testid="prestage-dialog"]')).toBeNull();
-    expect(onConfirmZero).toHaveBeenCalledTimes(1);
+    const playerUnit = battle.units.find((u) => u.isPlayer)!;
+    expect(playerUnit.statuses.some((s) => s.type === 'def_up' && s.turnsRemaining > 0)).toBe(true);
   });
 });

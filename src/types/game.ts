@@ -475,6 +475,7 @@ export interface BattleSupplyUnitState {
   usedThisTurn: number;
   usedCountsByTemplate: Record<string, number>;
   cooldownsByTemplate: Record<string, number>;
+  stockByTemplate?: Record<string, number>;
 }
 
 export interface ConsumableItem {

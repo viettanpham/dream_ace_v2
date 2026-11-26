@@ -1,13 +1,20 @@
+import {
+  getSupplyTemplateById,
+  SUPPLY_TEMPLATE_FAMILIES,
+} from '../data/consumables';
 import { getScaledSkillStats, getSkillById } from '../data/skills';
 import type {
   ActiveStatusEffect,
   AdminConfig,
+  BattleSupplyUnitState,
   CombatSide,
   CombatUnit,
+  Language,
   MechClassId,
   PrestageConfig,
   SkillEffectKind,
   StatusEffectType,
+  SupplyFamily,
 } from '../types/game';
 import { getSkillStep } from './turnPhase';
 
@@ -295,4 +302,124 @@ export function buildPrestageSummary(
     byClass,
     commander,
   };
+}
+
+export function countAppliedPrestageBuffs(
+  units: readonly CombatUnit[],
+  side: CombatSide = 'ally'
+): number {
+  let count = 0;
+  for (const unit of units) {
+    if (!unit.alive || unit.side !== side) continue;
+    for (const st of unit.statuses) {
+      if (st.turnsRemaining > 0) {
+        count += 1;
+      }
+    }
+  }
+  return count;
+}
+
+export function formatPrestageBuffChip(
+  st: ActiveStatusEffect,
+  lang: Language
+): string {
+  switch (st.type) {
+    case 'atk_up': {
+      const pct = Math.round((st.magnitude ?? 0.2) * 100);
+      return `⬆+${pct}% ATK`;
+    }
+    case 'def_up': {
+      const pct = Math.round((st.magnitude ?? 0.25) * 100);
+      return `⬆+${pct}% DEF`;
+    }
+    case 'eva_up': {
+      const pct = Math.round((st.magnitude ?? 0.25) * 40);
+      return `⬆+${pct}% EVA`;
+    }
+    case 'spd_up': {
+      const pct = Math.round((st.magnitude ?? 0.5) * 100);
+      return `⬆+${pct}% SPD`;
+    }
+    case 'primary_dmg_up': {
+      const pct = Math.round((st.magnitude ?? 0.3) * 100);
+      return `⬆+${pct}% DMG`;
+    }
+    case 'skill_dmg_up': {
+      const pct = Math.round((st.magnitude ?? 0.3) * 100);
+      return `⬆+${pct}% SKL`;
+    }
+    case 'regen_hp': {
+      const pct = Math.round((st.magnitude ?? 0.1) * 100);
+      return `⬆+${pct}% HP`;
+    }
+    case 'evade_all':
+      return '⬆100% EVA';
+    case 'invincible':
+      return lang === 'vi' ? '⬆Miễn ST' : '⬆Invincible';
+    case 'stealth':
+      return lang === 'vi' ? '⬆Ẩn thân' : '⬆Stealth';
+    case 'sure_hit':
+      return lang === 'vi' ? '⬆Chắc trúng' : '⬆Sure Hit';
+    default:
+      return `⬆${st.type}`;
+  }
+}
+
+export interface PrestageSupplyBagEntry {
+  family: SupplyFamily;
+  tier: number;
+  count: number;
+}
+
+export function buildAllySupplyBagSummary(
+  units: readonly CombatUnit[],
+  supplyByUnit?: Record<string, BattleSupplyUnitState> | null,
+  playerSupplyRows?: readonly { templateId: string | null; stock: number }[] | null
+): PrestageSupplyBagEntry[] {
+  const totalsByKey = new Map<string, PrestageSupplyBagEntry>();
+
+  const addTemplateStock = (templateId: string, rawQty: number) => {
+    const qty = Math.floor(rawQty);
+    if (!Number.isFinite(qty) || qty <= 0) return;
+    const tpl = getSupplyTemplateById(templateId);
+    if (!tpl) return;
+    const key = `${tpl.family}:${tpl.tier}`;
+    const prev = totalsByKey.get(key);
+    if (prev) {
+      prev.count += qty;
+    } else {
+      totalsByKey.set(key, {
+        family: tpl.family,
+        tier: tpl.tier,
+        count: qty,
+      });
+    }
+  };
+
+  for (const unit of units) {
+    if (!unit.alive || unit.side !== 'ally') continue;
+    const unitSupply = supplyByUnit?.[unit.id];
+    const stockMap = unitSupply?.stockByTemplate;
+    if (stockMap !== undefined) {
+      for (const [tplId, qty] of Object.entries(stockMap)) {
+        addTemplateStock(tplId, qty);
+      }
+    } else if (unit.isPlayer && playerSupplyRows && playerSupplyRows.length > 0) {
+      const seenPlayerTemplates = new Set<string>();
+      for (const row of playerSupplyRows) {
+        if (!row.templateId || seenPlayerTemplates.has(row.templateId)) continue;
+        seenPlayerTemplates.add(row.templateId);
+        addTemplateStock(row.templateId, row.stock);
+      }
+    }
+  }
+
+  return Array.from(totalsByKey.values()).sort((a, b) => {
+    const famA = SUPPLY_TEMPLATE_FAMILIES.indexOf(a.family);
+    const famB = SUPPLY_TEMPLATE_FAMILIES.indexOf(b.family);
+    const orderA = famA === -1 ? 999 : famA;
+    const orderB = famB === -1 ? 999 : famB;
+    return orderA - orderB || a.tier - b.tier;
+  });
 }

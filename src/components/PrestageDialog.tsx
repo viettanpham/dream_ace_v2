@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { getCatalogRow } from '../data/iconCatalog';
 import { getCatalogRowForStatus } from '../data/statusIconMap';
 import {
+  buildAllySupplyBagSummary,
   buildPrestageSummary,
-  sanitizePrestageConfig,
+  countAppliedPrestageBuffs,
+  formatPrestageBuffChip,
   shouldUseGroupedPrestage,
   type PrestageSideSummary,
 } from '../engine/prestage';
@@ -62,53 +63,20 @@ export function PrestageDialog({
   const isPhonePortrait = layoutMode === 'phone-portrait';
   const [phoneTab, setPhoneTab] = useState<CombatSide>('ally');
 
-  const prestageCfg = sanitizePrestageConfig(adminConfig.prestage);
-  const countdownSec = prestageCfg.countdownSec;
-
-  const loopKey = `${autoLoopActive ? 1 : 0}:${countdownSec}:${battle.sectorId}:${battle.turnCounter}`;
-  const [countdownState, setCountdownState] = useState<{
-    key: string;
-    remaining: number;
-  }>(() => ({
-    key: loopKey,
-    remaining: autoLoopActive ? countdownSec : 0,
-  }));
-  const remainingSec =
-    countdownState.key === loopKey
-      ? countdownState.remaining
-      : autoLoopActive
-        ? countdownSec
-        : 0;
-
-  const confirmedRef = useRef(false);
+  const loopKey = `${autoLoopActive ? 1 : 0}:${battle.sectorId}:${battle.turnCounter}`;
+  const confirmedForKeyRef = useRef<string | null>(null);
   const onConfirmRef = useRef(onConfirm);
   onConfirmRef.current = onConfirm;
 
   useEffect(() => {
-    confirmedRef.current = false;
-    if (!autoLoopActive) return;
-    setCountdownState({ key: loopKey, remaining: countdownSec });
-    if (countdownSec <= 0) {
-      confirmedRef.current = true;
-      onConfirmRef.current();
+    if (!autoLoopActive) {
+      confirmedForKeyRef.current = null;
       return;
     }
-    const id = window.setInterval(() => {
-      setCountdownState((prev) => {
-        const base = prev.key === loopKey ? prev.remaining : countdownSec;
-        return { key: loopKey, remaining: Math.max(0, base - 1) };
-      });
-    }, 1000);
-    return () => window.clearInterval(id);
-  }, [autoLoopActive, countdownSec, loopKey]);
-
-  useEffect(() => {
-    if (!autoLoopActive || countdownSec <= 0) return;
-    if (remainingSec <= 0 && !confirmedRef.current) {
-      confirmedRef.current = true;
-      onConfirmRef.current();
-    }
-  }, [autoLoopActive, countdownSec, remainingSec]);
+    if (confirmedForKeyRef.current === loopKey) return;
+    confirmedForKeyRef.current = loopKey;
+    onConfirmRef.current();
+  }, [autoLoopActive, loopKey]);
 
   const isGrouped = useMemo(
     () => shouldUseGroupedPrestage(battle.units, adminConfig),
@@ -135,25 +103,39 @@ export function PrestageDialog({
     [battle.units]
   );
 
+  const totalAllyBuffs = useMemo(
+    () => countAppliedPrestageBuffs(battle.units, 'ally'),
+    [battle.units]
+  );
+
+  const allySupplyEntries = useMemo(
+    () =>
+      buildAllySupplyBagSummary(battle.units, battle.supplyByUnit, supplyRows),
+    [battle.units, battle.supplyByUnit, supplyRows]
+  );
+
+  const allySupplyText = useMemo(
+    () =>
+      allySupplyEntries
+        .map(
+          (entry) =>
+            `${t(`prestage.supplyFamily.${entry.family}` as TranslationKey)} T${entry.tier} x${entry.count}`
+        )
+        .join(' · '),
+    [allySupplyEntries, t]
+  );
+
   const refLevel =
     allySummary.commander?.level ??
     allyUnits[0]?.level ??
     1;
 
   const iconMods = adminConfig.iconCatalogMods;
-  const equippedSupplies = useMemo(
-    () => supplyRows.filter((r) => r.templateId !== null),
-    [supplyRows]
-  );
 
-  // Instant auto-confirm when loop is active and countdownSec === 0: do not render dialog
-  if (autoLoopActive && countdownSec <= 0) {
+  // Multi-battle loop skips PrestageDialog completely (acts like countdown 0)
+  if (autoLoopActive) {
     return null;
   }
-
-  const buttonLabel = autoLoopActive
-    ? t('prestage.confirmCountdown', { sec: Math.max(0, remainingSec) })
-    : t('prestage.confirm');
 
   const confirmButton = (
     <button
@@ -164,7 +146,7 @@ export function PrestageDialog({
         isPhonePortrait ? 'w-full h-[44px] min-h-[44px]' : 'min-h-[40px] px-6'
       } rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm transition-colors cursor-pointer whitespace-nowrap`}
     >
-      {buttonLabel}
+      {t('prestage.confirm')}
     </button>
   );
 
@@ -173,7 +155,7 @@ export function PrestageDialog({
       return (
         <div
           data-testid="prestage-enemy-intel-strip"
-          className="shrink-0 mt-2 pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2 text-[11px] text-slate-400 min-w-0"
+          className="shrink-0 mt-2 pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2 text-xs text-slate-400 min-w-0"
         >
           <span className="font-semibold text-slate-300 shrink-0">
             {t('prestage.supplyBagTitle')}:
@@ -188,40 +170,17 @@ export function PrestageDialog({
     return (
       <div
         data-testid="prestage-ally-supply-strip"
-        className="shrink-0 mt-2 pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2 text-[11px] min-w-0"
+        className="shrink-0 mt-2 pt-2 border-t border-slate-800/80 text-xs leading-relaxed text-slate-300 min-w-0 break-words"
       >
-        <span className="font-semibold text-slate-300 shrink-0">
-          {t('prestage.supplyBagTitle')}
+        <span className="font-semibold text-slate-200">
+          {t('prestage.supplyBagTeamTitle')}:{' '}
         </span>
-        {equippedSupplies.length === 0 ? (
-          <span className="text-slate-500 truncate">
-            {t('prestage.supplyBagEmpty')}
-          </span>
+        {allySupplyEntries.length === 0 ? (
+          <span className="text-slate-400">{t('prestage.supplyBagEmpty')}</span>
         ) : (
-          <div className="flex items-center gap-1.5 flex-wrap justify-end min-w-0">
-            {equippedSupplies.map((row) => {
-              const iconRow = row.iconId
-                ? getCatalogRow(row.iconId, iconMods) ?? null
-                : null;
-              return (
-                <span
-                  key={`${row.slotIndex}-${row.templateId}`}
-                  title={`${row.templateId} x${row.stock}`}
-                  className="inline-flex items-center gap-0.5 rounded bg-slate-900/90 border border-slate-700/70 px-1 py-0.5"
-                >
-                  <CatalogIcon
-                    row={iconRow}
-                    size="xs"
-                    showBadges={false}
-                    showArrowBadge={false}
-                  />
-                  <span className="font-mono-nums text-[10px] text-amber-300">
-                    x{row.stock}
-                  </span>
-                </span>
-              );
-            })}
-          </div>
+          <span className="font-mono-nums text-amber-200">
+            {allySupplyText}
+          </span>
         )}
       </div>
     );
@@ -232,7 +191,7 @@ export function PrestageDialog({
     return (
       <div
         data-testid={`prestage-${side}-list`}
-        className="flex-1 min-h-0 overflow-y-auto tactical-scroll space-y-1 pr-0.5"
+        className="flex-1 min-h-0 overflow-y-auto tactical-scroll space-y-1.5 pr-0.5"
       >
         {sideUnits.map((unit) => {
           const hpPct =
@@ -246,72 +205,66 @@ export function PrestageDialog({
           const activeStatuses = isEnemy
             ? []
             : unit.statuses.filter((st) => st.turnsRemaining > 0);
-          const visibleStatuses = activeStatuses.slice(0, 4);
-          const extraCount = Math.max(0, activeStatuses.length - visibleStatuses.length);
 
           return (
             <div
               key={unit.id}
               data-testid={`prestage-row-${unit.id}`}
-              className="h-[28px] min-h-[28px] flex items-center gap-1.5 px-1.5 rounded border border-slate-800/80 bg-slate-900/65 min-w-0"
+              className="px-2.5 py-2 rounded-lg border border-slate-800/80 bg-slate-900/65 min-w-0"
             >
-              <LevelBadge
-                level={unit.level}
-                refLevel={refLevel}
-                side={unit.side}
-              />
-              <span className="text-[11px] font-medium text-slate-100 truncate min-w-0 flex-1">
-                {unit.name}
-              </span>
-              <span className="text-[10px] text-slate-400 shrink-0 whitespace-nowrap">
-                {getClassName(lang, unit.classId)}
-              </span>
-              <div
-                className="w-9 shrink-0 flex flex-col gap-0.5"
-                aria-hidden="true"
-              >
-                <div className="h-[3px] w-full rounded-full bg-slate-800 overflow-hidden">
-                  <div
-                    className="h-full bg-emerald-400"
-                    style={{ width: `${hpPct}%` }}
-                  />
-                </div>
-                <div className="h-[2px] w-full rounded-full bg-slate-800 overflow-hidden">
-                  <div
-                    className="h-full bg-amber-400"
-                    style={{ width: `${spPct}%` }}
-                  />
+              <div className="flex items-center gap-2 min-w-0">
+                <LevelBadge
+                  level={unit.level}
+                  refLevel={refLevel}
+                  side={unit.side}
+                  isLeader={unit.isPlayer}
+                  textSizeClass="text-xs"
+                />
+                <span className="text-sm font-semibold text-slate-100 truncate min-w-0 flex-1">
+                  {unit.name}
+                </span>
+                <span className="text-xs text-slate-400 shrink-0 whitespace-nowrap">
+                  {getClassName(lang, unit.classId)}
+                </span>
+                <div
+                  className="w-10 shrink-0 flex flex-col gap-0.5"
+                  aria-hidden="true"
+                >
+                  <div className="h-[3px] w-full rounded-full bg-slate-800 overflow-hidden">
+                    <div
+                      className="h-full bg-emerald-400"
+                      style={{ width: `${hpPct}%` }}
+                    />
+                  </div>
+                  <div className="h-[2px] w-full rounded-full bg-slate-800 overflow-hidden">
+                    <div
+                      className="h-full bg-amber-400"
+                      style={{ width: `${spPct}%` }}
+                    />
+                  </div>
                 </div>
               </div>
               {!isEnemy && activeStatuses.length > 0 && (
-                <div className="flex items-center gap-0.5 shrink-0">
-                  {visibleStatuses.map((st) => (
+                <div
+                  data-testid={`prestage-unit-buffs-${unit.id}`}
+                  className="mt-1.5 flex items-center flex-wrap gap-1.5 min-w-0"
+                >
+                  {activeStatuses.map((st) => (
                     <span
                       key={st.type}
                       title={getStatusLabel(lang, st.type)}
-                      className="inline-flex items-center justify-center"
+                      className="inline-flex items-center px-1.5 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/40 text-xs font-mono-nums font-medium text-emerald-200 whitespace-nowrap"
                     >
-                      <CatalogIcon
-                        row={getCatalogRowForStatus(st.type, iconMods)}
-                        fallbackStatusType={st.type}
-                        size="xs"
-                        showBadges={false}
-                        showArrowBadge={false}
-                      />
+                      {formatPrestageBuffChip(st, lang)}
                     </span>
                   ))}
-                  {extraCount > 0 && (
-                    <span className="font-mono-nums text-[9px] text-slate-300 px-0.5">
-                      +{extraCount}
-                    </span>
-                  )}
                 </div>
               )}
             </div>
           );
         })}
         {isEnemy && (
-          <div className="pt-1 text-[10px] text-slate-500">
+          <div className="pt-1 text-xs text-slate-500">
             {t('prestage.enemyStatusHidden')}
           </div>
         )}
@@ -324,25 +277,27 @@ export function PrestageDialog({
     return (
       <div
         data-testid={`prestage-${side}-grouped`}
-        className="flex-1 min-h-0 overflow-y-auto tactical-scroll space-y-1.5 pr-0.5"
+        className="flex-1 min-h-0 overflow-y-auto tactical-scroll space-y-2 pr-0.5"
       >
-        <div className="flex items-center gap-1.5 px-2 py-1 rounded border border-slate-800/80 bg-slate-900/80 min-w-0 text-xs">
+        <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-slate-800/80 bg-slate-900/80 min-w-0">
           {summary.commander ? (
             <>
               <LevelBadge
                 level={summary.commander.level}
                 refLevel={refLevel}
                 side={side}
+                isLeader={summary.commander.isPlayer}
+                textSizeClass="text-xs"
               />
-              <span className="font-semibold text-slate-100 truncate min-w-0 flex-1">
+              <span className="text-sm font-semibold text-slate-100 truncate min-w-0 flex-1">
                 {summary.commander.name}
               </span>
-              <span className="text-[10px] text-slate-400 shrink-0 whitespace-nowrap">
+              <span className="text-xs text-slate-400 shrink-0 whitespace-nowrap">
                 {getClassName(lang, summary.commander.classId)}
               </span>
             </>
           ) : (
-            <span className="text-slate-500 text-[11px]">
+            <span className="text-slate-500 text-xs">
               {t('prestage.commanderEmpty')}
             </span>
           )}
@@ -352,9 +307,9 @@ export function PrestageDialog({
           <div
             key={cls.classId}
             data-testid={`prestage-group-${side}-${cls.classId}`}
-            className="rounded border border-slate-800/75 bg-slate-900/50 px-2 py-1.5 space-y-1 min-w-0"
+            className="rounded-lg border border-slate-800/75 bg-slate-900/50 px-2.5 py-2 space-y-1.5 min-w-0"
           >
-            <div className="flex items-center justify-between gap-2 text-[11px] font-medium text-slate-100 font-mono-nums min-w-0">
+            <div className="flex items-center justify-between gap-2 text-xs font-medium text-slate-100 font-mono-nums min-w-0">
               <span className="truncate">
                 {t('prestage.classGroupLine', {
                   className: getClassName(lang, cls.classId),
@@ -366,32 +321,32 @@ export function PrestageDialog({
               </span>
             </div>
 
-            <div className="grid grid-cols-2 gap-1.5 items-center">
-              <div className="flex items-center gap-1 min-w-0">
+            <div className="grid grid-cols-2 gap-2 items-center">
+              <div className="flex items-center gap-1.5 min-w-0">
                 <div className="flex-1 h-1.5 rounded-full bg-slate-800 overflow-hidden">
                   <div
                     className="h-full bg-emerald-400"
                     style={{ width: `${cls.avgHpPct}%` }}
                   />
                 </div>
-                <span className="font-mono-nums text-[9px] text-emerald-300 shrink-0">
+                <span className="font-mono-nums text-xs text-emerald-300 shrink-0">
                   {cls.avgHpPct}%
                 </span>
               </div>
-              <div className="flex items-center gap-1 min-w-0">
+              <div className="flex items-center gap-1.5 min-w-0">
                 <div className="flex-1 h-1.5 rounded-full bg-slate-800 overflow-hidden">
                   <div
                     className="h-full bg-sky-400"
                     style={{ width: `${cls.avgShieldPct}%` }}
                   />
                 </div>
-                <span className="font-mono-nums text-[9px] text-sky-300 shrink-0">
+                <span className="font-mono-nums text-xs text-sky-300 shrink-0">
                   {cls.avgShieldPct}%
                 </span>
               </div>
             </div>
 
-            <div className="flex items-center flex-wrap gap-1.5 text-[10px] min-w-0">
+            <div className="flex items-center flex-wrap gap-1.5 text-xs min-w-0">
               {isEnemy ? (
                 <span className="text-slate-500">
                   {t('prestage.enemyStatusHidden')}
@@ -402,7 +357,7 @@ export function PrestageDialog({
                 cls.statuses.map((st) => (
                   <span
                     key={st.type}
-                    className="inline-flex items-center gap-0.5 text-emerald-200 font-mono-nums"
+                    className="inline-flex items-center gap-1 text-emerald-200 font-mono-nums"
                   >
                     <CatalogIcon
                       row={getCatalogRowForStatus(st.type, iconMods)}
@@ -432,7 +387,7 @@ export function PrestageDialog({
         className="flex flex-col flex-1 min-h-0 min-w-0"
       >
         {!isPhonePortrait && (
-          <div className="shrink-0 flex items-center justify-between gap-2 pb-1.5 mb-1.5 border-b border-slate-800/80 min-w-0">
+          <div className="shrink-0 flex items-center justify-between gap-2 pb-1.5 mb-2 border-b border-slate-800/80 min-w-0">
             <span
               className={`text-xs font-bold uppercase tracking-wider ${
                 side === 'ally' ? 'text-emerald-300' : 'text-rose-300'
@@ -440,7 +395,7 @@ export function PrestageDialog({
             >
               {side === 'ally' ? t('prestage.sideAlly') : t('prestage.sideEnemy')}
             </span>
-            <span className="font-mono-nums text-[11px] text-slate-400 shrink-0">
+            <span className="font-mono-nums text-xs text-slate-400 shrink-0">
               {summary.total}
             </span>
           </div>
@@ -452,6 +407,10 @@ export function PrestageDialog({
       </div>
     );
   };
+
+  const buffsHeaderText = t('prestage.buffsAppliedHeader', {
+    count: totalAllyBuffs,
+  });
 
   if (isPhonePortrait) {
     return (
@@ -465,15 +424,23 @@ export function PrestageDialog({
         testId="prestage-dialog"
         footer={confirmButton}
       >
-        {/* Fixed one-line overview ABOVE tabs */}
-        <div
-          data-testid="prestage-phone-overview"
-          className="shrink-0 px-4 pt-2 pb-1.5 text-xs font-semibold text-slate-200 font-mono-nums truncate"
-        >
-          {t('prestage.overviewPhone', {
-            ally: allySummary.total,
-            enemy: enemySummary.total,
-          })}
+        {/* Fixed overview + buff count ABOVE tabs */}
+        <div className="shrink-0 px-4 pt-2 pb-1.5 space-y-1 min-w-0">
+          <div
+            data-testid="prestage-phone-overview"
+            className="text-xs font-semibold text-slate-200 font-mono-nums truncate"
+          >
+            {t('prestage.overviewPhone', {
+              ally: allySummary.total,
+              enemy: enemySummary.total,
+            })}
+          </div>
+          <div
+            data-testid="prestage-buff-count"
+            className="text-xs font-medium text-emerald-300 truncate"
+          >
+            {buffsHeaderText}
+          </div>
         </div>
 
         {/* Fixed tabs [Ta | Địch] */}
@@ -522,14 +489,14 @@ export function PrestageDialog({
       <div
         data-testid="prestage-dialog"
         data-mode={isGrouped ? 'grouped' : 'list'}
-        className="w-[min(640px,calc(100vw-16px))] max-w-[640px] max-h-[80vh] flex flex-col rounded-xl border border-slate-700 bg-[#0E1521] text-slate-100 shadow-2xl overflow-hidden"
+        className="w-[min(820px,calc(100vw-16px))] max-w-[820px] max-h-[84vh] flex flex-col rounded-xl border border-slate-700 bg-[#0E1521] text-slate-100 shadow-2xl overflow-hidden"
       >
         {/* Fixed Header */}
-        <div className="shrink-0 px-4 py-3 border-b border-slate-800/90 space-y-1 min-w-0">
+        <div className="shrink-0 px-5 py-3.5 border-b border-slate-800/90 space-y-1 min-w-0">
           <div className="flex items-center justify-between gap-3 min-w-0">
             <h2
               id="prestage-dialog-title"
-              className="text-sm font-bold text-slate-100 truncate"
+              className="text-base font-bold text-slate-100 truncate"
             >
               {t('prestage.title')}
             </h2>
@@ -543,23 +510,31 @@ export function PrestageDialog({
               })}
             </span>
           </div>
-          <div
-            data-testid="prestage-desktop-mix"
-            className="text-[11px] text-slate-400 truncate"
-          >
-            {t('prestage.tabAlly')}: {formatMixText(allySummary, lang, t)} ·{' '}
-            {t('prestage.tabEnemy')}: {formatMixText(enemySummary, lang, t)}
+          <div className="flex items-center justify-between gap-3 min-w-0 flex-wrap">
+            <div
+              data-testid="prestage-desktop-mix"
+              className="text-xs text-slate-400 truncate min-w-0"
+            >
+              {t('prestage.tabAlly')}: {formatMixText(allySummary, lang, t)} ·{' '}
+              {t('prestage.tabEnemy')}: {formatMixText(enemySummary, lang, t)}
+            </div>
+            <div
+              data-testid="prestage-buff-count"
+              className="text-xs font-semibold text-emerald-300 shrink-0"
+            >
+              {buffsHeaderText}
+            </div>
           </div>
         </div>
 
         {/* 2 columns Ta | Địch */}
-        <div className="flex-1 min-h-0 grid grid-cols-2 gap-3 px-4 py-3 overflow-hidden">
+        <div className="flex-1 min-h-0 grid grid-cols-2 gap-4 px-5 py-3.5 overflow-hidden">
           {renderSidePanel('ally')}
           {renderSidePanel('enemy')}
         </div>
 
         {/* Fixed Footer */}
-        <div className="shrink-0 px-4 py-3 border-t border-slate-800/90 bg-[#080C14]/95 flex justify-end">
+        <div className="shrink-0 px-5 py-3 border-t border-slate-800/90 bg-[#080C14]/95 flex justify-end">
           {confirmButton}
         </div>
       </div>

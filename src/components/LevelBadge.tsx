@@ -7,6 +7,7 @@ export interface LevelBadgeProps {
   refLevel: number;
   side: CombatSide;
   isLeader?: boolean;
+  textSizeClass?: string;
   className?: string;
 }
 
@@ -15,6 +16,7 @@ export function LevelBadge({
   refLevel,
   side,
   isLeader = false,
+  textSizeClass = 'text-[10px]',
   className = '',
 }: LevelBadgeProps) {
   const { t } = useI18n();
@@ -39,7 +41,7 @@ export function LevelBadge({
       data-level={safeLevel}
       title={label}
       aria-label={label}
-      className={`font-mono font-mono-nums text-[10px] leading-tight font-semibold border rounded px-1 shrink-0 whitespace-nowrap ${frameClass} ${colorClass} ${className}`.trim()}
+      className={`font-mono font-mono-nums ${textSizeClass} leading-tight font-semibold border rounded px-1 shrink-0 whitespace-nowrap ${frameClass} ${colorClass} ${className}`.trim()}
     >
       [{safeLevel}]
     </span>
