@@ -73,6 +73,8 @@ import type {
   ShopItemListing,
   StarterSetConfig,
   SupplyShopListing,
+  SupplyShopRefreshState,
+  SupplyShopWpListing,
   WorldClockSpeedMode,
   WorldClockState,
   WpMarketOffer,
@@ -128,16 +130,27 @@ import { DEFAULT_QUICK_SELL_CONFIG } from './quickSell';
 import {
   buildShopOptionsFromState,
   DEFAULT_SUPPLY_SHOP_MAX_QTY,
+  DEFAULT_SUPPLY_SHOP_MAX_REFRESHES,
   DEFAULT_SUPPLY_SHOP_MAX_TYPES,
   DEFAULT_SUPPLY_SHOP_MIN_QTY,
   DEFAULT_SUPPLY_SHOP_MIN_TYPES,
+  DEFAULT_SUPPLY_SHOP_REFRESH_BASE_COST,
+  DEFAULT_SUPPLY_WP_DUP_WEIGHT,
+  DEFAULT_SUPPLY_WP_MAX_COPIES,
+  DEFAULT_SUPPLY_WP_MIN_TIER,
+  DEFAULT_SUPPLY_WP_PRICE_DIVISOR,
   generateCategorizedShopStock,
   generateSupplyShopStock,
+  generateSupplyShopStockWp,
   generateWpMarketOffers,
   getMaxGearLevel,
   hasOperationalShipyard,
+  migrateLegacySupplyShopAdminFields,
   sanitizeSupplyShopConfig,
+  sanitizeSupplyShopExtraConfig,
+  sanitizeSupplyShopRefresh,
   sanitizeSupplyShopStock,
+  sanitizeSupplyShopStockWp,
 } from './shop';
 import { isSkillAllowedForClass, MAX_ACTIVE_SKILL_BAR } from './skills';
 import {
@@ -287,6 +300,8 @@ export interface PersistedCampaignState {
   pilot: PilotAccount;
   shopStock: ShopItemListing[];
   supplyShopStock?: SupplyShopListing[];
+  supplyShopStockWp?: SupplyShopWpListing[];
+  supplyShopRefresh?: SupplyShopRefreshState;
   wpMarketOffers: WpMarketOffer[];
   battlesUntilRestock: number;
   inventoryFilterState: InventoryFilterState;
@@ -360,6 +375,12 @@ export function createDefaultAdminConfig(): AdminConfig {
     supplyShopMaxTypes: DEFAULT_SUPPLY_SHOP_MAX_TYPES,
     supplyShopMinQty: DEFAULT_SUPPLY_SHOP_MIN_QTY,
     supplyShopMaxQty: DEFAULT_SUPPLY_SHOP_MAX_QTY,
+    supplyShopMaxRefreshes: DEFAULT_SUPPLY_SHOP_MAX_REFRESHES,
+    supplyShopRefreshBaseCost: DEFAULT_SUPPLY_SHOP_REFRESH_BASE_COST,
+    supplyWpPriceDivisor: DEFAULT_SUPPLY_WP_PRICE_DIVISOR,
+    supplyWpMinTier: DEFAULT_SUPPLY_WP_MIN_TIER,
+    supplyWpDupWeight: DEFAULT_SUPPLY_WP_DUP_WEIGHT,
+    supplyWpMaxCopies: DEFAULT_SUPPLY_WP_MAX_COPIES,
     extenderLevelsPerSocket: DEFAULT_EXTENDER_LEVELS_PER_SOCKET,
     maxSkillModulesPerGear: DEFAULT_MAX_SKILL_MODULES_PER_GEAR,
     itemLevels: cloneItemLevelsConfig(DEFAULT_ITEM_LEVELS_CONFIG),
@@ -393,6 +414,19 @@ export function createFreshCampaignState(
     adminConfig.starterSet ?? DEFAULT_STARTER_SET_CONFIG,
     rng
   );
+  const freshSupplyShopStock = generateSupplyShopStock(
+    1,
+    adminConfig,
+    SUPPLY_TEMPLATES,
+    rng
+  );
+  const freshSupplyShopStockWp = generateSupplyShopStockWp(
+    1,
+    adminConfig,
+    freshSupplyShopStock.length,
+    SUPPLY_TEMPLATES,
+    rng
+  );
   return {
     pilot,
     shopStock: generateCategorizedShopStock(
@@ -400,12 +434,9 @@ export function createFreshCampaignState(
       buildShopOptionsFromState(pilot, adminConfig),
       rng
     ),
-    supplyShopStock: generateSupplyShopStock(
-      1,
-      adminConfig,
-      SUPPLY_TEMPLATES,
-      rng
-    ),
+    supplyShopStock: freshSupplyShopStock,
+    supplyShopStockWp: freshSupplyShopStockWp,
+    supplyShopRefresh: { used: 0 },
     wpMarketOffers: generateWpMarketOffers(
       { shipyardBonus: hasOperationalShipyard(pilot) },
       rng
@@ -717,7 +748,10 @@ export function migrateSaveData(
     supplyLoadoutSlots: sanitizeSupplyLoadoutSlots(rawAdmin.supplyLoadoutSlots),
     supplyUsesPerTurn: sanitizeSupplyUsesPerTurn(rawAdmin.supplyUsesPerTurn),
     supplyScanCount: sanitizeSupplyScanCount(rawAdmin.supplyScanCount),
-    ...sanitizeSupplyShopConfig(rawAdmin as Partial<AdminConfig>),
+    ...sanitizeSupplyShopConfig(
+      migrateLegacySupplyShopAdminFields(rawAdmin as Partial<AdminConfig>)
+    ),
+    ...sanitizeSupplyShopExtraConfig(rawAdmin as Partial<AdminConfig>),
     extenderLevelsPerSocket: sanitizeExtenderLevelsPerSocket(
       rawAdmin.extenderLevelsPerSocket
     ),
@@ -1146,6 +1180,28 @@ export function migrateSaveData(
 
     const hasAvailableShopStock = rawShop.some((it) => !it.soldOut);
 
+    const migratedSupplyShopStock = Array.isArray(raw.supplyShopStock)
+      ? sanitizeSupplyShopStock(raw.supplyShopStock)
+      : generateSupplyShopStock(
+          getMaxGearLevel(finalMigratedPilot),
+          adminConfig,
+          SUPPLY_TEMPLATES,
+          rng
+        );
+    const sanitizedSupplyShopStockWp = Array.isArray(raw.supplyShopStockWp)
+      ? sanitizeSupplyShopStockWp(raw.supplyShopStockWp)
+      : [];
+    const migratedSupplyShopStockWp =
+      sanitizedSupplyShopStockWp.length > 0
+        ? sanitizedSupplyShopStockWp
+        : generateSupplyShopStockWp(
+            getMaxGearLevel(finalMigratedPilot),
+            adminConfig,
+            migratedSupplyShopStock.length,
+            SUPPLY_TEMPLATES,
+            rng
+          );
+
     return {
       pilot: finalMigratedPilot,
       shopStock:
@@ -1156,14 +1212,9 @@ export function migrateSaveData(
               buildShopOptionsFromState(finalMigratedPilot, adminConfig),
               rng
             ),
-      supplyShopStock: Array.isArray(raw.supplyShopStock)
-        ? sanitizeSupplyShopStock(raw.supplyShopStock)
-        : generateSupplyShopStock(
-            getMaxGearLevel(finalMigratedPilot),
-            adminConfig,
-            SUPPLY_TEMPLATES,
-            rng
-          ),
+      supplyShopStock: migratedSupplyShopStock,
+      supplyShopStockWp: migratedSupplyShopStockWp,
+      supplyShopRefresh: sanitizeSupplyShopRefresh(raw.supplyShopRefresh),
       wpMarketOffers:
         rawWpOffers.length > 0
           ? rawWpOffers
@@ -1325,6 +1376,20 @@ export function migrateSaveData(
         ).pilot
       : legacyPilot;
 
+  const legacySupplyShopStock = generateSupplyShopStock(
+    getMaxGearLevel(finalLegacyPilot),
+    adminConfig,
+    SUPPLY_TEMPLATES,
+    rng
+  );
+  const legacySupplyShopStockWp = generateSupplyShopStockWp(
+    getMaxGearLevel(finalLegacyPilot),
+    adminConfig,
+    legacySupplyShopStock.length,
+    SUPPLY_TEMPLATES,
+    rng
+  );
+
   return {
     pilot: finalLegacyPilot,
     shopStock: generateCategorizedShopStock(
@@ -1332,12 +1397,9 @@ export function migrateSaveData(
       buildShopOptionsFromState(finalLegacyPilot, adminConfig),
       rng
     ),
-    supplyShopStock: generateSupplyShopStock(
-      getMaxGearLevel(finalLegacyPilot),
-      adminConfig,
-      SUPPLY_TEMPLATES,
-      rng
-    ),
+    supplyShopStock: legacySupplyShopStock,
+    supplyShopStockWp: legacySupplyShopStockWp,
+    supplyShopRefresh: sanitizeSupplyShopRefresh(raw.supplyShopRefresh),
     wpMarketOffers: generateWpMarketOffers(
       { shipyardBonus: hasOperationalShipyard(finalLegacyPilot) },
       rng

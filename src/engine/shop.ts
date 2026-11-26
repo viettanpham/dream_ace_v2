@@ -15,11 +15,15 @@ import type {
   PaperDollSlot,
   PilotAccount,
   ShopItemListing,
+  SupplyFamily,
   SupplyShopListing,
+  SupplyShopRefreshState,
+  SupplyShopWpListing,
   SupplyTemplate,
   WpMarketOffer,
 } from '../types/game';
 import { generateItemInstance, pickWeightedRarity } from './equipment';
+import { computeSupplyPrice } from './itemPrice';
 import {
   DEFAULT_ITEM_LEVELS_CONFIG,
   getEffectiveTemplateRequiredLevel,
@@ -305,15 +309,44 @@ export function buildShopOptionsFromState(
   };
 }
 
-export const DEFAULT_SUPPLY_SHOP_MIN_TYPES = 2;
-export const DEFAULT_SUPPLY_SHOP_MAX_TYPES = 5;
+export const LEGACY_SUPPLY_SHOP_MIN_TYPES = 2;
+export const LEGACY_SUPPLY_SHOP_MAX_TYPES = 5;
+export const LEGACY_SUPPLY_SHOP_MIN_QTY = 3;
+export const LEGACY_SUPPLY_SHOP_MAX_QTY = 15;
+
+export const DEFAULT_SUPPLY_SHOP_MIN_TYPES = 3;
+export const DEFAULT_SUPPLY_SHOP_MAX_TYPES = 10;
 export const MIN_SUPPLY_SHOP_TYPES = 1;
 export const MAX_SUPPLY_SHOP_TYPES = 12;
 
-export const DEFAULT_SUPPLY_SHOP_MIN_QTY = 3;
-export const DEFAULT_SUPPLY_SHOP_MAX_QTY = 15;
+export const DEFAULT_SUPPLY_SHOP_MIN_QTY = 10;
+export const DEFAULT_SUPPLY_SHOP_MAX_QTY = 50;
 export const MIN_SUPPLY_SHOP_QTY = 1;
 export const MAX_SUPPLY_SHOP_QTY = SUPPLY_STACK_CAP;
+
+export const DEFAULT_SUPPLY_SHOP_MAX_REFRESHES = 3;
+export const MIN_SUPPLY_SHOP_MAX_REFRESHES = 1;
+export const MAX_SUPPLY_SHOP_MAX_REFRESHES = 10;
+
+export const DEFAULT_SUPPLY_SHOP_REFRESH_BASE_COST = 1000;
+export const MIN_SUPPLY_SHOP_REFRESH_BASE_COST = 0;
+export const MAX_SUPPLY_SHOP_REFRESH_BASE_COST = 100000;
+
+export const DEFAULT_SUPPLY_WP_PRICE_DIVISOR = 5;
+export const MIN_SUPPLY_WP_PRICE_DIVISOR = 1;
+export const MAX_SUPPLY_WP_PRICE_DIVISOR = 100;
+
+export const DEFAULT_SUPPLY_WP_MIN_TIER = 3;
+export const MIN_SUPPLY_WP_MIN_TIER = 1;
+export const MAX_SUPPLY_WP_MIN_TIER = 5;
+
+export const DEFAULT_SUPPLY_WP_DUP_WEIGHT = 0.3;
+export const MIN_SUPPLY_WP_DUP_WEIGHT = 0.05;
+export const MAX_SUPPLY_WP_DUP_WEIGHT = 1;
+
+export const DEFAULT_SUPPLY_WP_MAX_COPIES = 2;
+export const MIN_SUPPLY_WP_MAX_COPIES = 1;
+export const MAX_SUPPLY_WP_MAX_COPIES = 5;
 
 function clampSupplyInt(
   raw: unknown,
@@ -323,6 +356,139 @@ function clampSupplyInt(
 ): number {
   if (typeof raw !== 'number' || !Number.isFinite(raw)) return fallback;
   return Math.max(min, Math.min(max, Math.round(raw)));
+}
+
+function clampSupplyFloat(
+  raw: unknown,
+  min: number,
+  max: number,
+  fallback: number
+): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return fallback;
+  return Math.max(min, Math.min(max, raw));
+}
+
+export function sanitizeSupplyShopMaxRefreshes(raw: unknown): number {
+  return clampSupplyInt(
+    raw,
+    MIN_SUPPLY_SHOP_MAX_REFRESHES,
+    MAX_SUPPLY_SHOP_MAX_REFRESHES,
+    DEFAULT_SUPPLY_SHOP_MAX_REFRESHES
+  );
+}
+
+export function sanitizeSupplyShopRefreshBaseCost(raw: unknown): number {
+  return clampSupplyInt(
+    raw,
+    MIN_SUPPLY_SHOP_REFRESH_BASE_COST,
+    MAX_SUPPLY_SHOP_REFRESH_BASE_COST,
+    DEFAULT_SUPPLY_SHOP_REFRESH_BASE_COST
+  );
+}
+
+export function sanitizeSupplyWpPriceDivisor(raw: unknown): number {
+  return clampSupplyInt(
+    raw,
+    MIN_SUPPLY_WP_PRICE_DIVISOR,
+    MAX_SUPPLY_WP_PRICE_DIVISOR,
+    DEFAULT_SUPPLY_WP_PRICE_DIVISOR
+  );
+}
+
+export function sanitizeSupplyWpMinTier(raw: unknown): number {
+  return clampSupplyInt(
+    raw,
+    MIN_SUPPLY_WP_MIN_TIER,
+    MAX_SUPPLY_WP_MIN_TIER,
+    DEFAULT_SUPPLY_WP_MIN_TIER
+  );
+}
+
+export function sanitizeSupplyWpDupWeight(raw: unknown): number {
+  return clampSupplyFloat(
+    raw,
+    MIN_SUPPLY_WP_DUP_WEIGHT,
+    MAX_SUPPLY_WP_DUP_WEIGHT,
+    DEFAULT_SUPPLY_WP_DUP_WEIGHT
+  );
+}
+
+export function sanitizeSupplyWpMaxCopies(raw: unknown): number {
+  return clampSupplyInt(
+    raw,
+    MIN_SUPPLY_WP_MAX_COPIES,
+    MAX_SUPPLY_WP_MAX_COPIES,
+    DEFAULT_SUPPLY_WP_MAX_COPIES
+  );
+}
+
+export function sanitizeSupplyShopExtraConfig(
+  cfg?: Pick<
+    Partial<AdminConfig>,
+    | 'supplyShopMaxRefreshes'
+    | 'supplyShopRefreshBaseCost'
+    | 'supplyWpPriceDivisor'
+    | 'supplyWpMinTier'
+    | 'supplyWpDupWeight'
+    | 'supplyWpMaxCopies'
+  > | null
+): {
+  supplyShopMaxRefreshes: number;
+  supplyShopRefreshBaseCost: number;
+  supplyWpPriceDivisor: number;
+  supplyWpMinTier: number;
+  supplyWpDupWeight: number;
+  supplyWpMaxCopies: number;
+} {
+  return {
+    supplyShopMaxRefreshes: sanitizeSupplyShopMaxRefreshes(
+      cfg?.supplyShopMaxRefreshes
+    ),
+    supplyShopRefreshBaseCost: sanitizeSupplyShopRefreshBaseCost(
+      cfg?.supplyShopRefreshBaseCost
+    ),
+    supplyWpPriceDivisor: sanitizeSupplyWpPriceDivisor(
+      cfg?.supplyWpPriceDivisor
+    ),
+    supplyWpMinTier: sanitizeSupplyWpMinTier(cfg?.supplyWpMinTier),
+    supplyWpDupWeight: sanitizeSupplyWpDupWeight(cfg?.supplyWpDupWeight),
+    supplyWpMaxCopies: sanitizeSupplyWpMaxCopies(cfg?.supplyWpMaxCopies),
+  };
+}
+
+export function migrateLegacySupplyShopAdminFields(
+  rawAdmin?: Partial<AdminConfig> | null
+): Partial<AdminConfig> {
+  if (!rawAdmin || typeof rawAdmin !== 'object') return {};
+  if (
+    rawAdmin.supplyShopMinTypes === LEGACY_SUPPLY_SHOP_MIN_TYPES &&
+    rawAdmin.supplyShopMaxTypes === LEGACY_SUPPLY_SHOP_MAX_TYPES &&
+    rawAdmin.supplyShopMinQty === LEGACY_SUPPLY_SHOP_MIN_QTY &&
+    rawAdmin.supplyShopMaxQty === LEGACY_SUPPLY_SHOP_MAX_QTY
+  ) {
+    return {
+      ...rawAdmin,
+      supplyShopMinTypes: DEFAULT_SUPPLY_SHOP_MIN_TYPES,
+      supplyShopMaxTypes: DEFAULT_SUPPLY_SHOP_MAX_TYPES,
+      supplyShopMinQty: DEFAULT_SUPPLY_SHOP_MIN_QTY,
+      supplyShopMaxQty: DEFAULT_SUPPLY_SHOP_MAX_QTY,
+    };
+  }
+  return rawAdmin;
+}
+
+export function sanitizeSupplyShopRefresh(
+  raw: unknown
+): SupplyShopRefreshState {
+  const obj =
+    raw && typeof raw === 'object' && !Array.isArray(raw)
+      ? (raw as { used?: unknown })
+      : null;
+  const used =
+    typeof obj?.used === 'number' && Number.isFinite(obj.used)
+      ? Math.max(0, Math.floor(obj.used))
+      : 0;
+  return { used };
 }
 
 export function sanitizeSupplyShopConfig(
@@ -481,7 +647,196 @@ export function generateSupplyShopStock(
     pool[j] = tmp;
   }
 
-  return pool.slice(0, count).map((tpl) => ({
+  const chosen = pool.slice(0, count);
+  if (count >= 3) {
+    const distinctFamilies = new Set(chosen.map((t) => t.family));
+    if (distinctFamilies.size < 2) {
+      const onlyFamily = chosen[0].family;
+      const otherFamilyTemplates = pool
+        .slice(count)
+        .filter((t) => t.family !== onlyFamily);
+      if (otherFamilyTemplates.length > 0) {
+        const swapPickIdx = Math.min(
+          otherFamilyTemplates.length - 1,
+          Math.floor(rng() * otherFamilyTemplates.length)
+        );
+        const replaceIdx = Math.min(
+          count - 1,
+          Math.floor(rng() * count)
+        );
+        chosen[replaceIdx] = otherFamilyTemplates[swapPickIdx];
+      }
+    }
+  }
+
+  return chosen.map((tpl) => ({
+    templateId: tpl.id,
+    remaining: rollIntInclusive(supplyShopMinQty, supplyShopMaxQty, rng),
+  }));
+}
+
+export function sanitizeSupplyShopStockWp(
+  rawStock: unknown
+): SupplyShopWpListing[] {
+  if (!Array.isArray(rawStock)) return [];
+  const seenSlots = new Set<string>();
+  const clean: SupplyShopWpListing[] = [];
+
+  for (const entry of rawStock) {
+    if (!entry || typeof entry !== 'object') continue;
+    const rawSlotId = (entry as { slotId?: unknown }).slotId;
+    const slotId = typeof rawSlotId === 'string' ? rawSlotId.trim() : '';
+    const rawId = (entry as { templateId?: unknown }).templateId;
+    const tplId = typeof rawId === 'string' ? rawId.trim() : '';
+    if (!slotId || seenSlots.has(slotId) || !tplId || !getSupplyTemplateById(tplId)) {
+      continue;
+    }
+    seenSlots.add(slotId);
+    const rawRem = (entry as { remaining?: unknown }).remaining;
+    const remaining =
+      typeof rawRem === 'number' && Number.isFinite(rawRem)
+        ? Math.max(0, Math.min(SUPPLY_STACK_CAP, Math.round(rawRem)))
+        : 0;
+    clean.push({
+      slotId,
+      templateId: tplId,
+      remaining,
+    });
+  }
+
+  return clean;
+}
+
+export function getSupplyWpPrice(
+  template: Pick<SupplyTemplate, 'family' | 'tier' | 'priceOverride'> &
+    Partial<Pick<SupplyTemplate, 'effects'>>,
+  cfg?: Pick<AdminConfig, 'supplyWpPriceDivisor' | 'supplyEconomy'> | null
+): number {
+  const crPrice = computeSupplyPrice(template, cfg);
+  const divisor = sanitizeSupplyWpPriceDivisor(cfg?.supplyWpPriceDivisor);
+  return Math.max(1, Math.round(crPrice / divisor));
+}
+
+const WP_CORE_FAMILIES: readonly SupplyFamily[] = [
+  'hp_kit',
+  'sp_kit',
+  'shield_kit',
+];
+
+export function generateSupplyShopStockWp(
+  maxGearLevel: number,
+  cfg?: Pick<
+    Partial<AdminConfig>,
+    | 'supplyShopMinQty'
+    | 'supplyShopMaxQty'
+    | 'supplyWpMinTier'
+    | 'supplyWpDupWeight'
+    | 'supplyWpMaxCopies'
+  > | null,
+  creditCount: number = 0,
+  templates: readonly SupplyTemplate[] = SUPPLY_TEMPLATES,
+  rng: () => number = Math.random
+): SupplyShopWpListing[] {
+  const { supplyShopMinQty, supplyShopMaxQty } = sanitizeSupplyShopConfig(
+    cfg as Partial<AdminConfig>
+  );
+  const { supplyWpMinTier, supplyWpDupWeight, supplyWpMaxCopies } =
+    sanitizeSupplyShopExtraConfig(cfg);
+
+  const levelCap = Number.isFinite(maxGearLevel)
+    ? Math.max(1, Math.floor(maxGearLevel))
+    : 1;
+
+  const seenIds = new Set<string>();
+  const unlockedByFamily = new Map<SupplyFamily, SupplyTemplate[]>();
+  for (const tpl of templates) {
+    if (tpl.unlockLevel > levelCap || seenIds.has(tpl.id)) continue;
+    seenIds.add(tpl.id);
+    const list = unlockedByFamily.get(tpl.family);
+    if (list) list.push(tpl);
+    else unlockedByFamily.set(tpl.family, [tpl]);
+  }
+
+  const eligible: SupplyTemplate[] = [];
+  for (const familyList of unlockedByFamily.values()) {
+    const atMinTier = familyList.filter((t) => t.tier >= supplyWpMinTier);
+    if (atMinTier.length > 0) {
+      eligible.push(...atMinTier);
+    } else {
+      const highestTier = Math.max(...familyList.map((t) => t.tier));
+      eligible.push(...familyList.filter((t) => t.tier === highestTier));
+    }
+  }
+
+  if (eligible.length === 0) return [];
+
+  const safeCreditCount = Number.isFinite(creditCount)
+    ? Math.max(0, Math.floor(creditCount))
+    : 0;
+  const maxPossible = eligible.length * supplyWpMaxCopies;
+  const targetCount = Math.min(maxPossible, Math.max(3, 2 * safeCreditCount));
+
+  const copiesByTemplate = new Map<string, number>();
+  const picked: SupplyTemplate[] = [];
+
+  for (const fam of WP_CORE_FAMILIES) {
+    if (picked.length >= targetCount) break;
+    const famPool = eligible.filter(
+      (t) =>
+        t.family === fam &&
+        (copiesByTemplate.get(t.id) ?? 0) < supplyWpMaxCopies
+    );
+    if (famPool.length > 0) {
+      const pickIdx = Math.min(
+        famPool.length - 1,
+        Math.floor(rng() * famPool.length)
+      );
+      const chosen = famPool[pickIdx];
+      picked.push(chosen);
+      copiesByTemplate.set(
+        chosen.id,
+        (copiesByTemplate.get(chosen.id) ?? 0) + 1
+      );
+    }
+  }
+
+  while (picked.length < targetCount) {
+    const candidates = eligible.filter(
+      (t) => (copiesByTemplate.get(t.id) ?? 0) < supplyWpMaxCopies
+    );
+    if (candidates.length === 0) break;
+
+    const weights = candidates.map((t) =>
+      Math.pow(supplyWpDupWeight, copiesByTemplate.get(t.id) ?? 0)
+    );
+    const totalWeight = weights.reduce((acc, w) => acc + w, 0);
+    let chosen = candidates[candidates.length - 1];
+    if (totalWeight > 0) {
+      let roll = rng() * totalWeight;
+      for (let i = 0; i < candidates.length; i++) {
+        roll -= weights[i];
+        if (roll <= 0) {
+          chosen = candidates[i];
+          break;
+        }
+      }
+    } else {
+      const pickIdx = Math.min(
+        candidates.length - 1,
+        Math.floor(rng() * candidates.length)
+      );
+      chosen = candidates[pickIdx];
+    }
+
+    picked.push(chosen);
+    copiesByTemplate.set(
+      chosen.id,
+      (copiesByTemplate.get(chosen.id) ?? 0) + 1
+    );
+  }
+
+  return picked.map((tpl, idx) => ({
+    slotId: `wp-${idx}-${tpl.id}`,
     templateId: tpl.id,
     remaining: rollIntInclusive(supplyShopMinQty, supplyShopMaxQty, rng),
   }));

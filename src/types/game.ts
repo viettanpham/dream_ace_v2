@@ -425,6 +425,16 @@ export interface SupplyShopListing {
   remaining: number;
 }
 
+export interface SupplyShopWpListing {
+  slotId: string;
+  templateId: string;
+  remaining: number;
+}
+
+export interface SupplyShopRefreshState {
+  used: number;
+}
+
 export type ConsumableKind =
   | 'equipment_crate'
   | 'enchant_stone'
@@ -1487,6 +1497,12 @@ export interface AdminConfig {
   supplyShopMaxTypes?: number;
   supplyShopMinQty?: number;
   supplyShopMaxQty?: number;
+  supplyShopMaxRefreshes?: number;
+  supplyShopRefreshBaseCost?: number;
+  supplyWpPriceDivisor?: number;
+  supplyWpMinTier?: number;
+  supplyWpDupWeight?: number;
+  supplyWpMaxCopies?: number;
   extenderLevelsPerSocket?: number;
   maxSkillModulesPerGear?: number;
   itemLevels?: ItemLevelsConfig;
