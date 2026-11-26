@@ -475,7 +475,7 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'battle.skillReason.blocked_by_siege': 'Không thể dùng khi đang bật Neo Pháo',
   'battle.skillReason.insufficient_sp': 'Không đủ SP (cần {cost} SP)',
   'battle.skillReason.flux_min_sp': 'Cần tối thiểu {cost} SP',
-  'battle.skillReason.used_this_turn': 'Đã dùng trong lượt này',
+  'battle.skillReason.used_this_turn': 'Đã dùng lượt này',
   'battle.skillReason.revealed_this_round': 'Vừa bị lộ diện — chờ round sau',
   'battle.skillReason.class_mismatch': 'Sai lớp Gear',
   'battle.skillReason.not_equipped': 'Chưa lắp trên thanh kỹ năng',
@@ -1992,6 +1992,12 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'admin.turnPhaseMaxStep2': 'Số skill bước 2 (buff) tối đa mỗi lượt',
   'admin.stealthLidarDetectMin': 'Lidar phát hiện tối thiểu (1–10)',
   'admin.stealthLidarDetectMax': 'Lidar phát hiện tối đa (1–10)',
+  'battle.turnStep.prefix': 'Lượt:',
+  'battle.turnStep.supply': 'Vật tư',
+  'battle.turnStep.buff': 'Buff',
+  'battle.turnStep.action': 'Hành động',
+  'battle.turnStep.attackShort': 'Đánh',
+  'battle.turnStep.step2Full': 'Buff tiếp theo tính là hành động chính',
 };
 
 

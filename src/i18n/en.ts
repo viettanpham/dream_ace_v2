@@ -1989,6 +1989,12 @@ export const EN_TRANSLATIONS = {
   'admin.turnPhaseMaxStep2': 'Max step-2 (buff) skills per turn',
   'admin.stealthLidarDetectMin': 'Lidar detect min (1–10)',
   'admin.stealthLidarDetectMax': 'Lidar detect max (1–10)',
+  'battle.turnStep.prefix': 'Turn:',
+  'battle.turnStep.supply': 'Supply',
+  'battle.turnStep.buff': 'Buff',
+  'battle.turnStep.action': 'Action',
+  'battle.turnStep.attackShort': 'Act',
+  'battle.turnStep.step2Full': 'Next buff counts as main action',
 } as const;
 
 export type TranslationKey = keyof typeof EN_TRANSLATIONS;

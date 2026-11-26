@@ -33,6 +33,7 @@ import {
 } from '../engine/combat';
 import { canUnitUseSkill } from '../engine/skills';
 import { getBattleSupplyRows } from '../engine/supplies';
+import { sanitizeTurnPhaseConfig } from '../engine/turnPhase';
 import {
   getAutoStopReasonLabel,
   getBattleSkillReason,
@@ -123,6 +124,7 @@ import {
 import { SkillIcon } from './SkillIcon';
 import { StatBar } from './StatBar';
 import { TurnQueueBar } from './TurnQueueBar';
+import { TurnStepLine } from './TurnStepLine';
 
 const REPEAT_OPTIONS: AutoRepeatLimit[] = [1, 5, 10, 20, 'infinite'];
 const ROWS_ORDER: CombatRow[] = ['front', 'middle', 'back'];
@@ -603,6 +605,7 @@ export function BattleScreen() {
     [battle, pilot, adminConfig]
   );
   const usableSupplyCount = battleSupplyView.usableCount;
+  const turnStep2Max = sanitizeTurnPhaseConfig(adminConfig.turnPhase).maxStep2PerTurn;
 
   const currentBattleMeta = useMemo(() => {
     if (!battle) return null;
@@ -2704,7 +2707,15 @@ export function BattleScreen() {
 
           {/* 6) Single-row bottom action dock (hidden in Auto mode — no separate AUTO bar) */}
           {!autoBattleEnabled && (
-            <div className="shrink-0 border-t border-slate-800/90 bg-[#0A0F18]/98 px-2 py-1.5 pb-safe">
+            <div className="shrink-0 border-t border-slate-800/90 bg-[#0A0F18]/98 px-2 py-1.5 pb-safe space-y-1">
+              {canPlayerManualAct && turnStep2Max > 0 && (
+                <TurnStepLine
+                  supplyUsed={battleSupplyView.usedThisTurn > 0}
+                  step2Used={battle.turnStep2Used ?? 0}
+                  step2Max={turnStep2Max}
+                  compact
+                />
+              )}
               <div
                 data-testid="battle-manual-dock"
                 className="grid grid-cols-4 gap-2"
@@ -3082,6 +3093,14 @@ export function BattleScreen() {
                     </div>
                   </div>
 
+                  {canPlayerManualAct && turnStep2Max > 0 && (
+                    <TurnStepLine
+                      supplyUsed={battleSupplyView.usedThisTurn > 0}
+                      step2Used={battle.turnStep2Used ?? 0}
+                      step2Max={turnStep2Max}
+                    />
+                  )}
+
                   {/* Single-Row Core + Skill Controls */}
                   <div
                     data-testid="battle-manual-dock"
@@ -3228,6 +3247,14 @@ export function BattleScreen() {
                               <div className="text-[12px] font-semibold leading-tight truncate">
                                 {getSkillName(lang, skill.id)}
                               </div>
+                              {usability.reason === 'used_this_turn' && reasonText && (
+                                <div
+                                  data-testid={`battle-skill-used-turn-${skill.id}`}
+                                  className="text-[10px] leading-none text-amber-300 font-semibold truncate"
+                                >
+                                  {reasonText}
+                                </div>
+                              )}
                             </button>
                           );
                         })
