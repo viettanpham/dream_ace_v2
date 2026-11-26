@@ -1482,6 +1482,10 @@ export interface AdminConfig {
   cardPopupStaggerMs?: number;
   cardPopupFlightMs?: number;
   cardPopupMaxConcurrent?: number;
+  radarPopupStartScalePct?: number;
+  radarPopupSmallScalePct?: number;
+  radarPopupLargeScalePct?: number;
+  radarPopupBigMaxUnits?: number;
   shieldRegen?: ShieldRegenConfig;
   spEconomy?: SpEconomyConfig;
   fluxTransfer?: FluxTransferConfig;

@@ -1753,6 +1753,12 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'admin.cardPopupStaggerMs': 'Giãn cách số kế (ms, >= 0)',
   'admin.cardPopupFlightMs': 'Thời gian bay vào giữa (ms, >= 1)',
   'admin.cardPopupMaxConcurrent': 'Số bay tối đa cùng lúc (>= 1)',
+  'admin.radarPopupSubtitle':
+    'Số nổi Radar (dùng chung thời gian bay ở trên): cỡ đầu %, cỡ cuối khi ít/đông tàu và ngưỡng số tàu sống.',
+  'admin.radarPopupStartScalePct': 'Radar: Cỡ bắt đầu (%, 20–300)',
+  'admin.radarPopupSmallScalePct': 'Radar: Cỡ cuối trận ít tàu (%, 20–300)',
+  'admin.radarPopupLargeScalePct': 'Radar: Cỡ cuối trận đông tàu (%, 20–300)',
+  'admin.radarPopupBigMaxUnits': 'Radar: Ngưỡng tàu sống dùng cỡ lớn (>= 1)',
   'iconCatalog.title': 'Bảng icon',
   'iconCatalog.subtitle': 'Chỉ xem · {total} biểu tượng trong 8 nhóm',
   'iconCatalog.tagSys': 'sys',

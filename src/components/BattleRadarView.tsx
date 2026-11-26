@@ -5,6 +5,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
 } from 'react';
 import { HelpCircle, Radio, X } from 'lucide-react';
 import { getCatalogRow } from '../data/iconCatalog';
@@ -75,6 +76,10 @@ import {
   type ReducedMotionSetting,
 } from '../utils/battleVfx';
 import { useStatusDisplaySettings } from '../utils/statusDisplayPrefs';
+import {
+  computeRadarPopupScales,
+  resolveRadarPopupConfig,
+} from '../utils/radarPopup';
 import {
   BattleVfxOverlay,
   type ManualAimLineSpec,
@@ -1336,6 +1341,38 @@ export function BattleRadarView({
   );
   const formationConfig = useGameStore((s) => s.adminConfig.formation);
   const iconMods = useGameStore((s) => s.adminConfig.iconCatalogMods);
+  const adminPopupFlightMs = useGameStore(
+    (s) => s.adminConfig.cardPopupFlightMs
+  );
+  const adminRadarStartScalePct = useGameStore(
+    (s) => s.adminConfig.radarPopupStartScalePct
+  );
+  const adminRadarSmallScalePct = useGameStore(
+    (s) => s.adminConfig.radarPopupSmallScalePct
+  );
+  const adminRadarLargeScalePct = useGameStore(
+    (s) => s.adminConfig.radarPopupLargeScalePct
+  );
+  const adminRadarBigMaxUnits = useGameStore(
+    (s) => s.adminConfig.radarPopupBigMaxUnits
+  );
+  const radarPopupCfg = useMemo(
+    () =>
+      resolveRadarPopupConfig({
+        cardPopupFlightMs: adminPopupFlightMs,
+        radarPopupStartScalePct: adminRadarStartScalePct,
+        radarPopupSmallScalePct: adminRadarSmallScalePct,
+        radarPopupLargeScalePct: adminRadarLargeScalePct,
+        radarPopupBigMaxUnits: adminRadarBigMaxUnits,
+      }),
+    [
+      adminPopupFlightMs,
+      adminRadarStartScalePct,
+      adminRadarSmallScalePct,
+      adminRadarLargeScalePct,
+      adminRadarBigMaxUnits,
+    ]
+  );
   const { settings: statusSettings } =
     useStatusDisplaySettings(adminStatusDefaults);
   const detectedMode = useBattleLayoutMode();
@@ -1820,6 +1857,15 @@ export function BattleRadarView({
     return set;
   }, [fadingDefeatIds, battle.explodedUnitIds]);
 
+  const aliveUnitsCount = useMemo(
+    () => battle.units.reduce((acc, u) => (u.alive ? acc + 1 : acc), 0),
+    [battle.units]
+  );
+  const radarPopupScales = useMemo(
+    () => computeRadarPopupScales(aliveUnitsCount, radarPopupCfg),
+    [aliveUnitsCount, radarPopupCfg]
+  );
+
   // One active floating label per alive unit, fixed 18px slot strictly ABOVE the unit ring
   const activeFloatingLabels = useMemo(() => {
     if (skipFloatingLabelsForSpeed) return [];
@@ -1827,6 +1873,7 @@ export function BattleRadarView({
       popup: FloatingPopup;
       leftPct: number;
       topPct: number;
+      dyPct: number;
     }> = [];
     for (const u of battle.units) {
       if (!u.alive) continue;
@@ -1843,7 +1890,10 @@ export function BattleRadarView({
       const topPct = Number(
         Math.max(0.5, Math.min(88, (slotTopSvgY / Math.max(1, vh)) * 100)).toFixed(2)
       );
-      items.push({ popup, leftPct, topPct });
+      const dyPct = Number(
+        (((ringOuterRadius + 12) / Math.max(1, vh)) * 100).toFixed(2)
+      );
+      items.push({ popup, leftPct, topPct, dyPct });
     }
     return items;
   }, [
@@ -2547,6 +2597,9 @@ export function BattleRadarView({
         >
           {activeFloatingLabels.map((item) => {
             const isSmall = isCompactPopupTone(item.popup.tone);
+            const animClass = vfxConfig.reducedMotion
+              ? 'anim-radar-popup-reduced'
+              : 'anim-radar-popup-flight';
             return (
               <div
                 key={item.popup.id}
@@ -2554,13 +2607,24 @@ export function BattleRadarView({
                 data-unit-id={item.popup.unitId}
                 data-slot-height="18"
                 data-popup-compact={isSmall ? 'true' : 'false'}
-                style={{
-                  left: `${item.leftPct}%`,
-                  top: `${item.topPct}%`,
-                  height: '18px',
-                  lineHeight: '18px',
-                }}
-                className={`absolute -translate-x-1/2 h-[18px] leading-[18px] px-1.5 rounded bg-[#050a12]/90 inline-flex items-center justify-center font-display font-bold tracking-wide drop-shadow-[0_1px_3px_rgba(0,0,0,0.95)] whitespace-nowrap ${
+                style={
+                  {
+                    left: `${item.leftPct}%`,
+                    top: `${item.topPct}%`,
+                    height: '18px',
+                    lineHeight: '18px',
+                    transformOrigin: 'center bottom',
+                    transform: `translateX(-50%) scale(${radarPopupScales.finalScale})`,
+                    '--radar-pop-top': `${item.topPct}%`,
+                    '--radar-pop-dy': `${item.dyPct}%`,
+                    '--radar-pop-start-scale': `${radarPopupScales.startScale}`,
+                    '--radar-pop-end-scale': `${radarPopupScales.finalScale}`,
+                    animationDuration: vfxConfig.reducedMotion
+                      ? '160ms'
+                      : `${radarPopupCfg.flightMs}ms`,
+                  } as CSSProperties
+                }
+                className={`absolute h-[18px] leading-[18px] px-1.5 rounded bg-[#050a12]/90 inline-flex items-center justify-center font-display font-bold tracking-wide drop-shadow-[0_1px_3px_rgba(0,0,0,0.95)] whitespace-nowrap ${animClass} ${
                   isSmall
                     ? 'text-[11px]'
                     : item.popup.tone === 'crit'

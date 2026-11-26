@@ -1750,6 +1750,12 @@ export const EN_TRANSLATIONS = {
   'admin.cardPopupStaggerMs': 'Popup stagger (ms, >= 0)',
   'admin.cardPopupFlightMs': 'Flight duration (ms, >= 1)',
   'admin.cardPopupMaxConcurrent': 'Max concurrent popups (>= 1)',
+  'admin.radarPopupSubtitle':
+    'Radar floating labels (reuses flight duration above): start scale %, final scales for small vs crowded battles, and alive-unit threshold.',
+  'admin.radarPopupStartScalePct': 'Radar: Start scale (%, 20–300)',
+  'admin.radarPopupSmallScalePct': 'Radar: Final scale <= threshold (%, 20–300)',
+  'admin.radarPopupLargeScalePct': 'Radar: Final scale > threshold (%, 20–300)',
+  'admin.radarPopupBigMaxUnits': 'Radar: Alive units threshold (>= 1)',
   'iconCatalog.title': 'Icon Catalog',
   'iconCatalog.subtitle': 'Read-only · {total} symbols in 8 groups',
   'iconCatalog.tagSys': 'sys',

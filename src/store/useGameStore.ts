@@ -252,6 +252,12 @@ import {
   sanitizeCardPopupMaxConcurrent,
   sanitizeCardPopupStaggerMs,
 } from '../utils/cardPopupQueue';
+import {
+  sanitizeRadarPopupBigMaxUnits,
+  sanitizeRadarPopupLargeScalePct,
+  sanitizeRadarPopupSmallScalePct,
+  sanitizeRadarPopupStartScalePct,
+} from '../utils/radarPopup';
 import { soundFx } from '../utils/sound';
 
 export const ENABLE_ADMIN_CP: boolean =
@@ -5115,6 +5121,26 @@ export const useGameStore = create<GameStoreState>()(
                 ? patch.cardPopupMaxConcurrent
                 : state.adminConfig.cardPopupMaxConcurrent
             ),
+            radarPopupStartScalePct: sanitizeRadarPopupStartScalePct(
+              patch.radarPopupStartScalePct !== undefined
+                ? patch.radarPopupStartScalePct
+                : state.adminConfig.radarPopupStartScalePct
+            ),
+            radarPopupSmallScalePct: sanitizeRadarPopupSmallScalePct(
+              patch.radarPopupSmallScalePct !== undefined
+                ? patch.radarPopupSmallScalePct
+                : state.adminConfig.radarPopupSmallScalePct
+            ),
+            radarPopupLargeScalePct: sanitizeRadarPopupLargeScalePct(
+              patch.radarPopupLargeScalePct !== undefined
+                ? patch.radarPopupLargeScalePct
+                : state.adminConfig.radarPopupLargeScalePct
+            ),
+            radarPopupBigMaxUnits: sanitizeRadarPopupBigMaxUnits(
+              patch.radarPopupBigMaxUnits !== undefined
+                ? patch.radarPopupBigMaxUnits
+                : state.adminConfig.radarPopupBigMaxUnits
+            ),
             pirates: nextPirates,
             spEconomy: nextSpEconomy,
             fluxTransfer: nextFluxTransfer,
@@ -5446,6 +5472,18 @@ export const useGameStore = create<GameStoreState>()(
               ),
               cardPopupMaxConcurrent: sanitizeCardPopupMaxConcurrent(
                 rawAdmin.cardPopupMaxConcurrent
+              ),
+              radarPopupStartScalePct: sanitizeRadarPopupStartScalePct(
+                rawAdmin.radarPopupStartScalePct
+              ),
+              radarPopupSmallScalePct: sanitizeRadarPopupSmallScalePct(
+                rawAdmin.radarPopupSmallScalePct
+              ),
+              radarPopupLargeScalePct: sanitizeRadarPopupLargeScalePct(
+                rawAdmin.radarPopupLargeScalePct
+              ),
+              radarPopupBigMaxUnits: sanitizeRadarPopupBigMaxUnits(
+                rawAdmin.radarPopupBigMaxUnits
               ),
               ...sanitizeSupplyShopConfig(rawAdmin as Partial<AdminConfig>),
               ...sanitizeSupplyShopExtraConfig(rawAdmin as Partial<AdminConfig>),

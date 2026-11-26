@@ -186,6 +186,16 @@ import {
 import { createDefaultTacticsForClass, sanitizeGearTactics } from './tactics';
 import { ALLOWED_BATTLE_SPEEDS } from '../utils/battleDisplay';
 import { sanitizeStatusDisplayDefaults } from '../utils/statusDisplayPrefs';
+import {
+  DEFAULT_RADAR_POPUP_BIG_MAX_UNITS,
+  DEFAULT_RADAR_POPUP_LARGE_SCALE_PCT,
+  DEFAULT_RADAR_POPUP_SMALL_SCALE_PCT,
+  DEFAULT_RADAR_POPUP_START_SCALE_PCT,
+  sanitizeRadarPopupBigMaxUnits,
+  sanitizeRadarPopupLargeScalePct,
+  sanitizeRadarPopupSmallScalePct,
+  sanitizeRadarPopupStartScalePct,
+} from '../utils/radarPopup';
 
 export { createDefaultWorldClock };
 
@@ -368,6 +378,10 @@ export function createDefaultAdminConfig(): AdminConfig {
     cardPopupStaggerMs: DEFAULT_CARD_POPUP_STAGGER_MS,
     cardPopupFlightMs: DEFAULT_CARD_POPUP_FLIGHT_MS,
     cardPopupMaxConcurrent: DEFAULT_CARD_POPUP_MAX_CONCURRENT,
+    radarPopupStartScalePct: DEFAULT_RADAR_POPUP_START_SCALE_PCT,
+    radarPopupSmallScalePct: DEFAULT_RADAR_POPUP_SMALL_SCALE_PCT,
+    radarPopupLargeScalePct: DEFAULT_RADAR_POPUP_LARGE_SCALE_PCT,
+    radarPopupBigMaxUnits: DEFAULT_RADAR_POPUP_BIG_MAX_UNITS,
     shieldRegen: { ...DEFAULT_SHIELD_REGEN_CONFIG },
     spEconomy: cloneSpEconomyConfig(DEFAULT_SP_ECONOMY_CONFIG),
     fluxTransfer: cloneFluxTransferConfig(DEFAULT_FLUX_TRANSFER_CONFIG),
@@ -740,6 +754,18 @@ export function migrateSaveData(
     cardPopupFlightMs: sanitizeCardPopupFlightMs(rawAdmin.cardPopupFlightMs),
     cardPopupMaxConcurrent: sanitizeCardPopupMaxConcurrent(
       rawAdmin.cardPopupMaxConcurrent
+    ),
+    radarPopupStartScalePct: sanitizeRadarPopupStartScalePct(
+      rawAdmin.radarPopupStartScalePct
+    ),
+    radarPopupSmallScalePct: sanitizeRadarPopupSmallScalePct(
+      rawAdmin.radarPopupSmallScalePct
+    ),
+    radarPopupLargeScalePct: sanitizeRadarPopupLargeScalePct(
+      rawAdmin.radarPopupLargeScalePct
+    ),
+    radarPopupBigMaxUnits: sanitizeRadarPopupBigMaxUnits(
+      rawAdmin.radarPopupBigMaxUnits
     ),
     shieldRegen: sanitizeShieldRegenConfig(rawAdmin.shieldRegen),
     spEconomy: sanitizeSpEconomyConfig(rawAdmin.spEconomy),

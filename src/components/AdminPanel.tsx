@@ -108,6 +108,13 @@ import {
   sanitizeCardPopupMaxConcurrent,
   sanitizeCardPopupStaggerMs,
 } from '../utils/cardPopupQueue';
+import {
+  resolveRadarPopupConfig,
+  sanitizeRadarPopupBigMaxUnits,
+  sanitizeRadarPopupLargeScalePct,
+  sanitizeRadarPopupSmallScalePct,
+  sanitizeRadarPopupStartScalePct,
+} from '../utils/radarPopup';
 import type {
   BattleSize,
   CombatRow,
@@ -2717,6 +2724,108 @@ export function AdminPanel() {
                         />
                       </label>
                     </div>
+
+                    {(() => {
+                      const radarPopupCfg = resolveRadarPopupConfig(adminConfig);
+                      return (
+                        <div
+                          data-testid="admin-radar-popup-fields"
+                          className="pt-2.5 border-t border-slate-800/80 space-y-2"
+                        >
+                          <p className="text-[11px] text-slate-400 leading-snug">
+                            {t('admin.radarPopupSubtitle')}
+                          </p>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                            <label className="space-y-1 block">
+                              <span className="text-[11px] text-slate-400 block">
+                                {t('admin.radarPopupStartScalePct')}
+                              </span>
+                              <input
+                                type="number"
+                                data-testid="admin-radar-popup-start-scale"
+                                min={20}
+                                max={300}
+                                value={radarPopupCfg.startScalePct}
+                                onChange={(e) =>
+                                  adminUpdateConfig({
+                                    radarPopupStartScalePct:
+                                      sanitizeRadarPopupStartScalePct(
+                                        Number(e.target.value)
+                                      ),
+                                  })
+                                }
+                                className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                              />
+                            </label>
+
+                            <label className="space-y-1 block">
+                              <span className="text-[11px] text-slate-400 block">
+                                {t('admin.radarPopupSmallScalePct')}
+                              </span>
+                              <input
+                                type="number"
+                                data-testid="admin-radar-popup-small-scale"
+                                min={20}
+                                max={300}
+                                value={radarPopupCfg.smallScalePct}
+                                onChange={(e) =>
+                                  adminUpdateConfig({
+                                    radarPopupSmallScalePct:
+                                      sanitizeRadarPopupSmallScalePct(
+                                        Number(e.target.value)
+                                      ),
+                                  })
+                                }
+                                className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                              />
+                            </label>
+
+                            <label className="space-y-1 block">
+                              <span className="text-[11px] text-slate-400 block">
+                                {t('admin.radarPopupLargeScalePct')}
+                              </span>
+                              <input
+                                type="number"
+                                data-testid="admin-radar-popup-large-scale"
+                                min={20}
+                                max={300}
+                                value={radarPopupCfg.largeScalePct}
+                                onChange={(e) =>
+                                  adminUpdateConfig({
+                                    radarPopupLargeScalePct:
+                                      sanitizeRadarPopupLargeScalePct(
+                                        Number(e.target.value)
+                                      ),
+                                  })
+                                }
+                                className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                              />
+                            </label>
+
+                            <label className="space-y-1 block">
+                              <span className="text-[11px] text-slate-400 block">
+                                {t('admin.radarPopupBigMaxUnits')}
+                              </span>
+                              <input
+                                type="number"
+                                data-testid="admin-radar-popup-big-max-units"
+                                min={1}
+                                value={radarPopupCfg.bigMaxUnits}
+                                onChange={(e) =>
+                                  adminUpdateConfig({
+                                    radarPopupBigMaxUnits:
+                                      sanitizeRadarPopupBigMaxUnits(
+                                        Number(e.target.value)
+                                      ),
+                                  })
+                                }
+                                className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                              />
+                            </label>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 );
               })()}
