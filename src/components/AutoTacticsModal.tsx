@@ -22,6 +22,7 @@ import {
   TACTICS_CONDITION_KINDS,
   TACTICS_TARGET_SELECTORS,
 } from '../engine/tactics';
+import { sanitizeLidarAutoConfig } from '../engine/lidarAuto';
 import {
   formatSimpleTacticsSummary,
   formatTacticsRuleSentence,
@@ -190,6 +191,7 @@ export function AutoTacticsModal() {
       activeGear.classId,
       activeGear.equippedSkillBar
     );
+  const lidarCfg = sanitizeLidarAutoConfig(simpleConfig.lidarAuto);
   const maxRules = BALANCE_CONFIG.maxTacticsRules;
 
   const handleTogglePrioritySkill = (skillId: string) => {
@@ -694,6 +696,108 @@ export function AutoTacticsModal() {
                     );
                   })}
                 </div>
+              )}
+            </div>
+
+            {/* Control 6: Auto Lidar */}
+            <div
+              data-testid="auto-lidar-section"
+              className="rounded-lg border border-slate-800 bg-[#090E18] p-3.5 space-y-2.5"
+            >
+              <div className="flex items-center justify-between gap-2 min-w-0">
+                <span className="text-sm font-semibold text-slate-100 truncate">
+                  {t('auto.simple.lidarLabel')}
+                </span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={lidarCfg.enabled}
+                  aria-label={t('auto.simple.lidarLabel')}
+                  data-testid="auto-lidar-toggle"
+                  onClick={() =>
+                    applySimpleTactics({
+                      lidarAuto: {
+                        ...lidarCfg,
+                        enabled: !lidarCfg.enabled,
+                      },
+                    })
+                  }
+                  className={`min-h-[36px] min-w-[52px] px-2.5 rounded-lg border text-xs font-semibold transition-colors cursor-pointer shrink-0 ${
+                    lidarCfg.enabled
+                      ? 'border-emerald-400 bg-emerald-500/25 text-emerald-200'
+                      : 'border-slate-700 bg-slate-900 text-slate-400'
+                  }`}
+                >
+                  {lidarCfg.enabled ? 'ON' : 'OFF'}
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-1.5">
+                {(['smart', 'fixed'] as const).map((mode) => {
+                  const active = lidarCfg.mode === mode;
+                  const labelKey =
+                    mode === 'smart'
+                      ? 'auto.simple.lidarModeSmart'
+                      : 'auto.simple.lidarModeFixed';
+                  return (
+                    <button
+                      key={mode}
+                      type="button"
+                      data-testid={`auto-lidar-mode-${mode}`}
+                      onClick={() =>
+                        applySimpleTactics({
+                          lidarAuto: {
+                            ...lidarCfg,
+                            mode,
+                          },
+                        })
+                      }
+                      className={`min-h-[40px] px-3 py-1.5 rounded border text-xs font-medium transition-colors cursor-pointer ${
+                        active
+                          ? 'border-cyan-400 bg-cyan-500/20 text-cyan-100 font-semibold'
+                          : 'border-slate-700/90 bg-slate-950/70 hover:border-slate-600 text-slate-300'
+                      }`}
+                    >
+                      {t(labelKey)}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {lidarCfg.mode === 'fixed' && (
+                <label className="flex items-center justify-between gap-2 min-w-0 pt-0.5">
+                  <span className="text-xs text-slate-300 shrink-0">
+                    {t('auto.simple.lidarMinSpLabel')}
+                  </span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <input
+                      type="number"
+                      data-testid="auto-lidar-min-sp-input"
+                      min={0}
+                      max={100}
+                      step={5}
+                      value={lidarCfg.minSpPct}
+                      onChange={(e) =>
+                        applySimpleTactics({
+                          lidarAuto: {
+                            ...lidarCfg,
+                            minSpPct: Math.max(
+                              0,
+                              Math.min(
+                                100,
+                                Math.round(Number(e.target.value) || 0)
+                              )
+                            ),
+                          },
+                        })
+                      }
+                      className="w-20 h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums text-slate-100 text-right"
+                    />
+                    <span className="text-xs font-mono-nums text-slate-400">
+                      %
+                    </span>
+                  </div>
+                </label>
               )}
             </div>
           </div>

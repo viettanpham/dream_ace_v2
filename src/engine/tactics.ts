@@ -38,6 +38,10 @@ import {
   hasStatus,
   isUnitStealthed,
 } from './combat';
+import {
+  DEFAULT_LIDAR_AUTO_CONFIG,
+  sanitizeLidarAutoConfig,
+} from './lidarAuto';
 import { canUnitUseSkill, isSkillAllowedForClass } from './skills';
 
 export const MAX_PRIORITY_SKILLS = BALANCE_CONFIG.maxEquippedActiveSkills;
@@ -681,6 +685,8 @@ export function createSimplePresetConfig(
     MAX_PRIORITY_SKILLS
   );
 
+  const defaultLidarAuto = { ...DEFAULT_LIDAR_AUTO_CONFIG };
+
   switch (presetId) {
     case 'aggressive':
       return {
@@ -691,6 +697,7 @@ export function createSimplePresetConfig(
         lowHpAction: 'nothing',
         elitePolicy: 'immediate',
         prioritySkillIds: defaultPriority,
+        lidarAuto: defaultLidarAuto,
       };
     case 'defensive':
       return {
@@ -701,6 +708,7 @@ export function createSimplePresetConfig(
         lowHpAction: classId === 'support' ? 'heal' : 'defend',
         elitePolicy: 'boss_only',
         prioritySkillIds: defaultPriority.slice(0, 2),
+        lidarAuto: defaultLidarAuto,
       };
     case 'support_team':
       return {
@@ -711,6 +719,7 @@ export function createSimplePresetConfig(
         lowHpAction: classId === 'support' ? 'heal' : 'defend',
         elitePolicy: 'boss_only',
         prioritySkillIds: defaultPriority,
+        lidarAuto: defaultLidarAuto,
       };
     case 'save_sp':
       return {
@@ -721,6 +730,7 @@ export function createSimplePresetConfig(
         lowHpAction: 'defend',
         elitePolicy: 'boss_only',
         prioritySkillIds: defaultPriority.slice(0, 2),
+        lidarAuto: defaultLidarAuto,
       };
     case 'balanced':
     default:
@@ -737,6 +747,7 @@ export function createSimplePresetConfig(
         lowHpAction: classId === 'support' ? 'heal' : 'defend',
         elitePolicy: 'boss_only',
         prioritySkillIds: defaultPriority,
+        lidarAuto: defaultLidarAuto,
       };
   }
 }
@@ -810,6 +821,8 @@ export function sanitizeSimpleTacticsConfig(
     }
   }
 
+  const lidarAuto = sanitizeLidarAutoConfig(obj.lidarAuto);
+
   return {
     presetId,
     preferredTarget,
@@ -818,6 +831,7 @@ export function sanitizeSimpleTacticsConfig(
     lowHpAction,
     elitePolicy,
     prioritySkillIds,
+    lidarAuto,
   };
 }
 

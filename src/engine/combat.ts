@@ -101,8 +101,9 @@ import {
   DEBUFF_TYPES,
   sanitizePrestageConfig,
 } from './prestage';
+import { LIDAR_SKILL_ID, pickLidarCast } from './lidarAuto';
 
-export { DEBUFF_TYPES };
+export { DEBUFF_TYPES, pickLidarCast };
 
 let uidCounter = 1;
 function nextId(prefix: string): string {
@@ -4545,7 +4546,8 @@ export function chooseAiDecision(
   units: CombatUnit[],
   rng: () => number = Math.random,
   adminConfig?: Partial<AdminConfig>,
-  turnLockedSkillIds?: readonly string[]
+  turnLockedSkillIds?: readonly string[],
+  step2UsedSoFar: number = 0
 ): { action: ActionType; targetId: string | null; skillId?: string; transferCount?: number } {
   const allies = units.filter((u) => u.side === actor.side && u.alive);
   const enemies = getValidEnemyTargets(units, actor, 'attack');
@@ -4594,13 +4596,21 @@ export function chooseAiDecision(
     }
   }
 
-  // Scan if any opposing ship is stealthed
-  const scanSkill = usableSkills.find((s) => s.effectKind === 'scan_reveal');
+  // NPC Support Lidar sweep (step-2 skill governed by pickLidarCast)
   if (
-    scanSkill &&
-    units.some((u) => u.side !== actor.side && u.alive && isUnitStealthed(u))
+    pickLidarCast(
+      units,
+      actor,
+      {
+        role: 'npc',
+        adminConfig,
+        step2UsedSoFar,
+        turnLockedSkillIds,
+      },
+      rng
+    )
   ) {
-    return { action: 'skill', targetId: null, skillId: scanSkill.id };
+    return { action: 'skill', targetId: null, skillId: LIDAR_SKILL_ID };
   }
 
   // Support Flux Transfer (sp_transfer): dedicated emergency threshold & keep-self rule
@@ -4625,13 +4635,14 @@ export function chooseAiDecision(
     }
   }
 
-  // Offensive or tactical skill roll (sp_transfer excluded; handled above)
+  // Offensive or tactical skill roll (sp_transfer & scan_reveal excluded; handled above)
   const tacticalSkills = usableSkills.filter(
     (s) =>
       !s.isToggle &&
       s.effectKind !== 'heal_single' &&
       s.effectKind !== 'heal_field_hot' &&
-      s.effectKind !== 'sp_transfer'
+      s.effectKind !== 'sp_transfer' &&
+      s.effectKind !== 'scan_reveal'
   );
   if (tacticalSkills.length > 0 && rng() < 0.55) {
     const pick = randomItem(tacticalSkills, rng);
@@ -4693,7 +4704,8 @@ export function resolveMultiStepTurn(params: {
     currentUnits: CombatUnit[],
     currentActor: CombatUnit,
     turnLockedSkillIds: string[],
-    stepIndex: number
+    stepIndex: number,
+    step2UsedSoFar: number
   ) => TurnDecision | null | undefined;
 }): MultiStepTurnResolution {
   const {
@@ -4742,7 +4754,8 @@ export function resolveMultiStepTurn(params: {
       currentUnits,
       currentActor,
       lockedSkillIds,
-      stepIdx
+      stepIdx,
+      step2Used
     );
     const decision: TurnDecision = picked ?? {
       action: 'defend',

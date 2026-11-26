@@ -694,6 +694,14 @@ export type SimpleLowHpAction = 'defend' | 'heal' | 'retreat' | 'nothing';
 
 export type SimpleElitePolicy = 'immediate' | 'boss_only' | 'off';
 
+export type LidarAutoMode = 'smart' | 'fixed';
+
+export interface LidarAutoConfig {
+  enabled: boolean;
+  mode: LidarAutoMode;
+  minSpPct: number; // default 50 (0..100)
+}
+
 export interface SimpleTacticsConfig {
   presetId: SimpleTacticsPresetId;
   preferredTarget: SimpleTargetPref;
@@ -702,6 +710,7 @@ export interface SimpleTacticsConfig {
   lowHpAction: SimpleLowHpAction;
   elitePolicy: SimpleElitePolicy;
   prioritySkillIds: string[]; // up to MAX_PRIORITY_SKILLS skill IDs from equipped bar (A > B > C ...)
+  lidarAuto?: LidarAutoConfig;
 }
 
 export type TacticsMode = 'simple' | 'custom';

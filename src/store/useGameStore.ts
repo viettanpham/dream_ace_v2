@@ -45,6 +45,7 @@ import {
   sanitizeTurnPhaseConfig,
 } from '../engine/turnPhase';
 import { sanitizePrestageConfig } from '../engine/prestage';
+import { LIDAR_SKILL_ID, pickLidarCast } from '../engine/lidarAuto';
 import {
   equipItemOnGear,
   generateItemInstance,
@@ -3607,7 +3608,34 @@ export const useGameStore = create<GameStoreState>()(
           rng: Math.random,
           initialTurnStep2Used: battle.turnStep2Used ?? 0,
           initialTurnLockedSkillIds: battle.turnLockedSkillIds ?? [],
-          chooseNextDecision: (curUnits, curActor, lockedSkillIds) => {
+          chooseNextDecision: (
+            curUnits,
+            curActor,
+            lockedSkillIds,
+            _stepIdx,
+            step2UsedSoFar
+          ) => {
+            if (
+              pickLidarCast(
+                curUnits,
+                curActor,
+                {
+                  role: 'player',
+                  lidarAuto: tactics.simple?.lidarAuto,
+                  adminConfig: state.adminConfig,
+                  step2UsedSoFar,
+                  turnLockedSkillIds: lockedSkillIds,
+                },
+                Math.random
+              )
+            ) {
+              return {
+                action: 'skill',
+                targetId: null,
+                skillId: LIDAR_SKILL_ID,
+                matchedRuleIndex: null,
+              };
+            }
             let choice = chooseAction(
               {
                 ...battle,
@@ -3867,7 +3895,13 @@ export const useGameStore = create<GameStoreState>()(
           rng: Math.random,
           initialTurnStep2Used: battle.turnStep2Used ?? 0,
           initialTurnLockedSkillIds: battle.turnLockedSkillIds ?? [],
-          chooseNextDecision: (curUnits, curActor, lockedSkillIds) =>
+          chooseNextDecision: (
+            curUnits,
+            curActor,
+            lockedSkillIds,
+            _stepIdx,
+            step2UsedSoFar
+          ) =>
             playerIsCharging
               ? {
                   action: 'attack',
@@ -3878,7 +3912,8 @@ export const useGameStore = create<GameStoreState>()(
                   curUnits,
                   Math.random,
                   state.adminConfig,
-                  lockedSkillIds
+                  lockedSkillIds,
+                  step2UsedSoFar
                 ),
         });
         playCue(resolution.soundCue, muteSound);

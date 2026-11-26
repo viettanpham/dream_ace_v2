@@ -1004,6 +1004,10 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'auto.simple.priorityEmpty': 'Chưa chọn kỹ năng ưu tiên (Auto sẽ đánh thường + xử lý sinh tồn).',
   'auto.simple.noEquippedSkills': 'Hãy gắn kỹ năng chủ động ở tab Kỹ năng để chọn ưu tiên.',
   'auto.simple.generatedCount': 'Tạo tự động {count} quy tắc đang chạy',
+  'auto.simple.lidarLabel': 'Tự quét Lidar',
+  'auto.simple.lidarModeSmart': 'Thông minh',
+  'auto.simple.lidarModeFixed': 'Theo %',
+  'auto.simple.lidarMinSpLabel': 'khi SP ≥ %',
 
   // Admin CP Cuồng nộ chống kéo dài
   'admin.softEnrage': 'Cuồng nộ chống kéo dài (Vòng 20+)',

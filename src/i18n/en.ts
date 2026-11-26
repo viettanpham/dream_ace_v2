@@ -1002,6 +1002,10 @@ export const EN_TRANSLATIONS = {
   'auto.simple.priorityEmpty': 'No priority skills picked (Auto uses basic attacks + survival rules).',
   'auto.simple.noEquippedSkills': 'Equip active skills in the Skills tab to prioritize them here.',
   'auto.simple.generatedCount': 'Generates {count} active rules',
+  'auto.simple.lidarLabel': 'Auto Lidar',
+  'auto.simple.lidarModeSmart': 'Smart',
+  'auto.simple.lidarModeFixed': 'By %',
+  'auto.simple.lidarMinSpLabel': 'when SP ≥ %',
 
   // Admin CP Soft Enrage
   'admin.softEnrage': 'Soft Enrage (Round 20+)',
