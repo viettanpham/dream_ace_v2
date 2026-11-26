@@ -124,11 +124,16 @@ import {
   sanitizeSupplyLoadout,
   sanitizeSupplyLoadoutSlots,
   sanitizeSupplyScanCount,
+  sanitizeSupplyUsesPerTurn,
   setSupplyLoadout as setSupplyLoadoutEngine,
   SUPPLY_STACK_CAP,
   tickBattleSupplyForUnit,
   type SupplyLoadoutReject,
 } from '../engine/supplies';
+import {
+  pickAutoSupplies,
+  sanitizeAutoSuppliesConfig,
+} from '../engine/supplyAi';
 import { computeSupplyPrice } from '../engine/itemPrice';
 import {
   clearModule as clearModuleEngine,
@@ -3766,8 +3771,8 @@ export const useGameStore = create<GameStoreState>()(
       },
 
       performAutoPlayerTurn: () => {
-        const state = get();
-        const { battle } = state;
+        let state = get();
+        let { battle } = state;
         if (
           !battle ||
           battle.summary ||
@@ -3779,11 +3784,86 @@ export const useGameStore = create<GameStoreState>()(
         }
 
         const activeUnitId = battle.turnOrder[battle.activeTurnIndex];
-        const activeUnit = battle.units.find((u) => u.id === activeUnitId);
+        let activeUnit = battle.units.find((u) => u.id === activeUnitId);
         if (!activeUnit || !activeUnit.isPlayer || !activeUnit.alive) return;
 
-        const deployedGear = state.pilot.gears[battle.deployedGearId];
-        const tactics = deployedGear.tactics;
+        let deployedGear = state.pilot.gears[battle.deployedGearId];
+        let tactics = deployedGear.tactics;
+
+        // 0. Auto supplies (when enabled in Simple tactics, runs at start of player's auto turn)
+        const autoSuppliesCfg = sanitizeAutoSuppliesConfig(
+          tactics.simple?.autoSupplies
+        );
+        if (autoSuppliesCfg.enabled) {
+          const usesPerTurn = sanitizeSupplyUsesPerTurn(
+            state.adminConfig?.supplyUsesPerTurn
+          );
+          for (let i = 0; i < usesPerTurn; i++) {
+            const curState = get();
+            const curBattle = curState.battle;
+            if (
+              !curBattle ||
+              curBattle.summary ||
+              curBattle.isResolving ||
+              curBattle.prestage?.active ||
+              !curState.autoBattleEnabled
+            ) {
+              return;
+            }
+            const curUnit = curBattle.units.find((u) => u.id === activeUnitId);
+            if (!curUnit || !curUnit.isPlayer || !curUnit.alive) return;
+            const curGear = curState.pilot.gears[curBattle.deployedGearId];
+            const maxSlots = sanitizeSupplyLoadoutSlots(
+              curState.adminConfig?.supplyLoadoutSlots
+            );
+            const loadoutIds = sanitizeSupplyLoadout(
+              curGear?.supplyLoadout,
+              maxSlots
+            );
+            const loadoutTemplates = loadoutIds
+              .map((id) => getSupplyTemplateById(id))
+              .filter((t): t is NonNullable<typeof t> => Boolean(t));
+            if (loadoutTemplates.length === 0) break;
+            const stockByTemplate: Record<string, number> = {};
+            for (const tpl of loadoutTemplates) {
+              stockByTemplate[tpl.id] = getSupplyStockCount(
+                curState.pilot.consumables,
+                tpl.id
+              );
+            }
+            const picks = pickAutoSupplies({
+              unit: curUnit,
+              loadoutTemplates,
+              stockByTemplate,
+              unitState: curBattle.supplyByUnit?.[curUnit.id],
+              cfg: autoSuppliesCfg,
+              adminCfg: curState.adminConfig,
+              kind: curBattle.kind,
+              units: curBattle.units,
+            });
+            if (picks.length === 0) break;
+            curState.useBattleSupply(picks[0]);
+          }
+
+          state = get();
+          battle = state.battle;
+          if (
+            !battle ||
+            battle.summary ||
+            battle.isResolving ||
+            battle.prestage?.active ||
+            !state.autoBattleEnabled
+          ) {
+            return;
+          }
+          const refreshedUnit = battle.units.find((u) => u.id === activeUnitId);
+          if (!refreshedUnit || !refreshedUnit.isPlayer || !refreshedUnit.alive) {
+            return;
+          }
+          activeUnit = refreshedUnit;
+          deployedGear = state.pilot.gears[battle.deployedGearId];
+          tactics = deployedGear.tactics;
+        }
 
         // 1. Evaluate Safety Stops before executing Auto turn
         const safetyEval = evaluateAutoSafety(

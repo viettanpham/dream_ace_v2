@@ -1017,6 +1017,12 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'auto.simple.fluxAllySpLabel': 'Chỉ truyền khi đồng minh dưới',
   'auto.simple.fluxKeepSelfPrefix': 'Giữ lại ít nhất',
   'auto.simple.fluxKeepSelfSuffix': '% SP của mình',
+  'auto.simple.suppliesLabel': 'Tự dùng vật tư',
+  'auto.simple.suppliesHpLabel': 'HP dưới',
+  'auto.simple.suppliesShieldLabel': 'Khiên dưới',
+  'auto.simple.suppliesSpLabel': 'SP dưới',
+  'auto.simple.suppliesHelp':
+    'Chỉ dùng vật tư trong Túi vật tư. Thiết bị quét không tự dùng.',
 
   // Admin CP Cuồng nộ chống kéo dài
   'admin.softEnrage': 'Cuồng nộ chống kéo dài (Vòng 20+)',

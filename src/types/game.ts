@@ -723,6 +723,14 @@ export interface FluxAutoConfig {
   keepSelfPct: number; // default 50 (0..100)
 }
 
+export interface AutoSuppliesConfig {
+  enabled: boolean;
+  hpBelowPct: number; // default 35 (5..90)
+  shieldBelowPct: number; // default 25 (5..90)
+  spBelowPct: number; // default 20 (5..90)
+  buffAtStart: boolean; // default true (stored for CS5)
+}
+
 export interface SimpleTacticsConfig {
   presetId: SimpleTacticsPresetId;
   preferredTarget: SimpleTargetPref;
@@ -733,6 +741,7 @@ export interface SimpleTacticsConfig {
   prioritySkillIds: string[]; // up to MAX_PRIORITY_SKILLS skill IDs from equipped bar (A > B > C ...)
   lidarAuto?: LidarAutoConfig;
   fluxAuto?: FluxAutoConfig;
+  autoSupplies?: AutoSuppliesConfig;
 }
 
 export type TacticsMode = 'simple' | 'custom';

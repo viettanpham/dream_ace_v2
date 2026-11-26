@@ -1015,6 +1015,12 @@ export const EN_TRANSLATIONS = {
   'auto.simple.fluxAllySpLabel': 'Transfer only when ally <',
   'auto.simple.fluxKeepSelfPrefix': 'Keep at least',
   'auto.simple.fluxKeepSelfSuffix': '% of own SP',
+  'auto.simple.suppliesLabel': 'Auto-use supplies',
+  'auto.simple.suppliesHpLabel': 'HP below',
+  'auto.simple.suppliesShieldLabel': 'Shield below',
+  'auto.simple.suppliesSpLabel': 'SP below',
+  'auto.simple.suppliesHelp':
+    'Uses supplies from the Supply Bag only. Scan devices are never auto-used.',
 
   // Admin CP Soft Enrage
   'admin.softEnrage': 'Soft Enrage (Round 20+)',

@@ -43,6 +43,10 @@ import {
   sanitizeLidarAutoConfig,
 } from './lidarAuto';
 import {
+  DEFAULT_AUTO_SUPPLIES_CONFIG,
+  sanitizeAutoSuppliesConfig,
+} from './supplyAi';
+import {
   DEFAULT_FLUX_AUTO_CONFIG,
   sanitizeFluxAutoConfig,
 } from './fluxAuto';
@@ -691,6 +695,7 @@ export function createSimplePresetConfig(
 
   const defaultLidarAuto = { ...DEFAULT_LIDAR_AUTO_CONFIG };
   const defaultFluxAuto = { ...DEFAULT_FLUX_AUTO_CONFIG };
+  const defaultAutoSupplies = { ...DEFAULT_AUTO_SUPPLIES_CONFIG };
 
   switch (presetId) {
     case 'aggressive':
@@ -704,6 +709,7 @@ export function createSimplePresetConfig(
         prioritySkillIds: defaultPriority,
         lidarAuto: defaultLidarAuto,
         fluxAuto: defaultFluxAuto,
+        autoSupplies: defaultAutoSupplies,
       };
     case 'defensive':
       return {
@@ -716,6 +722,7 @@ export function createSimplePresetConfig(
         prioritySkillIds: defaultPriority.slice(0, 2),
         lidarAuto: defaultLidarAuto,
         fluxAuto: defaultFluxAuto,
+        autoSupplies: defaultAutoSupplies,
       };
     case 'support_team':
       return {
@@ -728,6 +735,7 @@ export function createSimplePresetConfig(
         prioritySkillIds: defaultPriority,
         lidarAuto: defaultLidarAuto,
         fluxAuto: defaultFluxAuto,
+        autoSupplies: defaultAutoSupplies,
       };
     case 'save_sp':
       return {
@@ -740,6 +748,7 @@ export function createSimplePresetConfig(
         prioritySkillIds: defaultPriority.slice(0, 2),
         lidarAuto: defaultLidarAuto,
         fluxAuto: defaultFluxAuto,
+        autoSupplies: defaultAutoSupplies,
       };
     case 'balanced':
     default:
@@ -758,6 +767,7 @@ export function createSimplePresetConfig(
         prioritySkillIds: defaultPriority,
         lidarAuto: defaultLidarAuto,
         fluxAuto: defaultFluxAuto,
+        autoSupplies: defaultAutoSupplies,
       };
   }
 }
@@ -833,6 +843,7 @@ export function sanitizeSimpleTacticsConfig(
 
   const lidarAuto = sanitizeLidarAutoConfig(obj.lidarAuto);
   const fluxAuto = sanitizeFluxAutoConfig(obj.fluxAuto);
+  const autoSupplies = sanitizeAutoSuppliesConfig(obj.autoSupplies);
 
   return {
     presetId,
@@ -844,6 +855,7 @@ export function sanitizeSimpleTacticsConfig(
     prioritySkillIds,
     lidarAuto,
     fluxAuto,
+    autoSupplies,
   };
 }
 

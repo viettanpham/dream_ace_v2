@@ -25,6 +25,11 @@ import {
 import { sanitizeLidarAutoConfig } from '../engine/lidarAuto';
 import { sanitizeFluxAutoConfig } from '../engine/fluxAuto';
 import {
+  AUTO_SUPPLIES_MAX_PCT,
+  AUTO_SUPPLIES_MIN_PCT,
+  sanitizeAutoSuppliesConfig,
+} from '../engine/supplyAi';
+import {
   formatSimpleTacticsSummary,
   formatTacticsRuleSentence,
   getClassName,
@@ -190,12 +195,22 @@ export function AutoTacticsModal() {
     );
   const lidarCfg = sanitizeLidarAutoConfig(simpleConfig.lidarAuto);
   const fluxCfg = sanitizeFluxAutoConfig(simpleConfig.fluxAuto);
+  const suppliesCfg = sanitizeAutoSuppliesConfig(simpleConfig.autoSupplies);
 
   const [fluxAllyDraft, setFluxAllyDraft] = useState<string>(() =>
     String(fluxCfg.allySpBelowPct)
   );
   const [fluxKeepDraft, setFluxKeepDraft] = useState<string>(() =>
     String(fluxCfg.keepSelfPct)
+  );
+  const [supHpDraft, setSupHpDraft] = useState<string>(() =>
+    String(suppliesCfg.hpBelowPct)
+  );
+  const [supShieldDraft, setSupShieldDraft] = useState<string>(() =>
+    String(suppliesCfg.shieldBelowPct)
+  );
+  const [supSpDraft, setSupSpDraft] = useState<string>(() =>
+    String(suppliesCfg.spBelowPct)
   );
 
   useEffect(() => {
@@ -205,6 +220,18 @@ export function AutoTacticsModal() {
   useEffect(() => {
     setFluxKeepDraft(String(fluxCfg.keepSelfPct));
   }, [fluxCfg.keepSelfPct, open]);
+
+  useEffect(() => {
+    setSupHpDraft(String(suppliesCfg.hpBelowPct));
+  }, [suppliesCfg.hpBelowPct, open]);
+
+  useEffect(() => {
+    setSupShieldDraft(String(suppliesCfg.shieldBelowPct));
+  }, [suppliesCfg.shieldBelowPct, open]);
+
+  useEffect(() => {
+    setSupSpDraft(String(suppliesCfg.spBelowPct));
+  }, [suppliesCfg.spBelowPct, open]);
 
   if (!open) return null;
 
@@ -246,6 +273,32 @@ export function AutoTacticsModal() {
       fluxAuto: {
         ...fluxCfg,
         keepSelfPct: next,
+      },
+    });
+  };
+
+  const commitSupplyPct = (
+    field: 'hpBelowPct' | 'shieldBelowPct' | 'spBelowPct',
+    draft: string,
+    setDraft: (v: string) => void
+  ) => {
+    const trimmed = draft.trim();
+    const parsed = Number(trimmed);
+    if (
+      trimmed === '' ||
+      !Number.isFinite(parsed) ||
+      parsed < AUTO_SUPPLIES_MIN_PCT ||
+      parsed > AUTO_SUPPLIES_MAX_PCT
+    ) {
+      setDraft(String(suppliesCfg[field]));
+      return;
+    }
+    const next = Math.round(parsed);
+    setDraft(String(next));
+    applySimpleTactics({
+      autoSupplies: {
+        ...suppliesCfg,
+        [field]: next,
       },
     });
   };
@@ -988,6 +1041,106 @@ export function AutoTacticsModal() {
                 )}
               </div>
             )}
+
+            {/* Control 8: Auto-use Supplies */}
+            <div
+              data-testid="auto-supplies-section"
+              className="rounded-lg border border-slate-800 bg-[#090E18] p-3.5 space-y-2.5"
+            >
+              <div className="flex items-center justify-between gap-2 min-w-0">
+                <span className="text-sm font-semibold text-slate-100 truncate">
+                  {t('auto.simple.suppliesLabel')}
+                </span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={suppliesCfg.enabled}
+                  aria-label={t('auto.simple.suppliesLabel')}
+                  data-testid="auto-supplies-toggle"
+                  onClick={() =>
+                    applySimpleTactics({
+                      autoSupplies: {
+                        ...suppliesCfg,
+                        enabled: !suppliesCfg.enabled,
+                      },
+                    })
+                  }
+                  className={`min-h-[36px] min-w-[52px] px-2.5 rounded-lg border text-xs font-semibold transition-colors cursor-pointer shrink-0 ${
+                    suppliesCfg.enabled
+                      ? 'border-emerald-400 bg-emerald-500/25 text-emerald-200'
+                      : 'border-slate-700 bg-slate-900 text-slate-400'
+                  }`}
+                >
+                  {suppliesCfg.enabled ? 'ON' : 'OFF'}
+                </button>
+              </div>
+
+              {suppliesCfg.enabled && (
+                <div className="space-y-2 pt-0.5">
+                  {(
+                    [
+                      {
+                        field: 'hpBelowPct' as const,
+                        testId: 'auto-supplies-hp-input',
+                        labelKey: 'auto.simple.suppliesHpLabel',
+                        draft: supHpDraft,
+                        setDraft: setSupHpDraft,
+                      },
+                      {
+                        field: 'shieldBelowPct' as const,
+                        testId: 'auto-supplies-shield-input',
+                        labelKey: 'auto.simple.suppliesShieldLabel',
+                        draft: supShieldDraft,
+                        setDraft: setSupShieldDraft,
+                      },
+                      {
+                        field: 'spBelowPct' as const,
+                        testId: 'auto-supplies-sp-input',
+                        labelKey: 'auto.simple.suppliesSpLabel',
+                        draft: supSpDraft,
+                        setDraft: setSupSpDraft,
+                      },
+                    ] as const
+                  ).map((row) => (
+                    <label
+                      key={row.field}
+                      className="flex items-center justify-between gap-2 min-w-0"
+                    >
+                      <span className="text-xs text-slate-300 leading-snug min-w-0 flex-1 truncate">
+                        {t(row.labelKey)}
+                      </span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <input
+                          type="number"
+                          data-testid={row.testId}
+                          min={AUTO_SUPPLIES_MIN_PCT}
+                          max={AUTO_SUPPLIES_MAX_PCT}
+                          value={row.draft}
+                          onChange={(e) => row.setDraft(e.target.value)}
+                          onBlur={() =>
+                            commitSupplyPct(row.field, row.draft, row.setDraft)
+                          }
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              commitSupplyPct(row.field, row.draft, row.setDraft);
+                            }
+                          }}
+                          className="w-16 sm:w-20 h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums text-slate-100 text-right"
+                        />
+                        <span className="text-xs font-mono-nums text-slate-400">
+                          %
+                        </span>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              )}
+
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                {t('auto.simple.suppliesHelp')}
+              </p>
+            </div>
           </div>
         ) : (
           /* ================= ADVANCED MODE TAB ================= */

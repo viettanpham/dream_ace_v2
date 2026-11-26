@@ -1,0 +1,7 @@
+# TASK CS4 Report
+- ITEM 1 (pure engine): added `AutoSuppliesConfig` & `SimpleTacticsConfig.autoSupplies` in `src/types/game.ts`; created `src/engine/supplyAi.ts` (`DEFAULT_AUTO_SUPPLIES_CONFIG`, `sanitizeAutoSuppliesConfig()` 5–90%, `pickAutoSupplies()` HP->Shield->SP by smallest kit `>= missing` else largest, skipping `'utility'`).
+- ITEM 2 (wiring): added `autoSupplies` defaults/sanitize in `src/engine/tactics.ts` (no `CURRENT_SAVE_VERSION` bump); wired `performAutoPlayerTurn()` in `src/store/useGameStore.ts` to auto-use up to `supplyUsesPerTurn` via `useBattleSupply()` from latest state before safety/step logic.
+- ITEM 3 (UI): added `auto-supplies-section` (`auto-supplies-toggle` default OFF, `auto-supplies-hp-input` / `shield` / `sp` blur/Enter commit & invalid revert, help text) in `src/components/AutoTacticsModal.tsx` + `src/i18n/vi.ts`, `src/i18n/en.ts`, `docs/CODEMAP.md`.
+- Tests: `npx tsc --noEmit` passed; 4/4 related vitest files passed (26/26 tests: `supplyAiCs4.test.ts`, `fluxAutoB2b.test.ts`, `suppliesCs1.test.ts`, `autoPriorityLimitA6.test.tsx`). (`suppliesBattleCs2.test.tsx` was pre-failing from PREP-1b prestage active on `createInitialBattleState`.)
+- 5 seeded auto battles (`veridian_colony`, seeds 101..505): defaults (`enabled: false`) used `0, 0, 0, 0, 0` supplies/battle; with `enabled: true` (`35/25/20`) used `0, 0, 2, 2, 0` supplies/battle.
+- NOT checked in a real browser: visual wrapping of `auto-supplies-section` on 320–390px phone screens and live battle/loop auto-supply run.
