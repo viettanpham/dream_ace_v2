@@ -705,6 +705,7 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'log.unitMovesRow': '{actor} di chuyển sang {row}.',
   'log.invalidTarget': 'Không thể chọn {target}: {reason}.',
   'log.autoRepeatStopped': '{reason}',
+  'log.prestageConfirm': 'Vào trận',
   'log.primaryWeapons': 'Pháo Chính',
   'log.breakdownBoth': '{shield} Khiên, {hp} HP',
   'log.breakdownShield': '{shield} Khiên',
@@ -1998,6 +1999,8 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'battle.turnStep.action': 'Hành động',
   'battle.turnStep.attackShort': 'Đánh',
   'battle.turnStep.step2Full': 'Buff tiếp theo tính là hành động chính',
+  'admin.prestageEnabled': 'Bật Pre-stage đầu trận (buff sẵn & chờ xác nhận)',
+  'admin.prestageCountdownSec': 'Đếm ngược tự vào trận (giây)',
 };
 
 

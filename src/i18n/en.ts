@@ -703,6 +703,7 @@ export const EN_TRANSLATIONS = {
   'log.unitMovesRow': '{actor} moves to {row}.',
   'log.invalidTarget': 'Cannot target {target}: {reason}.',
   'log.autoRepeatStopped': '{reason}',
+  'log.prestageConfirm': 'Battle engaged',
   'log.primaryWeapons': 'Primary Lasers',
   'log.breakdownBoth': '{shield} SHD, {hp} HP',
   'log.breakdownShield': '{shield} SHD',
@@ -1995,6 +1996,8 @@ export const EN_TRANSLATIONS = {
   'battle.turnStep.action': 'Action',
   'battle.turnStep.attackShort': 'Act',
   'battle.turnStep.step2Full': 'Next buff counts as main action',
+  'admin.prestageEnabled': 'Pre-stage gate at battle start (free buffs & wait)',
+  'admin.prestageCountdownSec': 'Pre-stage auto-engage countdown (sec)',
 } as const;
 
 export type TranslationKey = keyof typeof EN_TRANSLATIONS;

@@ -78,6 +78,11 @@ import {
   MIN_MAX_STEP2_PER_TURN,
   sanitizeTurnPhaseConfig,
 } from '../engine/turnPhase';
+import {
+  MAX_PRESTAGE_COUNTDOWN_SEC,
+  MIN_PRESTAGE_COUNTDOWN_SEC,
+  sanitizePrestageConfig,
+} from '../engine/prestage';
 import { AdminCapacityField } from './AdminCapacityField';
 import { PirateAdminBlock } from './admin/PirateAdminBlock';
 import type {
@@ -2180,6 +2185,7 @@ export function AdminPanel() {
               {/* 3-Step Turn ("Lượt 3 bước") */}
               {(() => {
                 const tpCfg = sanitizeTurnPhaseConfig(adminConfig.turnPhase);
+                const prestageCfg = sanitizePrestageConfig(adminConfig.prestage);
                 return (
                   <div
                     data-testid="admin-turn-phase-section"
@@ -2217,6 +2223,59 @@ export function AdminPanel() {
                         t('admin.capacityApplied', { n })
                       }
                     />
+                    <div className="pt-2 border-t border-slate-800/80 space-y-2.5">
+                      <label className="flex items-center gap-2 text-xs text-slate-200 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          data-testid="admin-prestage-enabled-toggle"
+                          checked={prestageCfg.enabled}
+                          onChange={(e) =>
+                            adminUpdateConfig({
+                              prestage: {
+                                ...prestageCfg,
+                                enabled: e.target.checked,
+                              },
+                            })
+                          }
+                          className="rounded border-slate-600 bg-slate-900 accent-cyan-500"
+                        />
+                        <span>{t('admin.prestageEnabled')}</span>
+                      </label>
+                      <AdminCapacityField
+                        label={t('admin.prestageCountdownSec')}
+                        min={MIN_PRESTAGE_COUNTDOWN_SEC}
+                        max={MAX_PRESTAGE_COUNTDOWN_SEC}
+                        storedValue={prestageCfg.countdownSec}
+                        usedCount={0}
+                        inputTestId="admin-prestage-countdown-input"
+                        applyTestId="admin-prestage-countdown-apply"
+                        hintTestId="admin-prestage-countdown-hint"
+                        appliedTestId="admin-prestage-countdown-applied"
+                        overCapacityText=""
+                        sanitize={(raw) =>
+                          sanitizePrestageConfig({
+                            ...prestageCfg,
+                            countdownSec: raw,
+                          }).countdownSec
+                        }
+                        onApply={(countdownSec) =>
+                          adminUpdateConfig({
+                            prestage: {
+                              ...prestageCfg,
+                              countdownSec,
+                            },
+                          })
+                        }
+                        applyLabel={t('admin.capacityApply')}
+                        rangeHintText={t('admin.capacityRangeHint', {
+                          min: MIN_PRESTAGE_COUNTDOWN_SEC,
+                          max: MAX_PRESTAGE_COUNTDOWN_SEC,
+                        })}
+                        formatAppliedText={(n) =>
+                          t('admin.capacityApplied', { n })
+                        }
+                      />
+                    </div>
                   </div>
                 );
               })()}

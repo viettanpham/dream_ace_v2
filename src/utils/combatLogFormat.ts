@@ -244,6 +244,7 @@ export function isSystemOrKillLogEntry(entry: CombatLogEntry): boolean {
     entry.tag === 'KO' ||
     entry.templateKey === 'log.destroyed' ||
     entry.templateKey === 'log.battleStart' ||
+    entry.templateKey === 'log.prestageConfirm' ||
     entry.templateKey === 'log.retreat' ||
     entry.templateKey === 'log.invalidTarget' ||
     entry.templateKey === 'log.autoRepeatStopped'
@@ -1152,6 +1153,7 @@ export function parseStructuredCombatLogRow(
     }
 
     case 'log.battleStart':
+    case 'log.prestageConfirm':
     case 'log.retreat':
     case 'log.wingmanChat':
     default: {
@@ -1161,7 +1163,8 @@ export function parseStructuredCombatLogRow(
         turnLabel,
         faction,
         actorName:
-          entry.templateKey === 'log.battleStart'
+          entry.templateKey === 'log.battleStart' ||
+          entry.templateKey === 'log.prestageConfirm'
             ? translate(lang, 'log.actionSystem')
             : actorFromParams,
         autoBadge,

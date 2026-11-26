@@ -44,6 +44,7 @@ import {
   evaluateTurnPhaseAfterAction,
   sanitizeTurnPhaseConfig,
 } from '../engine/turnPhase';
+import { sanitizePrestageConfig } from '../engine/prestage';
 import {
   equipItemOnGear,
   generateItemInstance,
@@ -543,6 +544,7 @@ interface GameStoreState {
   // Battle actions
   startBattle: (sectorId?: string, opts?: LaunchBattleOptions) => void;
   reloadBattle: (sectorId?: string, opts?: LaunchBattleOptions) => void;
+  confirmPrestage: () => void;
   selectTarget: (unitId: string) => void;
   selectAllyTarget: (unitId: string) => void;
   logRadarInvalidTarget: (targetName: string, reasonKey: string) => void;
@@ -3048,6 +3050,29 @@ export const useGameStore = create<GameStoreState>()(
         launchBattleForSector(get(), set, sectorId, opts);
       },
 
+      confirmPrestage: () => {
+        const { battle } = get();
+        if (!battle || !battle.prestage?.active) return;
+        const confirmLog: CombatLogEntry = {
+          id: `log_prestage_${Date.now()}_${battle.turnCounter}`,
+          round: battle.round,
+          actorName: 'SYSTEM',
+          tag: 'SYSTEM',
+          templateKey: 'log.prestageConfirm',
+          params: {},
+        };
+        set({
+          battle: {
+            ...battle,
+            prestage: {
+              ...battle.prestage,
+              active: false,
+            },
+            log: [...battle.log, confirmLog],
+          },
+        });
+      },
+
       selectTarget: (unitId) => {
         const { battle } = get();
         if (!battle || battle.summary) return;
@@ -3102,7 +3127,9 @@ export const useGameStore = create<GameStoreState>()(
       useBattleSupply: (templateId) => {
         const state = get();
         const { battle } = state;
-        if (!battle || battle.summary || battle.isResolving) return;
+        if (!battle || battle.summary || battle.isResolving || battle.prestage?.active) {
+          return;
+        }
 
         const activeUnitId = battle.turnOrder[battle.activeTurnIndex];
         const activeUnit = battle.units.find((u) => u.id === activeUnitId);
@@ -3253,7 +3280,9 @@ export const useGameStore = create<GameStoreState>()(
       performPlayerAction: (action, skillId, transferCount) => {
         const state = get();
         const { battle } = state;
-        if (!battle || battle.summary || battle.isResolving) return;
+        if (!battle || battle.summary || battle.isResolving || battle.prestage?.active) {
+          return;
+        }
 
         const activeUnitId = battle.turnOrder[battle.activeTurnIndex];
         const activeUnit = battle.units.find((u) => u.id === activeUnitId);
@@ -3490,7 +3519,13 @@ export const useGameStore = create<GameStoreState>()(
       performAutoPlayerTurn: () => {
         const state = get();
         const { battle } = state;
-        if (!battle || battle.summary || battle.isResolving || !state.autoBattleEnabled) {
+        if (
+          !battle ||
+          battle.summary ||
+          battle.isResolving ||
+          battle.prestage?.active ||
+          !state.autoBattleEnabled
+        ) {
           return;
         }
 
@@ -3778,7 +3813,7 @@ export const useGameStore = create<GameStoreState>()(
       performAiTurn: () => {
         const state = get();
         const { battle } = state;
-        if (!battle || battle.summary) return;
+        if (!battle || battle.summary || battle.prestage?.active) return;
 
         const activeUnitId = battle.turnOrder[battle.activeTurnIndex];
         const activeUnit = battle.units.find((u) => u.id === activeUnitId);
@@ -4749,6 +4784,10 @@ export const useGameStore = create<GameStoreState>()(
             patch.turnPhase !== undefined
               ? sanitizeTurnPhaseConfig(patch.turnPhase)
               : sanitizeTurnPhaseConfig(state.adminConfig.turnPhase);
+          const nextPrestage =
+            patch.prestage !== undefined
+              ? sanitizePrestageConfig(patch.prestage)
+              : sanitizePrestageConfig(state.adminConfig.prestage);
           const nextStealth =
             patch.stealth !== undefined
               ? sanitizeStealthConfig(patch.stealth)
@@ -4772,6 +4811,7 @@ export const useGameStore = create<GameStoreState>()(
             supplyEconomy: nextSupplyEconomy,
             enemyLevel: nextEnemyLevel,
             turnPhase: nextTurnPhase,
+            prestage: nextPrestage,
             stealth: nextStealth,
           };
           let updatedPilot =

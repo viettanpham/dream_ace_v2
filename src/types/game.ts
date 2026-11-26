@@ -983,7 +983,8 @@ export type CombatLogTemplateKey =
   | 'log.unitMovesRow'
   | 'log.invalidTarget'
   | 'log.autoRepeatStopped'
-  | 'log.useSupply';
+  | 'log.useSupply'
+  | 'log.prestageConfirm';
 
 export interface CombatLogEntry {
   id: string;
@@ -1217,6 +1218,7 @@ export interface BattleState {
   supplyByUnit?: Record<string, BattleSupplyUnitState>;
   turnStep2Used?: number;
   turnLockedSkillIds?: string[];
+  prestage?: PrestageState;
   isResolving: boolean;
   summary: BattleSummary | null;
 }
@@ -1477,6 +1479,7 @@ export interface AdminConfig {
   itemLevels?: ItemLevelsConfig;
   pirates?: PiratesConfig;
   turnPhase?: TurnPhaseConfig;
+  prestage?: PrestageConfig;
   stealth?: StealthConfig;
   showRawI18nKeys: boolean;
 }
@@ -1488,6 +1491,16 @@ export interface StealthConfig {
 
 export interface TurnPhaseConfig {
   maxStep2PerTurn: number;
+}
+
+export interface PrestageConfig {
+  enabled: boolean;
+  countdownSec: number;
+}
+
+export interface PrestageState {
+  active: boolean;
+  appliedByUnit: Record<string, string[]>;
 }
 
 export interface FluxTransferLevelRule {

@@ -812,7 +812,9 @@ export function BattleScreen() {
 
   // Automatic AI (and player Charge Shot auto-release) scheduler
   useEffect(() => {
-    if (!battle || battle.summary || isPlayerTurn) return;
+    if (!battle || battle.summary || battle.prestage?.active || isPlayerTurn) {
+      return;
+    }
     const baseDelay = BALANCE_CONFIG.battleSpeedDelays[battleSpeed] ?? 760;
     const delayMs = skipAnimations ? Math.min(baseDelay, 40) : baseDelay;
     const timer = window.setTimeout(() => {
@@ -823,6 +825,7 @@ export function BattleScreen() {
     battle?.activeTurnIndex,
     battle?.round,
     battle?.summary,
+    battle?.prestage?.active,
     isPlayerTurn,
     battleSpeed,
     skipAnimations,
@@ -834,6 +837,7 @@ export function BattleScreen() {
     if (
       !battle ||
       battle.summary ||
+      battle.prestage?.active ||
       !isPlayerTurn ||
       !autoBattleEnabled ||
       tacticsModalOpen
@@ -852,6 +856,7 @@ export function BattleScreen() {
     battle?.activeTurnIndex,
     battle?.round,
     battle?.summary,
+    battle?.prestage?.active,
     isPlayerTurn,
     autoBattleEnabled,
     tacticsModalOpen,
@@ -895,7 +900,14 @@ export function BattleScreen() {
 
   const handleManualSkillTrigger = useCallback(
     (skillId: string) => {
-      if (!isPlayerTurn || autoBattleEnabled || battle?.summary) return;
+      if (
+        !isPlayerTurn ||
+        autoBattleEnabled ||
+        battle?.summary ||
+        battle?.prestage?.active
+      ) {
+        return;
+      }
       const def = getSkillById(skillId);
       if (def?.effectKind === 'sp_transfer') {
         setFluxPickerOpen((prev) => !prev);
@@ -904,7 +916,13 @@ export function BattleScreen() {
       setFluxPickerOpen(false);
       performPlayerAction('skill', skillId);
     },
-    [isPlayerTurn, autoBattleEnabled, battle?.summary, performPlayerAction]
+    [
+      isPlayerTurn,
+      autoBattleEnabled,
+      battle?.summary,
+      battle?.prestage?.active,
+      performPlayerAction,
+    ]
   );
 
   // Keyboard shortcuts: A Auto/Manual, M Mute, 1 Fire, 2-7 Skills, Q Shield, Tab Cycle Enemy
@@ -931,7 +949,14 @@ export function BattleScreen() {
         toggleMute();
         return;
       }
-      if (battle.summary || !isPlayerTurn || autoBattleEnabled) return;
+      if (
+        battle.summary ||
+        battle.prestage?.active ||
+        !isPlayerTurn ||
+        autoBattleEnabled
+      ) {
+        return;
+      }
 
       const playerUnit = battle.units.find((u) => u.isPlayer);
       if (!playerUnit) return;

@@ -95,6 +95,14 @@ import {
   evaluateTurnPhaseAfterAction,
   sanitizeTurnPhaseConfig,
 } from './turnPhase';
+import {
+  addOrRefreshStatus,
+  applyPrestageBuffs,
+  DEBUFF_TYPES,
+  sanitizePrestageConfig,
+} from './prestage';
+
+export { DEBUFF_TYPES };
 
 let uidCounter = 1;
 function nextId(prefix: string): string {
@@ -118,16 +126,6 @@ function getSlotIndex(units: CombatUnit[], unitId: string): number {
   const idx = sameSide.findIndex((u) => u.id === unitId);
   return Math.max(0, idx);
 }
-
-export const DEBUFF_TYPES = new Set<StatusEffectType>([
-  'burn',
-  'shield_break',
-  'shield_cracked',
-  'slow',
-  'silence',
-  'vulnerable',
-  'def_down',
-]);
 
 export function hasStatus(unit: CombatUnit, type: StatusEffectType): boolean {
   return unit.statuses.some((s) => s.type === type && s.turnsRemaining > 0);
@@ -207,14 +205,6 @@ function getEffectiveAttackDamageMult(
   }
 
   return Math.max(0.35, mult);
-}
-
-function addOrRefreshStatus(
-  statuses: ActiveStatusEffect[],
-  entry: ActiveStatusEffect
-): ActiveStatusEffect[] {
-  const filtered = statuses.filter((s) => s.type !== entry.type);
-  return [...filtered, { ...entry, isDebuff: DEBUFF_TYPES.has(entry.type) }];
 }
 
 function removeStatus(
@@ -828,9 +818,17 @@ export function createInitialBattleState(
     { rng, randomVariation: 0.25 }
   );
 
-  const units = [...allyUnits, ...enemyUnits];
+  const rawUnits = [...allyUnits, ...enemyUnits];
+  const prestageCfg = sanitizePrestageConfig(adminConfig?.prestage);
+  const prestageResult = prestageCfg.enabled
+    ? applyPrestageBuffs(rawUnits, adminConfig)
+    : { units: rawUnits, appliedByUnit: {} };
+  const units = prestageResult.units;
   const turnOrder = sortTurnOrder(units);
-  const placedPlayer = allyUnits.find((u) => u.isPlayer) ?? allyUnits[0];
+  const placedPlayer =
+    units.find((u) => u.side === 'ally' && u.isPlayer) ??
+    units.find((u) => u.side === 'ally') ??
+    allyUnits[0];
   const initialValidEnemies = placedPlayer
     ? getValidEnemyTargets(units, placedPlayer, 'attack')
     : enemyUnits;
@@ -874,6 +872,10 @@ export function createInitialBattleState(
     supplyByUnit: {},
     turnStep2Used: 0,
     turnLockedSkillIds: [],
+    prestage: {
+      active: prestageCfg.enabled,
+      appliedByUnit: prestageResult.appliedByUnit,
+    },
     isResolving: false,
     summary: null,
   };

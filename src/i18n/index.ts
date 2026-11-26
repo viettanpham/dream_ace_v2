@@ -707,6 +707,9 @@ function formatCombatLogBody(
       });
     }
 
+    case 'log.prestageConfirm':
+      return translate(lang, 'log.prestageConfirm');
+
     case 'log.defend': {
       const shd = Number(p.shieldRecovered ?? 0);
       const sp = Number(p.spRecovered ?? 0);

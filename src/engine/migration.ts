@@ -16,6 +16,11 @@ import {
   DEFAULT_TURN_PHASE_CONFIG,
   sanitizeTurnPhaseConfig,
 } from './turnPhase';
+import {
+  clonePrestageConfig,
+  DEFAULT_PRESTAGE_CONFIG,
+  sanitizePrestageConfig,
+} from './prestage';
 import { EMPTY_STAT_BLOCK, MECH_CLASS_LIST } from '../data/classes';
 import {
   BUILTIN_ITEM_REGISTRY_TAG,
@@ -357,6 +362,7 @@ export function createDefaultAdminConfig(): AdminConfig {
     itemLevels: cloneItemLevelsConfig(DEFAULT_ITEM_LEVELS_CONFIG),
     pirates: clonePiratesConfig(DEFAULT_PIRATES_CONFIG),
     turnPhase: cloneTurnPhaseConfig(DEFAULT_TURN_PHASE_CONFIG),
+    prestage: clonePrestageConfig(DEFAULT_PRESTAGE_CONFIG),
     stealth: cloneStealthConfig(DEFAULT_STEALTH_CONFIG),
     showRawI18nKeys: false,
   };
@@ -717,6 +723,7 @@ export function migrateSaveData(
     itemLevels: sanitizeItemLevelsConfig(rawAdmin.itemLevels),
     pirates: sanitizePiratesConfig(rawAdmin.pirates),
     turnPhase: sanitizeTurnPhaseConfig(rawAdmin.turnPhase),
+    prestage: sanitizePrestageConfig(rawAdmin.prestage),
     stealth: sanitizeStealthConfig(rawAdmin.stealth),
     showRawI18nKeys: Boolean(rawAdmin.showRawI18nKeys),
   };
