@@ -714,6 +714,15 @@ export interface LidarAutoConfig {
   minSpPct: number; // default 50 (0..100)
 }
 
+export type FluxAutoMode = 'smart' | 'fixed';
+
+export interface FluxAutoConfig {
+  enabled: boolean;
+  mode: FluxAutoMode;
+  allySpBelowPct: number; // default 25 (0..100)
+  keepSelfPct: number; // default 50 (0..100)
+}
+
 export interface SimpleTacticsConfig {
   presetId: SimpleTacticsPresetId;
   preferredTarget: SimpleTargetPref;
@@ -723,6 +732,7 @@ export interface SimpleTacticsConfig {
   elitePolicy: SimpleElitePolicy;
   prioritySkillIds: string[]; // up to MAX_PRIORITY_SKILLS skill IDs from equipped bar (A > B > C ...)
   lidarAuto?: LidarAutoConfig;
+  fluxAuto?: FluxAutoConfig;
 }
 
 export type TacticsMode = 'simple' | 'custom';

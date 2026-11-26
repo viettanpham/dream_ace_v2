@@ -485,4 +485,117 @@ describe('TASK AUTO-6 — Priority list 3->6 skills & Rule limit 8->12', () => {
     expect(addBtn).toBeDefined();
     expect(addBtn!.disabled).toBe(true);
   });
+
+  it('B2b (5): Support shows auto-flux-section; toggle, mode, and fixed inputs commit via applySimpleTactics', () => {
+    const setReactInputValue = (input: HTMLInputElement, value: string) => {
+      const setter = Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        'value'
+      )!.set!;
+      setter.call(input, value);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+
+    // Striker hides auto-flux-section
+    const baseState = useGameStore.getState();
+    useGameStore.setState({
+      language: 'vi',
+      tacticsModalOpen: true,
+      pilot: {
+        ...baseState.pilot,
+        activeGearId: 'striker',
+      },
+    });
+    act(() => {
+      root!.render(createElement(AutoTacticsModal));
+    });
+    expect(container!.querySelector('[data-testid="auto-flux-section"]')).toBeNull();
+
+    // Support shows auto-flux-section in simple mode
+    useGameStore.setState({
+      pilot: {
+        ...baseState.pilot,
+        activeGearId: 'support',
+        gears: {
+          ...baseState.pilot.gears,
+          support: {
+            ...baseState.pilot.gears.support,
+            owned: true,
+            tactics: {
+              ...baseState.pilot.gears.support.tactics,
+              mode: 'simple',
+              simple: createDefaultSimpleTactics('support', SUPPORT_HEAVY_BAR),
+            },
+          },
+        },
+      },
+    });
+    act(() => {
+      root!.render(createElement(AutoTacticsModal));
+    });
+
+    expect(container!.querySelector('[data-testid="auto-flux-section"]')).not.toBeNull();
+    expect(container!.querySelector('[data-testid="auto-flux-ally-sp-input"]')).toBeNull();
+
+    // Switch to fixed mode -> 2 inputs appear
+    act(() => {
+      container!.querySelector<HTMLButtonElement>('[data-testid="auto-flux-mode-fixed"]')!.click();
+    });
+    expect(
+      useGameStore.getState().pilot.gears.support.tactics.simple!.fluxAuto?.mode
+    ).toBe('fixed');
+
+    const allyInput = container!.querySelector<HTMLInputElement>(
+      '[data-testid="auto-flux-ally-sp-input"]'
+    )!;
+    const keepInput = container!.querySelector<HTMLInputElement>(
+      '[data-testid="auto-flux-keep-self-input"]'
+    )!;
+    expect(allyInput).not.toBeNull();
+    expect(keepInput).not.toBeNull();
+
+    // Blur commit on allySpBelowPct
+    act(() => {
+      setReactInputValue(allyInput, '60');
+    });
+    act(() => {
+      allyInput.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+    });
+    expect(
+      useGameStore.getState().pilot.gears.support.tactics.simple!.fluxAuto?.allySpBelowPct
+    ).toBe(60);
+
+    // Invalid input reverts on blur without overwriting stored value
+    act(() => {
+      setReactInputValue(allyInput, '150');
+    });
+    act(() => {
+      allyInput.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+    });
+    expect(allyInput.value).toBe('60');
+    expect(
+      useGameStore.getState().pilot.gears.support.tactics.simple!.fluxAuto?.allySpBelowPct
+    ).toBe(60);
+
+    // Enter commit on keepSelfPct
+    act(() => {
+      setReactInputValue(keepInput, '35');
+    });
+    act(() => {
+      keepInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    });
+    expect(
+      useGameStore.getState().pilot.gears.support.tactics.simple!.fluxAuto?.keepSelfPct
+    ).toBe(35);
+
+    // Toggle OFF hides inputs and saves enabled=false
+    act(() => {
+      container!.querySelector<HTMLButtonElement>('[data-testid="auto-flux-toggle"]')!.click();
+    });
+    expect(
+      useGameStore.getState().pilot.gears.support.tactics.simple!.fluxAuto?.enabled
+    ).toBe(false);
+    expect(container!.querySelector('[data-testid="auto-flux-ally-sp-input"]')).toBeNull();
+  });
 });
+

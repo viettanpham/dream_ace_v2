@@ -47,6 +47,11 @@ import {
 import { sanitizePrestageConfig } from '../engine/prestage';
 import { LIDAR_SKILL_ID, pickLidarCast } from '../engine/lidarAuto';
 import {
+  FLUX_SKILL_ID,
+  pickFluxAutoCount,
+  sanitizeFluxAutoConfig,
+} from '../engine/fluxAuto';
+import {
   equipItemOnGear,
   generateItemInstance,
   getItemEquippedByGear,
@@ -3877,6 +3882,27 @@ export const useGameStore = create<GameStoreState>()(
                 matchedRuleIndex: null,
               };
             }
+            const fluxAutoCfg = sanitizeFluxAutoConfig(tactics.simple?.fluxAuto);
+            const autoFluxCount = pickFluxAutoCount(
+              curUnits,
+              curActor,
+              {
+                fluxAuto: fluxAutoCfg,
+                adminConfig: state.adminConfig,
+                step2UsedSoFar,
+                turnLockedSkillIds: lockedSkillIds,
+              },
+              Math.random
+            );
+            if (autoFluxCount > 0) {
+              return {
+                action: 'skill',
+                targetId: null,
+                skillId: FLUX_SKILL_ID,
+                transferCount: autoFluxCount,
+                matchedRuleIndex: null,
+              };
+            }
             let choice = chooseAction(
               {
                 ...battle,
@@ -3898,13 +3924,15 @@ export const useGameStore = create<GameStoreState>()(
                 state.adminConfig.fluxTransfer
               );
               const pressure = computeFluxBattlePressure(curUnits, curActor.side);
-              const count = pickFluxCount(
-                curUnits,
-                curActor.id,
-                { ...fluxCfg, spEconomy: state.adminConfig.spEconomy },
-                pressure,
-                Math.random
-              );
+              const count = fluxAutoCfg.enabled
+                ? pickFluxCount(
+                    curUnits,
+                    curActor.id,
+                    { ...fluxCfg, spEconomy: state.adminConfig.spEconomy },
+                    pressure,
+                    Math.random
+                  )
+                : 0;
               if (count > 0) {
                 autoTransferCount = count;
               } else {

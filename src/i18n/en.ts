@@ -1008,6 +1008,13 @@ export const EN_TRANSLATIONS = {
   'auto.simple.lidarModeSmart': 'Smart',
   'auto.simple.lidarModeFixed': 'By %',
   'auto.simple.lidarMinSpLabel': 'when SP ≥ %',
+  'auto.simple.fluxLabel': 'Auto Flux Transfer',
+  'auto.simple.fluxModeSmart': 'Smart',
+  'auto.simple.fluxModeFixed': 'By %',
+  'auto.simple.fluxSmartDesc': 'Reserves SP for heal/shield/revive; drops reserve to 15% when losing.',
+  'auto.simple.fluxAllySpLabel': 'Transfer only when ally <',
+  'auto.simple.fluxKeepSelfPrefix': 'Keep at least',
+  'auto.simple.fluxKeepSelfSuffix': '% of own SP',
 
   // Admin CP Soft Enrage
   'admin.softEnrage': 'Soft Enrage (Round 20+)',

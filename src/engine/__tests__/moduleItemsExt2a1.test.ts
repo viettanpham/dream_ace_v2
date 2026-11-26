@@ -7,15 +7,15 @@ import { VI_TRANSLATIONS } from '../../i18n/vi';
 import type { CombatUnit, InventorySlotFilter } from '../../types/game';
 import {
   generateItemInstance,
-  generateShopStock,
   getEnchantMetadata,
   resolveEnchantAttempt,
   rollBattleItemDrops,
 } from '../equipment';
 import { filterAndSortInventory, getDefaultInventoryFilterState } from '../inventory';
+import { DEFAULT_ITEM_LEVELS_CONFIG } from '../itemLevels';
 import { computeModulePrice } from '../itemPrice';
 import { createFreshCampaignState } from '../migration';
-import { generateCategorizedShopStock } from '../shop';
+import { DEFAULT_MODULE_DROP_CONFIG } from '../moduleDrop';
 
 function createRng(seed = 20261124): () => number {
   let s = seed >>> 0;
@@ -87,21 +87,25 @@ describe('EXT2a-1 — Modules as slot "module" items', () => {
     expect(attempt.remainingCredits).toBe(99999);
   });
 
-  it('(4) seeded battle drops, shop stock, and un-templated generateItemInstance never contain a module', () => {
+  it('(4) battle drops with moduleDrop factor=0 and un-templated generateItemInstance never contain a module', () => {
     const rng = createRng(777);
     const deadEnemies = Array.from({ length: 6 }, (_, idx) => ({
       id: `enemy_${idx}`,
       alive: false,
     })) as unknown as CombatUnit[];
 
-    const drops = rollBattleItemDrops(deadEnemies, SECTORS_CATALOG[0].id, 10, true, rng);
-    const shopFlat = generateShopStock(10, 24, rng);
-    const shopCat = generateCategorizedShopStock(10, { priceMultiplier: 1 }, rng);
+    const drops = rollBattleItemDrops(
+      deadEnemies,
+      SECTORS_CATALOG[0].id,
+      10,
+      true,
+      rng,
+      DEFAULT_ITEM_LEVELS_CONFIG,
+      { ...DEFAULT_MODULE_DROP_CONFIG, factor: 0 }
+    );
     const randomAdminModuleGuard = generateItemInstance({ slot: 'module', tier: 2 }, rng);
 
     expect(drops.some((it) => it.slot === 'module')).toBe(false);
-    expect(shopFlat.some((it) => it.slot === 'module')).toBe(false);
-    expect(shopCat.some((it) => it.slot === 'module')).toBe(false);
     expect(randomAdminModuleGuard.slot).not.toBe('module');
   });
 

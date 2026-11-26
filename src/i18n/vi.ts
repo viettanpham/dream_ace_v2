@@ -1010,6 +1010,13 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'auto.simple.lidarModeSmart': 'Thông minh',
   'auto.simple.lidarModeFixed': 'Theo %',
   'auto.simple.lidarMinSpLabel': 'khi SP ≥ %',
+  'auto.simple.fluxLabel': 'Truyền năng lượng tự động',
+  'auto.simple.fluxModeSmart': 'Thông minh',
+  'auto.simple.fluxModeFixed': 'Theo %',
+  'auto.simple.fluxSmartDesc': 'Giữ SP để hồi máu/khiên/hồi sinh, khi đang thua thì chỉ giữ 15%.',
+  'auto.simple.fluxAllySpLabel': 'Chỉ truyền khi đồng minh dưới',
+  'auto.simple.fluxKeepSelfPrefix': 'Giữ lại ít nhất',
+  'auto.simple.fluxKeepSelfSuffix': '% SP của mình',
 
   // Admin CP Cuồng nộ chống kéo dài
   'admin.softEnrage': 'Cuồng nộ chống kéo dài (Vòng 20+)',

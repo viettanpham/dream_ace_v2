@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
   ArrowDown,
@@ -23,6 +23,7 @@ import {
   TACTICS_TARGET_SELECTORS,
 } from '../engine/tactics';
 import { sanitizeLidarAutoConfig } from '../engine/lidarAuto';
+import { sanitizeFluxAutoConfig } from '../engine/fluxAuto';
 import {
   formatSimpleTacticsSummary,
   formatTacticsRuleSentence,
@@ -181,10 +182,6 @@ export function AutoTacticsModal() {
       .filter((s): s is NonNullable<typeof s> => Boolean(s));
   }, [activeGear.equippedSkillBar]);
 
-  if (!open) return null;
-
-  const { rules, safety } = activeGear.tactics;
-  const isCustomMode = activeGear.tactics.mode === 'custom';
   const simpleConfig =
     activeGear.tactics.simple ??
     createDefaultSimpleTactics(
@@ -192,7 +189,66 @@ export function AutoTacticsModal() {
       activeGear.equippedSkillBar
     );
   const lidarCfg = sanitizeLidarAutoConfig(simpleConfig.lidarAuto);
+  const fluxCfg = sanitizeFluxAutoConfig(simpleConfig.fluxAuto);
+
+  const [fluxAllyDraft, setFluxAllyDraft] = useState<string>(() =>
+    String(fluxCfg.allySpBelowPct)
+  );
+  const [fluxKeepDraft, setFluxKeepDraft] = useState<string>(() =>
+    String(fluxCfg.keepSelfPct)
+  );
+
+  useEffect(() => {
+    setFluxAllyDraft(String(fluxCfg.allySpBelowPct));
+  }, [fluxCfg.allySpBelowPct, open]);
+
+  useEffect(() => {
+    setFluxKeepDraft(String(fluxCfg.keepSelfPct));
+  }, [fluxCfg.keepSelfPct, open]);
+
+  if (!open) return null;
+
+  const { rules, safety } = activeGear.tactics;
+  const isCustomMode = activeGear.tactics.mode === 'custom';
   const maxRules = BALANCE_CONFIG.maxTacticsRules;
+
+  const parseFluxPctDraft = (raw: string): number | null => {
+    const trimmed = raw.trim();
+    if (trimmed === '') return null;
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed) || parsed < 0 || parsed > 100) return null;
+    return Math.round(parsed);
+  };
+
+  const commitFluxAllyPct = () => {
+    const next = parseFluxPctDraft(fluxAllyDraft);
+    if (next === null) {
+      setFluxAllyDraft(String(fluxCfg.allySpBelowPct));
+      return;
+    }
+    setFluxAllyDraft(String(next));
+    applySimpleTactics({
+      fluxAuto: {
+        ...fluxCfg,
+        allySpBelowPct: next,
+      },
+    });
+  };
+
+  const commitFluxKeepPct = () => {
+    const next = parseFluxPctDraft(fluxKeepDraft);
+    if (next === null) {
+      setFluxKeepDraft(String(fluxCfg.keepSelfPct));
+      return;
+    }
+    setFluxKeepDraft(String(next));
+    applySimpleTactics({
+      fluxAuto: {
+        ...fluxCfg,
+        keepSelfPct: next,
+      },
+    });
+  };
 
   const handleTogglePrioritySkill = (skillId: string) => {
     const cur = [...simpleConfig.prioritySkillIds];
@@ -800,6 +856,138 @@ export function AutoTacticsModal() {
                 </label>
               )}
             </div>
+
+            {/* Control 7: Auto Flux Transfer (Support only) */}
+            {activeGear.classId === 'support' && (
+              <div
+                data-testid="auto-flux-section"
+                className="rounded-lg border border-slate-800 bg-[#090E18] p-3.5 space-y-2.5"
+              >
+                <div className="flex items-center justify-between gap-2 min-w-0">
+                  <span className="text-sm font-semibold text-slate-100 truncate">
+                    {t('auto.simple.fluxLabel')}
+                  </span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={fluxCfg.enabled}
+                    aria-label={t('auto.simple.fluxLabel')}
+                    data-testid="auto-flux-toggle"
+                    onClick={() =>
+                      applySimpleTactics({
+                        fluxAuto: {
+                          ...fluxCfg,
+                          enabled: !fluxCfg.enabled,
+                        },
+                      })
+                    }
+                    className={`min-h-[36px] min-w-[52px] px-2.5 rounded-lg border text-xs font-semibold transition-colors cursor-pointer shrink-0 ${
+                      fluxCfg.enabled
+                        ? 'border-emerald-400 bg-emerald-500/25 text-emerald-200'
+                        : 'border-slate-700 bg-slate-900 text-slate-400'
+                    }`}
+                  >
+                    {fluxCfg.enabled ? 'ON' : 'OFF'}
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-1.5">
+                  {(['smart', 'fixed'] as const).map((mode) => {
+                    const active = fluxCfg.mode === mode;
+                    const labelKey =
+                      mode === 'smart'
+                        ? 'auto.simple.fluxModeSmart'
+                        : 'auto.simple.fluxModeFixed';
+                    return (
+                      <button
+                        key={mode}
+                        type="button"
+                        data-testid={`auto-flux-mode-${mode}`}
+                        onClick={() =>
+                          applySimpleTactics({
+                            fluxAuto: {
+                              ...fluxCfg,
+                              mode,
+                            },
+                          })
+                        }
+                        className={`min-h-[40px] px-3 py-1.5 rounded border text-xs font-medium transition-colors cursor-pointer ${
+                          active
+                            ? 'border-cyan-400 bg-cyan-500/20 text-cyan-100 font-semibold'
+                            : 'border-slate-700/90 bg-slate-950/70 hover:border-slate-600 text-slate-300'
+                        }`}
+                      >
+                        {t(labelKey)}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {fluxCfg.mode === 'smart' && (
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    {t('auto.simple.fluxSmartDesc')}
+                  </p>
+                )}
+
+                {fluxCfg.enabled && fluxCfg.mode === 'fixed' && (
+                  <div className="space-y-2 pt-0.5">
+                    <label className="flex items-center justify-between gap-2 min-w-0">
+                      <span className="text-xs text-slate-300 leading-snug min-w-0 flex-1">
+                        {t('auto.simple.fluxAllySpLabel')}
+                      </span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <input
+                          type="number"
+                          data-testid="auto-flux-ally-sp-input"
+                          min={0}
+                          max={100}
+                          value={fluxAllyDraft}
+                          onChange={(e) => setFluxAllyDraft(e.target.value)}
+                          onBlur={commitFluxAllyPct}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              commitFluxAllyPct();
+                            }
+                          }}
+                          className="w-16 sm:w-20 h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums text-slate-100 text-right"
+                        />
+                        <span className="text-xs font-mono-nums text-slate-400 whitespace-nowrap">
+                          % SP
+                        </span>
+                      </div>
+                    </label>
+
+                    <label className="flex items-center justify-between gap-2 min-w-0">
+                      <span className="text-xs text-slate-300 leading-snug min-w-0 flex-1">
+                        {t('auto.simple.fluxKeepSelfPrefix')}
+                      </span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <input
+                          type="number"
+                          data-testid="auto-flux-keep-self-input"
+                          min={0}
+                          max={100}
+                          value={fluxKeepDraft}
+                          onChange={(e) => setFluxKeepDraft(e.target.value)}
+                          onBlur={commitFluxKeepPct}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              commitFluxKeepPct();
+                            }
+                          }}
+                          className="w-16 sm:w-20 h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums text-slate-100 text-right"
+                        />
+                        <span className="text-xs font-mono-nums text-slate-400 whitespace-nowrap">
+                          {t('auto.simple.fluxKeepSelfSuffix')}
+                        </span>
+                      </div>
+                    </label>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         ) : (
           /* ================= ADVANCED MODE TAB ================= */
