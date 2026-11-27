@@ -483,6 +483,113 @@ function describeEffectAtLevel(
         compactValue: `+${scaled.spAmount} SP/t`,
         durationTurns: null,
       };
+    case 'passive_stat': {
+      const entries = scaled.passiveStats ?? [];
+      const fmtVal = (v: number) => (Number.isInteger(v) ? `${v}` : `${Number(v.toFixed(2))}`);
+      const iconMap: Record<string, string> = {
+        attackPct: 'BS01',
+        defPct: 'BF03',
+        evaPct: 'BF04',
+        speedFlat: 'BF07',
+        spRegenFlat: 'BF11',
+        maxHpPct: 'SS01',
+        maxShieldPct: 'BS05',
+        critFlat: 'SS04',
+        critDamagePct: 'SS05',
+        dodgeFlat: 'BF04',
+        armorPierceFlat: 'SS12',
+        healPowerPct: 'BF09',
+        shieldPowerPct: 'BF12',
+        shieldRegenPctAdd: 'BF10',
+        hpRegenPctAdd: 'BF09',
+        executeDmgPct: 'BF02',
+        lastStandDefPct: 'BF13',
+      };
+      const labelEntry = (key: string, val: number): { full: string; compact: string } => {
+        const n = fmtVal(val);
+        switch (key) {
+          case 'attackPct':
+            return { full: `ATK +${n}%`, compact: `ATK +${n}%` };
+          case 'defPct':
+            return { full: `DEF +${n}%`, compact: `DEF +${n}%` };
+          case 'evaPct':
+            return { full: `EVA +${n}%`, compact: `EVA +${n}%` };
+          case 'speedFlat':
+            return { full: `SPD +${n}`, compact: `SPD +${n}` };
+          case 'spRegenFlat':
+            return {
+              full: lang === 'vi' ? `Hồi +${n} SP/lượt` : `+${n} SP/turn`,
+              compact: `+${n} SP/t`,
+            };
+          case 'maxHpPct':
+            return { full: `Max HP +${n}%`, compact: `HP +${n}%` };
+          case 'maxShieldPct':
+            return { full: `Max SHD +${n}%`, compact: `SHD +${n}%` };
+          case 'critFlat':
+            return {
+              full: lang === 'vi' ? `Chí mạng +${n}%` : `Crit +${n}%`,
+              compact: `Crit +${n}%`,
+            };
+          case 'critDamagePct':
+            return {
+              full: lang === 'vi' ? `ST Chí mạng +${n}%` : `Crit DMG +${n}%`,
+              compact: `Crit DMG +${n}%`,
+            };
+          case 'dodgeFlat':
+            return {
+              full: lang === 'vi' ? `Né đòn +${n}%` : `Dodge +${n}%`,
+              compact: `Dodge +${n}%`,
+            };
+          case 'armorPierceFlat':
+            return {
+              full: lang === 'vi' ? `Xuyên giáp +${n}%` : `Pierce +${n}%`,
+              compact: `Pierce +${n}%`,
+            };
+          case 'healPowerPct':
+            return {
+              full: lang === 'vi' ? `Hiệu lực hồi HP +${n}%` : `Heal Power +${n}%`,
+              compact: `Heal +${n}%`,
+            };
+          case 'shieldPowerPct':
+            return {
+              full: lang === 'vi' ? `Hiệu lực hồi Khiên +${n}%` : `Shield Power +${n}%`,
+              compact: `SHD Heal +${n}%`,
+            };
+          case 'shieldRegenPctAdd':
+            return {
+              full: lang === 'vi' ? `Tái tạo Khiên +${n}%/lượt` : `SHD Regen +${n}%/t`,
+              compact: `+${n}% SHD/t`,
+            };
+          case 'hpRegenPctAdd':
+            return {
+              full: lang === 'vi' ? `Tự hồi HP +${n}%/lượt` : `Self HP Regen +${n}%/t`,
+              compact: `+${n}% HP/t`,
+            };
+          case 'executeDmgPct':
+            return {
+              full: lang === 'vi' ? `+${n}% ST mục tiêu <30% HP` : `+${n}% DMG vs <30% HP`,
+              compact: `+${n}% <30% HP`,
+            };
+          case 'lastStandDefPct':
+            return {
+              full: lang === 'vi' ? `+${n}% DEF khi <30% HP` : `+${n}% DEF at <30% HP`,
+              compact: `+${n}% DEF <30%`,
+            };
+          default:
+            return { full: `+${n}`, compact: `+${n}` };
+        }
+      };
+      const iconIds = Array.from(
+        new Set(entries.map((e) => iconMap[e.key] ?? 'BF01'))
+      );
+      const formatted = entries.map((e) => labelEntry(e.key, e.value));
+      return {
+        iconIds: iconIds.length > 0 ? iconIds : ['BF01'],
+        primaryText: formatted.map((f) => f.full).join(', '),
+        compactValue: formatted.map((f) => f.compact).join(', ') || null,
+        durationTurns: null,
+      };
+    }
   }
 }
 

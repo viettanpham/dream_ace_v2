@@ -1027,6 +1027,12 @@ function formatCombatLogBody(
       });
     }
 
+    case 'log.hpRegen':
+      return translate(lang, 'log.hpRegen', {
+        target: String(p.target ?? ''),
+        amount: Number(p.amount ?? 0),
+      });
+
     case 'log.statusCleansed':
       return translate(lang, 'log.statusCleansed', {
         actor: String(p.actor ?? ''),

@@ -34,6 +34,13 @@ export interface DerivedStats {
   splashPct: number; // splash damage % on basic attacks (0 to 40)
   spRegenPerTurn: number; // bonus SP regen per turn from item traits + passives
   passiveSkillDmgPct: number; // from Striker passive
+  critDamagePct?: number; // S1c-1: bonus critical damage percentage points (e.g. 25 => +25%)
+  healPowerPct?: number; // S1c-1: bonus outgoing HP heal percentage points
+  shieldPowerPct?: number; // S1c-1: bonus outgoing shield restore percentage points
+  shieldRegenPctAdd?: number; // S1c-1: additive per-turn shield regen % + cap
+  hpRegenPctAdd?: number; // S1c-1: additive own-turn-start self HP regen %
+  executeDmgPct?: number; // S1c-1: bonus damage % vs targets below 30% HP
+  lastStandDefPct?: number; // S1c-1: bonus own DEF % while own HP below 30%
 }
 
 export type StatusEffectType =
@@ -122,7 +129,42 @@ export type SkillIconKey =
   | 'feather'
   | 'sun'
   | 'cleanse'
-  | 'star';
+  | 'star'
+  | 'remove_moderator'
+  | 'explosion'
+  | 'flare'
+  | 'health_cross'
+  | 'security'
+  | 'shield_with_heart'
+  | 'center_focus_strong'
+  | 'air'
+  | 'health_and_safety'
+  | 'add_moderator'
+  | 'shield_moon';
+
+export type PassiveStatKey =
+  | 'attackPct'
+  | 'defPct'
+  | 'evaPct'
+  | 'speedFlat'
+  | 'spRegenFlat'
+  | 'maxHpPct'
+  | 'maxShieldPct'
+  | 'critFlat'
+  | 'critDamagePct'
+  | 'dodgeFlat'
+  | 'armorPierceFlat'
+  | 'healPowerPct'
+  | 'shieldPowerPct'
+  | 'shieldRegenPctAdd'
+  | 'hpRegenPctAdd'
+  | 'executeDmgPct'
+  | 'lastStandDefPct';
+
+export interface PassiveStatEntry {
+  key: PassiveStatKey;
+  perLevel: number;
+}
 
 export type SkillEffectKind =
   | 'buff_def'
@@ -163,7 +205,8 @@ export type SkillEffectKind =
   | 'passive_skill_dmg'
   | 'passive_def_pct'
   | 'passive_eva_spd'
-  | 'passive_sp_regen';
+  | 'passive_sp_regen'
+  | 'passive_stat';
 
 export type SkillRegistryTag = 'sys' | 'mod';
 
@@ -186,6 +229,7 @@ export interface SkillDefinition {
   maxTargets?: number; // e.g., 3 for Strafing Run
   charges?: number; // e.g., 2 for Target Lock
   spAmount?: number; // e.g., +20 SP / +10 SP
+  passiveStats?: PassiveStatEntry[]; // S1c-1: generic per-level passive stat table (1-2 entries)
   oncePerBattle?: boolean;
   isToggle?: boolean;
   phaseOverride?: 'step2' | 'step3';
@@ -1033,6 +1077,7 @@ export type CombatLogTemplateKey =
   | 'log.registryHotTick'
   | 'log.controlResisted'
   | 'log.shieldRegen'
+  | 'log.hpRegen'
   | 'log.statusCleansed'
   | 'log.splashDamage'
   | 'log.retreat'

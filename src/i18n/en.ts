@@ -383,7 +383,16 @@ export const EN_TRANSLATIONS = {
     'Elite (1x/battle): Calls orbital cluster ordnance striking all enemies for 220% damage.',
   'skill.str_passive_ordnance.name': 'High-Yield Warheads',
   'skill.str_passive_ordnance.desc':
-    'Passive: Permanently increases all Skill damage by +5% per skill level.',
+    'Passive: Permanently increases ATK by +5% per skill level.',
+  'skill.str_passive_piercer.name': 'Armor-Piercing Rounds',
+  'skill.str_passive_piercer.desc':
+    'Passive: Permanently grants +2% Armor Pierce per skill level.',
+  'skill.str_passive_overcharge.name': 'Overcharged Crits',
+  'skill.str_passive_overcharge.desc':
+    'Passive: Permanently increases Critical Damage by +5% per skill level.',
+  'skill.str_passive_killzone.name': 'Killzone Targeting',
+  'skill.str_passive_killzone.desc':
+    'Passive: Permanently increases Critical Chance by +1.5% per skill level.',
 
   // SIEGE
   'skill.sge_anchor_protocol.name': 'Anchor Siege Mode',
@@ -404,9 +413,18 @@ export const EN_TRANSLATIONS = {
   'skill.sge_starbreaker_lance.name': 'Starbreaker Rail-Lance',
   'skill.sge_starbreaker_lance.desc':
     'Elite (1x/battle): Fires a 400% hyper-velocity lance that pierces Defense but hits shields first.',
+  'skill.sge_passive_plating.name': 'Reinforced Plating',
+  'skill.sge_passive_plating.desc':
+    'Passive: Permanently increases Max HP by +3% per skill level.',
   'skill.sge_passive_hull.name': 'Composite Bulkheads',
   'skill.sge_passive_hull.desc':
-    'Passive: Permanently increases Defense by +4% per skill level.',
+    'Passive: Permanently increases Defense (DEF) by +4% per skill level.',
+  'skill.sge_passive_capbank.name': 'Shield Capacitor Bank',
+  'skill.sge_passive_capbank.desc':
+    'Passive: Permanently increases Max Shield by +5% per skill level.',
+  'skill.sge_passive_last_stand.name': 'Last Stand Bastion',
+  'skill.sge_passive_last_stand.desc':
+    'Passive: While own HP is below 30%, increases own DEF by +6% per skill level.',
 
   // INTERCEPTOR
   'skill.int_sabot_burst.name': 'Sabot Needle Burst',
@@ -432,7 +450,16 @@ export const EN_TRANSLATIONS = {
     'Elite (1x/battle): Strips reactor limiters for +60% ATK & +40% Speed, at the cost of -30% DEF for 3 turns.',
   'skill.int_passive_vectored.name': 'Vectored Nozzles',
   'skill.int_passive_vectored.desc':
-    'Passive: Permanently increases Evasion by +3% and Speed by +2% per skill level.',
+    'Passive: Permanently increases Evasion (EVA) by +3% per skill level.',
+  'skill.int_passive_hunter.name': 'Hunter Optics',
+  'skill.int_passive_hunter.desc':
+    'Passive: Permanently increases Critical Chance by +3% per skill level.',
+  'skill.int_passive_afterimage.name': 'Afterimage Thrusters',
+  'skill.int_passive_afterimage.desc':
+    'Passive: Permanently grants +3% EVA and +1 Speed per skill level.',
+  'skill.int_passive_finisher.name': 'Finisher Protocol',
+  'skill.int_passive_finisher.desc':
+    'Passive: Deals +10% damage against targets below 30% HP per skill level.',
 
   // SUPPORT
   'skill.sup_nanite_mend.name': 'Nanite Hull Mend',
@@ -470,7 +497,16 @@ export const EN_TRANSLATIONS = {
     'Elite (1x/battle): Restores 100% Hull HP & Energy Shields and cleanses all debuffs for the entire squadron.',
   'skill.sup_passive_capacitor.name': 'Auxiliary SP Capacitor',
   'skill.sup_passive_capacitor.desc':
-    'Passive: Permanently regenerates +1 additional SP per turn per skill level.',
+    'Passive: Permanently regenerates +3 additional SP per turn per skill level.',
+  'skill.sup_passive_field_medic.name': 'Field Medic',
+  'skill.sup_passive_field_medic.desc':
+    'Passive: Boosts cast HP healing power by +10% per skill level.',
+  'skill.sup_passive_shield_tech.name': 'Shield Technician',
+  'skill.sup_passive_shield_tech.desc':
+    'Passive: Boosts cast Shield restore power by +10% per skill level.',
+  'skill.sup_passive_reactor.name': 'Auxiliary Reactor',
+  'skill.sup_passive_reactor.desc':
+    'Passive (self only): At turn start, adds +0.5% Shield Regen (and cap) and self-heals +0.3% Max HP per level.',
 
   // Target labels
   'skill.target.self': 'Self',
@@ -710,6 +746,7 @@ export const EN_TRANSLATIONS = {
   'log.registryHotTick': '{target} recovers +{amount} {resource} from {status}!',
   'log.controlResisted': 'Resisted: {status}',
   'log.shieldRegen': '{target} regenerates shield SHD +{amount}{suffix}',
+  'log.hpRegen': '{target} self-regenerates HP +{amount}',
   'log.shieldRegenHitSuffix': ' (hit {hits}x, {multPct}%)',
   'log.shieldRegenCrackedSuffix': ' (cracked shield, {multPct}%)',
   'log.statusCleansed': '{actor} purged all negative statuses from allies.',

@@ -150,8 +150,10 @@
       "spCost": 0,
       "cooldown": 0,
       "targetType": "self",
-      "effectKind": "passive_skill_dmg",
-      "buffMagnitude": 0.05,
+      "effectKind": "passive_stat",
+      "passiveStats": [
+        { "key": "attackPct", "perLevel": 5 }
+      ],
       "registryTag": "sys"
     },
     {
@@ -247,12 +249,14 @@
       "classScope": "siege",
       "category": "passive",
       "icon": "star",
-      "unlockLevel": 1,
+      "unlockLevel": 10,
       "spCost": 0,
       "cooldown": 0,
       "targetType": "self",
-      "effectKind": "passive_def_pct",
-      "buffMagnitude": 0.04,
+      "effectKind": "passive_stat",
+      "passiveStats": [
+        { "key": "defPct", "perLevel": 4 }
+      ],
       "registryTag": "sys"
     },
     {
@@ -366,9 +370,10 @@
       "spCost": 0,
       "cooldown": 0,
       "targetType": "self",
-      "effectKind": "passive_eva_spd",
-      "buffMagnitude": 0.03,
-      "secondaryMagnitude": 0.02,
+      "effectKind": "passive_stat",
+      "passiveStats": [
+        { "key": "evaPct", "perLevel": 3 }
+      ],
       "registryTag": "sys"
     },
     {
@@ -532,8 +537,192 @@
       "spCost": 0,
       "cooldown": 0,
       "targetType": "self",
-      "effectKind": "passive_sp_regen",
-      "spAmount": 1,
+      "effectKind": "passive_stat",
+      "passiveStats": [
+        { "key": "spRegenFlat", "perLevel": 3 }
+      ],
+      "registryTag": "sys"
+    },
+    {
+      "id": "str_passive_piercer",
+      "classScope": "striker",
+      "category": "passive",
+      "icon": "remove_moderator",
+      "unlockLevel": 10,
+      "spCost": 0,
+      "cooldown": 0,
+      "targetType": "self",
+      "effectKind": "passive_stat",
+      "passiveStats": [
+        { "key": "armorPierceFlat", "perLevel": 2 }
+      ],
+      "registryTag": "sys"
+    },
+    {
+      "id": "str_passive_overcharge",
+      "classScope": "striker",
+      "category": "passive",
+      "icon": "explosion",
+      "unlockLevel": 20,
+      "spCost": 0,
+      "cooldown": 0,
+      "targetType": "self",
+      "effectKind": "passive_stat",
+      "passiveStats": [
+        { "key": "critDamagePct", "perLevel": 5 }
+      ],
+      "registryTag": "sys"
+    },
+    {
+      "id": "str_passive_killzone",
+      "classScope": "striker",
+      "category": "passive",
+      "icon": "flare",
+      "unlockLevel": 30,
+      "spCost": 0,
+      "cooldown": 0,
+      "targetType": "self",
+      "effectKind": "passive_stat",
+      "passiveStats": [
+        { "key": "critFlat", "perLevel": 1.5 }
+      ],
+      "registryTag": "sys"
+    },
+    {
+      "id": "sge_passive_plating",
+      "classScope": "siege",
+      "category": "passive",
+      "icon": "health_cross",
+      "unlockLevel": 1,
+      "spCost": 0,
+      "cooldown": 0,
+      "targetType": "self",
+      "effectKind": "passive_stat",
+      "passiveStats": [
+        { "key": "maxHpPct", "perLevel": 3 }
+      ],
+      "registryTag": "sys"
+    },
+    {
+      "id": "sge_passive_capbank",
+      "classScope": "siege",
+      "category": "passive",
+      "icon": "security",
+      "unlockLevel": 20,
+      "spCost": 0,
+      "cooldown": 0,
+      "targetType": "self",
+      "effectKind": "passive_stat",
+      "passiveStats": [
+        { "key": "maxShieldPct", "perLevel": 5 }
+      ],
+      "registryTag": "sys"
+    },
+    {
+      "id": "sge_passive_last_stand",
+      "classScope": "siege",
+      "category": "passive",
+      "icon": "shield_with_heart",
+      "unlockLevel": 30,
+      "spCost": 0,
+      "cooldown": 0,
+      "targetType": "self",
+      "effectKind": "passive_stat",
+      "passiveStats": [
+        { "key": "lastStandDefPct", "perLevel": 6 }
+      ],
+      "registryTag": "sys"
+    },
+    {
+      "id": "int_passive_hunter",
+      "classScope": "interceptor",
+      "category": "passive",
+      "icon": "center_focus_strong",
+      "unlockLevel": 10,
+      "spCost": 0,
+      "cooldown": 0,
+      "targetType": "self",
+      "effectKind": "passive_stat",
+      "passiveStats": [
+        { "key": "critFlat", "perLevel": 3 }
+      ],
+      "registryTag": "sys"
+    },
+    {
+      "id": "int_passive_afterimage",
+      "classScope": "interceptor",
+      "category": "passive",
+      "icon": "air",
+      "unlockLevel": 20,
+      "spCost": 0,
+      "cooldown": 0,
+      "targetType": "self",
+      "effectKind": "passive_stat",
+      "passiveStats": [
+        { "key": "evaPct", "perLevel": 3 },
+        { "key": "speedFlat", "perLevel": 1 }
+      ],
+      "registryTag": "sys"
+    },
+    {
+      "id": "int_passive_finisher",
+      "classScope": "interceptor",
+      "category": "passive",
+      "icon": "swords",
+      "unlockLevel": 30,
+      "spCost": 0,
+      "cooldown": 0,
+      "targetType": "self",
+      "effectKind": "passive_stat",
+      "passiveStats": [
+        { "key": "executeDmgPct", "perLevel": 10 }
+      ],
+      "registryTag": "sys"
+    },
+    {
+      "id": "sup_passive_field_medic",
+      "classScope": "support",
+      "category": "passive",
+      "icon": "health_and_safety",
+      "unlockLevel": 10,
+      "spCost": 0,
+      "cooldown": 0,
+      "targetType": "self",
+      "effectKind": "passive_stat",
+      "passiveStats": [
+        { "key": "healPowerPct", "perLevel": 10 }
+      ],
+      "registryTag": "sys"
+    },
+    {
+      "id": "sup_passive_shield_tech",
+      "classScope": "support",
+      "category": "passive",
+      "icon": "add_moderator",
+      "unlockLevel": 20,
+      "spCost": 0,
+      "cooldown": 0,
+      "targetType": "self",
+      "effectKind": "passive_stat",
+      "passiveStats": [
+        { "key": "shieldPowerPct", "perLevel": 10 }
+      ],
+      "registryTag": "sys"
+    },
+    {
+      "id": "sup_passive_reactor",
+      "classScope": "support",
+      "category": "passive",
+      "icon": "shield_moon",
+      "unlockLevel": 30,
+      "spCost": 0,
+      "cooldown": 0,
+      "targetType": "self",
+      "effectKind": "passive_stat",
+      "passiveStats": [
+        { "key": "shieldRegenPctAdd", "perLevel": 0.5 },
+        { "key": "hpRegenPctAdd", "perLevel": 0.3 }
+      ],
       "registryTag": "sys"
     }
   ]

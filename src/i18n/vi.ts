@@ -385,7 +385,16 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
     'Tinh anh (1 lần/trận): Gọi oanh kích bão hòa toàn đội hình địch gây 220% sát thương.',
   'skill.str_passive_ordnance.name': 'Đầu Đạn Thuốc Nổ Cao',
   'skill.str_passive_ordnance.desc':
-    'Bị động: Vĩnh viễn tăng +5% sát thương mọi Kỹ năng mỗi cấp.',
+    'Bị động: Vĩnh viễn tăng +5% ATK mỗi cấp kỹ năng.',
+  'skill.str_passive_piercer.name': 'Đạn Xuyên Giáp',
+  'skill.str_passive_piercer.desc':
+    'Bị động: Vĩnh viễn tăng +2% Xuyên giáp mỗi cấp kỹ năng.',
+  'skill.str_passive_overcharge.name': 'Chí Mạng Tăng Cường',
+  'skill.str_passive_overcharge.desc':
+    'Bị động: Vĩnh viễn tăng +5% Sát thương chí mạng mỗi cấp kỹ năng.',
+  'skill.str_passive_killzone.name': 'Vùng Hạ Sát',
+  'skill.str_passive_killzone.desc':
+    'Bị động: Vĩnh viễn tăng +1.5% Tỉ lệ chí mạng mỗi cấp kỹ năng.',
 
   // SIEGE
   'skill.sge_anchor_protocol.name': 'Chế Độ Neo Pháo',
@@ -406,9 +415,18 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'skill.sge_starbreaker_lance.name': 'Thương Railgun Phá Tinh',
   'skill.sge_starbreaker_lance.desc':
     'Tinh anh (1 lần/trận): Bắn 1 phát siêu tốc 400% sát thương, xuyên giáp, không xuyên khiên.',
+  'skill.sge_passive_plating.name': 'Giáp Gia Cố',
+  'skill.sge_passive_plating.desc':
+    'Bị động: Vĩnh viễn tăng +3% HP tối đa mỗi cấp kỹ năng.',
   'skill.sge_passive_hull.name': 'Thân Vỏ Hợp Kim Kép',
   'skill.sge_passive_hull.desc':
-    'Bị động: Vĩnh viễn tăng +4% Phòng thủ mỗi cấp.',
+    'Bị động: Vĩnh viễn tăng +4% DEF mỗi cấp kỹ năng.',
+  'skill.sge_passive_capbank.name': 'Tụ Khiên',
+  'skill.sge_passive_capbank.desc':
+    'Bị động: Vĩnh viễn tăng +5% Khiên tối đa mỗi cấp kỹ năng.',
+  'skill.sge_passive_last_stand.name': 'Thành Trì Cuối',
+  'skill.sge_passive_last_stand.desc':
+    'Bị động: Khi HP bản thân dưới 30%, tăng +6% DEF mỗi cấp kỹ năng.',
 
   // INTERCEPTOR
   'skill.int_sabot_burst.name': 'Loạt Đạn Xuyên Giáp',
@@ -434,7 +452,16 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
     'Tinh anh (1 lần/trận): Gỡ giới hạn lò phản ứng tăng +60% ATK & +40% Tốc độ, đổi lại -30% DEF trong 3 lượt.',
   'skill.int_passive_vectored.name': 'Ống Phản Lực Đảo Hướng',
   'skill.int_passive_vectored.desc':
-    'Bị động: Vĩnh viễn tăng +3% Né tránh và +2% Tốc độ mỗi cấp.',
+    'Bị động: Vĩnh viễn tăng +3% Né tránh (EVA) mỗi cấp kỹ năng.',
+  'skill.int_passive_hunter.name': 'Mắt Thợ Săn',
+  'skill.int_passive_hunter.desc':
+    'Bị động: Vĩnh viễn tăng +3% Tỉ lệ chí mạng mỗi cấp kỹ năng.',
+  'skill.int_passive_afterimage.name': 'Ảnh Ảo',
+  'skill.int_passive_afterimage.desc':
+    'Bị động: Vĩnh viễn tăng +3% EVA và +1 Tốc độ mỗi cấp kỹ năng.',
+  'skill.int_passive_finisher.name': 'Đòn Dứt Điểm',
+  'skill.int_passive_finisher.desc':
+    'Bị động: Tăng +10% sát thương gây lên mục tiêu dưới 30% HP mỗi cấp kỹ năng.',
 
   // SUPPORT
   'skill.sup_nanite_mend.name': 'Tia Sửa Chữa Nanite',
@@ -472,7 +499,16 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
     'Tinh anh (1 lần/trận): Hồi 100% HP & Khiên và xóa sạch mọi hiệu ứng xấu cho toàn bộ phi đội.',
   'skill.sup_passive_capacitor.name': 'Tụ Điện SP Phụ Trợ',
   'skill.sup_passive_capacitor.desc':
-    'Bị động: Vĩnh viễn hồi thêm +1 SP mỗi lượt cho mỗi cấp kỹ năng.',
+    'Bị động: Vĩnh viễn hồi thêm +3 SP mỗi lượt cho mỗi cấp kỹ năng.',
+  'skill.sup_passive_field_medic.name': 'Kỹ Sư Cứu Hộ',
+  'skill.sup_passive_field_medic.desc':
+    'Bị động: Tăng +10% hiệu lực kỹ năng hồi HP thi triển mỗi cấp kỹ năng.',
+  'skill.sup_passive_shield_tech.name': 'Kỹ Thuật Khiên',
+  'skill.sup_passive_shield_tech.desc':
+    'Bị động: Tăng +10% hiệu lực hồi Khiên thi triển mỗi cấp kỹ năng.',
+  'skill.sup_passive_reactor.name': 'Lò Phản Ứng Phụ',
+  'skill.sup_passive_reactor.desc':
+    'Bị động (chỉ bản thân): Đầu lượt tăng +0.5% tái tạo Khiên (và trần) và tự hồi +0.3% HP tối đa mỗi cấp.',
 
   // Target labels
   'skill.target.self': 'Bản thân',
@@ -712,6 +748,7 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'log.registryHotTick': '{target} hồi +{amount} {resource} từ {status}!',
   'log.controlResisted': 'Kháng: {status}',
   'log.shieldRegen': '{target} hồi khiên SHD +{amount}{suffix}',
+  'log.hpRegen': '{target} tự hồi phục HP +{amount}',
   'log.shieldRegenHitSuffix': ' (trúng {hits} lần, {multPct}%)',
   'log.shieldRegenCrackedSuffix': ' (khiên nứt, {multPct}%)',
   'log.statusCleansed': '{actor} đã giải trừ toàn bộ hiệu ứng xấu cho đồng minh.',

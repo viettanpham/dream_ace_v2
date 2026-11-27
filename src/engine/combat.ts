@@ -198,6 +198,13 @@ export function getEffectiveUnitDefense(
   if (regMod.pct !== 0 || regMod.flat !== 0) {
     def = def * Math.max(0.1, 1 + regMod.pct) + regMod.flat;
   }
+  if (
+    (unit.derived.lastStandDefPct ?? 0) > 0 &&
+    unit.derived.maxHp > 0 &&
+    unit.hp / unit.derived.maxHp < 0.3
+  ) {
+    def *= 1 + (unit.derived.lastStandDefPct ?? 0) / 100;
+  }
   return Math.max(0, Math.round(def));
 }
 
@@ -1592,7 +1599,20 @@ function applyDamageToUnit(
           randomVariance(rng)
       );
   if (!isOneHit && isCrit) {
-    finalDamage = Math.round(finalDamage * COMBAT_FORMULAS.critDamageMultiplier);
+    const critMult =
+      COMBAT_FORMULAS.critDamageMultiplier +
+      (curAttacker.derived.critDamagePct ?? 0) / 100;
+    finalDamage = Math.round(finalDamage * critMult);
+  }
+  if (
+    !isOneHit &&
+    (curAttacker.derived.executeDmgPct ?? 0) > 0 &&
+    curTarget.derived.maxHp > 0 &&
+    curTarget.hp / curTarget.derived.maxHp < 0.3
+  ) {
+    finalDamage = Math.round(
+      finalDamage * (1 + (curAttacker.derived.executeDmgPct ?? 0) / 100)
+    );
   }
   if (!isOneHit && curTarget.isDefending) {
     finalDamage = Math.round(finalDamage * COMBAT_FORMULAS.defendDamageMultiplier);
@@ -2337,6 +2357,48 @@ function resolveUnitActionCore(
       }
     }
 
+    // Passive self-only per-turn HP regeneration at unit's OWN turn start
+    const passiveHpRegenPct = actor.derived.hpRegenPctAdd ?? 0;
+    if (actor.alive && passiveHpRegenPct > 0 && actor.hp < actor.derived.maxHp) {
+      const passiveHpGain = Math.min(
+        actor.derived.maxHp - actor.hp,
+        Math.max(1, Math.round((actor.derived.maxHp * passiveHpRegenPct) / 100))
+      );
+      if (passiveHpGain > 0) {
+        actor = { ...actor, hp: actor.hp + passiveHpGain };
+        events.push({
+          id: nextId('ev'),
+          round,
+          turn: 0,
+          actorId: actor.id,
+          targetId: actor.id,
+          type: 'heal',
+          amount: passiveHpGain,
+          flags: { isRegen: true },
+        });
+        popups.push({
+          id: nextId('pop'),
+          unitId: actor.id,
+          text: `+${passiveHpGain} HP`,
+          tone: 'heal',
+        });
+        logs.push({
+          id: nextId('log'),
+          round,
+          actorName: actor.name,
+          actorSide: actor.side,
+          tag: 'HEAL',
+          templateKey: 'log.hpRegen',
+          params: {
+            target: actor.name,
+            amount: passiveHpGain,
+            pct: Number(passiveHpRegenPct.toFixed(2)),
+            classId: actor.classId,
+          },
+        });
+      }
+    }
+
     // Healing Field HoT tick
     const regenSt = getStatus(actor, 'regen_hp');
     if (regenSt) {
@@ -2991,10 +3053,13 @@ function resolveUnitActionCore(
             });
             const shieldBlocked =
               shieldBreakAtTurnStart || hasStatus(act, 'shield_break');
+            const shieldPowerMult = 1 + (act.derived.shieldPowerPct ?? 0) / 100;
             const shieldBoost = shieldBlocked
               ? 0
               : Math.round(
-                  act.derived.maxShield * (scaled.secondaryMagnitude || 0.3)
+                  act.derived.maxShield *
+                    (scaled.secondaryMagnitude || 0.3) *
+                    shieldPowerMult
                 );
             nextShield = Math.min(act.derived.maxShield, act.shield + shieldBoost);
           }
@@ -3721,9 +3786,12 @@ function resolveUnitActionCore(
             )[0];
           if (chosenAlly) {
             const aIdx = nextUnits.findIndex((u) => u.id === chosenAlly.id);
+            const healPowerMult = 1 + (act.derived.healPowerPct ?? 0) / 100;
             const healAmt = Math.min(
               chosenAlly.derived.maxHp - chosenAlly.hp,
-              Math.round(chosenAlly.derived.maxHp * scaled.buffMagnitude)
+              Math.round(
+                chosenAlly.derived.maxHp * scaled.buffMagnitude * healPowerMult
+              )
             );
             nextUnits[aIdx] = {
               ...chosenAlly,
@@ -3878,6 +3946,10 @@ function resolveUnitActionCore(
 
         case 'heal_field_hot': {
           const slotIndices: number[] = [];
+          const healPowerMult = 1 + (act.derived.healPowerPct ?? 0) / 100;
+          const effectiveHotMagnitude = Number(
+            (scaled.buffMagnitude * healPowerMult).toFixed(4)
+          );
           for (let i = 0; i < nextUnits.length; i++) {
             const ally = nextUnits[i];
             if (ally.side !== act.side || !ally.alive) continue;
@@ -3887,7 +3959,7 @@ function resolveUnitActionCore(
               statuses: addOrRefreshStatus(ally.statuses, {
                 type: 'regen_hp',
                 turnsRemaining: skill.duration ?? 3,
-                magnitude: scaled.buffMagnitude,
+                magnitude: effectiveHotMagnitude,
                 sourceSkillId: skill.id,
               }),
               animState: ally.id === act.id ? 'casting' : 'shielded',
@@ -3895,7 +3967,7 @@ function resolveUnitActionCore(
             popups.push({
               id: nextId('pop'),
               unitId: ally.id,
-              text: `REGEN ${Math.round(scaled.buffMagnitude * 100)}%`,
+              text: `REGEN ${Math.round(effectiveHotMagnitude * 100)}%`,
               tone: 'heal',
             });
           }
@@ -3941,11 +4013,16 @@ function resolveUnitActionCore(
             const shieldBlocked =
               (ally.id === act.id && shieldBreakAtTurnStart) ||
               hasStatus(ally, 'shield_break');
+            const shieldPowerMult = 1 + (act.derived.shieldPowerPct ?? 0) / 100;
             const shdGain = shieldBlocked
               ? 0
               : Math.min(
                   ally.derived.maxShield - ally.shield,
-                  Math.round(ally.derived.maxShield * (scaled.buffMagnitude || 0.25))
+                  Math.round(
+                    ally.derived.maxShield *
+                      (scaled.buffMagnitude || 0.25) *
+                      shieldPowerMult
+                  )
                 );
             totalRestored += spGain + shdGain;
             nextUnits[i] = {

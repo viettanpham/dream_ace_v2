@@ -744,6 +744,31 @@ export function parseStructuredCombatLogRow(
       };
     }
 
+    case 'log.hpRegen': {
+      const amount = Number(p.amount ?? 0);
+      const unitName = targetFromParams ?? actorFromParams;
+      const regenAvatar = resolveActorAvatarMeta(entry, unitName, faction, units);
+      return {
+        id: entry.id,
+        round,
+        turnLabel,
+        faction,
+        actorName: unitName,
+        autoBadge,
+        actionKind: 'heal',
+        actionLabel: translate(lang, 'log.tag.HEAL'),
+        targetName: null,
+        valueText: `+${amount} HP`,
+        valueTone: 'heal',
+        fallbackText,
+        sentence: fallbackText,
+        spCost: null,
+        isStrong: false,
+        strongTone: null,
+        ...regenAvatar,
+      };
+    }
+
     case 'log.defend': {
       const shd = Number(p.shieldRecovered ?? 0);
       const sp = Number(p.spRecovered ?? 0);
@@ -1512,10 +1537,11 @@ export function splitLogSentenceWithIcons(
     case 'log.healSingle':
     case 'log.healSquad':
     case 'log.regenTick':
+    case 'log.hpRegen':
       return (
         insertSingleIconBeforeMatch(
           sentence,
-          /(hồi\s+|healing\s+|self-repairs\s+)(\+?\d+)/,
+          /(hồi\s+|healing\s+|self-repairs\s+|HP\s+)(\+?\d+)/,
           1,
           'hp_plus',
           'text-emerald-300',

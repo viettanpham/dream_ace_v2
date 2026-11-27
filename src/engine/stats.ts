@@ -71,6 +71,9 @@ export function calculateEffectiveStats(
     if (key === 'evasion' && specialTraits?.evasionMod) {
       total = Math.max(1, total + specialTraits.evasionMod);
     }
+    if (key === 'attack' && passives?.attackPct) {
+      total = Math.round(total * (1 + passives.attackPct));
+    }
     if (key === 'defense' && passives?.defPct) {
       total = Math.round(total * (1 + passives.defPct));
     }
@@ -97,17 +100,17 @@ export function calculateDerivedStats(
   const cls = MECH_CLASSES[classId];
   const lvl = Math.max(1, level);
 
-  const maxHp = Math.round(
+  const rawMaxHp =
     cls.baseHp +
-      stats.defense * COMBAT_FORMULAS.hpPerDefense +
-      (lvl - 1) * COMBAT_FORMULAS.hpPerLevel
-  );
+    stats.defense * COMBAT_FORMULAS.hpPerDefense +
+    (lvl - 1) * COMBAT_FORMULAS.hpPerLevel;
+  const maxHp = Math.round(rawMaxHp * (1 + (passives?.maxHpPct ?? 0)));
 
-  const maxShield = Math.round(
+  const rawMaxShield =
     cls.baseShield +
-      stats.shield * COMBAT_FORMULAS.shieldPerShieldStat +
-      (lvl - 1) * COMBAT_FORMULAS.shieldPerLevel
-  );
+    stats.shield * COMBAT_FORMULAS.shieldPerShieldStat +
+    (lvl - 1) * COMBAT_FORMULAS.shieldPerLevel;
+  const maxShield = Math.round(rawMaxShield * (1 + (passives?.maxShieldPct ?? 0)));
 
   const maxSp = Math.round(
     cls.baseSp +
@@ -119,20 +122,24 @@ export function calculateDerivedStats(
     cls.baseSpeed +
     stats.fuel * COMBAT_FORMULAS.speedFuelWeight +
     stats.evasion * COMBAT_FORMULAS.speedEvasionWeight;
-  const speed = Math.round(rawSpeed * (1 + (passives?.speedPct ?? 0)));
-
-  const dodgeChance = Math.min(
-    COMBAT_FORMULAS.maxDodgeChance,
-    Math.max(0, Math.round(stats.evasion * COMBAT_FORMULAS.dodgePerEvasion))
+  const speed = Math.round(
+    rawSpeed * (1 + (passives?.speedPct ?? 0)) + (passives?.speedFlat ?? 0)
   );
 
+  const baseDodge = Math.round(stats.evasion * COMBAT_FORMULAS.dodgePerEvasion);
+  const dodgeChance = Math.min(
+    COMBAT_FORMULAS.maxDodgeChance,
+    Math.max(0, Number((baseDodge + (passives?.dodgeFlat ?? 0)).toFixed(2)))
+  );
+
+  const baseCrit = Math.round(
+    COMBAT_FORMULAS.baseCritChance +
+      stats.evasion * COMBAT_FORMULAS.critPerEvasion +
+      (specialTraits?.critBonusPct ?? 0)
+  );
   const critChance = Math.min(
     COMBAT_FORMULAS.maxCritChance,
-    Math.round(
-      COMBAT_FORMULAS.baseCritChance +
-        stats.evasion * COMBAT_FORMULAS.critPerEvasion +
-        (specialTraits?.critBonusPct ?? 0)
-    )
+    Math.max(0, Number((baseCrit + (passives?.critFlat ?? 0)).toFixed(2)))
   );
 
   const skillPower = Math.round(stats.attack * 0.7 + stats.spirit * 0.85);
@@ -143,6 +150,10 @@ export function calculateDerivedStats(
       spEco.regenPerSpirit *
       (spEco.classFactor[classId] ?? 1)
   );
+  const passiveSpRegen =
+    passives?.spRegenPerTurn && passives.spRegenPerTurn > 0
+      ? passives.spRegenPerTurn
+      : passives?.spRegenFlat ?? 0;
 
   return {
     maxHp,
@@ -154,17 +165,34 @@ export function calculateDerivedStats(
     dodgeChance,
     critChance,
     skillPower,
-    armorPiercePct: Math.min(50, specialTraits?.armorPiercePct ?? 0),
+    armorPiercePct: Math.min(
+      50,
+      Math.max(
+        0,
+        Number(
+          (
+            (specialTraits?.armorPiercePct ?? 0) +
+            (passives?.armorPierceFlat ?? 0)
+          ).toFixed(2)
+        )
+      )
+    ),
     accuracyPct: Math.min(
       BALANCE_CONFIG.maxAccuracyPct,
       Math.max(0, specialTraits?.accuracyPct ?? 0)
     ),
     splashPct: Math.min(40, specialTraits?.splashPct ?? 0),
-    spRegenPerTurn:
-      spiritRegen +
-      (specialTraits?.spRegenPerTurn ?? 0) +
-      (passives?.spRegenPerTurn ?? 0),
+    spRegenPerTurn: Math.round(
+      spiritRegen + (specialTraits?.spRegenPerTurn ?? 0) + passiveSpRegen
+    ),
     passiveSkillDmgPct: passives?.skillDmgPct ?? 0,
+    critDamagePct: passives?.critDamagePct ?? 0,
+    healPowerPct: passives?.healPowerPct ?? 0,
+    shieldPowerPct: passives?.shieldPowerPct ?? 0,
+    shieldRegenPctAdd: passives?.shieldRegenPctAdd ?? 0,
+    hpRegenPctAdd: passives?.hpRegenPctAdd ?? 0,
+    executeDmgPct: passives?.executeDmgPct ?? 0,
+    lastStandDefPct: passives?.lastStandDefPct ?? 0,
   };
 }
 

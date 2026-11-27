@@ -100,11 +100,13 @@ function unitHasActiveStatus(unit: CombatUnit, type: StatusEffectType): boolean 
 
 export function computeShieldRegenPct(
   shieldStat: number,
-  cfg: ShieldRegenConfig = DEFAULT_SHIELD_REGEN_CONFIG
+  cfg: ShieldRegenConfig = DEFAULT_SHIELD_REGEN_CONFIG,
+  extraRegenPct = 0
 ): number {
   const safeStat = Number.isFinite(shieldStat) ? Math.max(0, shieldStat) : 0;
-  const rawPct = cfg.basePct + safeStat * cfg.perPointPct;
-  const clamped = Math.max(0, Math.min(cfg.capPct, rawPct));
+  const addPct = Number.isFinite(extraRegenPct) ? Math.max(0, extraRegenPct) : 0;
+  const rawPct = cfg.basePct + safeStat * cfg.perPointPct + addPct;
+  const clamped = Math.max(0, Math.min(cfg.capPct + addPct, rawPct));
   return Number(clamped.toFixed(6));
 }
 
@@ -137,7 +139,11 @@ export function computeShieldRegen(
     reason = 'not_hit';
   }
 
-  const regenPct = computeShieldRegenPct(unit.stats?.shield ?? 0, resolved);
+  const regenPct = computeShieldRegenPct(
+    unit.stats?.shield ?? 0,
+    resolved,
+    unit.derived?.shieldRegenPctAdd ?? 0
+  );
   const base = Math.round((maxShield * regenPct) / 100);
   const room = Math.max(0, maxShield - Math.max(0, unit.shield));
   const amount = Math.min(room, Math.max(0, Math.round((base * multPct) / 100)));

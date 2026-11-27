@@ -28,10 +28,50 @@ export const MAX_ACTIVE_SKILL_BAR = BALANCE_CONFIG.maxEquippedActiveSkills;
 
 export interface GearPassiveBonuses {
   skillDmgPct: number; // e.g., 0.15 for +15%
+  attackPct: number; // e.g., 0.15 for +15%
   defPct: number; // e.g., 0.12 for +12%
   evaPct: number; // e.g., 0.09 for +9%
   speedPct: number; // e.g., 0.06 for +6%
-  spRegenPerTurn: number; // e.g., +3 SP/turn
+  speedFlat: number; // e.g., +3 SPD
+  spRegenPerTurn: number; // e.g., +3 SP/turn (legacy + spRegenFlat)
+  spRegenFlat: number; // e.g., +3 SP/turn from passive_stat
+  maxHpPct: number; // e.g., 0.09 for +9%
+  maxShieldPct: number; // e.g., 0.15 for +15%
+  critFlat: number; // e.g., +4.5% crit chance
+  critDamagePct: number; // e.g., +25% crit damage
+  dodgeFlat: number; // e.g., +5% dodge chance
+  armorPierceFlat: number; // e.g., +6% armor pierce
+  healPowerPct: number; // e.g., +30% heal power
+  shieldPowerPct: number; // e.g., +30% shield restore power
+  shieldRegenPctAdd: number; // e.g., +1.5% per-turn shield regen + cap
+  hpRegenPctAdd: number; // e.g., +0.9% own-turn-start self HP regen
+  executeDmgPct: number; // e.g., +30% dmg vs <30% HP targets
+  lastStandDefPct: number; // e.g., +18% own DEF when <30% HP
+}
+
+export function createEmptyGearPassiveBonuses(): GearPassiveBonuses {
+  return {
+    skillDmgPct: 0,
+    attackPct: 0,
+    defPct: 0,
+    evaPct: 0,
+    speedPct: 0,
+    speedFlat: 0,
+    spRegenPerTurn: 0,
+    spRegenFlat: 0,
+    maxHpPct: 0,
+    maxShieldPct: 0,
+    critFlat: 0,
+    critDamagePct: 0,
+    dodgeFlat: 0,
+    armorPierceFlat: 0,
+    healPowerPct: 0,
+    shieldPowerPct: 0,
+    shieldRegenPctAdd: 0,
+    hpRegenPctAdd: 0,
+    executeDmgPct: 0,
+    lastStandDefPct: 0,
+  };
 }
 
 /**
@@ -91,11 +131,8 @@ export function getGearPassiveBonuses(
     'skillMaxLevel' | 'passiveScaleAfter5' | 'restorePctCap' | 'passiveSlots' | 'skillMods'
   > | null
 ): GearPassiveBonuses {
-  let skillDmgPct = 0;
-  let defPct = 0;
-  let evaPct = 0;
-  let speedPct = 0;
-  let spRegenPerTurn = 0;
+  const bonuses = createEmptyGearPassiveBonuses();
+  let legacySpRegen = 0;
 
   const unlockedSlots = getUnlockedPassiveSlots(gear.level, admin?.passiveSlots);
   const rawEquipped = Array.isArray(gear.equippedPassives)
@@ -118,22 +155,81 @@ export function getGearPassiveBonuses(
     const scaled = getScaledSkillStats(skill, level, admin);
     switch (skill.effectKind) {
       case 'passive_skill_dmg':
-        skillDmgPct += scaled.buffMagnitude;
+        bonuses.skillDmgPct += scaled.buffMagnitude;
         break;
       case 'passive_def_pct':
-        defPct += scaled.buffMagnitude;
+        bonuses.defPct += scaled.buffMagnitude;
         break;
       case 'passive_eva_spd':
-        evaPct += scaled.buffMagnitude;
-        speedPct += scaled.secondaryMagnitude;
+        bonuses.evaPct += scaled.buffMagnitude;
+        bonuses.speedPct += scaled.secondaryMagnitude;
         break;
       case 'passive_sp_regen':
-        spRegenPerTurn += scaled.spAmount;
+        legacySpRegen += scaled.spAmount;
         break;
+      case 'passive_stat': {
+        for (const entry of scaled.passiveStats ?? []) {
+          switch (entry.key) {
+            case 'attackPct':
+              bonuses.attackPct += entry.value / 100;
+              break;
+            case 'defPct':
+              bonuses.defPct += entry.value / 100;
+              break;
+            case 'evaPct':
+              bonuses.evaPct += entry.value / 100;
+              break;
+            case 'maxHpPct':
+              bonuses.maxHpPct += entry.value / 100;
+              break;
+            case 'maxShieldPct':
+              bonuses.maxShieldPct += entry.value / 100;
+              break;
+            case 'speedFlat':
+              bonuses.speedFlat += entry.value;
+              break;
+            case 'spRegenFlat':
+              bonuses.spRegenFlat += entry.value;
+              break;
+            case 'critFlat':
+              bonuses.critFlat += entry.value;
+              break;
+            case 'critDamagePct':
+              bonuses.critDamagePct += entry.value;
+              break;
+            case 'dodgeFlat':
+              bonuses.dodgeFlat += entry.value;
+              break;
+            case 'armorPierceFlat':
+              bonuses.armorPierceFlat += entry.value;
+              break;
+            case 'healPowerPct':
+              bonuses.healPowerPct += entry.value;
+              break;
+            case 'shieldPowerPct':
+              bonuses.shieldPowerPct += entry.value;
+              break;
+            case 'shieldRegenPctAdd':
+              bonuses.shieldRegenPctAdd += entry.value;
+              break;
+            case 'hpRegenPctAdd':
+              bonuses.hpRegenPctAdd += entry.value;
+              break;
+            case 'executeDmgPct':
+              bonuses.executeDmgPct += entry.value;
+              break;
+            case 'lastStandDefPct':
+              bonuses.lastStandDefPct += entry.value;
+              break;
+          }
+        }
+        break;
+      }
     }
   }
 
-  return { skillDmgPct, defPct, evaPct, speedPct, spRegenPerTurn };
+  bonuses.spRegenPerTurn = legacySpRegen + bonuses.spRegenFlat;
+  return bonuses;
 }
 
 /**

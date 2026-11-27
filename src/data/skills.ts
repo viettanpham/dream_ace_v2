@@ -2,16 +2,69 @@ import { getCatalogRow } from './iconCatalog';
 import rawSkillsData from './skills.json';
 import type {
   AdminConfig, IconCatalogModRow, MechClassId, OpeningCardDefinition,
-  SkillCategory, SkillClassScope, SkillDefinition, SkillEffectKind,
-  SkillIconKey, SkillModDefinition, SkillRegistryTag, SkillTargetType,
+  PassiveStatEntry, PassiveStatKey, SkillCategory, SkillClassScope,
+  SkillDefinition, SkillEffectKind, SkillIconKey, SkillModDefinition,
+  SkillRegistryTag, SkillTargetType,
 } from '../types/game';
 import { BALANCE_CONFIG, getEffectiveSkillMaxLevel, sanitizePassiveScaleAfter5, sanitizeRestorePctCap } from './balance';
 
 export const BUILTIN_SKILL_REGISTRY_TAG = 'sys' as const;
 export const MAX_SKILL_MODS = 100;
 export const SKILL_MOD_ID_REGEX = /^mod_[a-z0-9_-]+$/;
-export const EFFECT_KIND_VALIDATORS: Partial<Record<SkillEffectKind, (row: Record<string, unknown>) => string[]>> = {};
-export const MOD_EFFECT_KINDS: SkillEffectKind[] = [];
+export const PASSIVE_STAT_KEYS = [
+  'attackPct',
+  'defPct',
+  'evaPct',
+  'speedFlat',
+  'spRegenFlat',
+  'maxHpPct',
+  'maxShieldPct',
+  'critFlat',
+  'critDamagePct',
+  'dodgeFlat',
+  'armorPierceFlat',
+  'healPowerPct',
+  'shieldPowerPct',
+  'shieldRegenPctAdd',
+  'hpRegenPctAdd',
+  'executeDmgPct',
+  'lastStandDefPct',
+] as const satisfies readonly PassiveStatKey[];
+const PASSIVE_STAT_KEY_SET = new Set<string>(PASSIVE_STAT_KEYS);
+
+export function validatePassiveStatEntries(row: Record<string, unknown>): string[] {
+  const errs: string[] = [];
+  if (row.category !== 'passive') {
+    errs.push('passive_stat_requires_passive_category');
+  }
+  if (!Array.isArray(row.passiveStats) || row.passiveStats.length < 1 || row.passiveStats.length > 2) {
+    errs.push('passiveStats_length_1_to_2_required');
+    return errs;
+  }
+  const seenKeys = new Set<string>();
+  row.passiveStats.forEach((entry, idx) => {
+    const p = entry && typeof entry === 'object' && !Array.isArray(entry)
+      ? (entry as Record<string, unknown>)
+      : null;
+    if (!p || typeof p.key !== 'string' || !PASSIVE_STAT_KEY_SET.has(p.key)) {
+      errs.push(`passiveStats[${idx}].key_invalid`);
+      return;
+    }
+    if (seenKeys.has(p.key)) {
+      errs.push(`passiveStats[${idx}].key_duplicate`);
+    }
+    seenKeys.add(p.key);
+    if (typeof p.perLevel !== 'number' || !Number.isFinite(p.perLevel) || p.perLevel <= 0 || p.perLevel > 50) {
+      errs.push(`passiveStats[${idx}].perLevel_invalid`);
+    }
+  });
+  return errs;
+}
+
+export const EFFECT_KIND_VALIDATORS: Partial<Record<SkillEffectKind, (row: Record<string, unknown>) => string[]>> = {
+  passive_stat: validatePassiveStatEntries,
+};
+export const MOD_EFFECT_KINDS: SkillEffectKind[] = ['passive_stat'];
 
 const VALID_CLASS_SCOPES = new Set<SkillClassScope>(['general', 'striker', 'interceptor', 'siege', 'support']);
 const VALID_CATEGORIES = new Set<SkillCategory>(['normal', 'special', 'elite', 'passive']);
@@ -21,6 +74,8 @@ const VALID_ICON_KEYS = new Set<SkillIconKey>([
   'anchor', 'fortress', 'snowflake', 'shield_off', 'eye_off', 'ray', 'sword', 'rotate', 'corner_down_left', 'gauge',
   'radio', 'sparkles', 'skull', 'heart', 'radar', 'bolt', 'plus_circle', 'waves', 'swords', 'shield_plus',
   'feather', 'sun', 'cleanse', 'star',
+  'remove_moderator', 'explosion', 'flare', 'health_cross', 'security', 'shield_with_heart',
+  'center_focus_strong', 'air', 'health_and_safety', 'add_moderator', 'shield_moon',
 ]);
 const VALID_EFFECT_KINDS = new Set<SkillEffectKind>([
   'buff_def', 'buff_eva', 'buff_primary_dmg', 'buff_skill_dmg', 'buff_sure_hit',
@@ -31,7 +86,7 @@ const VALID_EFFECT_KINDS = new Set<SkillEffectKind>([
   'heal_single', 'scan_reveal', 'energize_single', 'sp_transfer', 'heal_field_hot',
   'energize_shield_field', 'team_atk_up', 'team_def_up', 'team_eva_up', 'invincible_ally',
   'purify_team', 'full_recovery_elite', 'passive_skill_dmg', 'passive_def_pct',
-  'passive_eva_spd', 'passive_sp_regen',
+  'passive_eva_spd', 'passive_sp_regen', 'passive_stat',
 ]);
 const OPTIONAL_NUMERIC_KEYS = [
   'powerMultiplier', 'shieldDamageMult', 'secondaryRatio', 'buffMagnitude',
@@ -245,11 +300,20 @@ export function getScaledSkillStats(
   if (skill.category === 'passive') {
     const scaleAfter5 = sanitizePassiveScaleAfter5(adminOrOpts?.passiveScaleAfter5);
     const passiveMult = clampedLv <= 5 ? clampedLv : 5 + (clampedLv - 5) * scaleAfter5;
+    const scaledPassiveStats: Array<PassiveStatEntry & { value: number }> =
+      Array.isArray(skill.passiveStats)
+        ? skill.passiveStats.map((entry) => ({
+            key: entry.key,
+            perLevel: entry.perLevel,
+            value: Number((entry.perLevel * passiveMult).toFixed(4)),
+          }))
+        : [];
     return {
       level: clampedLv, effectMult: passiveMult, spCost: 0, cooldown: 0, powerMultiplier: 0, secondaryRatio: 0,
       buffMagnitude: Number(((skill.buffMagnitude ?? 0) * passiveMult).toFixed(3)),
       secondaryMagnitude: Number(((skill.secondaryMagnitude ?? 0) * passiveMult).toFixed(3)),
       spAmount: Math.round((skill.spAmount ?? 0) * passiveMult),
+      passiveStats: scaledPassiveStats,
     };
   }
 

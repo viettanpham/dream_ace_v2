@@ -43,12 +43,16 @@ interface SkillIconProps {
 export function SkillIcon({ icon, className = 'w-4 h-4' }: SkillIconProps) {
   switch (icon) {
     case 'shield':
+    case 'security':
+    case 'shield_moon':
       return <Shield className={className} />;
     case 'wind':
+    case 'air':
       return <Wind className={className} />;
     case 'flame':
       return <Flame className={className} />;
     case 'crosshair':
+    case 'center_focus_strong':
       return <Crosshair className={className} />;
     case 'target':
       return <Target className={className} />;
@@ -56,6 +60,7 @@ export function SkillIcon({ icon, className = 'w-4 h-4' }: SkillIconProps) {
     case 'bolt':
       return <Zap className={className} />;
     case 'bomb':
+    case 'explosion':
       return <Bomb className={className} />;
     case 'battery':
       return <BatteryCharging className={className} />;
@@ -70,10 +75,12 @@ export function SkillIcon({ icon, className = 'w-4 h-4' }: SkillIconProps) {
     case 'snowflake':
       return <Snowflake className={className} />;
     case 'shield_off':
+    case 'remove_moderator':
       return <ShieldOff className={className} />;
     case 'eye_off':
       return <EyeOff className={className} />;
     case 'ray':
+    case 'flare':
       return <Sparkle className={className} />;
     case 'sword':
       return <Sword className={className} />;
@@ -94,12 +101,16 @@ export function SkillIcon({ icon, className = 'w-4 h-4' }: SkillIconProps) {
     case 'radar':
       return <Radar className={className} />;
     case 'plus_circle':
+    case 'health_cross':
       return <PlusCircle className={className} />;
     case 'waves':
       return <Waves className={className} />;
     case 'swords':
       return <Swords className={className} />;
     case 'shield_plus':
+    case 'shield_with_heart':
+    case 'health_and_safety':
+    case 'add_moderator':
       return <ShieldPlus className={className} />;
     case 'feather':
       return <Feather className={className} />;

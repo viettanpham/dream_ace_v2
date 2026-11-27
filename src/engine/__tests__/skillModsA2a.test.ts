@@ -157,27 +157,30 @@ function makePopupUnit(): CombatUnit {
 
 describe('TASK A2a: skills.json + Admin skillMods engine + ITEM Z popups', () => {
   const roots: Root[] = [];
+  const initialModEffectKinds = [...MOD_EFFECT_KINDS];
+  const initialValidators = { ...EFFECT_KIND_VALIDATORS };
 
   afterEach(() => {
     while (roots.length > 0) {
       const r = roots.pop()!;
       act(() => r.unmount());
     }
-    MOD_EFFECT_KINDS.length = 0;
+    MOD_EFFECT_KINDS.splice(0, MOD_EFFECT_KINDS.length, ...initialModEffectKinds);
     for (const k of Object.keys(EFFECT_KIND_VALIDATORS) as Array<keyof typeof EFFECT_KIND_VALIDATORS>) {
       delete EFFECT_KIND_VALIDATORS[k];
     }
+    Object.assign(EFFECT_KIND_VALIDATORS, initialValidators);
     vi.restoreAllMocks();
   });
 
   it('1) skills.json schema & snapshot equality + same-seed determinism when skillMods = []', () => {
     expect(CURRENT_SAVE_VERSION).toBe(14);
-    expect(Object.keys(EFFECT_KIND_VALIDATORS)).toHaveLength(0);
-    expect(MOD_EFFECT_KINDS).toHaveLength(0);
+    expect(Object.keys(EFFECT_KIND_VALIDATORS)).toEqual(['passive_stat']);
+    expect(MOD_EFFECT_KINDS).toEqual(['passive_stat']);
 
     expect(rawSkillsJson.schemaVersion).toBe(1);
-    expect(rawSkillsJson.skills).toHaveLength(38);
-    expect(SKILLS_LIST).toHaveLength(38);
+    expect(rawSkillsJson.skills).toHaveLength(50);
+    expect(SKILLS_LIST).toHaveLength(50);
     for (const skill of SKILLS_LIST) {
       expect(skill.registryTag).toBe(BUILTIN_SKILL_REGISTRY_TAG);
       expect(SKILLS_CATALOG[skill.id]).toEqual(skill);
@@ -337,7 +340,9 @@ describe('TASK A2a: skills.json + Admin skillMods engine + ITEM Z popups', () =>
     gear.skillLevels.sup_passive_capacitor = 1;
     gear.equippedPassives = ['mod_passive_alpha', 'sup_passive_capacitor'];
     const bonuses = getGearPassiveBonuses(gear, adminDisabled);
-    const capLv1 = getScaledSkillStats(SKILLS_CATALOG.sup_passive_capacitor, 1, adminDisabled).spAmount;
+    const capLv1 =
+      getScaledSkillStats(SKILLS_CATALOG.sup_passive_capacitor, 1, adminDisabled)
+        .passiveStats?.[0]?.value ?? 0;
     expect(bonuses.spRegenPerTurn).toBe(capLv1);
     expect(bonuses.skillDmgPct).toBe(0);
 

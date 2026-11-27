@@ -108,19 +108,19 @@ describe('TASK S1b: Skill level cap, real-number cards, configurable passive slo
   });
 
   it('2) passive scaling above Lv5, restorePctCap, and upgrade cost beyond Lv5 table', () => {
-    const passive = getSkillById('str_passive_ordnance')!; // +5% per level
+    const passive = getSkillById('str_passive_ordnance')!; // +5% ATK per level
     const lv5 = getScaledSkillStats(passive, 5, {
       skillMaxLevel: 10,
       passiveScaleAfter5: 0.5,
     });
-    expect(lv5.buffMagnitude).toBeCloseTo(0.25, 4);
+    expect(lv5.passiveStats?.[0]?.value).toBeCloseTo(25, 4);
 
     const lv8 = getScaledSkillStats(passive, 8, {
       skillMaxLevel: 10,
       passiveScaleAfter5: 0.5,
     });
-    // 5 + (8 - 5) * 0.5 = 6.5 * 0.05 = 0.325
-    expect(lv8.buffMagnitude).toBeCloseTo(0.325, 4);
+    // 5 + (8 - 5) * 0.5 = 6.5 * 5 = 32.5
+    expect(lv8.passiveStats?.[0]?.value).toBeCloseTo(32.5, 4);
 
     // Heal / shield restore % cap
     const mend = getSkillById('sup_nanite_mend')!; // base 0.30
@@ -184,14 +184,14 @@ describe('TASK S1b: Skill level cap, real-number cards, configurable passive slo
       },
       equippedPassives: [], // learned, NOT equipped
     };
-    expect(getGearPassiveBonuses(gear).skillDmgPct).toBe(0);
+    expect(getGearPassiveBonuses(gear).attackPct).toBe(0);
 
     // Equipping applies bonus
     const gearEquipped: GearUnit = {
       ...gear,
       equippedPassives: ['str_passive_ordnance'],
     };
-    expect(getGearPassiveBonuses(gearEquipped).skillDmgPct).toBeCloseTo(0.15, 4);
+    expect(getGearPassiveBonuses(gearEquipped).attackPct).toBeCloseTo(0.15, 4);
 
     // Shrinking cap/unlocked slots ignores overflow passives without deleting from save
     const overflowGear: GearUnit = {
@@ -202,7 +202,7 @@ describe('TASK S1b: Skill level cap, real-number cards, configurable passive slo
     expect(
       getGearPassiveBonuses(overflowGear, {
         passiveSlots: { initial: 1, everyLevels: 5, max: 12 },
-      }).skillDmgPct
+      }).attackPct
     ).toBe(0);
     expect(overflowGear.equippedPassives).toHaveLength(2);
 
