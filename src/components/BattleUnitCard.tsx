@@ -310,6 +310,7 @@ export const BattleUnitCard = memo(function BattleUnitCard({
         ...cardPopupCfg,
         battleSpeed,
         effectsMode: fxSettings.effectsMode,
+        lang,
       },
       {
         width: CARD_POPUP_FALLBACK_WIDTH_PX,
@@ -339,6 +340,7 @@ export const BattleUnitCard = memo(function BattleUnitCard({
           ...cardPopupCfg,
           battleSpeed,
           effectsMode: fxSettings.effectsMode,
+          lang,
         },
         { width: cardWidth, height: cardHeight }
       )
@@ -348,6 +350,7 @@ export const BattleUnitCard = memo(function BattleUnitCard({
     cardPopupCfg,
     battleSpeed,
     fxSettings.effectsMode,
+    lang,
     skipAnimations,
     unit.alive,
   ]);
@@ -375,6 +378,7 @@ export const BattleUnitCard = memo(function BattleUnitCard({
             ...cardPopupCfg,
             battleSpeed,
             effectsMode: fxSettings.effectsMode,
+            lang,
           },
           { width: cardWidth, height: cardHeight }
         )
@@ -386,6 +390,7 @@ export const BattleUnitCard = memo(function BattleUnitCard({
     cardPopupCfg,
     battleSpeed,
     fxSettings.effectsMode,
+    lang,
     skipAnimations,
     unit.alive,
   ]);
@@ -568,7 +573,7 @@ export const BattleUnitCard = memo(function BattleUnitCard({
               const sp = item.startPoint;
               const isSmall =
                 isCompactPopupTone(pop.tone) && !isSpPopupText(pop.text);
-              const display = parseCardPopupDisplay(pop);
+              const display = parseCardPopupDisplay(pop, lang);
               const arrow = display.arrow;
               const iconPx = isSmall ? 12 : pop.tone === 'crit' ? 15 : 14;
               const colorClass = getPopupColor(pop.tone, pop.text);
@@ -596,6 +601,24 @@ export const BattleUnitCard = memo(function BattleUnitCard({
                         </span>
                       )}
                       <span>{seg.text}</span>
+                      {seg.trailingIconKind && (
+                        <span
+                          data-testid="card-popup-icon"
+                          data-popup-icon-kind={seg.trailingIconKind}
+                          data-popup-icon-role="trailing"
+                          className={`material-symbols-outlined leading-none select-none shrink-0 ${
+                            seg.trailingColorClass ?? ''
+                          }`}
+                          style={{
+                            fontSize: `${
+                              seg.trailingSmall ? Math.max(10, iconPx - 2) : iconPx
+                            }px`,
+                          }}
+                          aria-hidden="true"
+                        >
+                          {getCardPopupSymbol(seg.trailingIconKind, iconMods)}
+                        </span>
+                      )}
                     </span>
                   ))}
                 </>

@@ -123,8 +123,8 @@ describe('TASK POP-ICON — card/radar popup icons and combat log inline icons',
         ],
         arrow: 'up',
       },
-      { pop: { tone: 'buff', text: 'REDLINE FURY!' }, segs: [{ kind: null, text: 'REDLINE FURY!' }], arrow: 'up' },
-      { pop: { tone: 'evade', text: 'REVEALED!' }, segs: [{ kind: null, text: 'REVEALED!' }], arrow: null },
+      { pop: { tone: 'buff', text: 'REDLINE FURY!' }, segs: [{ kind: 'splash', symbol: 'explosion', text: 'CUỒNG NỘ' }], arrow: 'up' },
+      { pop: { tone: 'evade', text: 'REVEALED!' }, segs: [{ kind: 'revealed', symbol: 'visibility', text: 'LỘ DIỆN' }], arrow: null },
     ];
 
     for (const c of cases) {

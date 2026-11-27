@@ -1,14 +1,28 @@
 import { getCatalogRow } from '../data/iconCatalog';
+import { EN_TRANSLATIONS } from '../i18n/en';
+import { VI_TRANSLATIONS } from '../i18n/vi';
 import type {
   BattleSpeed,
   FloatingPopup,
   IconCatalogModRow,
+  Language,
 } from '../types/game';
 import {
   shouldSkipRadarFloatingLabels,
   SP_COLOR_TOKENS,
 } from './battleDisplay';
 import type { BattleEffectsMode } from './battleVfx';
+
+type PopupTextKey = Extract<keyof typeof EN_TRANSLATIONS, `popup.${string}`>;
+
+function getPopupText(lang: Language, key: PopupTextKey): string {
+  return lang === 'en' ? EN_TRANSLATIONS[key] : VI_TRANSLATIONS[key];
+}
+
+export type CardPopupInput = Pick<FloatingPopup, 'tone' | 'text'> & {
+  id?: string;
+  isSupply?: boolean;
+};
 
 export const DEFAULT_CARD_POPUP_STAGGER_MS = 100;
 export const DEFAULT_CARD_POPUP_FLIGHT_MS = 200;
@@ -43,6 +57,7 @@ export interface CardPopupQueueOptions {
   zoneHeightPct?: number;
   battleSpeed?: BattleSpeed;
   effectsMode?: BattleEffectsMode;
+  lang?: Language;
 }
 
 export interface CardPopupStartPoint {
@@ -167,6 +182,9 @@ export function getCardPopupArrow(
   if (/^BURN\s+-\d+$/i.test(trimmed)) {
     return null;
   }
+  if (/^(?:(?:SIEGE|FORTRESS)\s+(?:ON|OFF)|COUNTER READY)$/i.test(trimmed)) {
+    return null;
+  }
   if (/^REGEN\s+[+-]?\d+%$/i.test(trimmed)) {
     return 'up';
   }
@@ -181,6 +199,7 @@ export function getCardPopupArrow(
 
 export type CardPopupIconKind =
   | 'hp'
+  | 'hp_hull'
   | 'crit'
   | 'splash'
   | 'burn'
@@ -194,10 +213,28 @@ export type CardPopupIconKind =
   | 'spd'
   | 'vuln'
   | 'regen'
-  | 'lock';
+  | 'lock'
+  | 'counter'
+  | 'flash'
+  | 'stealth'
+  | 'revealed'
+  | 'shd_break'
+  | 'shd_crack'
+  | 'slow'
+  | 'silenced'
+  | 'boost'
+  | 'purify'
+  | 'anchor'
+  | 'fort'
+  | 'supply'
+  | 'active'
+  | 'inactive';
 
 export interface CardPopupSegment {
   iconKind: CardPopupIconKind | null;
+  trailingIconKind?: CardPopupIconKind | null;
+  trailingColorClass?: string;
+  trailingSmall?: boolean;
   text: string;
   colorClass?: string;
 }
@@ -223,11 +260,99 @@ const STAT_POPUP_PATTERNS: readonly {
   { regex: /^LOCK\s+(x\d+)$/i, kind: 'lock' },
 ];
 
+const NAMED_POPUP_TABLE: Record<
+  string,
+  {
+    key: PopupTextKey;
+    iconKind: CardPopupIconKind;
+    trailingIconKind?: CardPopupIconKind;
+    trailingColorClass?: string;
+  }
+> = {
+  EVADED: { key: 'popup.evaded', iconKind: 'eva', trailingIconKind: 'eva' },
+  'EVADE ALL': { key: 'popup.evade_all', iconKind: 'eva', trailingIconKind: 'eva' },
+  'BARREL ROLL': { key: 'popup.barrel_roll', iconKind: 'eva', trailingIconKind: 'eva' },
+  'COUNTER!': {
+    key: 'popup.counter',
+    iconKind: 'counter',
+    trailingIconKind: 'flash',
+    trailingColorClass: 'text-amber-300',
+  },
+  'COUNTER READY': {
+    key: 'popup.counter_ready',
+    iconKind: 'counter',
+    trailingIconKind: 'active',
+    trailingColorClass: 'text-emerald-400',
+  },
+  STEALTH: { key: 'popup.stealth', iconKind: 'stealth' },
+  CAMO: { key: 'popup.camo', iconKind: 'stealth' },
+  'REVEALED!': { key: 'popup.revealed', iconKind: 'revealed' },
+  'SHD BREAK': { key: 'popup.shd_break', iconKind: 'shd_break' },
+  'SHD CRACK': { key: 'popup.shd_crack', iconKind: 'shd_crack' },
+  SLOW: { key: 'popup.slow', iconKind: 'slow' },
+  SILENCED: { key: 'popup.silenced', iconKind: 'silenced' },
+  'REDLINE FURY!': { key: 'popup.redline_fury', iconKind: 'splash' },
+  BURN: { key: 'popup.burn', iconKind: 'burn' },
+  'CHARGING...': { key: 'popup.charging', iconKind: 'boost', trailingIconKind: 'boost' },
+  PURIFIED: { key: 'popup.purified', iconKind: 'purify', trailingIconKind: 'purify' },
+  'FULL RECOVERY': {
+    key: 'popup.full_recovery',
+    iconKind: 'regen',
+    trailingIconKind: 'regen',
+  },
+  'SIEGE ON': {
+    key: 'popup.siege_on',
+    iconKind: 'anchor',
+    trailingIconKind: 'active',
+    trailingColorClass: 'text-emerald-400',
+  },
+  'SIEGE OFF': {
+    key: 'popup.siege_off',
+    iconKind: 'anchor',
+    trailingIconKind: 'inactive',
+    trailingColorClass: 'text-slate-400',
+  },
+  'FORTRESS ON': {
+    key: 'popup.fortress_on',
+    iconKind: 'fort',
+    trailingIconKind: 'active',
+    trailingColorClass: 'text-emerald-400',
+  },
+  'FORTRESS OFF': {
+    key: 'popup.fortress_off',
+    iconKind: 'fort',
+    trailingIconKind: 'inactive',
+    trailingColorClass: 'text-slate-400',
+  },
+};
+
+function defaultLeadingIconForTone(tone: FloatingPopup['tone']): CardPopupIconKind {
+  switch (tone) {
+    case 'crit':
+      return 'crit';
+    case 'damage':
+      return 'hp';
+    case 'shield':
+      return 'shield';
+    case 'heal':
+      return 'hp_plus';
+    case 'evade':
+      return 'eva';
+    case 'buff':
+      return 'boost';
+    case 'status':
+      return 'vuln';
+  }
+}
+
 export function parseCardPopupDisplay(
-  popup: Pick<FloatingPopup, 'tone' | 'text'>
+  popup: CardPopupInput,
+  lang: Language = 'vi'
 ): CardPopupDisplayInfo {
   const trimmed = popup.text.trim();
+  const upper = trimmed.toUpperCase();
   const arrow = getCardPopupArrow(popup);
+  const isSupply = Boolean(popup.isSupply || popup.id?.startsWith('pop_sup_'));
 
   const build = (segments: CardPopupSegment[]): CardPopupDisplayInfo => {
     const firstIcon =
@@ -239,6 +364,20 @@ export function parseCardPopupDisplay(
       arrow,
     };
   };
+
+  const withSupplyMarker = (seg: CardPopupSegment): CardPopupSegment =>
+    isSupply
+      ? {
+          ...seg,
+          trailingIconKind: 'supply',
+          trailingSmall: true,
+        }
+      : seg;
+
+  // Admin unchanged popups
+  if (upper === 'GOD 0' || upper === 'INVINCIBLE') {
+    return build([{ iconKind: null, text: popup.text }]);
+  }
 
   // Combined "+N SP +M SHD" or "+N SHD +M SP"
   const spShdMatch = /^\+(\d+)\s*SP\s+\+(\d+)\s*SHD$/i.exec(trimmed);
@@ -272,14 +411,70 @@ export function parseCardPopupDisplay(
     ]);
   }
 
-  // Single "+N SP"
+  // Single "+N SP" (with optional supply marker)
   const spMatch = /^\+(\d+)\s*SP$/i.exec(trimmed);
   if (spMatch) {
     return build([
-      {
+      withSupplyMarker({
         iconKind: 'sp',
         text: `+${spMatch[1]}`,
         colorClass: SP_COLOR_TOKENS.textClass,
+      }),
+    ]);
+  }
+
+  // Drained "-N SP"
+  const drainSpMatch = /^(-\d+)\s*SP$/i.exec(trimmed);
+  if (drainSpMatch) {
+    return build([
+      {
+        iconKind: 'sp',
+        text: drainSpMatch[1],
+        colorClass: SP_COLOR_TOKENS.textClass,
+      },
+    ]);
+  }
+
+  // Drained "-N SHD"
+  const drainShdMatch = /^(-\d+)\s*SHD$/i.exec(trimmed);
+  if (drainShdMatch) {
+    return build([
+      {
+        iconKind: 'shield',
+        text: drainShdMatch[1],
+        colorClass: 'text-sky-300',
+      },
+    ]);
+  }
+
+  // CRIT SHD -N: shield | explosion (SS05)
+  const critShdMatch = /^CRIT\s+SHD\s+(-\d+)$/i.exec(trimmed);
+  if (critShdMatch) {
+    return build([
+      {
+        iconKind: 'shield',
+        text: critShdMatch[1],
+        trailingIconKind: 'splash',
+        trailingColorClass: 'text-amber-300',
+      },
+    ]);
+  }
+
+  // SHD -N: shield | none
+  const shdDmgMatch = /^SHD\s+(-\d+)$/i.exec(trimmed);
+  if (shdDmgMatch) {
+    return build([{ iconKind: 'shield', text: shdDmgMatch[1] }]);
+  }
+
+  // CRIT -N (hull): hp (SS01) | explosion (SS05)
+  const critHullMatch = /^CRIT\s+(-\d+)$/i.exec(trimmed);
+  if (critHullMatch) {
+    return build([
+      {
+        iconKind: 'hp_hull',
+        text: critHullMatch[1],
+        trailingIconKind: 'splash',
+        trailingColorClass: 'text-amber-300',
       },
     ]);
   }
@@ -307,26 +502,27 @@ export function parseCardPopupDisplay(
         },
       ]);
     }
-    return build([{ iconKind: null, text: popup.text }]);
   }
 
-  // Heal "+N HP"
+  // Heal "+N HP" (with optional supply marker)
   const healMatch = /^\+(\d+)\s*HP$/i.exec(trimmed);
   if (healMatch) {
-    return build([{ iconKind: 'hp_plus', text: `+${healMatch[1]}` }]);
+    return build([
+      withSupplyMarker({ iconKind: 'hp_plus', text: `+${healMatch[1]}` }),
+    ]);
   }
 
-  // Shield "+N SHD" or "SHD +N"
-  const shdPrefixMatch = /^SHD\s+\+(\d+)$/i.exec(trimmed);
+  // Shield "+N SHD", "SHD +N", or "SHIELD +N" (with optional supply marker)
+  const shdPrefixMatch = /^(?:SHD|SHIELD)\s+\+(\d+)$/i.exec(trimmed);
   const shdSuffixMatch = /^\+(\d+)\s*SHD$/i.exec(trimmed);
   const shdVal = shdPrefixMatch?.[1] ?? shdSuffixMatch?.[1];
   if (shdVal !== undefined) {
     return build([
-      {
+      withSupplyMarker({
         iconKind: 'shield',
         text: `+${shdVal}`,
         colorClass: 'text-sky-300',
-      },
+      }),
     ]);
   }
 
@@ -339,6 +535,12 @@ export function parseCardPopupDisplay(
     ]);
   }
 
+  // Generic ATK +N%: swords + "ATK +N%"
+  const atkMatch = /^ATK\s+([+-]?\d+%)$/i.exec(trimmed);
+  if (atkMatch) {
+    return build([{ iconKind: 'wpn', text: `ATK ${atkMatch[1]}` }]);
+  }
+
   // Stat buff / debuff labels
   for (const rule of STAT_POPUP_PATTERNS) {
     const m = rule.regex.exec(trimmed);
@@ -347,7 +549,30 @@ export function parseCardPopupDisplay(
     }
   }
 
-  return build([{ iconKind: null, text: popup.text }]);
+  // Named status / action / stance popups (VI / EN)
+  const named = NAMED_POPUP_TABLE[upper];
+  if (named) {
+    const seg: CardPopupSegment = {
+      iconKind: named.iconKind,
+      text: getPopupText(lang, named.key),
+      ...(named.trailingIconKind
+        ? {
+            trailingIconKind: named.trailingIconKind,
+            trailingColorClass: named.trailingColorClass,
+          }
+        : {}),
+    };
+    return build([
+      upper === 'REVEALED!' ? withSupplyMarker(seg) : seg,
+    ]);
+  }
+
+  return build([
+    {
+      iconKind: defaultLeadingIconForTone(popup.tone),
+      text: popup.text,
+    },
+  ]);
 }
 
 export function getCardPopupSymbol(
@@ -357,6 +582,8 @@ export function getCardPopupSymbol(
   switch (kind) {
     case 'hp':
       return 'swords';
+    case 'hp_hull':
+      return getCatalogRow('SS01', iconMods)?.symbol ?? 'health_cross';
     case 'crit':
       return getCatalogRow('SS04', iconMods)?.symbol ?? 'flare';
     case 'splash':
@@ -368,7 +595,7 @@ export function getCardPopupSymbol(
     case 'shield':
       return getCatalogRow('BS05', iconMods)?.symbol ?? 'security';
     case 'sp':
-      return 'water_drop';
+      return getCatalogRow('SS02', iconMods)?.symbol ?? 'water_drop';
     case 'def':
       return getCatalogRow('BF03', iconMods)?.symbol ?? 'shield';
     case 'eva':
@@ -385,6 +612,36 @@ export function getCardPopupSymbol(
       return getCatalogRow('BF09', iconMods)?.symbol ?? 'health_cross';
     case 'lock':
       return getCatalogRow('CC02', iconMods)?.symbol ?? 'lock';
+    case 'counter':
+      return getCatalogRow('SS14', iconMods)?.symbol ?? 'undo';
+    case 'flash':
+      return 'flash_on';
+    case 'stealth':
+      return getCatalogRow('BF18', iconMods)?.symbol ?? 'visibility_off';
+    case 'revealed':
+      return 'visibility';
+    case 'shd_break':
+      return getCatalogRow('DB10', iconMods)?.symbol ?? 'shield_toggle';
+    case 'shd_crack':
+      return getCatalogRow('DB12', iconMods)?.symbol ?? 'shield_question';
+    case 'slow':
+      return getCatalogRow('DB05', iconMods)?.symbol ?? 'ac_unit';
+    case 'silenced':
+      return getCatalogRow('CC04', iconMods)?.symbol ?? 'block';
+    case 'boost':
+      return getCatalogRow('BF17', iconMods)?.symbol ?? 'bolt_boost';
+    case 'purify':
+      return 'cleaning_services';
+    case 'anchor':
+      return getCatalogRow('CC05', iconMods)?.symbol ?? 'anchor';
+    case 'fort':
+      return 'fort';
+    case 'supply':
+      return 'package_2';
+    case 'active':
+      return 'check_circle';
+    case 'inactive':
+      return 'cancel';
   }
 }
 
@@ -571,7 +828,8 @@ export function pickCardPopupEndPoint(
 }
 
 export function estimatePopupBoxSize(
-  popup: Pick<FloatingPopup, 'tone' | 'text'>
+  popup: CardPopupInput,
+  lang: Language = 'vi'
 ): {
   width: number;
   height: number;
@@ -579,9 +837,19 @@ export function estimatePopupBoxSize(
   const isSmall =
     (popup.tone === 'buff' || popup.tone === 'status') &&
     !isSpPopupText(popup.text);
-  const charW = isSmall ? 8 : 10;
-  const chars = popup.text.trim().length;
-  const width = Math.max(36, Math.ceil((chars * charW + 28) * 1.2));
+  const parsed = parseCardPopupDisplay(popup, lang);
+  const charW = isSmall ? 7 : 9;
+  const chars = parsed.displayText.trim().length;
+  let iconCount = 0;
+  for (const seg of parsed.segments) {
+    if (seg.iconKind) iconCount += 1;
+    if (seg.trailingIconKind) iconCount += 1;
+  }
+  const arrowBonus = parsed.arrow ? 10 : 0;
+  const width = Math.max(
+    36,
+    Math.ceil((chars * charW + iconCount * 22 + arrowBonus + 6) * 1.15)
+  );
   const height = (isSmall ? 18 : 22) + 4;
   return { width, height };
 }
@@ -727,7 +995,7 @@ export function syncCardPopupQueue(
       cardSize.width,
       cardSize.height,
       nextActive.map((a) => a.endPoint),
-      estimatePopupBoxSize(nextPopup),
+      estimatePopupBoxSize(nextPopup, options.lang ?? 'vi'),
       rng
     );
     nextActive.push({

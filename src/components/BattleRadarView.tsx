@@ -2611,7 +2611,7 @@ export function BattleRadarView({
             const isSmall =
               isCompactPopupTone(item.popup.tone) &&
               !isSpPopupText(item.popup.text);
-            const display = parseCardPopupDisplay(item.popup);
+            const display = parseCardPopupDisplay(item.popup, lang);
             const iconPx = isSmall
               ? 11
               : item.popup.tone === 'crit'
@@ -2673,6 +2673,24 @@ export function BattleRadarView({
                       </span>
                     )}
                     <span>{seg.text}</span>
+                    {seg.trailingIconKind && (
+                      <span
+                        data-testid="card-popup-icon"
+                        data-popup-icon-kind={seg.trailingIconKind}
+                        data-popup-icon-role="trailing"
+                        className={`material-symbols-outlined leading-none select-none shrink-0 ${
+                          seg.trailingColorClass ?? ''
+                        }`}
+                        style={{
+                          fontSize: `${
+                            seg.trailingSmall ? Math.max(9, iconPx - 2) : iconPx
+                          }px`,
+                        }}
+                        aria-hidden="true"
+                      >
+                        {getCardPopupSymbol(seg.trailingIconKind, iconMods)}
+                      </span>
+                    )}
                   </span>
                 ))}
               </div>
