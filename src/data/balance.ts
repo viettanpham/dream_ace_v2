@@ -4,6 +4,7 @@ import type {
   FluxTransferLevelRule,
   ItemRarity,
   MechClassId,
+  PassiveSlotsConfig,
   SectorDifficulty,
   SkillCategory,
   SpEconomyConfig,
@@ -70,9 +71,10 @@ export const BALANCE_CONFIG = {
   enchantPriceCostFactor: 0.14,
   enchantLevelCostStep: 0.45,
 
-  // ---- Gear Skill System (Levels 1-5, +10% effect/level, 6-slot active bar) ----
+  // ---- Gear Skill System (Default cap 5, configurable 1-20, +10% effect/level, 6-slot active bar) ----
   maxEquippedActiveSkills: 6,
   skillMaxLevel: 5,
+  skillMaxLevelHardCap: 20,
   skillEffectScalePerLevel: 0.1, // +10% effect per level above Lv1
   skillLevelReqStep: 4, // Gear level needed for skill Lv n = unlockLevel + 4 * (n - 1)
   skillLearnBaseCost: {
@@ -398,25 +400,112 @@ export function sanitizeFluxTransferConfig(
 
 function getClampedFluxSkillLevel(
   skillLevel: number,
-  skillMaxLevel: number = BALANCE_CONFIG.skillMaxLevel
+  skillMaxLevel: number = DEFAULT_SKILL_MAX_LEVEL
 ): number {
-  const maxLv = Math.max(
-    1,
-    Math.floor(skillMaxLevel || BALANCE_CONFIG.skillMaxLevel)
-  );
+  const maxLv = sanitizeSkillMaxLevel(skillMaxLevel);
   return Math.max(1, Math.min(maxLv, Math.floor(skillLevel || 1)));
+}
+
+export const DEFAULT_SKILL_MAX_LEVEL = BALANCE_CONFIG.skillMaxLevel;
+export const MIN_SKILL_MAX_LEVEL = 1;
+export const MAX_SKILL_MAX_LEVEL = BALANCE_CONFIG.skillMaxLevelHardCap;
+export const DEFAULT_PASSIVE_SCALE_AFTER_5 = 0.5;
+export const DEFAULT_RESTORE_PCT_CAP = 0.8;
+export const MIN_RESTORE_PCT_CAP = 0.1;
+export const MAX_RESTORE_PCT_CAP = 1.0;
+export const DEFAULT_PASSIVE_SLOTS_CONFIG: PassiveSlotsConfig = {
+  initial: 2,
+  everyLevels: 5,
+  max: 12,
+};
+
+export function sanitizeSkillMaxLevel(raw: unknown): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) {
+    return DEFAULT_SKILL_MAX_LEVEL;
+  }
+  return Math.max(MIN_SKILL_MAX_LEVEL, Math.min(MAX_SKILL_MAX_LEVEL, Math.round(raw)));
+}
+
+export function getEffectiveSkillMaxLevel(
+  adminOrCap?: { skillMaxLevel?: unknown } | number | null
+): number {
+  if (typeof adminOrCap === 'number') {
+    return sanitizeSkillMaxLevel(adminOrCap);
+  }
+  return sanitizeSkillMaxLevel(adminOrCap?.skillMaxLevel);
+}
+
+export function sanitizePassiveScaleAfter5(raw: unknown): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) {
+    return DEFAULT_PASSIVE_SCALE_AFTER_5;
+  }
+  return Math.max(0, Math.min(1, Math.round(raw * 100) / 100));
+}
+
+export function sanitizeRestorePctCap(raw: unknown): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) {
+    return DEFAULT_RESTORE_PCT_CAP;
+  }
+  return Math.max(
+    MIN_RESTORE_PCT_CAP,
+    Math.min(MAX_RESTORE_PCT_CAP, Math.round(raw * 100) / 100)
+  );
+}
+
+export function sanitizePassiveSlotsConfig(raw: unknown): PassiveSlotsConfig {
+  const obj =
+    raw && typeof raw === 'object' && !Array.isArray(raw)
+      ? (raw as Record<string, unknown>)
+      : {};
+  const initialRaw =
+    typeof obj.initial === 'number' && Number.isFinite(obj.initial)
+      ? Math.round(obj.initial)
+      : DEFAULT_PASSIVE_SLOTS_CONFIG.initial;
+  const initial = Math.max(1, Math.min(12, initialRaw));
+  const everyRaw =
+    typeof obj.everyLevels === 'number' && Number.isFinite(obj.everyLevels)
+      ? Math.round(obj.everyLevels)
+      : DEFAULT_PASSIVE_SLOTS_CONFIG.everyLevels;
+  const everyLevels = Math.max(1, Math.min(50, everyRaw));
+  const maxRaw =
+    typeof obj.max === 'number' && Number.isFinite(obj.max)
+      ? Math.round(obj.max)
+      : DEFAULT_PASSIVE_SLOTS_CONFIG.max;
+  const max = Math.max(initial, Math.min(12, maxRaw));
+  return { initial, everyLevels, max };
+}
+
+export function clonePassiveSlotsConfig(
+  cfg?: Partial<PassiveSlotsConfig> | null
+): PassiveSlotsConfig {
+  return { ...sanitizePassiveSlotsConfig(cfg) };
+}
+
+export function getUnlockedPassiveSlots(
+  level: number,
+  cfg?: Partial<PassiveSlotsConfig> | null
+): number {
+  const clean = sanitizePassiveSlotsConfig(cfg);
+  const lv = Number.isFinite(level) ? Math.max(0, Math.floor(level)) : 0;
+  return Math.min(clean.max, clean.initial + Math.floor(lv / clean.everyLevels));
+}
+
+export function getPassiveSlotUnlockGearLevel(
+  slotIndex: number,
+  cfg?: Partial<PassiveSlotsConfig> | null
+): number {
+  const clean = sanitizePassiveSlotsConfig(cfg);
+  if (slotIndex < clean.initial) return 1;
+  return Math.max(1, (slotIndex + 1 - clean.initial) * clean.everyLevels);
 }
 
 export function getFluxTransferRule(
   skillLevel: number,
   cfg?: FluxTransferConfig | null,
-  skillMaxLevel: number = BALANCE_CONFIG.skillMaxLevel
+  skillMaxLevel: number = DEFAULT_SKILL_MAX_LEVEL
 ): FluxTransferLevelRule {
   const clean = sanitizeFluxTransferConfig(cfg);
-  const maxLv = Math.max(
-    1,
-    Math.floor(skillMaxLevel || BALANCE_CONFIG.skillMaxLevel)
-  );
+  const maxLv = sanitizeSkillMaxLevel(skillMaxLevel);
   const lv = getClampedFluxSkillLevel(skillLevel, maxLv);
   if (maxLv === clean.levels.length) {
     return { ...clean.levels[lv - 1] };
@@ -437,7 +526,7 @@ export function getFluxTransferRule(
 export function getFluxMinPerAlly(
   skillLevel: number,
   cfg?: FluxTransferConfig | null,
-  skillMaxLevel: number = BALANCE_CONFIG.skillMaxLevel
+  skillMaxLevel: number = DEFAULT_SKILL_MAX_LEVEL
 ): number {
   const clean = sanitizeFluxTransferConfig(cfg);
   const lv = getClampedFluxSkillLevel(skillLevel, skillMaxLevel);
@@ -448,7 +537,7 @@ export function getFluxPlannedAmountEach(
   actorSp: number,
   skillLevel: number,
   cfg?: FluxTransferConfig | null,
-  skillMaxLevel: number = BALANCE_CONFIG.skillMaxLevel
+  skillMaxLevel: number = DEFAULT_SKILL_MAX_LEVEL
 ): number {
   const rule = getFluxTransferRule(skillLevel, cfg, skillMaxLevel);
   const minPerAlly = getFluxMinPerAlly(skillLevel, cfg, skillMaxLevel);
@@ -460,7 +549,7 @@ export function getFluxMinCastCost(
   actorSp: number,
   skillLevel: number,
   cfg?: FluxTransferConfig | null,
-  skillMaxLevel: number = BALANCE_CONFIG.skillMaxLevel
+  skillMaxLevel: number = DEFAULT_SKILL_MAX_LEVEL
 ): number {
   const rule = getFluxTransferRule(skillLevel, cfg, skillMaxLevel);
   const amountEach = getFluxPlannedAmountEach(
@@ -480,10 +569,25 @@ export function getGarageUnlockCost(ownedCount: number): number {
   return BALANCE_CONFIG.garageUnlockPrices[idx];
 }
 
-export function getSkillUpgradeCost(currentLevel: number): number | null {
-  if (currentLevel >= BALANCE_CONFIG.skillMaxLevel) return null;
-  const idx = Math.max(0, currentLevel - 1);
-  return BALANCE_CONFIG.skillUpgradeCosts[idx] ?? null;
+export function getSkillUpgradeBaseCostForTargetLevel(targetLevel: number): number {
+  const lv = Math.max(2, Math.floor(targetLevel));
+  const table = BALANCE_CONFIG.skillUpgradeCosts;
+  const idx = lv - 2;
+  if (idx < table.length) {
+    return table[idx];
+  }
+  const lastCost = table[table.length - 1];
+  const extraLevels = idx - (table.length - 1);
+  return Math.round(lastCost * Math.pow(1.8, extraLevels));
+}
+
+export function getSkillUpgradeCost(
+  currentLevel: number,
+  skillMaxLevel: number = DEFAULT_SKILL_MAX_LEVEL
+): number | null {
+  const maxLv = sanitizeSkillMaxLevel(skillMaxLevel);
+  if (currentLevel >= maxLv) return null;
+  return getSkillUpgradeBaseCostForTargetLevel(Math.max(1, currentLevel) + 1);
 }
 
 export function getSkillPurchaseCost(
@@ -493,10 +597,7 @@ export function getSkillPurchaseCost(
 ): number {
   const base = BALANCE_CONFIG.skillLearnBaseCost[category] + unlockLevel * 18;
   if (targetLevel <= 1) return base;
-  const stepCost =
-    BALANCE_CONFIG.skillUpgradeCosts[
-      Math.min(BALANCE_CONFIG.skillUpgradeCosts.length - 1, targetLevel - 2)
-    ] ?? 500;
+  const stepCost = getSkillUpgradeBaseCostForTargetLevel(targetLevel);
   return Math.round(stepCost + unlockLevel * 20);
 }
 

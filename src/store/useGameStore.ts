@@ -2,10 +2,16 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import {
   BALANCE_CONFIG,
+  getEffectiveSkillMaxLevel,
   getGarageUnlockCost,
   getMaxLevel,
+  getUnlockedPassiveSlots,
   sanitizeFluxTransferConfig,
   sanitizeMaxLevel,
+  sanitizePassiveScaleAfter5,
+  sanitizePassiveSlotsConfig,
+  sanitizeRestorePctCap,
+  sanitizeSkillMaxLevel,
   sanitizeSpEconomyConfig,
   sanitizeStealthConfig,
   setRuntimeMaxLevel,
@@ -170,9 +176,11 @@ import {
 } from '../engine/shop';
 import {
   buyOpeningCard,
+  equipPassiveToGear,
   equipSkillToGearBar,
   getSkillsForClass,
   learnOrUpgradeSkillOnGear,
+  unequipPassiveFromGear,
   unequipSkillFromGearBar,
 } from '../engine/skills';
 import { sanitizeStatusDisplayDefaults } from '../utils/statusDisplayPrefs';
@@ -481,6 +489,8 @@ interface GameStoreState {
   ) => { validation: SkillValidationResult; newLevel: number };
   equipSkillToBar: (skillId: string) => SkillValidationResult;
   unequipSkillFromBar: (skillId: string) => void;
+  equipPassiveSkill: (skillId: string) => SkillValidationResult;
+  unequipPassiveSkill: (skillId: string) => void;
   buyOpeningCardAction: (cardId: string) => {
     ok: boolean;
     reason: 'ok' | 'invalid_card' | 'already_owned' | 'insufficient_wp';
@@ -1666,7 +1676,8 @@ export const useGameStore = create<GameStoreState>()(
         const res = learnOrUpgradeSkillOnGear(
           state.pilot,
           state.pilot.activeGearId,
-          skillId
+          skillId,
+          state.adminConfig
         );
         if (res.validation.ok) {
           soundFx.playVictory();
@@ -1692,6 +1703,33 @@ export const useGameStore = create<GameStoreState>()(
       unequipSkillFromBar: (skillId) => {
         const state = get();
         const nextPilot = unequipSkillFromGearBar(
+          state.pilot,
+          state.pilot.activeGearId,
+          skillId
+        );
+        if (nextPilot === state.pilot) return;
+        soundFx.playClick();
+        set({ pilot: nextPilot, hasSaveData: true });
+      },
+
+      equipPassiveSkill: (skillId) => {
+        const state = get();
+        const res = equipPassiveToGear(
+          state.pilot,
+          state.pilot.activeGearId,
+          skillId,
+          state.adminConfig
+        );
+        if (res.validation.ok) {
+          soundFx.playConfirm();
+          set({ pilot: res.pilot, hasSaveData: true });
+        }
+        return res.validation;
+      },
+
+      unequipPassiveSkill: (skillId) => {
+        const state = get();
+        const nextPilot = unequipPassiveFromGear(
           state.pilot,
           state.pilot.activeGearId,
           skillId
@@ -3486,7 +3524,8 @@ export const useGameStore = create<GameStoreState>()(
             battle.units,
             activeUnit.id,
             fluxLv,
-            state.adminConfig.fluxTransfer
+            state.adminConfig.fluxTransfer,
+            getEffectiveSkillMaxLevel(state.adminConfig)
           );
           clampedTransferCount =
             transferCount === undefined
@@ -3941,7 +3980,11 @@ export const useGameStore = create<GameStoreState>()(
                 ? pickFluxCount(
                     curUnits,
                     curActor.id,
-                    { ...fluxCfg, spEconomy: state.adminConfig.spEconomy },
+                    {
+                      ...fluxCfg,
+                      spEconomy: state.adminConfig.spEconomy,
+                      skillMaxLevel: getEffectiveSkillMaxLevel(state.adminConfig),
+                    },
                     pressure,
                     Math.random
                   )
@@ -4867,7 +4910,8 @@ export const useGameStore = create<GameStoreState>()(
         if (!gear) return;
         const allowed = getSkillsForClass(id);
         const nextLevels: Record<string, number> = { ...gear.skillLevels };
-        const targetLv = maxLevel ? BALANCE_CONFIG.skillMaxLevel : 1;
+        const effectiveCap = getEffectiveSkillMaxLevel(state.adminConfig);
+        const targetLv = maxLevel ? effectiveCap : 1;
         for (const sk of allowed) {
           nextLevels[sk.id] = Math.max(nextLevels[sk.id] ?? 0, targetLv);
         }
@@ -4875,6 +4919,22 @@ export const useGameStore = create<GameStoreState>()(
         for (const sk of allowed) {
           if (sk.category !== 'passive' && !activeBar.includes(sk.id) && activeBar.length < 6) {
             activeBar.push(sk.id);
+          }
+        }
+        const passiveSlotCap = getUnlockedPassiveSlots(
+          gear.level,
+          state.adminConfig.passiveSlots
+        );
+        const nextPassives = Array.isArray(gear.equippedPassives)
+          ? [...gear.equippedPassives]
+          : [];
+        for (const sk of allowed) {
+          if (
+            sk.category === 'passive' &&
+            !nextPassives.includes(sk.id) &&
+            nextPassives.length < passiveSlotCap
+          ) {
+            nextPassives.push(sk.id);
           }
         }
         set({
@@ -4886,6 +4946,7 @@ export const useGameStore = create<GameStoreState>()(
                 ...gear,
                 skillLevels: nextLevels,
                 equippedSkillBar: activeBar,
+                equippedPassives: nextPassives,
               },
             },
           },
@@ -5190,6 +5251,26 @@ export const useGameStore = create<GameStoreState>()(
                 patch.supplyWpMaxCopies ?? state.adminConfig.supplyWpMaxCopies,
             }),
             maxLevel: nextMaxLevel,
+            skillMaxLevel: sanitizeSkillMaxLevel(
+              patch.skillMaxLevel !== undefined
+                ? patch.skillMaxLevel
+                : state.adminConfig.skillMaxLevel
+            ),
+            passiveScaleAfter5: sanitizePassiveScaleAfter5(
+              patch.passiveScaleAfter5 !== undefined
+                ? patch.passiveScaleAfter5
+                : state.adminConfig.passiveScaleAfter5
+            ),
+            restorePctCap: sanitizeRestorePctCap(
+              patch.restorePctCap !== undefined
+                ? patch.restorePctCap
+                : state.adminConfig.restorePctCap
+            ),
+            passiveSlots: sanitizePassiveSlotsConfig(
+              patch.passiveSlots !== undefined
+                ? patch.passiveSlots
+                : state.adminConfig.passiveSlots
+            ),
             formation: nextFormation,
             autoEquip: nextAutoEquip,
             starterSet: nextStarterSet,
@@ -5603,6 +5684,12 @@ export const useGameStore = create<GameStoreState>()(
               moduleDrop: sanitizeModuleDropConfig(rawAdmin.moduleDrop),
               pirates: sanitizePiratesConfig(rawAdmin.pirates),
               stealth: sanitizeStealthConfig(rawAdmin.stealth),
+              skillMaxLevel: sanitizeSkillMaxLevel(rawAdmin.skillMaxLevel),
+              passiveScaleAfter5: sanitizePassiveScaleAfter5(
+                rawAdmin.passiveScaleAfter5
+              ),
+              restorePctCap: sanitizeRestorePctCap(rawAdmin.restorePctCap),
+              passiveSlots: sanitizePassiveSlotsConfig(rawAdmin.passiveSlots),
               rewardMultiplier:
                 typeof state.adminConfig.rewardMultiplier === 'number' &&
                 Number.isFinite(state.adminConfig.rewardMultiplier) &&

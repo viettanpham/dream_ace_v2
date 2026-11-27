@@ -1,6 +1,7 @@
 import {
   BALANCE_CONFIG,
   COMBAT_FORMULAS,
+  getEffectiveSkillMaxLevel,
   getMaxLevel,
   sanitizeSpEconomyConfig,
 } from '../data/balance';
@@ -173,12 +174,20 @@ export function calculateDerivedStats(
 export function calculateGearPowerRating(
   gear: GearUnit,
   inventory: ItemInstance[],
-  admin?: Pick<AdminConfig, 'extenderLevelsPerSocket' | 'spEconomy'> | null,
+  admin?: Pick<
+    AdminConfig,
+    | 'extenderLevelsPerSocket'
+    | 'spEconomy'
+    | 'skillMaxLevel'
+    | 'passiveScaleAfter5'
+    | 'restorePctCap'
+    | 'passiveSlots'
+  > | null,
   warehouse: readonly ItemInstance[] = []
 ): number {
   const equipBonuses = sumGearEquipmentStats(gear, inventory, admin, warehouse);
   const traits = sumGearSpecialTraits(gear, inventory, admin, warehouse);
-  const passives = getGearPassiveBonuses(gear);
+  const passives = getGearPassiveBonuses(gear, admin);
   const stats = calculateEffectiveStats(
     gear.classId,
     gear.level,
@@ -196,8 +205,9 @@ export function calculateGearPowerRating(
     passives,
     admin
   );
+  const maxSkillLv = getEffectiveSkillMaxLevel(admin);
   const totalSkillLevels = Object.values(gear.skillLevels).reduce(
-    (sum, lv) => sum + Math.max(0, lv),
+    (sum, lv) => sum + Math.min(maxSkillLv, Math.max(0, lv)),
     0
   );
 
@@ -245,6 +255,7 @@ export function createDefaultGearUnit(
     equipped: { ...EMPTY_EQUIPPED_SLOT_IDS },
     skillLevels,
     equippedSkillBar: [...starterSkills],
+    equippedPassives: [],
     supplyLoadout: [],
     extenders: [null, null, null, null, null],
     tactics: createDefaultTacticsForClass(classId),

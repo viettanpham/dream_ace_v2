@@ -212,7 +212,8 @@ export interface SkillValidationResult {
     | 'is_passive'
     | 'not_learned'
     | 'already_equipped'
-    | 'bar_full';
+    | 'bar_full'
+    | 'passive_slots_full';
   requiredGearLevel?: number;
   requiredCardId?: string;
   cost?: number;
@@ -849,8 +850,9 @@ export interface GearUnit {
   unspentPoints: number;
   allocatedPoints: StatBlock;
   equipped: EquippedSlotIds;
-  skillLevels: Record<string, number>; // learned skillId -> 1..5
+  skillLevels: Record<string, number>; // learned skillId -> 1..20
   equippedSkillBar: string[]; // up to 6 active skills (class + general only)
+  equippedPassives?: string[]; // equipped passive skillIds (up to unlocked slots)
   supplyLoadout: string[]; // battle supply templateIds equipped for battle
   extenders?: (string | null)[]; // 5 extender module slot ids (null = empty)
   tactics: GearTacticsProfile;
@@ -1571,7 +1573,17 @@ export interface AdminConfig {
   stealth?: StealthConfig;
   npcSupply?: Partial<NpcSupplyConfig>;
   supplyMaxPerTypePerBattle?: number;
+  skillMaxLevel?: number;
+  passiveScaleAfter5?: number;
+  restorePctCap?: number;
+  passiveSlots?: PassiveSlotsConfig;
   showRawI18nKeys: boolean;
+}
+
+export interface PassiveSlotsConfig {
+  initial: number;
+  everyLevels: number;
+  max: number;
 }
 
 export type NpcSupplyKitFamily = 'hp_kit' | 'shield_kit' | 'sp_kit';

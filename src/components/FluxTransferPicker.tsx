@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import {
-  BALANCE_CONFIG,
+  DEFAULT_SKILL_MAX_LEVEL,
+  getEffectiveSkillMaxLevel,
   getFluxMinPerAlly,
   getFluxTransferRule,
 } from '../data/balance';
@@ -38,23 +39,24 @@ export function previewFluxTransfer(
   units: CombatUnit[],
   actorId: string,
   cfg?: FluxTransferConfig | null,
-  requestedCount?: number
+  requestedCount?: number,
+  skillMaxLevel: number = DEFAULT_SKILL_MAX_LEVEL
 ): FluxTransferPreview {
   const actor = units.find((u) => u.id === actorId);
-  const skillLevel = actor
+  const effMaxLv = getEffectiveSkillMaxLevel(skillMaxLevel);
+  const rawSkillLevel = actor
     ? actor.skillLevels['sup_flux_transfer'] ?? actor.skillLevel ?? 1
     : 1;
-  const rule = getFluxTransferRule(
+  const skillLevel = Math.max(1, Math.min(effMaxLv, Math.floor(rawSkillLevel)));
+  const rule = getFluxTransferRule(skillLevel, cfg, effMaxLv);
+  const minPerAlly = getFluxMinPerAlly(skillLevel, cfg, effMaxLv);
+  const maxAffordable = getMaxAffordableFluxCount(
+    units,
+    actorId,
     skillLevel,
     cfg,
-    BALANCE_CONFIG.skillMaxLevel
+    effMaxLv
   );
-  const minPerAlly = getFluxMinPerAlly(
-    skillLevel,
-    cfg,
-    BALANCE_CONFIG.skillMaxLevel
-  );
-  const maxAffordable = getMaxAffordableFluxCount(units, actorId, skillLevel, cfg);
   const maxCount = Math.min(
     Math.max(1, Math.floor(rule.targets)),
     Math.max(0, maxAffordable)
@@ -85,7 +87,17 @@ export function previewFluxTransfer(
         )
       );
 
-  const sim = resolveSpTransfer(units, actorId, skillLevel, cfg, count);
+  const sim = resolveSpTransfer(
+    units,
+    actorId,
+    skillLevel,
+    cfg,
+    count,
+    1,
+    undefined,
+    'sup_flux_transfer',
+    effMaxLv
+  );
   const actorAfter = sim.updatedUnits.find((u) => u.id === actorId);
   const leftSp = actorAfter ? actorAfter.sp : actor ? actor.sp : 0;
 
@@ -109,6 +121,7 @@ export interface FluxTransferPickerProps {
   units: CombatUnit[];
   actorId: string;
   fluxConfig?: FluxTransferConfig | null;
+  skillMaxLevel?: number;
   isPhone: boolean;
   anchorRef?: RefObject<HTMLElement | null>;
   t: TranslateFn;
@@ -121,6 +134,7 @@ export function FluxTransferPicker({
   units,
   actorId,
   fluxConfig,
+  skillMaxLevel,
   isPhone,
   anchorRef,
   t,
@@ -128,7 +142,13 @@ export function FluxTransferPicker({
   onConfirm,
 }: FluxTransferPickerProps) {
   const pickerRef = useRef<HTMLDivElement | null>(null);
-  const basePreview = previewFluxTransfer(units, actorId, fluxConfig);
+  const basePreview = previewFluxTransfer(
+    units,
+    actorId,
+    fluxConfig,
+    undefined,
+    skillMaxLevel
+  );
   const defaultCount = basePreview.count;
   const [selectedCount, setSelectedCount] = useState<number>(defaultCount);
   const [desktopPos, setDesktopPos] = useState<{ left: number; bottom: number }>({
@@ -190,7 +210,13 @@ export function FluxTransferPicker({
 
   if (!open) return null;
 
-  const preview = previewFluxTransfer(units, actorId, fluxConfig, selectedCount);
+  const preview = previewFluxTransfer(
+    units,
+    actorId,
+    fluxConfig,
+    selectedCount,
+    skillMaxLevel
+  );
   const clampedCount = preview.count;
   const maxCount = preview.maxCount;
 

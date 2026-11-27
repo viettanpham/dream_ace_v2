@@ -1127,7 +1127,7 @@ export function BattleScreen() {
       ? playerUnit.skillLevels[inspectedSkill.id] ?? 1
       : 1;
   const inspectedScaled = inspectedSkill
-    ? getScaledSkillStats(inspectedSkill, inspectedLv)
+    ? getScaledSkillStats(inspectedSkill, inspectedLv, adminConfig)
     : null;
 
   const repeatLabelFor = (opt: AutoRepeatLimit): string => {
@@ -3465,6 +3465,7 @@ export function BattleScreen() {
           units={battle.units}
           actorId={playerUnit.id}
           fluxConfig={adminConfig.fluxTransfer}
+          skillMaxLevel={adminConfig.skillMaxLevel}
           isPhone={isPhonePortrait}
           anchorRef={fluxSkillBtnRef}
           t={t}

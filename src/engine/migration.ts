@@ -1,13 +1,24 @@
 import {
   BALANCE_CONFIG,
   cloneFluxTransferConfig,
+  clonePassiveSlotsConfig,
   cloneSpEconomyConfig,
   cloneStealthConfig,
   DEFAULT_FLUX_TRANSFER_CONFIG,
+  DEFAULT_PASSIVE_SCALE_AFTER_5,
+  DEFAULT_PASSIVE_SLOTS_CONFIG,
+  DEFAULT_RESTORE_PCT_CAP,
+  DEFAULT_SKILL_MAX_LEVEL,
   DEFAULT_SP_ECONOMY_CONFIG,
   DEFAULT_STEALTH_CONFIG,
+  getUnlockedPassiveSlots,
+  MAX_SKILL_MAX_LEVEL,
   sanitizeFluxTransferConfig,
   sanitizeMaxLevel,
+  sanitizePassiveScaleAfter5,
+  sanitizePassiveSlotsConfig,
+  sanitizeRestorePctCap,
+  sanitizeSkillMaxLevel,
   sanitizeSpEconomyConfig,
   sanitizeStealthConfig,
 } from '../data/balance';
@@ -54,6 +65,7 @@ import {
   getOpeningCardById,
   getSkillById,
   LEGACY_SKILL_ID_MAP,
+  SKILLS_LIST,
 } from '../data/skills';
 import { SUPPLY_TEMPLATES } from '../data/consumables';
 import { getModuleTemplateById } from '../data/modules';
@@ -216,7 +228,7 @@ import {
 
 export { createDefaultWorldClock };
 
-export const CURRENT_SAVE_VERSION = 13;
+export const CURRENT_SAVE_VERSION = 14;
 
 export {
   DEFAULT_EXTENDER_LEVELS_PER_SOCKET,
@@ -435,6 +447,10 @@ export function createDefaultAdminConfig(): AdminConfig {
     stealth: cloneStealthConfig(DEFAULT_STEALTH_CONFIG),
     npcSupply: cloneNpcSupplyConfig(DEFAULT_NPC_SUPPLY_CONFIG),
     supplyMaxPerTypePerBattle: DEFAULT_SUPPLY_MAX_PER_TYPE_PER_BATTLE,
+    skillMaxLevel: DEFAULT_SKILL_MAX_LEVEL,
+    passiveScaleAfter5: DEFAULT_PASSIVE_SCALE_AFTER_5,
+    restorePctCap: DEFAULT_RESTORE_PCT_CAP,
+    passiveSlots: clonePassiveSlotsConfig(DEFAULT_PASSIVE_SLOTS_CONFIG),
     showRawI18nKeys: false,
   };
 }
@@ -505,8 +521,16 @@ export function createFreshCampaignState(
 function sanitizeGearSkills(
   classId: MechClassId,
   rawSkillLevels: unknown,
-  rawEquippedBar: unknown
-): { skillLevels: Record<string, number>; equippedSkillBar: string[] } {
+  rawEquippedBar: unknown,
+  rawEquippedPassives?: unknown,
+  gearLevel: number = 1,
+  passiveSlotsCfg?: AdminConfig['passiveSlots'],
+  forceBackfillPassives: boolean = false
+): {
+  skillLevels: Record<string, number>;
+  equippedSkillBar: string[];
+  equippedPassives: string[];
+} {
   const cleanLevels: Record<string, number> = {};
 
   if (rawSkillLevels && typeof rawSkillLevels === 'object') {
@@ -518,9 +542,10 @@ function sanitizeGearSkills(
       if (!skill) continue;
       // Strictly strip any cross-class skill!
       if (!isSkillAllowedForClass(skill, classId)) continue;
+      // Sanity clamp 1..20 only; never lower stored levels when admin cap drops.
       const lv = Math.max(
         1,
-        Math.min(BALANCE_CONFIG.skillMaxLevel, Number(rawLv) || 1)
+        Math.min(MAX_SKILL_MAX_LEVEL, Math.floor(Number(rawLv) || 1))
       );
       cleanLevels[mappedId] = Math.max(cleanLevels[mappedId] ?? 0, lv);
     }
@@ -561,7 +586,42 @@ function sanitizeGearSkills(
     }
   }
 
-  return { skillLevels: cleanLevels, equippedSkillBar: cleanBar };
+  const cleanPassives: string[] = [];
+  if (!forceBackfillPassives && Array.isArray(rawEquippedPassives)) {
+    for (const rawId of rawEquippedPassives) {
+      if (typeof rawId !== 'string') continue;
+      const mappedId = LEGACY_SKILL_ID_MAP[rawId] ?? rawId;
+      const skill = getSkillById(mappedId);
+      if (
+        skill &&
+        skill.category === 'passive' &&
+        isSkillAllowedForClass(skill, classId) &&
+        (cleanLevels[mappedId] ?? 0) >= 1 &&
+        !cleanPassives.includes(mappedId)
+      ) {
+        cleanPassives.push(mappedId);
+      }
+    }
+  } else {
+    const unlockedCap = getUnlockedPassiveSlots(gearLevel, passiveSlotsCfg);
+    for (const skill of SKILLS_LIST) {
+      if (cleanPassives.length >= unlockedCap) break;
+      if (
+        skill.category === 'passive' &&
+        isSkillAllowedForClass(skill, classId) &&
+        (cleanLevels[skill.id] ?? 0) >= 1 &&
+        !cleanPassives.includes(skill.id)
+      ) {
+        cleanPassives.push(skill.id);
+      }
+    }
+  }
+
+  return {
+    skillLevels: cleanLevels,
+    equippedSkillBar: cleanBar,
+    equippedPassives: cleanPassives,
+  };
 }
 
 function convertLegacyItemInstance(
@@ -838,6 +898,10 @@ export function migrateSaveData(
     supplyMaxPerTypePerBattle: sanitizeSupplyMaxPerTypePerBattle(
       rawAdmin.supplyMaxPerTypePerBattle
     ),
+    skillMaxLevel: sanitizeSkillMaxLevel(rawAdmin.skillMaxLevel),
+    passiveScaleAfter5: sanitizePassiveScaleAfter5(rawAdmin.passiveScaleAfter5),
+    restorePctCap: sanitizeRestorePctCap(rawAdmin.restorePctCap),
+    passiveSlots: sanitizePassiveSlotsConfig(rawAdmin.passiveSlots),
     showRawI18nKeys: Boolean(rawAdmin.showRawI18nKeys),
   };
 
@@ -926,15 +990,21 @@ export function migrateSaveData(
             claimedIds.add(refId);
           }
         }
-        const { skillLevels, equippedSkillBar } = sanitizeGearSkills(
-          cls.id,
-          rawGear.skillLevels,
-          rawGear.equippedSkillBar
-        );
+        const cleanLevel = Math.max(1, Math.floor(Number(rawGear.level) || 1));
+        const { skillLevels, equippedSkillBar, equippedPassives } =
+          sanitizeGearSkills(
+            cls.id,
+            rawGear.skillLevels,
+            rawGear.equippedSkillBar,
+            rawGear.equippedPassives,
+            cleanLevel,
+            adminConfig.passiveSlots,
+            version < 14
+          );
         gears[cls.id] = {
           classId: cls.id,
           owned: Boolean(rawGear.owned),
-          level: Math.max(1, Math.floor(Number(rawGear.level) || 1)),
+          level: cleanLevel,
           exp: Math.max(0, Number(rawGear.exp) || 0),
           unspentPoints: Math.max(0, Number(rawGear.unspentPoints) || 0),
           allocatedPoints: {
@@ -944,6 +1014,7 @@ export function migrateSaveData(
           equipped: cleanEquipped,
           skillLevels,
           equippedSkillBar,
+          equippedPassives,
           supplyLoadout: sanitizeSupplyLoadout(
             rawGear.supplyLoadout,
             adminConfig.supplyLoadoutSlots ?? DEFAULT_SUPPLY_LOADOUT_SLOTS
@@ -1363,15 +1434,24 @@ export function migrateSaveData(
   const gears = {} as Record<MechClassId, GearUnit>;
   for (const cls of MECH_CLASS_LIST) {
     if (cls.id === legacyClass) {
-      const { skillLevels, equippedSkillBar } = sanitizeGearSkills(
-        cls.id,
-        undefined,
-        undefined
+      const legacyGearLv = Math.max(
+        1,
+        Math.floor(Number(legacyPlayer.level) || 1)
       );
+      const { skillLevels, equippedSkillBar, equippedPassives } =
+        sanitizeGearSkills(
+          cls.id,
+          undefined,
+          undefined,
+          undefined,
+          legacyGearLv,
+          adminConfig.passiveSlots,
+          true
+        );
       gears[cls.id] = {
         classId: cls.id,
         owned: true,
-        level: Math.max(1, Math.floor(Number(legacyPlayer.level) || 1)),
+        level: legacyGearLv,
         exp: Math.max(0, Number(legacyPlayer.exp) || 0),
         unspentPoints: Math.max(
           0,
@@ -1384,6 +1464,7 @@ export function migrateSaveData(
         equipped: equippedIds,
         skillLevels,
         equippedSkillBar,
+        equippedPassives,
         supplyLoadout: [],
         extenders: sanitizeGearExtenders(null),
         tactics: createDefaultTacticsForClass(cls.id),

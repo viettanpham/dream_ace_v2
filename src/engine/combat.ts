@@ -3,9 +3,12 @@ import {
   COMBAT_FORMULAS,
   computeLidarDetectCount,
   DEFAULT_FLUX_TRANSFER_CONFIG,
+  DEFAULT_SKILL_MAX_LEVEL,
+  getEffectiveSkillMaxLevel,
   getFluxMinPerAlly,
   getFluxPlannedAmountEach,
   getFluxTransferRule,
+  getUnlockedPassiveSlots,
   sanitizeFluxTransferConfig,
 } from '../data/balance';
 import { EMPTY_STAT_BLOCK, MECH_CLASSES, MECH_CLASS_LIST } from '../data/classes';
@@ -285,8 +288,13 @@ export const NPC_ROLE_SKILL_PRIORITY: Record<MechClassId, readonly string[]> = {
 
 export function buildNpcSkillLoadout(
   classId: MechClassId,
-  level: number
-): { equippedSkillIds: string[]; skillLevels: Record<string, number> } {
+  level: number,
+  adminConfig?: Pick<AdminConfig, 'skillMaxLevel' | 'passiveSlots'> | null
+): {
+  equippedSkillIds: string[];
+  equippedPassives: string[];
+  skillLevels: Record<string, number>;
+} {
   const unlocked = SKILLS_LIST.filter(
     (s) =>
       s.classScope === classId &&
@@ -315,12 +323,41 @@ export function buildNpcSkillLoadout(
   } else {
     picked = [...CLASS_STARTER_SKILLS[classId]].slice(0, MAX_ACTIVE_SKILL_BAR);
   }
-  const lv = Math.min(5, Math.max(1, Math.ceil(level / 5)));
+  const skillCap = getEffectiveSkillMaxLevel(adminConfig);
+  const lv = Math.min(skillCap, Math.max(1, Math.ceil(level / 5)));
   const skillLevels: Record<string, number> = {};
   for (const id of picked) {
     skillLevels[id] = lv;
   }
-  return { equippedSkillIds: picked, skillLevels };
+
+  const passiveCap = getUnlockedPassiveSlots(level, adminConfig?.passiveSlots);
+  const unlockedPassives = SKILLS_LIST.filter(
+    (s) =>
+      s.category === 'passive' &&
+      isSkillAllowedForClass(s, classId) &&
+      s.unlockLevel <= level
+  );
+  const equippedPassives: string[] = [];
+  for (const passive of unlockedPassives) {
+    if (equippedPassives.length >= passiveCap) break;
+    equippedPassives.push(passive.id);
+    skillLevels[passive.id] = lv;
+  }
+
+  return { equippedSkillIds: picked, equippedPassives, skillLevels };
+}
+
+function clampBattleSkillLevels(
+  rawLevels: Record<string, number>,
+  skillCap: number
+): Record<string, number> {
+  const clamped: Record<string, number> = {};
+  for (const [id, lv] of Object.entries(rawLevels)) {
+    if (typeof lv === 'number' && lv >= 1) {
+      clamped[id] = Math.min(skillCap, Math.floor(lv));
+    }
+  }
+  return clamped;
 }
 
 function buildCombatUnit(params: {
@@ -348,6 +385,26 @@ function buildCombatUnit(params: {
   passives?: GearPassiveBonuses;
   adminConfig?: Partial<AdminConfig>;
 }): CombatUnit {
+  const skillCap = getEffectiveSkillMaxLevel(params.adminConfig);
+  const npcFallback = buildNpcSkillLoadout(
+    params.classId,
+    params.level,
+    params.adminConfig
+  );
+  const rawSkillLevels = params.skillLevels ?? npcFallback.skillLevels;
+  const effectiveSkillLevels = clampBattleSkillLevels(rawSkillLevels, skillCap);
+  const effectivePassives =
+    params.passives ??
+    getGearPassiveBonuses(
+      {
+        classId: params.classId,
+        level: params.level,
+        skillLevels: effectiveSkillLevels,
+        equippedPassives: npcFallback.equippedPassives,
+      },
+      params.adminConfig
+    );
+
   const stats = calculateEffectiveStats(
     params.classId,
     params.level,
@@ -355,14 +412,14 @@ function buildCombatUnit(params: {
     EMPTY_STAT_BLOCK,
     params.equipmentBonuses ?? EMPTY_STAT_BLOCK,
     params.specialTraits,
-    params.passives
+    effectivePassives
   );
   const baseDerived = calculateDerivedStats(
     params.classId,
     params.level,
     stats,
     params.specialTraits,
-    params.passives,
+    effectivePassives,
     params.adminConfig
   );
 
@@ -386,7 +443,6 @@ function buildCombatUnit(params: {
       }
     : baseDerived;
 
-  const npcFallback = buildNpcSkillLoadout(params.classId, params.level);
   const equippedSkillIds = (params.equippedSkillIds ?? npcFallback.equippedSkillIds)
     .filter((id) => {
       const sk = getSkillById(id);
@@ -417,8 +473,8 @@ function buildCombatUnit(params: {
     isBoss: Boolean(params.isBoss),
     isStructure: Boolean(params.isStructure),
     level: params.level,
-    skillLevel: params.skillLevel ?? 1,
-    skillLevels: params.skillLevels ?? npcFallback.skillLevels,
+    skillLevel: Math.min(skillCap, Math.max(1, params.skillLevel ?? 1)),
+    skillLevels: effectiveSkillLevels,
     equippedSkillIds,
     skillCooldowns: {},
     usedOnceSkills: [],
@@ -685,7 +741,7 @@ export function createInitialBattleState(
     adminConfig,
     pilot.warehouse
   );
-  const playerPassives = getGearPassiveBonuses(activeGear);
+  const playerPassives = getGearPassiveBonuses(activeGear, adminConfig);
 
   const savedFormation = Array.isArray(pilot.squadFormation)
     ? pilot.squadFormation
@@ -1921,11 +1977,13 @@ export function getMaxAffordableFluxCount(
   units: CombatUnit[],
   actorId: string,
   skillLevel: number,
-  cfg?: FluxTransferConfig | null
+  cfg?: FluxTransferConfig | null,
+  skillMaxLevel: number = DEFAULT_SKILL_MAX_LEVEL
 ): number {
   const actor = units.find((u) => u.id === actorId);
   if (!actor || !actor.alive) return 0;
-  const rule = getFluxTransferRule(skillLevel, cfg, BALANCE_CONFIG.skillMaxLevel);
+  const effCap = getEffectiveSkillMaxLevel(skillMaxLevel);
+  const rule = getFluxTransferRule(skillLevel, cfg, effCap);
   const maxTargets = Math.max(0, Math.floor(rule.targets));
   if (maxTargets <= 0) return 0;
   const actorSp = Math.max(0, actor.sp);
@@ -1933,7 +1991,7 @@ export function getMaxAffordableFluxCount(
     actorSp,
     skillLevel,
     cfg,
-    BALANCE_CONFIG.skillMaxLevel
+    effCap
   );
   if (amountEach <= 0) return maxTargets;
   for (let k = maxTargets; k >= 1; k--) {
@@ -1953,7 +2011,8 @@ export function resolveSpTransfer(
   count?: number,
   round = 1,
   nextIdFn: (prefix: string) => string = nextId,
-  skillId = 'sup_flux_transfer'
+  skillId = 'sup_flux_transfer',
+  skillMaxLevel: number = DEFAULT_SKILL_MAX_LEVEL
 ): SpTransferResolution {
   const nextUnits = units.map((u) => ({ ...u }));
   const actorIdx = nextUnits.findIndex((u) => u.id === actorId);
@@ -1982,13 +2041,15 @@ export function resolveSpTransfer(
   }
 
   const actor = nextUnits[actorIdx];
-  const rule = getFluxTransferRule(skillLevel, cfg, BALANCE_CONFIG.skillMaxLevel);
+  const effCap = getEffectiveSkillMaxLevel(skillMaxLevel);
+  const rule = getFluxTransferRule(skillLevel, cfg, effCap);
   const maxTargets = Math.max(0, Math.floor(rule.targets));
   const maxAffordable = getMaxAffordableFluxCount(
     nextUnits,
     actorId,
     skillLevel,
-    cfg
+    cfg,
+    effCap
   );
   const requested =
     count === undefined ? maxTargets : Math.max(0, Math.floor(count));
@@ -1997,7 +2058,7 @@ export function resolveSpTransfer(
     actor.sp,
     skillLevel,
     cfg,
-    BALANCE_CONFIG.skillMaxLevel
+    effCap
   );
 
   const candidateIndices = nextUnits
@@ -2429,7 +2490,7 @@ function resolveUnitActionCore(
     const skillLv =
       actor.skillLevels[chargedSkill?.id ?? 'str_solar_capacitor'] ?? 1;
     const scaled = chargedSkill
-      ? getScaledSkillStats(chargedSkill, skillLv)
+      ? getScaledSkillStats(chargedSkill, skillLv, adminConfig)
       : { powerMultiplier: 3.2 };
 
     const opponents = getTargetableOpponents(nextUnits, actor.side, actor.detectsStealth);
@@ -2586,7 +2647,7 @@ function resolveUnitActionCore(
 
     if (skill && usability && usability.canUse) {
       const skillLv = actor.skillLevels[skill.id] ?? actor.skillLevel ?? 1;
-      const scaled = getScaledSkillStats(skill, skillLv);
+      const scaled = getScaledSkillStats(skill, skillLv, adminConfig);
 
       // Deduct SP, set Cooldown, record Once-Per-Battle
       const nextCooldowns =
@@ -3568,7 +3629,7 @@ function resolveUnitActionCore(
           const detectLimit = computeLidarDetectCount(
             skillLv,
             adminConfig?.stealth,
-            BALANCE_CONFIG.skillMaxLevel
+            getEffectiveSkillMaxLevel(adminConfig)
           );
           const revealedUnitIds = new Set<string>(
             stealthedIndices
@@ -3785,7 +3846,8 @@ function resolveUnitActionCore(
             transferCount,
             round,
             nextId,
-            skill.id
+            skill.id,
+            getEffectiveSkillMaxLevel(adminConfig)
           );
           popups.push(...transfer.popups);
           logs.push(transfer.logEntry);
@@ -4491,11 +4553,15 @@ const SUPPORT_RESERVE_EFFECT_KINDS = new Set<SkillDefinition['effectKind']>([
 export type FluxTransferRulesInput =
   | (FluxTransferLevelRule & {
       spEconomy?: SpEconomyConfig | null;
+      skillMaxLevel?: number;
       minPerLevel?: number;
       allySpBelowPct?: number;
       keepSelfPct?: number;
     })
-  | (FluxTransferConfig & { spEconomy?: SpEconomyConfig | null });
+  | (FluxTransferConfig & {
+      spEconomy?: SpEconomyConfig | null;
+      skillMaxLevel?: number;
+    });
 
 export function computeFluxBattlePressure(
   units: CombatUnit[],
@@ -4549,9 +4615,12 @@ export function pickFluxCount(
           keepSelfPct: rules.keepSelfPct,
         }
   );
+  const effSkillMax = getEffectiveSkillMaxLevel(
+    'skillMaxLevel' in rules ? rules.skillMaxLevel : undefined
+  );
   const rule: FluxTransferLevelRule =
     'levels' in rules
-      ? getFluxTransferRule(fluxLv, sanitizedCfg, BALANCE_CONFIG.skillMaxLevel)
+      ? getFluxTransferRule(fluxLv, sanitizedCfg, effSkillMax)
       : rules;
   const spEconomy =
     'spEconomy' in rules && rules.spEconomy ? { spEconomy: rules.spEconomy } : undefined;
@@ -4600,7 +4669,8 @@ export function pickFluxCount(
     units,
     actorId,
     fluxLv,
-    sanitizedCfg
+    sanitizedCfg,
+    effSkillMax
   );
   if (maxAffordable <= 0) return 0;
 
@@ -4608,7 +4678,7 @@ export function pickFluxCount(
     actor.sp,
     fluxLv,
     sanitizedCfg,
-    BALANCE_CONFIG.skillMaxLevel
+    effSkillMax
   );
   if (amountEach <= 0) return 0;
 
@@ -4745,7 +4815,11 @@ export function chooseAiDecision(
     const fluxCount = pickFluxCount(
       units,
       actor.id,
-      { ...fluxCfg, spEconomy: adminConfig?.spEconomy },
+      {
+        ...fluxCfg,
+        spEconomy: adminConfig?.spEconomy,
+        skillMaxLevel: getEffectiveSkillMaxLevel(adminConfig),
+      },
       pressure,
       rng
     );

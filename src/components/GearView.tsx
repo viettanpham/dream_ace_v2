@@ -372,8 +372,8 @@ export function GearView() {
   );
 
   const passiveBonuses = useMemo(
-    () => getGearPassiveBonuses(activeGear),
-    [activeGear]
+    () => getGearPassiveBonuses(activeGear, adminConfig),
+    [activeGear, adminConfig]
   );
 
   const currentStats = useMemo(

@@ -137,7 +137,7 @@ export function applyPrestageBuffs(
       if (!statusType) continue;
 
       const skillLevel = caster.skillLevels[skill.id] ?? caster.skillLevel ?? 1;
-      const scaled = getScaledSkillStats(skill, skillLevel);
+      const scaled = getScaledSkillStats(skill, skillLevel, adminConfig);
       const turnsRemaining = skill.duration ?? 3;
       const statusEntry: ActiveStatusEffect = {
         type: statusType,

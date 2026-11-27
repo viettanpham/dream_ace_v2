@@ -219,8 +219,8 @@ export function GarageView() {
   );
 
   const passiveBonuses = useMemo(
-    () => getGearPassiveBonuses(activeGear),
-    [activeGear]
+    () => getGearPassiveBonuses(activeGear, adminConfig),
+    [activeGear, adminConfig]
   );
 
   const currentStats = useMemo(

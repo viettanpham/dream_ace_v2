@@ -27,9 +27,19 @@ import { EnemyLevelAdminBlock } from './admin/EnemyLevelAdminBlock';
 import { ModuleDropAdminBlock } from './ModuleDropAdminBlock';
 import {
   BALANCE_CONFIG,
+  getEffectiveSkillMaxLevel,
   getMaxLevel,
+  getUnlockedPassiveSlots,
+  MAX_RESTORE_PCT_CAP,
+  MAX_SKILL_MAX_LEVEL,
+  MIN_RESTORE_PCT_CAP,
+  MIN_SKILL_MAX_LEVEL,
   sanitizeFluxTransferConfig,
   sanitizeMaxLevel,
+  sanitizePassiveScaleAfter5,
+  sanitizePassiveSlotsConfig,
+  sanitizeRestorePctCap,
+  sanitizeSkillMaxLevel,
   sanitizeSpEconomyConfig,
   sanitizeStealthConfig,
 } from '../data/balance';
@@ -1680,6 +1690,76 @@ export function AdminPanel() {
                   />
                 </label>
 
+                {/* Skill Max Level (1..20) */}
+                <label className="space-y-1 block">
+                  <span className="text-[11px] text-slate-400 block">
+                    {t('admin.skillMaxLevel')}
+                  </span>
+                  <input
+                    type="number"
+                    min={MIN_SKILL_MAX_LEVEL}
+                    max={MAX_SKILL_MAX_LEVEL}
+                    data-testid="admin-skill-max-level"
+                    value={getEffectiveSkillMaxLevel(adminConfig)}
+                    onChange={(e) => {
+                      const raw = Number(e.target.value);
+                      if (!Number.isFinite(raw)) return;
+                      adminUpdateConfig({
+                        skillMaxLevel: sanitizeSkillMaxLevel(raw),
+                      });
+                    }}
+                    className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                  />
+                </label>
+
+                {/* Passive Scale After Lv5 (0..1) */}
+                <label className="space-y-1 block">
+                  <span className="text-[11px] text-slate-400 block">
+                    {t('admin.passiveScaleAfter5')}
+                  </span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    data-testid="admin-passive-scale-after5"
+                    value={sanitizePassiveScaleAfter5(
+                      adminConfig.passiveScaleAfter5
+                    )}
+                    onChange={(e) => {
+                      const raw = Number(e.target.value);
+                      if (!Number.isFinite(raw)) return;
+                      adminUpdateConfig({
+                        passiveScaleAfter5: sanitizePassiveScaleAfter5(raw),
+                      });
+                    }}
+                    className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                  />
+                </label>
+
+                {/* Restore Pct Cap (0.1..1) */}
+                <label className="space-y-1 block">
+                  <span className="text-[11px] text-slate-400 block">
+                    {t('admin.restorePctCap')}
+                  </span>
+                  <input
+                    type="number"
+                    min={MIN_RESTORE_PCT_CAP}
+                    max={MAX_RESTORE_PCT_CAP}
+                    step={0.05}
+                    data-testid="admin-restore-pct-cap"
+                    value={sanitizeRestorePctCap(adminConfig.restorePctCap)}
+                    onChange={(e) => {
+                      const raw = Number(e.target.value);
+                      if (!Number.isFinite(raw)) return;
+                      adminUpdateConfig({
+                        restorePctCap: sanitizeRestorePctCap(raw),
+                      });
+                    }}
+                    className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                  />
+                </label>
+
                 {/* Notice Banner Auto-Close Duration */}
                 <label className="space-y-1 block sm:col-span-2 lg:col-span-1">
                   <span className="text-[11px] text-slate-400 block">
@@ -1756,6 +1836,107 @@ export function AdminPanel() {
                   formatAppliedText={(n) => t('admin.capacityApplied', { n })}
                 />
               </div>
+
+              {/* Slot passive */}
+              {(() => {
+                const pSlots = sanitizePassiveSlotsConfig(
+                  adminConfig.passiveSlots
+                );
+                return (
+                  <div
+                    data-testid="admin-passive-slots-section"
+                    className="rounded-lg border border-emerald-500/30 bg-[#08120F]/70 p-3 space-y-2"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-xs font-bold text-emerald-300">
+                        {t('admin.passiveSlotsSection')}
+                      </span>
+                      <span
+                        data-testid="admin-passive-slots-preview"
+                        className="text-[11px] font-mono-nums text-slate-300"
+                      >
+                        {t('admin.passiveSlotsPreview', {
+                          lv1: getUnlockedPassiveSlots(1, pSlots),
+                          lv10: getUnlockedPassiveSlots(10, pSlots),
+                          lv30: getUnlockedPassiveSlots(30, pSlots),
+                          lv50: getUnlockedPassiveSlots(50, pSlots),
+                        })}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <label className="space-y-1 block">
+                        <span className="text-[11px] text-slate-400 block">
+                          {t('admin.passiveSlotsInitial')}
+                        </span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={12}
+                          data-testid="admin-passive-slots-initial"
+                          value={pSlots.initial}
+                          onChange={(e) => {
+                            const raw = Number(e.target.value);
+                            if (!Number.isFinite(raw)) return;
+                            adminUpdateConfig({
+                              passiveSlots: sanitizePassiveSlotsConfig({
+                                ...pSlots,
+                                initial: raw,
+                              }),
+                            });
+                          }}
+                          className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                        />
+                      </label>
+                      <label className="space-y-1 block">
+                        <span className="text-[11px] text-slate-400 block">
+                          {t('admin.passiveSlotsEveryLevels')}
+                        </span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={50}
+                          data-testid="admin-passive-slots-every"
+                          value={pSlots.everyLevels}
+                          onChange={(e) => {
+                            const raw = Number(e.target.value);
+                            if (!Number.isFinite(raw)) return;
+                            adminUpdateConfig({
+                              passiveSlots: sanitizePassiveSlotsConfig({
+                                ...pSlots,
+                                everyLevels: raw,
+                              }),
+                            });
+                          }}
+                          className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                        />
+                      </label>
+                      <label className="space-y-1 block">
+                        <span className="text-[11px] text-slate-400 block">
+                          {t('admin.passiveSlotsMax')}
+                        </span>
+                        <input
+                          type="number"
+                          min={pSlots.initial}
+                          max={12}
+                          data-testid="admin-passive-slots-max"
+                          value={pSlots.max}
+                          onChange={(e) => {
+                            const raw = Number(e.target.value);
+                            if (!Number.isFinite(raw)) return;
+                            adminUpdateConfig({
+                              passiveSlots: sanitizePassiveSlotsConfig({
+                                ...pSlots,
+                                max: raw,
+                              }),
+                            });
+                          }}
+                          className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                );
+              })()}
 
               <EnemyLevelAdminBlock />
 

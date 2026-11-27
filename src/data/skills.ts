@@ -1,9 +1,15 @@
 import type {
+  AdminConfig,
   MechClassId,
   OpeningCardDefinition,
   SkillDefinition,
 } from '../types/game';
-import { BALANCE_CONFIG } from './balance';
+import {
+  BALANCE_CONFIG,
+  getEffectiveSkillMaxLevel,
+  sanitizePassiveScaleAfter5,
+  sanitizeRestorePctCap,
+} from './balance';
 
 /**
  * Full Data-Driven Gear Skill Catalog (38 skills across General + 4 Gear Classes).
@@ -575,29 +581,66 @@ export function getOpeningCardById(
   return OPENING_CARDS_BY_ID[cardId];
 }
 
+export interface SkillScaleOptions {
+  skillMaxLevel?: number;
+  passiveScaleAfter5?: number;
+  restorePctCap?: number;
+}
+
 /**
  * Scales a skill's numeric effect by +10% per skill level (Lv 1 = 1.0x, Lv 5 = 1.4x).
- * Passives scale linearly per level (Lv 1 = 1x, Lv 5 = 5x).
+ * Passives scale linearly Lv1..5 (1x..5x), then add `passiveScaleAfter5` (default 0.5) per level above 5.
+ * Single heal / shield restore percent values are clamped to `restorePctCap` (default 0.8).
  */
-export function getScaledSkillStats(skill: SkillDefinition, level: number) {
-  const clampedLv = Math.max(1, Math.min(BALANCE_CONFIG.skillMaxLevel, level));
+export function getScaledSkillStats(
+  skill: SkillDefinition,
+  level: number,
+  adminOrOpts?:
+    | Pick<AdminConfig, 'skillMaxLevel' | 'passiveScaleAfter5' | 'restorePctCap'>
+    | SkillScaleOptions
+    | null
+) {
+  const maxLv = getEffectiveSkillMaxLevel(adminOrOpts);
+  const clampedLv = Math.max(1, Math.min(maxLv, Math.floor(level || 1)));
   const effectMult =
     1 + (clampedLv - 1) * BALANCE_CONFIG.skillEffectScalePerLevel;
 
   if (skill.category === 'passive') {
+    const scaleAfter5 = sanitizePassiveScaleAfter5(adminOrOpts?.passiveScaleAfter5);
+    const passiveMult =
+      clampedLv <= 5 ? clampedLv : 5 + (clampedLv - 5) * scaleAfter5;
     return {
       level: clampedLv,
-      effectMult: clampedLv,
+      effectMult: passiveMult,
       spCost: 0,
       cooldown: 0,
       powerMultiplier: 0,
       secondaryRatio: 0,
-      buffMagnitude: Number(((skill.buffMagnitude ?? 0) * clampedLv).toFixed(3)),
+      buffMagnitude: Number(((skill.buffMagnitude ?? 0) * passiveMult).toFixed(3)),
       secondaryMagnitude: Number(
-        ((skill.secondaryMagnitude ?? 0) * clampedLv).toFixed(3)
+        ((skill.secondaryMagnitude ?? 0) * passiveMult).toFixed(3)
       ),
-      spAmount: (skill.spAmount ?? 0) * clampedLv,
+      spAmount: Math.round((skill.spAmount ?? 0) * passiveMult),
     };
+  }
+
+  const restoreCap = sanitizeRestorePctCap(adminOrOpts?.restorePctCap);
+  let buffMagnitude = skill.buffMagnitude
+    ? Number((skill.buffMagnitude * effectMult).toFixed(3))
+    : 0;
+  let secondaryMagnitude = skill.secondaryMagnitude
+    ? Number((skill.secondaryMagnitude * effectMult).toFixed(3))
+    : 0;
+
+  if (
+    skill.effectKind === 'heal_single' ||
+    skill.effectKind === 'heal_field_hot' ||
+    skill.effectKind === 'energize_shield_field'
+  ) {
+    buffMagnitude = Math.min(restoreCap, buffMagnitude);
+  }
+  if (skill.effectKind === 'toggle_siege_defense') {
+    secondaryMagnitude = Math.min(restoreCap, secondaryMagnitude);
   }
 
   return {
@@ -611,12 +654,8 @@ export function getScaledSkillStats(skill: SkillDefinition, level: number) {
     secondaryRatio: skill.secondaryRatio
       ? Number((skill.secondaryRatio * effectMult).toFixed(2))
       : 0,
-    buffMagnitude: skill.buffMagnitude
-      ? Number((skill.buffMagnitude * effectMult).toFixed(3))
-      : 0,
-    secondaryMagnitude: skill.secondaryMagnitude
-      ? Number((skill.secondaryMagnitude * effectMult).toFixed(3))
-      : 0,
+    buffMagnitude,
+    secondaryMagnitude,
     spAmount: skill.spAmount ? Math.round(skill.spAmount * effectMult) : 0,
   };
 }

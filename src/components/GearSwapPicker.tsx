@@ -119,7 +119,7 @@ export function GearSwapPicker({
       adminConfig,
       pilot.warehouse
     );
-    const passiveBonuses = getGearPassiveBonuses(activeGear);
+    const passiveBonuses = getGearPassiveBonuses(activeGear, adminConfig);
     const currentStats = calculateEffectiveStats(
       activeGear.classId,
       activeGear.level,

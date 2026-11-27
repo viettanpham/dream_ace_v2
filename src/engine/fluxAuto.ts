@@ -1,4 +1,7 @@
-import { sanitizeFluxTransferConfig } from '../data/balance';
+import {
+  getEffectiveSkillMaxLevel,
+  sanitizeFluxTransferConfig,
+} from '../data/balance';
 import { getSkillById } from '../data/skills';
 import type { AdminConfig, CombatUnit, FluxAutoConfig } from '../types/game';
 import { computeFluxBattlePressure, pickFluxCount } from './combat';
@@ -98,13 +101,18 @@ export function pickFluxAutoCount(
   }
 
   const baseFluxCfg = sanitizeFluxTransferConfig(params.adminConfig?.fluxTransfer);
+  const skillMaxLevel = getEffectiveSkillMaxLevel(params.adminConfig);
 
   if (cfg.mode === 'smart') {
     const pressure = computeFluxBattlePressure(units, actor.side);
     return pickFluxCount(
       units,
       actor.id,
-      { ...baseFluxCfg, spEconomy: params.adminConfig?.spEconomy },
+      {
+        ...baseFluxCfg,
+        spEconomy: params.adminConfig?.spEconomy,
+        skillMaxLevel,
+      },
       pressure,
       rng
     );
@@ -119,7 +127,11 @@ export function pickFluxAutoCount(
   return pickFluxCount(
     units,
     actor.id,
-    { ...overriddenCfg, spEconomy: params.adminConfig?.spEconomy },
+    {
+      ...overriddenCfg,
+      spEconomy: params.adminConfig?.spEconomy,
+      skillMaxLevel,
+    },
     0,
     rng
   );

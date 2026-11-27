@@ -11,14 +11,21 @@ import {
   Sparkles,
   X,
 } from 'lucide-react';
-import { BALANCE_CONFIG } from '../data/balance';
-import { getScaledSkillStats, getSkillById } from '../data/skills';
+import {
+  getEffectiveSkillMaxLevel,
+  getPassiveSlotUnlockGearLevel,
+  getUnlockedPassiveSlots,
+  sanitizePassiveSlotsConfig,
+} from '../data/balance';
+import { getCatalogRow } from '../data/iconCatalog';
+import { getSkillById } from '../data/skills';
 import {
   getEffectiveSpCost,
   getRequiredGearLevelForSkillLevel,
   getSkillLearnOrUpgradeCost,
   getSkillsForClass,
   MAX_ACTIVE_SKILL_BAR,
+  validateEquipPassiveSkill,
   validateEquipSkillOnBar,
   validateLearnOrUpgradeSkill,
 } from '../engine/skills';
@@ -28,12 +35,20 @@ import {
   getSkillCategoryLabel,
   getSkillDesc,
   getSkillName,
-  getSkillTargetLabel,
   useI18n,
 } from '../i18n';
 import { useGameStore } from '../store/useGameStore';
-import type { SkillCategory, SkillDefinition } from '../types/game';
+import type {
+  IconCatalogModRow,
+  SkillCategory,
+  SkillDefinition,
+} from '../types/game';
+import {
+  formatSkillRealSummary,
+  type SkillRealSummary,
+} from '../utils/skillDisplay';
 import { BottomSheet } from './BottomSheet';
+import { CatalogIcon } from './CatalogIcon';
 import { FighterSvg } from './FighterSvg';
 import { ClassIcon } from './GameIcons';
 import { SkillIcon } from './SkillIcon';
@@ -53,6 +68,48 @@ function getCategoryStyle(category: SkillCategory): string {
   }
 }
 
+function SkillSummaryInline({
+  summary,
+  mods,
+  compact = false,
+}: {
+  summary: SkillRealSummary;
+  mods?: readonly IconCatalogModRow[] | null;
+  compact?: boolean;
+}) {
+  return (
+    <div
+      className={
+        compact
+          ? 'flex flex-wrap items-center gap-1.5 text-[11px] font-mono-nums text-slate-200'
+          : 'rounded border border-slate-800/80 bg-[#080C14]/80 px-2.5 py-1.5 space-y-1 text-[11px] font-mono-nums'
+      }
+    >
+      <div className="flex flex-wrap items-center gap-1.5 text-slate-200">
+        {summary.iconIds.map((iconId) => {
+          const row = getCatalogRow(iconId, mods) ?? null;
+          return row ? (
+            <CatalogIcon
+              key={iconId}
+              row={row}
+              size="xs"
+              showBadges={false}
+              showArrowBadge={false}
+              className="shrink-0"
+            />
+          ) : null;
+        })}
+        <span>{summary.primaryText}</span>
+      </div>
+      {!compact && summary.nextLine && (
+        <div className="text-emerald-400 font-semibold">
+          {summary.nextLine}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function SkillView() {
   const { lang, t } = useI18n();
   const pilot = useGameStore((s) => s.pilot);
@@ -60,6 +117,8 @@ export function SkillView() {
   const learnOrUpgradeSkill = useGameStore((s) => s.learnOrUpgradeSkill);
   const equipSkillToBar = useGameStore((s) => s.equipSkillToBar);
   const unequipSkillFromBar = useGameStore((s) => s.unequipSkillFromBar);
+  const equipPassiveSkill = useGameStore((s) => s.equipPassiveSkill);
+  const unequipPassiveSkill = useGameStore((s) => s.unequipPassiveSkill);
   const openWarPointShop = useGameStore((s) => s.openWarPointShop);
   const setTacticsModalOpen = useGameStore((s) => s.setTacticsModalOpen);
 
@@ -69,6 +128,19 @@ export function SkillView() {
 
   const activeGear = pilot.gears[pilot.activeGearId];
   const activeGearName = getClassName(lang, activeGear.classId);
+  const skillMaxLevel = getEffectiveSkillMaxLevel(adminConfig);
+  const passiveSlotsCfg = useMemo(
+    () => sanitizePassiveSlotsConfig(adminConfig.passiveSlots),
+    [adminConfig.passiveSlots]
+  );
+  const unlockedPassiveSlots = getUnlockedPassiveSlots(
+    activeGear.level,
+    passiveSlotsCfg
+  );
+  const equippedPassives = Array.isArray(activeGear.equippedPassives)
+    ? activeGear.equippedPassives
+    : [];
+  const activeEquippedPassives = equippedPassives.slice(0, unlockedPassiveSlots);
 
   const classAndGeneralSkills = useMemo(
     () => getSkillsForClass(activeGear.classId),
@@ -153,6 +225,28 @@ export function SkillView() {
     );
   };
 
+  const handleEquipPassive = (skill: SkillDefinition) => {
+    const res = equipPassiveSkill(skill.id);
+    if (res.ok) {
+      setFeedback(
+        t('skill.passiveEquippedFeedback', {
+          skill: getSkillName(lang, skill.id),
+          gear: activeGearName,
+        })
+      );
+    }
+  };
+
+  const handleUnequipPassive = (skillId: string) => {
+    unequipPassiveSkill(skillId);
+    setFeedback(
+      t('skill.passiveUnequippedFeedback', {
+        skill: getSkillName(lang, skillId),
+        gear: activeGearName,
+      })
+    );
+  };
+
   const mobileSelectedSkill = mobileSkillId
     ? getSkillById(mobileSkillId) ?? null
     : null;
@@ -185,7 +279,10 @@ export function SkillView() {
               {t('skill.pageTitle', { gear: activeGearName })}
             </h1>
             <p className="text-sm md:text-xs text-slate-400 mt-0.5">
-              {t('skill.pageSubtitle', { gear: activeGearName })}
+              {t('skill.pageSubtitle', {
+                gear: activeGearName,
+                max: skillMaxLevel,
+              })}
             </p>
           </div>
         </div>
@@ -263,7 +360,8 @@ export function SkillView() {
           {Array.from({ length: MAX_ACTIVE_SKILL_BAR }).map((_, idx) => {
             const skillId = activeGear.equippedSkillBar[idx];
             const skill = skillId ? getSkillById(skillId) : undefined;
-            const lv = skill ? activeGear.skillLevels[skill.id] ?? 1 : 0;
+            const rawLv = skill ? activeGear.skillLevels[skill.id] ?? 1 : 0;
+            const lv = skill ? Math.min(skillMaxLevel, rawLv) : 0;
 
             if (!skill) {
               return (
@@ -279,9 +377,19 @@ export function SkillView() {
               );
             }
 
+            const slotSp = getEffectiveSpCost(skill, activeGear, adminConfig);
+            const slotSummary = formatSkillRealSummary(
+              skill,
+              rawLv,
+              lang,
+              adminConfig,
+              slotSp
+            );
+
             return (
               <div
                 key={skill.id}
+                title={slotSummary.tooltipText}
                 onClick={() => {
                   if (window.innerWidth < 768) {
                     setMobileSkillId(skill.id);
@@ -305,7 +413,7 @@ export function SkillView() {
                         {getSkillName(lang, skill.id)}
                       </div>
                       <div className="text-[11px] font-mono-nums text-sky-300">
-                        Lv.{lv} · {getEffectiveSpCost(skill, activeGear, adminConfig)} SP
+                        Lv.{lv} · {slotSp} SP
                       </div>
                     </div>
                   </div>
@@ -343,104 +451,302 @@ export function SkillView() {
       {/* 2. PASSIVE MODULES */}
       {passiveSkills.length > 0 && (
         <section className="rounded-lg border border-emerald-500/35 bg-[#0C121D]/95 p-3.5 sm:p-4 space-y-3">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-emerald-400" />
-            <h2 className="font-display text-lg font-bold tracking-wide text-slate-100">
-              {t('skill.passivesTitle')}
-            </h2>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-emerald-400" />
+                <h2 className="font-display text-lg font-bold tracking-wide text-slate-100">
+                  {t('skill.passivesTitle', {
+                    used: activeEquippedPassives.length,
+                    max: unlockedPassiveSlots,
+                  })}
+                </h2>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5">
+                {t('skill.passiveSlotsHint')}
+              </p>
+            </div>
+            <span className="text-xs font-mono-nums text-emerald-300">
+              {t('skill.passiveSlotsTitle', {
+                used: activeEquippedPassives.length,
+                unlocked: unlockedPassiveSlots,
+                max: passiveSlotsCfg.max,
+              })}
+            </span>
+          </div>
+
+          {/* Passive Slot Row */}
+          <div
+            data-testid="passive-slots-row"
+            className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2"
+          >
+            {Array.from({ length: passiveSlotsCfg.max }).map((_, idx) => {
+              const isUnlocked = idx < unlockedPassiveSlots;
+              const slotSkillId = isUnlocked ? equippedPassives[idx] : undefined;
+              const slotSkill = slotSkillId ? getSkillById(slotSkillId) : undefined;
+              const unlockGearLv = getPassiveSlotUnlockGearLevel(
+                idx,
+                passiveSlotsCfg
+              );
+
+              if (!isUnlocked) {
+                return (
+                  <div
+                    key={`passive-locked-${idx}`}
+                    data-testid={`passive-slot-${idx}`}
+                    className="min-h-[68px] rounded-md border border-dashed border-slate-800/80 bg-[#070B12]/70 p-2 flex flex-col items-center justify-center text-slate-500 text-[11px] font-mono-nums text-center gap-1"
+                  >
+                    <Lock className="w-3.5 h-3.5 text-slate-600" />
+                    <span>
+                      {t('skill.passiveSlotLocked', { level: unlockGearLv })}
+                    </span>
+                  </div>
+                );
+              }
+
+              if (!slotSkill) {
+                return (
+                  <div
+                    key={`passive-empty-${idx}`}
+                    data-testid={`passive-slot-${idx}`}
+                    className="min-h-[68px] rounded-md border border-dashed border-emerald-500/30 bg-[#08120F]/60 p-2 flex flex-col items-center justify-center text-slate-500 text-xs"
+                  >
+                    <span className="font-mono-nums text-[10px] mb-0.5">
+                      P#{idx + 1}
+                    </span>
+                    <span>{t('skill.passiveSlotEmpty')}</span>
+                  </div>
+                );
+              }
+
+              const slotRawLv = activeGear.skillLevels[slotSkill.id] ?? 1;
+              const slotEffLv = Math.min(skillMaxLevel, slotRawLv);
+              const slotSummary = formatSkillRealSummary(
+                slotSkill,
+                slotRawLv,
+                lang,
+                adminConfig,
+                0
+              );
+
+              return (
+                <div
+                  key={`passive-filled-${slotSkill.id}`}
+                  data-testid={`passive-slot-${idx}`}
+                  title={slotSummary.tooltipText}
+                  className="min-h-[68px] rounded-md border border-emerald-500/60 bg-[#08120F] p-2 flex flex-col justify-between gap-1"
+                >
+                  <div className="flex items-start justify-between gap-1.5">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="w-6 h-6 rounded bg-emerald-500/15 border border-emerald-500/40 flex items-center justify-center text-emerald-300 shrink-0">
+                        <SkillIcon icon={slotSkill.icon} className="w-3.5 h-3.5" />
+                      </span>
+                      <div className="min-w-0">
+                        <div className="text-[11px] font-bold text-slate-100 leading-tight truncate">
+                          {getSkillName(lang, slotSkill.id)}
+                        </div>
+                        <div className="text-[10px] font-mono-nums text-emerald-300">
+                          Lv.{slotEffLv}
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleUnequipPassive(slotSkill.id)}
+                      title={t('skill.passiveUnequipBtn')}
+                      className="w-6 h-6 md:w-5 md:h-5 rounded bg-slate-800 hover:bg-red-500/80 text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer shrink-0"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                  <SkillSummaryInline
+                    summary={slotSummary}
+                    mods={adminConfig.iconCatalogMods}
+                    compact
+                  />
+                </div>
+              );
+            })}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {passiveSkills.map((skill) => {
               const currentLv = activeGear.skillLevels[skill.id] ?? 0;
+              const effectiveLv =
+                currentLv >= 1 ? Math.min(skillMaxLevel, currentLv) : 0;
               const isLearned = currentLv >= 1;
-              const isMax = currentLv >= BALANCE_CONFIG.skillMaxLevel;
-              const nextLv = Math.min(
-                BALANCE_CONFIG.skillMaxLevel,
-                currentLv + 1
+              const isMax = currentLv >= skillMaxLevel;
+              const nextLv = Math.min(skillMaxLevel, currentLv + 1);
+              const reqGearLv = getRequiredGearLevelForSkillLevel(
+                skill,
+                nextLv,
+                skillMaxLevel
               );
-              const reqGearLv = getRequiredGearLevelForSkillLevel(skill, nextLv);
               const cost = getSkillLearnOrUpgradeCost(skill, nextLv);
               const validation = validateLearnOrUpgradeSkill(
                 pilot,
                 activeGear.classId,
+                skill.id,
+                adminConfig
+              );
+              const isEquippedInActiveSlot = activeEquippedPassives.includes(
                 skill.id
+              );
+              const isEquippedInOverflowSlot =
+                !isEquippedInActiveSlot && equippedPassives.includes(skill.id);
+              const equipPassiveVal = validateEquipPassiveSkill(
+                activeGear,
+                skill.id,
+                adminConfig
+              );
+              const summary = formatSkillRealSummary(
+                skill,
+                currentLv,
+                lang,
+                adminConfig,
+                0
               );
 
               return (
                 <div
                   key={skill.id}
+                  title={summary.tooltipText}
                   onClick={() => {
                     if (window.innerWidth < 768) setMobileSkillId(skill.id);
                   }}
                   className={`rounded-md border p-3.5 flex flex-col justify-between gap-3 cursor-pointer md:cursor-default ${
-                    isLearned
-                      ? 'border-emerald-500/50 bg-[#08120F]'
+                    isEquippedInActiveSlot
+                      ? 'border-emerald-500/60 bg-[#08120F]'
+                      : isLearned
+                      ? 'border-emerald-500/25 bg-[#0A111A]'
                       : 'border-slate-800 bg-[#080C14]/80 opacity-85'
                   }`}
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-start gap-3">
-                      <div className="w-10 h-10 rounded-md border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 flex items-center justify-center shrink-0">
-                        <SkillIcon icon={skill.icon} className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="font-display text-lg font-bold text-slate-100 leading-tight">
-                            {getSkillName(lang, skill.id)}
-                          </h3>
-                          {isLearned && (
-                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                              {t('skill.passiveAlwaysOn')}
-                            </span>
-                          )}
+                  <div className="space-y-2.5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 rounded-md border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 flex items-center justify-center shrink-0">
+                          <SkillIcon icon={skill.icon} className="w-5 h-5" />
                         </div>
-                        <p className="text-sm md:text-xs text-slate-400 mt-1">
-                          {getSkillDesc(lang, skill.id)}
-                        </p>
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="font-display text-lg font-bold text-slate-100 leading-tight">
+                              {getSkillName(lang, skill.id)}
+                            </h3>
+                            {isEquippedInActiveSlot && (
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                                {t('skill.passiveSlotActive')}
+                              </span>
+                            )}
+                            {isEquippedInOverflowSlot && (
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                                {t('skill.passiveOverCapTag')}
+                              </span>
+                            )}
+                            {isLearned &&
+                              !isEquippedInActiveSlot &&
+                              !isEquippedInOverflowSlot && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700">
+                                  {t('skill.passiveUnequippedTag')}
+                                </span>
+                              )}
+                          </div>
+                          <p className="text-sm md:text-xs text-slate-400 mt-1">
+                            {getSkillDesc(lang, skill.id)}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="text-right shrink-0">
+                        <span className="font-mono-nums text-xs font-bold text-emerald-300 block">
+                          {isLearned
+                            ? t('skill.levelLabel', {
+                                level: effectiveLv,
+                                max: skillMaxLevel,
+                              })
+                            : t('skill.notLearned')}
+                        </span>
+                        {currentLv > skillMaxLevel && (
+                          <span className="font-mono-nums text-[10px] text-amber-300 block">
+                            ({t('skill.storedLevelNote', { stored: currentLv })})
+                          </span>
+                        )}
                       </div>
                     </div>
 
-                    <span className="font-mono-nums text-xs font-bold text-emerald-300 shrink-0">
-                      {isLearned
-                        ? t('skill.levelLabel', {
-                            level: currentLv,
-                            max: BALANCE_CONFIG.skillMaxLevel,
-                          })
-                        : t('skill.notLearned')}
-                    </span>
+                    <SkillSummaryInline
+                      summary={summary}
+                      mods={adminConfig.iconCatalogMods}
+                    />
                   </div>
 
                   <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-800/80 text-xs">
                     <span className="text-slate-400 font-mono-nums">
                       {isMax
-                        ? t('skill.maxLevel')
+                        ? t('skill.maxLevel', { max: skillMaxLevel })
                         : t('skill.reqGearLv', { level: reqGearLv })}
                     </span>
 
-                    {!isMax && (
-                      <button
-                        type="button"
-                        disabled={!validation.ok}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleLearnOrUpgrade(skill);
-                        }}
-                        className="min-h-[44px] md:min-h-0 md:h-8 px-3 inline-flex items-center gap-1.5 rounded-lg md:rounded bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-slate-950 font-semibold text-xs transition-colors cursor-pointer"
-                      >
-                        <ArrowUpCircle className="w-3.5 h-3.5" />
-                        <span>
-                          {isLearned
-                            ? t('skill.upgradeBtn', {
-                                next: nextLv,
-                                cost: cost.toLocaleString(),
-                              })
-                            : t('skill.learnBtn', {
-                                cost: cost.toLocaleString(),
-                              })}
-                        </span>
-                      </button>
-                    )}
+                    <div className="flex flex-wrap items-center gap-2">
+                      {!isMax && (
+                        <button
+                          type="button"
+                          disabled={!validation.ok}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleLearnOrUpgrade(skill);
+                          }}
+                          className="min-h-[44px] md:min-h-0 md:h-8 px-3 inline-flex items-center gap-1.5 rounded-lg md:rounded bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-slate-950 font-semibold text-xs transition-colors cursor-pointer"
+                        >
+                          <ArrowUpCircle className="w-3.5 h-3.5" />
+                          <span>
+                            {isLearned
+                              ? t('skill.upgradeBtn', {
+                                  next: nextLv,
+                                  cost: cost.toLocaleString(),
+                                })
+                              : t('skill.learnBtn', {
+                                  cost: cost.toLocaleString(),
+                                })}
+                          </span>
+                        </button>
+                      )}
+
+                      {isLearned &&
+                        (isEquippedInActiveSlot || isEquippedInOverflowSlot ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleUnequipPassive(skill.id);
+                            }}
+                            className="min-h-[44px] md:min-h-0 md:h-8 px-2.5 inline-flex items-center gap-1 rounded-lg md:rounded border border-emerald-400/60 bg-emerald-500/15 hover:bg-red-500/20 hover:border-red-400/60 text-emerald-200 hover:text-red-200 text-xs font-semibold transition-colors cursor-pointer"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                            <span>{t('skill.passiveEquippedBtn')}</span>
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={!equipPassiveVal.ok}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEquipPassive(skill);
+                            }}
+                            className="min-h-[44px] md:min-h-0 md:h-8 px-2.5 inline-flex items-center gap-1 rounded-lg md:rounded border border-sky-500/50 bg-sky-500/15 hover:bg-sky-500/25 disabled:bg-slate-900 disabled:border-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-sky-200 text-xs font-semibold transition-colors cursor-pointer"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>
+                              {equipPassiveVal.reason === 'passive_slots_full'
+                                ? t('skill.passiveSlotsFull', {
+                                    used: equippedPassives.length,
+                                    max: unlockedPassiveSlots,
+                                  })
+                                : t('skill.passiveEquipBtn')}
+                            </span>
+                          </button>
+                        ))}
+                    </div>
                   </div>
                 </div>
               );
@@ -523,9 +829,15 @@ export function SkillView() {
         <div className="md:hidden divide-y divide-slate-800/80 rounded-lg border border-slate-800 bg-[#0C121D]/95 overflow-hidden">
           {filteredActiveSkills.map((skill) => {
             const currentLv = activeGear.skillLevels[skill.id] ?? 0;
+            const effectiveLv =
+              currentLv >= 1 ? Math.min(skillMaxLevel, currentLv) : 0;
             const isLearned = currentLv >= 1;
-            const nextLv = Math.min(BALANCE_CONFIG.skillMaxLevel, currentLv + 1);
-            const reqGearLv = getRequiredGearLevelForSkillLevel(skill, nextLv);
+            const nextLv = Math.min(skillMaxLevel, currentLv + 1);
+            const reqGearLv = getRequiredGearLevelForSkillLevel(
+              skill,
+              nextLv,
+              skillMaxLevel
+            );
             const isEquipped = activeGear.equippedSkillBar.includes(skill.id);
             const needsCard =
               !isLearned &&
@@ -533,11 +845,20 @@ export function SkillView() {
               !pilot.ownedOpeningCards.includes(skill.openingCardId!);
             const isLevelLocked = activeGear.level < reqGearLv;
             const isGreyedOut = !isLearned && (needsCard || isLevelLocked);
+            const spCost = getEffectiveSpCost(skill, activeGear, adminConfig);
+            const summary = formatSkillRealSummary(
+              skill,
+              currentLv,
+              lang,
+              adminConfig,
+              spCost
+            );
 
             return (
               <button
                 key={skill.id}
                 type="button"
+                title={summary.tooltipText}
                 onClick={() => setMobileSkillId(skill.id)}
                 className={`w-full min-h-[68px] px-3.5 py-3 flex items-center justify-between gap-3 text-left active:bg-slate-800/70 cursor-pointer ${
                   isGreyedOut ? 'opacity-70' : ''
@@ -561,7 +882,7 @@ export function SkillView() {
                       <SkillIcon icon={skill.icon} className="w-5 h-5" />
                     )}
                   </div>
-                  <div className="min-w-0">
+                  <div className="min-w-0 space-y-0.5">
                     <div className="flex items-center gap-1.5">
                       <span className="text-sm font-bold text-slate-100 truncate">
                         {getSkillName(lang, skill.id)}
@@ -572,11 +893,15 @@ export function SkillView() {
                         </span>
                       )}
                     </div>
-                    <div className="text-xs text-slate-400 truncate mt-0.5">
-                      {getSkillCategoryLabel(lang, skill.category)} ·{' '}
-                      {getEffectiveSpCost(skill, activeGear, adminConfig)} SP ·{' '}
-                      {isLearned ? `Lv.${currentLv}` : t('skill.notLearned')}
+                    <div className="text-xs text-slate-400 truncate">
+                      {getSkillCategoryLabel(lang, skill.category)} · {spCost} SP ·{' '}
+                      {isLearned ? `Lv.${effectiveLv}/${skillMaxLevel}` : t('skill.notLearned')}
                     </div>
+                    <SkillSummaryInline
+                      summary={summary}
+                      mods={adminConfig.iconCatalogMods}
+                      compact
+                    />
                   </div>
                 </div>
 
@@ -590,15 +915,22 @@ export function SkillView() {
         <div className="hidden md:grid grid-cols-2 xl:grid-cols-3 gap-3.5">
           {filteredActiveSkills.map((skill) => {
             const currentLv = activeGear.skillLevels[skill.id] ?? 0;
+            const effectiveLv =
+              currentLv >= 1 ? Math.min(skillMaxLevel, currentLv) : 0;
             const isLearned = currentLv >= 1;
-            const isMax = currentLv >= BALANCE_CONFIG.skillMaxLevel;
-            const nextLv = Math.min(BALANCE_CONFIG.skillMaxLevel, currentLv + 1);
-            const reqGearLv = getRequiredGearLevelForSkillLevel(skill, nextLv);
+            const isMax = currentLv >= skillMaxLevel;
+            const nextLv = Math.min(skillMaxLevel, currentLv + 1);
+            const reqGearLv = getRequiredGearLevelForSkillLevel(
+              skill,
+              nextLv,
+              skillMaxLevel
+            );
             const cost = getSkillLearnOrUpgradeCost(skill, nextLv);
             const learnVal = validateLearnOrUpgradeSkill(
               pilot,
               activeGear.classId,
-              skill.id
+              skill.id,
+              adminConfig
             );
             const isEquipped = activeGear.equippedSkillBar.includes(skill.id);
             const equipVal = validateEquipSkillOnBar(activeGear, skill.id);
@@ -611,11 +943,19 @@ export function SkillView() {
               pilot.ownedOpeningCards.includes(skill.openingCardId!);
             const isLevelLocked = activeGear.level < reqGearLv;
             const isGreyedOut = !isLearned && (needsCard || isLevelLocked);
-            const scaled = getScaledSkillStats(skill, Math.max(1, currentLv));
+            const spCost = getEffectiveSpCost(skill, activeGear, adminConfig);
+            const summary = formatSkillRealSummary(
+              skill,
+              currentLv,
+              lang,
+              adminConfig,
+              spCost
+            );
 
             return (
               <div
                 key={skill.id}
+                title={summary.tooltipText}
                 className={`rounded-lg border p-4 flex flex-col justify-between gap-3 transition-colors ${
                   isEquipped
                     ? 'border-amber-400/70 bg-[#0D1524]'
@@ -668,7 +1008,7 @@ export function SkillView() {
 
                     <div className="text-right font-mono-nums shrink-0">
                       <div className="text-xs font-bold text-amber-400">
-                        {getEffectiveSpCost(skill, activeGear, adminConfig)} SP
+                        {spCost} SP
                       </div>
                       <div
                         className={`text-[11px] font-semibold ${
@@ -677,11 +1017,16 @@ export function SkillView() {
                       >
                         {isLearned
                           ? t('skill.levelLabel', {
-                              level: currentLv,
-                              max: BALANCE_CONFIG.skillMaxLevel,
+                              level: effectiveLv,
+                              max: skillMaxLevel,
                             })
                           : t('skill.notLearned')}
                       </div>
+                      {currentLv > skillMaxLevel && (
+                        <div className="text-[10px] text-amber-300">
+                          ({t('skill.storedLevelNote', { stored: currentLv })})
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -689,28 +1034,15 @@ export function SkillView() {
                     {getSkillDesc(lang, skill.id)}
                   </p>
 
+                  <SkillSummaryInline
+                    summary={summary}
+                    mods={adminConfig.iconCatalogMods}
+                  />
+
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-mono-nums text-slate-400">
-                    <span>{getSkillTargetLabel(lang, skill.targetType)}</span>
+                    <span>{summary.targetText}</span>
                     <span>·</span>
-                    <span>
-                      {skill.oncePerBattle
-                        ? t('skill.oncePerBattle')
-                        : skill.isToggle
-                        ? t('skill.toggleTag')
-                        : skill.cooldown > 0
-                        ? t('skill.cooldown', { turns: skill.cooldown })
-                        : t('skill.noCooldown')}
-                    </span>
-                    {isLearned && (
-                      <>
-                        <span>·</span>
-                        <span className="text-emerald-400">
-                          {t('skill.scaleInfo', {
-                            pct: Math.round(scaled.effectMult * 100),
-                          })}
-                        </span>
-                      </>
-                    )}
+                    <span>{summary.cooldownText}</span>
                   </div>
 
                   {!isMax && (needsCard || isLevelLocked || hasCard) && (
@@ -748,7 +1080,7 @@ export function SkillView() {
                     </button>
                   ) : isMax ? (
                     <span className="h-8 px-2.5 inline-flex items-center rounded border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 font-semibold text-xs">
-                      {t('skill.maxLevel')}
+                      {t('skill.maxLevel', { max: skillMaxLevel })}
                     </span>
                   ) : (
                     <button
@@ -829,24 +1161,44 @@ export function SkillView() {
           {mobileSelectedSkill && (() => {
             const skill = mobileSelectedSkill;
             const currentLv = activeGear.skillLevels[skill.id] ?? 0;
+            const effectiveLv =
+              currentLv >= 1 ? Math.min(skillMaxLevel, currentLv) : 0;
             const isLearned = currentLv >= 1;
-            const isMax = currentLv >= BALANCE_CONFIG.skillMaxLevel;
-            const nextLv = Math.min(BALANCE_CONFIG.skillMaxLevel, currentLv + 1);
-            const reqGearLv = getRequiredGearLevelForSkillLevel(skill, nextLv);
+            const isMax = currentLv >= skillMaxLevel;
+            const nextLv = Math.min(skillMaxLevel, currentLv + 1);
+            const reqGearLv = getRequiredGearLevelForSkillLevel(
+              skill,
+              nextLv,
+              skillMaxLevel
+            );
             const cost = getSkillLearnOrUpgradeCost(skill, nextLv);
             const learnVal = validateLearnOrUpgradeSkill(
               pilot,
               activeGear.classId,
-              skill.id
+              skill.id,
+              adminConfig
             );
             const isEquipped = activeGear.equippedSkillBar.includes(skill.id);
             const equipVal = validateEquipSkillOnBar(activeGear, skill.id);
+            const isPassiveEquipped = equippedPassives.includes(skill.id);
+            const passiveEquipVal = validateEquipPassiveSkill(
+              activeGear,
+              skill.id,
+              adminConfig
+            );
             const needsCard =
               !isLearned &&
               Boolean(skill.openingCardId) &&
               !pilot.ownedOpeningCards.includes(skill.openingCardId!);
             const isLevelLocked = activeGear.level < reqGearLv;
-            const scaled = getScaledSkillStats(skill, Math.max(1, currentLv));
+            const spCost = getEffectiveSpCost(skill, activeGear, adminConfig);
+            const summary = formatSkillRealSummary(
+              skill,
+              currentLv,
+              lang,
+              adminConfig,
+              spCost
+            );
 
             return (
               <div className="space-y-4">
@@ -854,21 +1206,26 @@ export function SkillView() {
                   {getSkillDesc(lang, skill.id)}
                 </p>
 
+                <SkillSummaryInline
+                  summary={summary}
+                  mods={adminConfig.iconCatalogMods}
+                />
+
                 <div className="grid grid-cols-2 gap-2 text-xs font-mono-nums">
                   <div className="rounded-lg border border-slate-800 bg-[#080C14] p-2.5">
                     <div className="text-slate-400">{t('skill.targeting')}</div>
                     <div className="text-slate-100 font-semibold mt-0.5">
-                      {getSkillTargetLabel(lang, skill.targetType)}
+                      {summary.targetText} · {summary.cooldownText}
                     </div>
                   </div>
                   <div className="rounded-lg border border-slate-800 bg-[#080C14] p-2.5">
                     <div className="text-slate-400">{t('common.level')}</div>
                     <div className="text-sky-300 font-semibold mt-0.5">
                       {isLearned
-                        ? `${t('skill.levelLabel', {
-                            level: currentLv,
-                            max: BALANCE_CONFIG.skillMaxLevel,
-                          })} (${Math.round(scaled.effectMult * 100)}%)`
+                        ? t('skill.levelLabel', {
+                            level: effectiveLv,
+                            max: skillMaxLevel,
+                          })
                         : t('skill.notLearned')}
                     </div>
                   </div>
@@ -918,7 +1275,7 @@ export function SkillView() {
                     </button>
                   ) : (
                     <div className="text-center py-2 text-sm font-bold text-emerald-400">
-                      {t('skill.maxLevel')}
+                      {t('skill.maxLevel', { max: skillMaxLevel })}
                     </div>
                   )}
 
@@ -942,6 +1299,32 @@ export function SkillView() {
                         {equipVal.reason === 'bar_full'
                           ? t('skill.barFull')
                           : t('skill.equipBtn')}
+                      </button>
+                    ))}
+
+                  {skill.category === 'passive' &&
+                    isLearned &&
+                    (isPassiveEquipped ? (
+                      <button
+                        type="button"
+                        onClick={() => handleUnequipPassive(skill.id)}
+                        className="w-full min-h-[48px] px-4 rounded-lg border border-red-500/50 bg-red-500/15 text-red-200 font-semibold text-sm cursor-pointer"
+                      >
+                        {t('skill.passiveUnequipBtn')}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={!passiveEquipVal.ok}
+                        onClick={() => handleEquipPassive(skill)}
+                        className="w-full min-h-[48px] px-4 rounded-lg border border-emerald-500/50 bg-emerald-500/15 disabled:bg-slate-900 disabled:text-slate-500 text-emerald-200 font-semibold text-sm cursor-pointer"
+                      >
+                        {passiveEquipVal.reason === 'passive_slots_full'
+                          ? t('skill.passiveSlotsFull', {
+                              used: equippedPassives.length,
+                              max: unlockedPassiveSlots,
+                            })
+                          : t('skill.passiveEquipBtn')}
                       </button>
                     ))}
                 </div>
