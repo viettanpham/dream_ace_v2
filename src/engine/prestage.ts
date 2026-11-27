@@ -16,6 +16,9 @@ import type {
   StatusEffectType,
   SupplyFamily,
 } from '../types/game';
+import { isDebuffType } from '../data/statusEffects';
+import { ALL_ENGINE_STATUS_TYPES } from '../data/statusIconMap';
+import { applyStatus } from './statusEngine';
 import { getSkillStep } from './turnPhase';
 
 export const MIN_PRESTAGE_COUNTDOWN_SEC = 0;
@@ -64,22 +67,17 @@ export function sanitizePrestageConfig(raw: unknown): Required<PrestageConfig> {
   };
 }
 
-export const DEBUFF_TYPES = new Set<StatusEffectType>([
-  'burn',
-  'shield_break',
-  'shield_cracked',
-  'slow',
-  'silence',
-  'vulnerable',
-  'def_down',
-]);
+export const DEBUFF_TYPES = new Set<StatusEffectType>(
+  ALL_ENGINE_STATUS_TYPES.filter(
+    (t) => t !== 'registry_effect' && isDebuffType(t)
+  )
+);
 
 export function addOrRefreshStatus(
   statuses: ActiveStatusEffect[],
   entry: ActiveStatusEffect
 ): ActiveStatusEffect[] {
-  const filtered = statuses.filter((s) => s.type !== entry.type);
-  return [...filtered, { ...entry, isDebuff: DEBUFF_TYPES.has(entry.type) }];
+  return applyStatus(statuses, entry);
 }
 
 const PURE_STAT_BUFF_EFFECTS: Readonly<

@@ -1,6 +1,7 @@
+import '../data/statusEffects';
 import {
   formatStatusChipShortValue,
-  getCatalogRowForStatus,
+  getCatalogRowForActiveStatus,
   getFirstExpiringTurns,
   getStatusVisualKind,
 } from '../data/statusIconMap';
@@ -60,7 +61,7 @@ export function StatusChip({
   labelTestId,
   className = '',
 }: StatusChipProps) {
-  const catalogRow = getCatalogRowForStatus(status.type, iconMods);
+  const catalogRow = getCatalogRowForActiveStatus(status, iconMods);
   const visualKind = getStatusVisualKind(status, catalogRow);
   const shortValue = formatStatusChipShortValue(
     lang,
@@ -72,7 +73,9 @@ export function StatusChip({
   const turnsLeft = getFirstExpiringTurns(status, stackTurns, allowStack);
   const fullDetail = formatStatusEffectDetail(lang, status, unit);
   const effectiveStacks =
-    allowStack && Number.isFinite(stacks) && stacks >= 2
+    Number.isFinite(status.stacks) && (status.stacks as number) >= 2
+      ? Math.floor(status.stacks as number)
+      : allowStack && Number.isFinite(stacks) && stacks >= 2
       ? Math.floor(stacks)
       : 1;
   const turnsText =

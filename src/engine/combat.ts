@@ -23,6 +23,12 @@ import {
   SKILLS_LIST,
 } from '../data/skills';
 import { SUPPLY_TEMPLATES } from '../data/consumables';
+import {
+  getStatusKey,
+  getStatusStatModifier,
+  processRegistryTickEffects,
+  tickStatusDurations,
+} from './statusEngine';
 import type {
   ActionType,
   ActiveStatusEffect,
@@ -130,15 +136,26 @@ function getSlotIndex(units: CombatUnit[], unitId: string): number {
   return Math.max(0, idx);
 }
 
-export function hasStatus(unit: CombatUnit, type: StatusEffectType): boolean {
-  return unit.statuses.some((s) => s.type === type && s.turnsRemaining > 0);
+export function hasStatus(
+  unit: CombatUnit,
+  typeOrKey: StatusEffectType | string
+): boolean {
+  return unit.statuses.some(
+    (s) =>
+      (getStatusKey(s) === typeOrKey || s.type === typeOrKey) &&
+      s.turnsRemaining > 0
+  );
 }
 
 export function getStatus(
   unit: CombatUnit,
-  type: StatusEffectType
+  typeOrKey: StatusEffectType | string
 ): ActiveStatusEffect | undefined {
-  return unit.statuses.find((s) => s.type === type && s.turnsRemaining > 0);
+  return unit.statuses.find(
+    (s) =>
+      (getStatusKey(s) === typeOrKey || s.type === typeOrKey) &&
+      s.turnsRemaining > 0
+  );
 }
 
 export function isUnitStealthed(unit: CombatUnit): boolean {
@@ -153,6 +170,10 @@ export function getEffectiveUnitSpeed(unit: CombatUnit): number {
   }
   if (hasStatus(unit, 'slow')) {
     speed *= 1 - BALANCE_CONFIG.slowSpeedPenalty;
+  }
+  const regMod = getStatusStatModifier(unit, 'speed');
+  if (regMod.pct !== 0 || regMod.flat !== 0) {
+    speed = speed * Math.max(0.1, 1 + regMod.pct) + regMod.flat;
   }
   return Math.max(1, Math.round(speed));
 }
@@ -170,6 +191,10 @@ export function getEffectiveUnitDefense(
   if (siegeDef) def *= 1 + (siegeDef.magnitude ?? 0.8);
   const defDown = getStatus(unit, 'def_down');
   if (defDown) def *= Math.max(0.2, 1 - (defDown.magnitude ?? 0.3));
+  const regMod = getStatusStatModifier(unit, 'defense');
+  if (regMod.pct !== 0 || regMod.flat !== 0) {
+    def = def * Math.max(0.1, 1 + regMod.pct) + regMod.flat;
+  }
   return Math.max(0, Math.round(def));
 }
 
@@ -180,6 +205,10 @@ export function getEffectiveUnitDodge(unit: CombatUnit): number {
   const evaUp = getStatus(unit, 'eva_up');
   if (evaUp) {
     dodge += Math.round((evaUp.magnitude ?? 0.25) * 40);
+  }
+  const regMod = getStatusStatModifier(unit, 'dodge');
+  if (regMod.pct !== 0 || regMod.flat !== 0) {
+    dodge += Math.round(regMod.pct * 100) + regMod.flat;
   }
   return Math.min(75, Math.max(0, dodge));
 }
@@ -207,14 +236,24 @@ function getEffectiveAttackDamageMult(
     mult += unit.derived.passiveSkillDmgPct ?? 0;
   }
 
+  const regMod = getStatusStatModifier(unit, 'attack');
+  if (regMod.pct !== 0 || regMod.flat !== 0) {
+    mult += regMod.pct;
+    if (regMod.flat !== 0 && unit.derived.attackPower > 0) {
+      mult += regMod.flat / unit.derived.attackPower;
+    }
+  }
+
   return Math.max(0.35, mult);
 }
 
 function removeStatus(
   statuses: ActiveStatusEffect[],
-  type: StatusEffectType
+  typeOrKey: StatusEffectType | string
 ): ActiveStatusEffect[] {
-  return statuses.filter((s) => s.type !== type);
+  return statuses.filter(
+    (s) => getStatusKey(s) !== typeOrKey && s.type !== typeOrKey
+  );
 }
 
 export const NPC_ROLE_SKILL_PRIORITY: Record<MechClassId, readonly string[]> = {
@@ -2341,6 +2380,21 @@ function resolveUnitActionCore(
         });
       }
     }
+
+    // Generic DoT/HoT tick for registry-only effects with tickTiming (once per own turn)
+    if (actor.alive) {
+      actor = processRegistryTickEffects({
+        actor,
+        round,
+        adminConfig,
+        applyShieldThenHull,
+        nextId,
+        events,
+        popups,
+        logs,
+        destroyedUnitIds,
+      });
+    }
   }
 
   // Check if releasing a charged shot (str_solar_capacitor) BEFORE ticking statuses
@@ -2348,17 +2402,10 @@ function resolveUnitActionCore(
 
   if (!skipTurnStartTicks) {
     // Tick down active non-permanent status durations (99 = toggle/until-attack)
+    // and grant IMM_CONTROL when a registry-only control effect expires by duration.
     actor = {
       ...actor,
-      statuses: actor.alive
-        ? actor.statuses
-            .map((s) =>
-              s.turnsRemaining >= 90
-                ? s
-                : { ...s, turnsRemaining: s.turnsRemaining - 1 }
-            )
-            .filter((s) => s.turnsRemaining > 0)
-        : [],
+      statuses: actor.alive ? tickStatusDurations(actor.statuses).statuses : [],
     };
   }
   nextUnits[actorIdx] = actor;

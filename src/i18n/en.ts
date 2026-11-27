@@ -257,6 +257,8 @@ export const EN_TRANSLATIONS = {
   'status.siege_defense.desc': '+80% DEF & +30% Shield, -30% damage dealt',
   'status.charging': 'Charging',
   'status.charging.desc': 'Charging Solar Capacitor — fires automatically next turn',
+  'status.registry_effect': 'Status Effect',
+  'status.registry_effect.desc': 'Combat status effect',
 
   // Enemy Archetypes
   'archetype.drone': 'Fast Drone',
@@ -691,6 +693,9 @@ export const EN_TRANSLATIONS = {
   'log.shieldCrackNoShield': '{target}: No active shield to crack.',
   'log.burnTick': '{target} suffers {damage} hull burn damage!',
   'log.regenTick': '{target} regenerates +{amount} hull HP!',
+  'log.registryDotTick': '{target} suffers {damage} {resource} from {status}!',
+  'log.registryHotTick': '{target} recovers +{amount} {resource} from {status}!',
+  'log.controlResisted': 'Resisted: {status}',
   'log.shieldRegen': '{target} regenerates shield SHD +{amount}{suffix}',
   'log.shieldRegenHitSuffix': ' (hit {hits}x, {multPct}%)',
   'log.shieldRegenCrackedSuffix': ' (cracked shield, {multPct}%)',

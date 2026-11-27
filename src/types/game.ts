@@ -58,7 +58,8 @@ export type StatusEffectType =
   | 'regen_hp'
   | 'siege_mode'
   | 'siege_defense'
-  | 'charging';
+  | 'charging'
+  | 'registry_effect';
 
 export interface ActiveStatusEffect {
   type: StatusEffectType;
@@ -70,6 +71,9 @@ export interface ActiveStatusEffect {
   sourceSkillId?: string;
   targetId?: string; // stored target for Charge Shot
   sourceName?: string;
+  registryId?: string; // S1a: status registry id for registry-only effects
+  stacks?: number; // S1a: current stack count (>= 1)
+  sourceId?: string; // S1a: caster unit id
 }
 
 export type SkillClassScope = 'general' | MechClassId;
@@ -1009,6 +1013,9 @@ export type CombatLogTemplateKey =
   | 'log.shieldCrackNoShield'
   | 'log.burnTick'
   | 'log.regenTick'
+  | 'log.registryDotTick'
+  | 'log.registryHotTick'
+  | 'log.controlResisted'
   | 'log.shieldRegen'
   | 'log.statusCleansed'
   | 'log.splashDamage'

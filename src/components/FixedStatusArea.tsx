@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
+import { getStatusKey } from '../data/statusEffects';
 import {
   formatStatusChipShortValue,
-  getCatalogRowForStatus,
+  getCatalogRowForActiveStatus,
   getFirstExpiringTurns,
   getStatusVisualKind,
   sortStatusEffects,
@@ -309,18 +310,23 @@ export function FixedStatusArea({
     return (
       <div className="space-y-2">
         {sorted.map((st) => {
-          const occ = typeCounts.get(st.type) ?? 0;
-          typeCounts.set(st.type, occ + 1);
-          const catalogRow = getCatalogRowForStatus(st.type, iconMods);
+          const stKey = getStatusKey(st);
+          const occ = typeCounts.get(stKey) ?? 0;
+          typeCounts.set(stKey, occ + 1);
+          const catalogRow = getCatalogRowForActiveStatus(st, iconMods);
           const visualKind = getStatusVisualKind(st, catalogRow);
           const detail = formatStatusEffectDetail(lang, st, unit);
           const shortVal = formatStatusChipShortValue(lang, st, unit, 1, false);
           const turns = getFirstExpiringTurns(st, undefined, false);
+          const stackCount =
+            Number.isFinite(st.stacks) && (st.stacks as number) >= 1
+              ? Math.floor(st.stacks as number)
+              : 1;
 
           return (
             <div
-              key={`${st.type}-${occ}`}
-              data-testid={`status-detail-item-${st.type}`}
+              key={`${stKey}-${occ}`}
+              data-testid={`status-detail-item-${stKey}`}
               className={`rounded-lg border pl-4 pr-3 py-2.5 flex items-start gap-2.5 ${
                 visualKind === 'debuff'
                   ? 'border-red-500/40 bg-red-950/20'
@@ -361,7 +367,7 @@ export function FixedStatusArea({
                     <strong className="text-slate-200">{shortVal}</strong>
                   </span>
                   <span>
-                    {t('statusUi.stacksLabel')}: <strong className="text-slate-200">1</strong>
+                    {t('statusUi.stacksLabel')}: <strong className="text-slate-200">{stackCount}</strong>
                   </span>
                 </div>
               </div>

@@ -259,6 +259,8 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'status.siege_defense.desc': '+80% DEF & +30% Khiên, giảm 30% sát thương gây ra',
   'status.charging': 'Đang Tụ Năng',
   'status.charging.desc': 'Đang nạp tụ điện Mặt Trời — tự khai hỏa ở lượt sau',
+  'status.registry_effect': 'Hiệu ứng',
+  'status.registry_effect.desc': 'Hiệu ứng chiến đấu',
 
   // Enemy Archetypes
   'archetype.drone': 'Drone Tốc độ',
@@ -693,6 +695,9 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'log.shieldCrackNoShield': '{target}: Không có khiên để làm nứt.',
   'log.burnTick': '{target} chịu {damage} sát thương Thiêu đốt!',
   'log.regenTick': '{target} hồi phục +{amount} HP thân tàu!',
+  'log.registryDotTick': '{target} chịu {damage} {resource} từ {status}!',
+  'log.registryHotTick': '{target} hồi +{amount} {resource} từ {status}!',
+  'log.controlResisted': 'Kháng: {status}',
   'log.shieldRegen': '{target} hồi khiên SHD +{amount}{suffix}',
   'log.shieldRegenHitSuffix': ' (trúng {hits} lần, {multPct}%)',
   'log.shieldRegenCrackedSuffix': ' (khiên nứt, {multPct}%)',

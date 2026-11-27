@@ -1,10 +1,12 @@
 import { ALLY_PILOT_POOL } from '../data/pilots';
 import { getSkillById } from '../data/skills';
+import { getStatusEntry, isDebuffType } from '../data/statusEffects';
 import {
   formatCombatLogMessage,
   getClassName,
   getSkillName,
   getStatShort,
+  getStatusDisplayName,
   getStatusLabel,
   translate,
 } from '../i18n';
@@ -68,15 +70,15 @@ export const COMBAT_LOG_CHROME_HEIGHTS = {
   maxTotalPx: 76,
 } as const;
 
-const DEBUFF_STATUS_TYPES = new Set<StatusEffectType>([
-  'burn',
-  'shield_break',
-  'shield_cracked',
-  'slow',
-  'silence',
-  'vulnerable',
-  'def_down',
-]);
+function isStatusEffectDebuff(
+  status: StatusEffectType,
+  registryId?: string
+): boolean {
+  if (registryId) {
+    return getStatusEntry(registryId)?.polarity === 'debuff';
+  }
+  return isDebuffType(status);
+}
 
 export type CombatLogStrongTone =
   | 'crit'
@@ -1040,9 +1042,10 @@ export function parseStructuredCombatLogRow(
 
     case 'log.statusApplied': {
       const status = String(p.status ?? 'burn') as StatusEffectType;
-      const isDebuff = DEBUFF_STATUS_TYPES.has(status);
+      const registryId = p.registryId ? String(p.registryId) : undefined;
+      const isDebuff = isStatusEffectDebuff(status, registryId);
       const turns = Number(p.turns ?? 2);
-      const statusLabel = getStatusLabel(lang, status);
+      const statusLabel = getStatusDisplayName(lang, status, registryId);
       const subject = targetFromParams ?? actorFromParams;
       const subjectAvatar = resolveActorAvatarMeta(
         entry,
@@ -1078,6 +1081,124 @@ export function parseStructuredCombatLogRow(
         spCost: null,
         isStrong: isShieldBreak,
         strongTone: isShieldBreak ? 'shield-break' : null,
+        ...subjectAvatar,
+      };
+    }
+
+    case 'log.registryDotTick': {
+      const dmg = Number(p.damage ?? 0);
+      const resource = String(p.resource ?? 'HP');
+      const registryId = p.registryId ? String(p.registryId) : undefined;
+      const statusLabel = getStatusDisplayName(
+        lang,
+        'registry_effect',
+        registryId
+      );
+      const subject = targetFromParams ?? actorFromParams;
+      const subjectAvatar = resolveActorAvatarMeta(
+        entry,
+        subject,
+        faction,
+        units
+      );
+      const sentence = isVi
+        ? `${subject} chịu ${dmg} ${resource} từ ${statusLabel}`
+        : `${subject} suffers ${dmg} ${resource} from ${statusLabel}`;
+      return {
+        id: entry.id,
+        round,
+        turnLabel,
+        faction,
+        actorName: subject,
+        autoBadge,
+        actionKind: 'debuff',
+        actionLabel: statusLabel,
+        targetName: null,
+        valueText: `-${dmg} ${resource}`,
+        valueTone: 'damage',
+        fallbackText,
+        sentence,
+        spCost: null,
+        isStrong: dmg >= 220,
+        strongTone: dmg >= 220 ? 'heavy' : null,
+        ...subjectAvatar,
+      };
+    }
+
+    case 'log.registryHotTick': {
+      const amount = Number(p.amount ?? 0);
+      const resource = String(p.resource ?? 'HP');
+      const registryId = p.registryId ? String(p.registryId) : undefined;
+      const statusLabel = getStatusDisplayName(
+        lang,
+        'registry_effect',
+        registryId
+      );
+      const subject = targetFromParams ?? actorFromParams;
+      const subjectAvatar = resolveActorAvatarMeta(
+        entry,
+        subject,
+        faction,
+        units
+      );
+      const sentence = isVi
+        ? `${subject} hồi +${amount} ${resource} từ ${statusLabel}`
+        : `${subject} recovers +${amount} ${resource} from ${statusLabel}`;
+      return {
+        id: entry.id,
+        round,
+        turnLabel,
+        faction,
+        actorName: subject,
+        autoBadge,
+        actionKind: resource === 'HP' ? 'heal' : 'buff',
+        actionLabel: statusLabel,
+        targetName: null,
+        valueText: `+${amount} ${resource}`,
+        valueTone: resource === 'HP' ? 'heal' : 'buff',
+        fallbackText,
+        sentence,
+        spCost: null,
+        isStrong: false,
+        strongTone: null,
+        ...subjectAvatar,
+      };
+    }
+
+    case 'log.controlResisted': {
+      const registryId = p.registryId ? String(p.registryId) : undefined;
+      const statusLabel = getStatusDisplayName(
+        lang,
+        'registry_effect',
+        registryId
+      );
+      const subject = targetFromParams ?? actorFromParams;
+      const subjectAvatar = resolveActorAvatarMeta(
+        entry,
+        subject,
+        faction,
+        units
+      );
+      const sentence = isVi
+        ? `Kháng: ${statusLabel}`
+        : `Resisted: ${statusLabel}`;
+      return {
+        id: entry.id,
+        round,
+        turnLabel,
+        faction,
+        actorName: subject,
+        autoBadge,
+        actionKind: 'system',
+        actionLabel: statusLabel,
+        targetName: null,
+        valueText: sentence,
+        valueTone: 'neutral',
+        fallbackText,
+        sentence,
+        spCost: null,
+        isStrong: false,
+        strongTone: null,
         ...subjectAvatar,
       };
     }
@@ -1249,7 +1370,7 @@ export function buildLiveBattleProgress(
       const isDebuff =
         st.isDebuff !== undefined
           ? Boolean(st.isDebuff)
-          : DEBUFF_STATUS_TYPES.has(st.type);
+          : isStatusEffectDebuff(st.type, st.registryId);
       if (u.side === 'ally') {
         if (isDebuff) allyActiveDebuffs += 1;
         else allyActiveBuffs += 1;

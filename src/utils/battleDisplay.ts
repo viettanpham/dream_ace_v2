@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { FORMATION_ROWS } from '../data/formationConfig';
+import { getStatusEntry, isDebuffType } from '../data/statusEffects';
 import {
   buildTurnQueue,
   getValidEnemyTargets,
@@ -792,15 +793,12 @@ export interface UpcomingTurnListResult {
   upcoming: UpcomingTurnItem[];
 }
 
-const DEFAULT_DEBUFF_TYPES: ReadonlySet<StatusEffectType> = new Set([
-  'burn',
-  'shield_break',
-  'shield_cracked',
-  'slow',
-  'silence',
-  'vulnerable',
-  'def_down',
-]);
+function isDefaultDebuff(status: Pick<ActiveStatusEffect, 'type' | 'registryId'>): boolean {
+  if (status.registryId) {
+    return getStatusEntry(status.registryId)?.polarity === 'debuff';
+  }
+  return isDebuffType(status.type);
+}
 
 /**
  * Pure ring arc computation for radar unit markers.
@@ -1021,7 +1019,7 @@ export function getStatusIconMeta(status: ActiveStatusEffect): StatusIconMeta {
   const isDebuff =
     status.isDebuff !== undefined
       ? Boolean(status.isDebuff)
-      : DEFAULT_DEBUFF_TYPES.has(status.type);
+      : isDefaultDebuff(status);
 
   let symbol = '▲';
   switch (status.type) {

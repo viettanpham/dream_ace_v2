@@ -1,5 +1,7 @@
 import { useCallback } from 'react';
 import { AFFIX_SUFFIX_MAP, getItemTemplate } from '../data/items';
+import { getStatusEntry } from '../data/statusEffects';
+import { formatStatusChipShortValue } from '../data/statusIconMap';
 import { useGameStore } from '../store/useGameStore';
 import type {
   ActiveStatusEffect,
@@ -180,6 +182,22 @@ export function getStatusLabel(
   return translate(lang, `status.${status}` as TranslationKey);
 }
 
+/**
+ * S1a: Reads status name from statusEffects registry first when `registryId` is present,
+ * falling back to the existing `status.<type>` i18n key.
+ */
+export function getStatusDisplayName(
+  lang: Language,
+  status: StatusEffectType,
+  registryId?: string
+): string {
+  if (registryId) {
+    const entry = getStatusEntry(registryId);
+    if (entry) return lang === 'vi' ? entry.nameVi : entry.nameEn;
+  }
+  return getStatusLabel(lang, status);
+}
+
 export function getStatusDesc(
   lang: Language,
   status: StatusEffectType,
@@ -216,6 +234,7 @@ const STATUS_SHORT_LABELS: Record<
   siege_mode: { en: 'Siege', vi: 'Pháo' },
   siege_defense: { en: 'Bastion', vi: 'PháoĐài' },
   charging: { en: 'Charge', vi: 'Nạp' },
+  registry_effect: { en: 'Effect', vi: 'Hiệu ứng' },
 };
 
 export function getStatusShortLabel(
@@ -247,7 +266,7 @@ export function formatStatusEffectDetail(
   unit?: CombatUnit | null
 ): StatusEffectDetail {
   const isVi = lang === 'vi';
-  const label = getStatusLabel(lang, st.type);
+  const label = getStatusDisplayName(lang, st.type, st.registryId);
   const maxHp = unit?.derived?.maxHp ?? 0;
 
   let valueText = '';
@@ -388,6 +407,11 @@ export function formatStatusEffectDetail(
       includeTurns = false;
       break;
     }
+    case 'registry_effect': {
+      const shortVal = formatStatusChipShortValue(lang, st, unit);
+      valueText = shortVal === label ? '' : shortVal;
+      break;
+    }
   }
 
   const durationText = includeTurns
@@ -404,7 +428,10 @@ export function formatStatusEffectDetail(
     ? `${label} ${durationText}`
     : label;
 
-  const shortLabel = getStatusShortLabel(lang, st.type);
+  const shortLabel =
+    st.type === 'registry_effect' && st.registryId
+      ? label
+      : getStatusShortLabel(lang, st.type);
   const shortText = valueText ? `${shortLabel}: ${valueText}` : shortLabel;
 
   return {
@@ -860,9 +887,10 @@ function formatCombatLogBody(
 
     case 'log.statusApplied': {
       const status = String(p.status ?? 'burn') as StatusEffectType;
+      const registryId = p.registryId ? String(p.registryId) : undefined;
       return translate(lang, 'log.statusApplied', {
         target: String(p.target ?? ''),
-        status: getStatusLabel(lang, status),
+        status: getStatusDisplayName(lang, status, registryId),
         turns: Number(p.turns ?? 2),
       });
     }
@@ -883,6 +911,33 @@ function formatCombatLogBody(
         target: String(p.target ?? ''),
         amount: Number(p.amount ?? 0),
       });
+
+    case 'log.registryDotTick': {
+      const registryId = p.registryId ? String(p.registryId) : undefined;
+      return translate(lang, 'log.registryDotTick', {
+        target: String(p.target ?? ''),
+        damage: Number(p.damage ?? 0),
+        resource: String(p.resource ?? 'HP'),
+        status: getStatusDisplayName(lang, 'registry_effect', registryId),
+      });
+    }
+
+    case 'log.registryHotTick': {
+      const registryId = p.registryId ? String(p.registryId) : undefined;
+      return translate(lang, 'log.registryHotTick', {
+        target: String(p.target ?? ''),
+        amount: Number(p.amount ?? 0),
+        resource: String(p.resource ?? 'HP'),
+        status: getStatusDisplayName(lang, 'registry_effect', registryId),
+      });
+    }
+
+    case 'log.controlResisted': {
+      const registryId = p.registryId ? String(p.registryId) : undefined;
+      return translate(lang, 'log.controlResisted', {
+        status: getStatusDisplayName(lang, 'registry_effect', registryId),
+      });
+    }
 
     case 'log.shieldRegen': {
       const reason = String(p.reason ?? 'not_hit');
