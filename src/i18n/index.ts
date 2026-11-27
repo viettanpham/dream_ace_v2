@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { AFFIX_SUFFIX_MAP, getItemTemplate } from '../data/items';
-import { getDefaultSelectedNodeId } from '../data/maps';
+import { getDefaultSelectedNodeId, getMapNodeById } from '../data/maps';
 import { getSkillById } from '../data/skills';
 import { getStatusEntry } from '../data/statusEffects';
 import { formatStatusChipShortValue } from '../data/statusIconMap';
@@ -218,16 +218,57 @@ export function getBattleSkillReason(
   });
 }
 
+function hasStaticTranslation(lang: Language, key: string): boolean {
+  try {
+    if (useGameStore.getState()?.adminConfig?.showRawI18nKeys) {
+      return true;
+    }
+  } catch {
+    // Store may not be initialized
+  }
+  const dict = DICTIONARIES[lang] ?? VI_TRANSLATIONS;
+  return (
+    (dict as Record<string, string | undefined>)[key] !== undefined ||
+    (EN_TRANSLATIONS as Record<string, string | undefined>)[key] !== undefined
+  );
+}
+
 export function getSectorName(lang: Language, sectorId: string): string {
-  return translate(lang, `sector.${sectorId}.name` as TranslationKey);
+  const key = `sector.${sectorId}.name` as TranslationKey;
+  if (hasStaticTranslation(lang, key)) {
+    return translate(lang, key);
+  }
+  const node = getMapNodeById(sectorId);
+  if (node) {
+    if (lang === 'en' && node.name.startsWith('Căn cứ ')) {
+      return `Base ${node.name.slice('Căn cứ '.length)}`;
+    }
+    if (lang === 'vi' && node.name.startsWith('Base ')) {
+      return `Căn cứ ${node.name.slice('Base '.length)}`;
+    }
+    return node.name;
+  }
+  return translate(lang, key);
 }
 
 export function getSectorRegion(lang: Language, sectorId: string): string {
-  return translate(lang, `sector.${sectorId}.region` as TranslationKey);
+  const key = `sector.${sectorId}.region` as TranslationKey;
+  if (hasStaticTranslation(lang, key)) {
+    return translate(lang, key);
+  }
+  const node = getMapNodeById(sectorId);
+  if (node?.regionCode) return node.regionCode;
+  return translate(lang, key);
 }
 
 export function getSectorDesc(lang: Language, sectorId: string): string {
-  return translate(lang, `sector.${sectorId}.desc` as TranslationKey);
+  const key = `sector.${sectorId}.desc` as TranslationKey;
+  if (hasStaticTranslation(lang, key)) {
+    return translate(lang, key);
+  }
+  const node = getMapNodeById(sectorId);
+  if (node?.description) return node.description;
+  return translate(lang, key);
 }
 
 export function getDifficultyLabel(

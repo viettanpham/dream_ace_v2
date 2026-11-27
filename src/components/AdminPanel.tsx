@@ -28,6 +28,7 @@ import { EnrageAdminBlock } from './admin/EnrageAdminBlock';
 import { BattleRewardsAdminBlock } from './admin/BattleRewardsAdminBlock';
 import { BattlePenaltyAdminBlock } from './admin/BattlePenaltyAdminBlock';
 import { MapPackAdminBlock } from './admin/MapPackAdminBlock';
+import { WorldGenAdminBlock } from './admin/WorldGenAdminBlock';
 import { VoucherAdminBlock } from './admin/VoucherAdminBlock';
 import {
   AdminSection,
@@ -3455,6 +3456,13 @@ export function AdminPanel() {
                 description={t('admin.campaignSection.mapPack.desc')}
               >
                 <MapPackAdminBlock onFlash={flash} />
+              </AdminSection>
+              <AdminSection
+                id="campaign-world-gen"
+                title={t('admin.campaignSection.worldGen.title')}
+                description={t('admin.campaignSection.worldGen.desc')}
+              >
+                <WorldGenAdminBlock onFlash={flash} />
               </AdminSection>
               <div className="p-3.5 rounded-lg border border-slate-800 bg-[#0D1422] flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-2">

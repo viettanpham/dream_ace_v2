@@ -732,6 +732,14 @@ interface GameStoreState {
     nodes: number;
     lanes: number;
   };
+  applyWorldAndResetProgress: (
+    pack: MapPackDefinition | null
+  ) => {
+    ok: boolean;
+    reason?: 'in_battle' | 'auto_repeat_active' | 'invalid_pack';
+    nodes: number;
+    lanes: number;
+  };
   adminExportSaveJson: () => string;
   adminImportSaveJson: (rawJson: string) => { ok: boolean; error?: string };
 
@@ -5603,6 +5611,94 @@ export const useGameStore = create<GameStoreState>()(
             mapPack: validated,
           },
           hasSaveData: true,
+        });
+
+        return {
+          ok: true,
+          nodes: nextActiveMap.nodes.length,
+          lanes: nextActiveMap.lanes.length,
+        };
+      },
+
+      applyWorldAndResetProgress: (pack) => {
+        const state = get();
+        if (isBattleActive(state)) {
+          return {
+            ok: false,
+            reason: 'in_battle',
+            nodes: getMapNodes().length,
+            lanes: MAP_LANES.length,
+          };
+        }
+        if (state.autoRepeatSession?.active) {
+          return {
+            ok: false,
+            reason: 'auto_repeat_active',
+            nodes: getMapNodes().length,
+            lanes: MAP_LANES.length,
+          };
+        }
+
+        let validated: MapPackDefinition | null = null;
+        if (pack !== null) {
+          validated = validateMapPack(pack);
+          if (!validated) {
+            return {
+              ok: false,
+              reason: 'invalid_pack',
+              nodes: getMapNodes().length,
+              lanes: MAP_LANES.length,
+            };
+          }
+        }
+
+        const nextActiveMap = setActiveMapPack(validated);
+        const pilotName = state.pilot.name?.trim() || 'Vance';
+        const starterClassId = state.pilot.activeGearId ?? 'striker';
+        const fresh = createFreshCampaignState(
+          pilotName,
+          starterClassId,
+          Math.random,
+          state.adminConfig?.starterSet
+        );
+        const nextAdminConfig: AdminConfig = {
+          ...state.adminConfig,
+          mapPack: validated,
+        };
+        setRuntimeMaxLevel(nextAdminConfig.maxLevel);
+
+        soundFx.playConfirm();
+        set({
+          pilot: fresh.pilot,
+          shopStock: fresh.shopStock,
+          supplyShopStock: fresh.supplyShopStock ?? [],
+          supplyShopStockWp: fresh.supplyShopStockWp ?? [],
+          voucherShopStockWp: fresh.voucherShopStockWp ?? [],
+          supplyShopRefresh: fresh.supplyShopRefresh ?? { used: 0 },
+          wpMarketOffers: fresh.wpMarketOffers,
+          battlesUntilRestock: fresh.battlesUntilRestock,
+          inventoryFilterState: fresh.inventoryFilterState,
+          quickSellConfig: fresh.quickSellConfig,
+          selectedSectorId: nextActiveMap.defaultSelectedNodeId,
+          adminConfig: nextAdminConfig,
+          language: state.language,
+          muted: state.muted,
+          battleSpeed: state.battleSpeed,
+          skipAnimations: state.skipAnimations,
+          battleViewMode: state.battleViewMode,
+          autoRepeatDefeatRule: state.autoRepeatDefeatRule,
+          autoRepeatDefeatStreakLimit: state.autoRepeatDefeatStreakLimit,
+          autoRepeatStopOnDefeat: state.autoRepeatStopOnDefeat,
+          hasSaveData: true,
+          battle: null,
+          screen: state.screen === 'TITLE' ? 'HANGAR' : state.screen,
+          activeTab: 'map',
+          shopSubTab: 'buy',
+          autoRepeatSession: null,
+          autoRepeatToast: null,
+          battleLaunchToast: null,
+          quickSellUndo: null,
+          autoEquipUndo: null,
         });
 
         return {

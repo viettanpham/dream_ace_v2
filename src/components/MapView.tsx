@@ -30,6 +30,7 @@ import {
 import { MECH_CLASS_LIST } from '../data/classes';
 import { DROP_CONFIG } from '../data/items';
 import {
+  getActiveMap,
   getSectorById,
   getTokenShapeForBaseType,
   MAP_LANES,
@@ -72,6 +73,7 @@ import type {
   BaseFaction,
   BaseNpcRole,
   BaseType,
+  MapBounds,
   MechClassId,
   PilotAccount,
   SectorDifficulty,
@@ -131,8 +133,23 @@ export function getMapLaneVisualKind(
   return 'other';
 }
 
-export function clampMapZoom(z: number): number {
-  return Math.max(MAP_MIN_ZOOM, Math.min(MAP_MAX_ZOOM, z));
+export function getMaxMapZoom(
+  bounds: MapBounds = getActiveMap().bounds
+): number {
+  const widthRatio = bounds.width / MAP_VIEWBOX_WIDTH;
+  const heightRatio = bounds.height / MAP_VIEWBOX_HEIGHT;
+  const scaleRatio = Math.max(1, widthRatio, heightRatio);
+  return Math.max(
+    MAP_MAX_ZOOM,
+    Number((MAP_MAX_ZOOM * scaleRatio).toFixed(2))
+  );
+}
+
+export function clampMapZoom(
+  z: number,
+  bounds: MapBounds = getActiveMap().bounds
+): number {
+  return Math.max(MAP_MIN_ZOOM, Math.min(getMaxMapZoom(bounds), z));
 }
 
 export function clampMapPan(
@@ -140,16 +157,16 @@ export function clampMapPan(
   y: number,
   zoom: number,
   boxWidth: number,
-  boxHeight: number
+  boxHeight: number,
+  bounds: MapBounds = getActiveMap().bounds
 ): { x: number; y: number } {
   const safeW = Math.max(120, boxWidth);
   const safeH = Math.max(120, boxHeight);
-  const baseScale = Math.min(
-    safeW / MAP_VIEWBOX_WIDTH,
-    safeH / MAP_VIEWBOX_HEIGHT
-  );
-  const scaledW = MAP_VIEWBOX_WIDTH * baseScale * zoom;
-  const scaledH = MAP_VIEWBOX_HEIGHT * baseScale * zoom;
+  const viewW = Math.max(1, bounds.width);
+  const viewH = Math.max(1, bounds.height);
+  const baseScale = Math.min(safeW / viewW, safeH / viewH);
+  const scaledW = viewW * baseScale * zoom;
+  const scaledH = viewH * baseScale * zoom;
   const maxPanX = Math.abs(scaledW - safeW) / 2;
   const maxPanY = Math.abs(scaledH - safeH) / 2;
   return {
@@ -161,24 +178,25 @@ export function clampMapPan(
 export function computeInitialPhoneMapView(
   targetPos: { x: number; y: number },
   boxWidth: number,
-  boxHeight: number
+  boxHeight: number,
+  bounds: MapBounds = getActiveMap().bounds
 ): { zoom: number; pan: { x: number; y: number } } {
   const safeW = Math.max(120, boxWidth);
   const safeH = Math.max(120, boxHeight);
-  const baseScale = Math.min(
-    safeW / MAP_VIEWBOX_WIDTH,
-    safeH / MAP_VIEWBOX_HEIGHT
-  );
+  const viewW = Math.max(1, bounds.width);
+  const viewH = Math.max(1, bounds.height);
+  const baseScale = Math.min(safeW / viewW, safeH / viewH);
   const neededZoom =
     MAP_MIN_PHONE_LABEL_PX / (MAP_SVG_LABEL_FONT_SIZE * baseScale);
   const zoom = clampMapZoom(
-    Math.max(1, Math.ceil(neededZoom * 100) / 100)
+    Math.max(1, Math.ceil(neededZoom * 100) / 100),
+    bounds
   );
-  const rawPanX = -(targetPos.x - MAP_VIEWBOX_WIDTH / 2) * baseScale * zoom;
-  const rawPanY = -(targetPos.y - MAP_VIEWBOX_HEIGHT / 2) * baseScale * zoom;
+  const rawPanX = -(targetPos.x - viewW / 2) * baseScale * zoom;
+  const rawPanY = -(targetPos.y - viewH / 2) * baseScale * zoom;
   return {
     zoom,
-    pan: clampMapPan(rawPanX, rawPanY, zoom, safeW, safeH),
+    pan: clampMapPan(rawPanX, rawPanY, zoom, safeW, safeH, bounds),
   };
 }
 
@@ -307,13 +325,15 @@ export function MapView() {
 
   const layoutMode = useBattleLayoutMode();
   const isPhone = layoutMode === 'phone-portrait';
+  const activeMapBounds = getActiveMap().bounds;
   const initialSelectedSector = getSectorById(selectedSectorId);
   const initialFallbackSize = getFallbackMapBoxSize(isPhone);
   const initialView = isPhone
     ? computeInitialPhoneMapView(
         initialSelectedSector.mapPos,
         initialFallbackSize.width,
-        initialFallbackSize.height
+        initialFallbackSize.height,
+        activeMapBounds
       )
     : { zoom: 1, pan: { x: 0, y: 0 } };
 
@@ -435,10 +455,17 @@ export function MapView() {
     return mapBoxSize;
   };
 
-  const clampZoom = (z: number) => clampMapZoom(z);
+  const clampZoom = (z: number) => clampMapZoom(z, activeMapBounds);
   const clampPan = (x: number, y: number, targetZoom = zoom) => {
     const size = getCurrentMapBoxSize();
-    return clampMapPan(x, y, targetZoom, size.width, size.height);
+    return clampMapPan(
+      x,
+      y,
+      targetZoom,
+      size.width,
+      size.height,
+      activeMapBounds
+    );
   };
 
   const resetMapView = () => {
@@ -448,7 +475,8 @@ export function MapView() {
       const view = computeInitialPhoneMapView(
         selectedSector.mapPos,
         size.width,
-        size.height
+        size.height,
+        activeMapBounds
       );
       setZoom(view.zoom);
       setPan(view.pan);
@@ -469,7 +497,8 @@ export function MapView() {
           const view = computeInitialPhoneMapView(
             selectedSector.mapPos,
             nextSize.width,
-            nextSize.height
+            nextSize.height,
+            activeMapBounds
           );
           setZoom(view.zoom);
           setPan(view.pan);
@@ -480,7 +509,12 @@ export function MapView() {
     const ro = new ResizeObserver(syncSize);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [isPhone, selectedSector.mapPos]);
+  }, [
+    isPhone,
+    selectedSector.mapPos,
+    activeMapBounds.width,
+    activeMapBounds.height,
+  ]);
 
   useEffect(() => {
     const fallback = getFallbackMapBoxSize(isPhone);
@@ -506,7 +540,8 @@ export function MapView() {
         const view = computeInitialPhoneMapView(
           selectedSector.mapPos,
           size.width,
-          size.height
+          size.height,
+          activeMapBounds
         );
         setZoom(view.zoom);
         setPan(view.pan);
@@ -516,7 +551,12 @@ export function MapView() {
         setMapInfoOpen(false);
       }
     }
-  }, [isPhone, selectedSector.mapPos]);
+  }, [
+    isPhone,
+    selectedSector.mapPos,
+    activeMapBounds.width,
+    activeMapBounds.height,
+  ]);
 
   useEffect(() => {
     if (!isPhone) {
@@ -1553,7 +1593,7 @@ export function MapView() {
           </div>
 
           <svg
-            viewBox="0 0 840 310"
+            viewBox={`0 0 ${activeMapBounds.width} ${activeMapBounds.height}`}
             className="w-full h-full select-none transition-transform duration-75"
             style={{
               transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
@@ -1563,20 +1603,20 @@ export function MapView() {
           >
             {/* Subtle orbital grid rings */}
             <ellipse
-              cx="420"
-              cy="165"
-              rx="375"
-              ry="135"
+              cx={Math.round((activeMapBounds.width * 420) / MAP_VIEWBOX_WIDTH)}
+              cy={Math.round((activeMapBounds.height * 165) / MAP_VIEWBOX_HEIGHT)}
+              rx={Math.round((activeMapBounds.width * 375) / MAP_VIEWBOX_WIDTH)}
+              ry={Math.round((activeMapBounds.height * 135) / MAP_VIEWBOX_HEIGHT)}
               fill="none"
               stroke="#1E293B"
               strokeWidth="1"
               strokeDasharray="6 6"
             />
             <ellipse
-              cx="420"
-              cy="165"
-              rx="235"
-              ry="90"
+              cx={Math.round((activeMapBounds.width * 420) / MAP_VIEWBOX_WIDTH)}
+              cy={Math.round((activeMapBounds.height * 165) / MAP_VIEWBOX_HEIGHT)}
+              rx={Math.round((activeMapBounds.width * 235) / MAP_VIEWBOX_WIDTH)}
+              ry={Math.round((activeMapBounds.height * 90) / MAP_VIEWBOX_HEIGHT)}
               fill="none"
               stroke="#1E293B"
               strokeWidth="1"

@@ -2579,6 +2579,31 @@ export const EN_TRANSLATIONS = {
   'admin.mapPack.appliedMsg': 'Applied map {name} and reset the world.',
   'admin.mapPack.restoredMsg': 'Restored built-in map and reset the world.',
   'admin.mapPack.exportedMsg': 'Exported map JSON.',
+
+  // Admin CP — World Generator (MAP-C3)
+  'admin.campaignSection.worldGen.title': 'World',
+  'admin.campaignSection.worldGen.desc':
+    'Generate a procedural campaign map by base count and seed, with optional progress reset',
+  'admin.worldGen.nodeCount.title': 'Base Count (12–50)',
+  'admin.worldGen.nodeCount.desc':
+    'Total generated bases; map dimensions scale automatically with count',
+  'admin.worldGen.nodeCount.ex':
+    '{nodes} bases · ~{lanes} lanes · {contested} contested at start',
+  'admin.worldGen.seed.title': 'SEED',
+  'admin.worldGen.seed.desc':
+    'Seed string determining deterministic base layout, lanes, and factions',
+  'admin.worldGen.seed.random': 'Random',
+  'admin.worldGen.resetProgressLabel':
+    'Also reset character progress (erases GEARs, items, credits)',
+  'admin.worldGen.createBtn': 'Create World',
+  'admin.worldGen.confirmTitle': 'Confirm World Creation',
+  'admin.worldGen.confirmQuestion':
+    'Do you want to RESET the world to {seed} with {count} bases?',
+  'admin.worldGen.resetWarning': 'Erases all GEARs, items, credits, and EXP',
+  'admin.worldGen.resetTypeHint': 'Type RESET to confirm erasing progress:',
+  'admin.worldGen.confirmBtn': 'Confirm',
+  'admin.worldGen.cancelBtn': 'Cancel',
+  'admin.worldGen.createdMsg': 'Created world {seed}: {count} bases',
 } as const;
 
 export type TranslationKey = keyof typeof EN_TRANSLATIONS;

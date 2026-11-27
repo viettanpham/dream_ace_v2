@@ -2581,6 +2581,31 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'admin.mapPack.appliedMsg': 'Đã áp dụng bản đồ {name} và reset thế giới.',
   'admin.mapPack.restoredMsg': 'Đã khôi phục bản đồ gốc và reset thế giới.',
   'admin.mapPack.exportedMsg': 'Đã xuất JSON bản đồ.',
+
+  // Admin CP — Thế giới (MAP-C3)
+  'admin.campaignSection.worldGen.title': 'Thế giới',
+  'admin.campaignSection.worldGen.desc':
+    'Tạo bản đồ ngẫu nhiên theo số căn cứ và seed, tùy chọn reset tiến trình',
+  'admin.worldGen.nodeCount.title': 'Số căn cứ (12–50)',
+  'admin.worldGen.nodeCount.desc':
+    'Quy mô mạng căn cứ mới; bản đồ tự giãn kích thước theo số lượng',
+  'admin.worldGen.nodeCount.ex':
+    '{nodes} căn cứ · ~{lanes} tuyến · {contested} giao tranh lúc đầu',
+  'admin.worldGen.seed.title': 'SEED',
+  'admin.worldGen.seed.desc':
+    'Chuỗi hạt giống xác định vị trí, tuyến nối và phân bố căn cứ',
+  'admin.worldGen.seed.random': 'Ngẫu nhiên',
+  'admin.worldGen.resetProgressLabel':
+    'Reset cả tiến trình nhân vật (xóa GEAR, đồ, tiền)',
+  'admin.worldGen.createBtn': 'Tạo thế giới',
+  'admin.worldGen.confirmTitle': 'Xác nhận tạo thế giới',
+  'admin.worldGen.confirmQuestion':
+    'Bạn có muốn RESET thế giới về thế giới {seed} với {count} căn cứ không?',
+  'admin.worldGen.resetWarning': 'Xóa toàn bộ GEAR, đồ, tiền, EXP',
+  'admin.worldGen.resetTypeHint': 'Nhập RESET để xác nhận xóa tiến trình:',
+  'admin.worldGen.confirmBtn': 'Xác nhận',
+  'admin.worldGen.cancelBtn': 'Hủy',
+  'admin.worldGen.createdMsg': 'Đã tạo thế giới {seed}: {count} căn cứ',
 };
 
 
