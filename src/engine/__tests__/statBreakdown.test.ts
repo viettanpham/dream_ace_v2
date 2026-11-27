@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { EMPTY_STAT_BLOCK, MECH_CLASS_LIST, STAT_KEYS } from '../../data/classes';
 import { useGameStore } from '../../store/useGameStore';
-import type { GearPassiveBonuses } from '../skills';
+import { createEmptyGearPassiveBonuses, type GearPassiveBonuses } from '../skills';
 import { getStatBreakdown } from '../statBreakdown';
 import { calculateEffectiveStats } from '../stats';
 import type { GearUnit, ItemSpecialTraits, StatBlock } from '../../types/game';
@@ -35,6 +35,7 @@ function makeGear(
 describe('getStatBreakdown', () => {
   it('matches calculateEffectiveStats and sums to total for every class with and without equipment, traits, passives, pending, and negative evasionMod', () => {
     const samplePassives: GearPassiveBonuses = {
+      ...createEmptyGearPassiveBonuses(),
       skillDmgPct: 10,
       defPct: 20,
       evaPct: 15,

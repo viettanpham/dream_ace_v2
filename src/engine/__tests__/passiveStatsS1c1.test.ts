@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { COMBAT_FORMULAS } from '../../data/balance';
 import { EMPTY_STAT_BLOCK } from '../../data/classes';
 import rawSkillsJson from '../../data/skills.json';
 import {
@@ -228,8 +229,8 @@ describe('TASK S1c-1: Generic passive_stat engine & 16 passives table', () => {
     expect(boosted.spRegenPerTurn).toBe(baseDerived.spRegenPerTurn + 9);
     expect(boosted.maxHp).toBe(Math.round(baseDerived.maxHp * 1.15));
     expect(boosted.maxShield).toBe(Math.round(baseDerived.maxShield * 1.25));
-    expect(boosted.critChance).toBe(65);
-    expect(boosted.dodgeChance).toBe(45);
+    expect(boosted.critChance).toBe(COMBAT_FORMULAS.maxCritChance);
+    expect(boosted.dodgeChance).toBe(COMBAT_FORMULAS.maxDodgeChance);
     expect(boosted.armorPiercePct).toBe(50);
     expect(boosted.critDamagePct).toBe(25);
     expect(boosted.healPowerPct).toBe(30);
@@ -263,16 +264,11 @@ describe('TASK S1c-1: Generic passive_stat engine & 16 passives table', () => {
         },
       });
 
-    // rng returns 0 for crit check (< critChance) and 0.5 for variance (~1.0)
     const fixedRng = () => 0.5;
-    const critRng = (() => {
-      let i = 0;
-      return () => {
-        i += 1;
-        return i === 1 ? 0.0 : 0.5; // first call is crit check (< 100% anyway), then variance
-      };
-    })();
-
+    const attackerNoCrit = makeCombatUnit({
+      id: 'a1',
+      derived: { ...makeCombatUnit().derived, critChance: 0, critDamagePct: 0 },
+    });
     const attackerBase = makeCombatUnit({
       id: 'a1',
       derived: { ...makeCombatUnit().derived, critChance: 100, critDamagePct: 0 },
@@ -282,6 +278,15 @@ describe('TASK S1c-1: Generic passive_stat engine & 16 passives table', () => {
       derived: { ...makeCombatUnit().derived, critChance: 100, critDamagePct: 25 },
     });
 
+    const dmgNoCrit = resolveUnitAction(
+      [attackerNoCrit, makeEnemy(1000)],
+      'a1',
+      'attack',
+      'e1',
+      1,
+      undefined,
+      fixedRng
+    );
     const dmgBase = resolveUnitAction(
       [attackerBase, makeEnemy(1000)],
       'a1',
@@ -289,7 +294,7 @@ describe('TASK S1c-1: Generic passive_stat engine & 16 passives table', () => {
       'e1',
       1,
       undefined,
-      critRng
+      fixedRng
     );
     const dmgCritLv5 = resolveUnitAction(
       [attackerCritLv5, makeEnemy(1000)],
@@ -300,18 +305,24 @@ describe('TASK S1c-1: Generic passive_stat engine & 16 passives table', () => {
       undefined,
       fixedRng
     );
+    const dealtNoCrit = 1000 - dmgNoCrit.updatedUnits.find((u) => u.id === 'e1')!.hp;
     const dealtBase = 1000 - dmgBase.updatedUnits.find((u) => u.id === 'e1')!.hp;
     const dealtCritLv5 = 1000 - dmgCritLv5.updatedUnits.find((u) => u.id === 'e1')!.hp;
-    // Base crit = 1.5x, Lv5 overcharge (+25%) = 1.75x => ratio = 1.75 / 1.5
-    expect(dealtCritLv5).toBe(Math.round((dealtBase / 1.5) * 1.75));
+    // Base crit = 1.5x, Lv5 overcharge (+25%) = 1.75x
+    expect(dealtBase).toBe(Math.round(dealtNoCrit * 1.5));
+    expect(dealtCritLv5).toBe(Math.round(dealtNoCrit * 1.75));
 
-    // executeDmgPct: at 30% HP (300/1000) does NOT trigger; at 29% HP (290/1000) DOES trigger
+    // executeDmgPct: at 30% HP (600/2000) does NOT trigger; at 29% HP (580/2000) DOES trigger
+    const makeExecEnemy = (hp: number) => ({
+      ...makeEnemy(hp),
+      derived: { ...makeEnemy(hp).derived, maxHp: 2000 },
+    });
     const attackerExec = makeCombatUnit({
       id: 'a1',
       derived: { ...makeCombatUnit().derived, critChance: 0, executeDmgPct: 50 },
     });
     const at30 = resolveUnitAction(
-      [attackerExec, makeEnemy(300)],
+      [attackerExec, makeExecEnemy(600)],
       'a1',
       'attack',
       'e1',
@@ -320,7 +331,7 @@ describe('TASK S1c-1: Generic passive_stat engine & 16 passives table', () => {
       fixedRng
     );
     const at29 = resolveUnitAction(
-      [attackerExec, makeEnemy(290)],
+      [attackerExec, makeExecEnemy(580)],
       'a1',
       'attack',
       'e1',
@@ -328,12 +339,13 @@ describe('TASK S1c-1: Generic passive_stat engine & 16 passives table', () => {
       undefined,
       fixedRng
     );
-    const dmgAt30 = 300 - at30.updatedUnits.find((u) => u.id === 'e1')!.hp;
-    const dmgAt29 = 290 - at29.updatedUnits.find((u) => u.id === 'e1')!.hp;
+    const dmgAt30 = 600 - at30.updatedUnits.find((u) => u.id === 'e1')!.hp;
+    const dmgAt29 = 580 - at29.updatedUnits.find((u) => u.id === 'e1')!.hp;
     expect(dmgAt29).toBe(Math.round(dmgAt30 * 1.5));
 
-    // lastStandDefPct: at 30% HP no boost; at 29% HP +30% DEF
+    // lastStandDefPct: at 30% HP no boost; at 29% HP +30% DEF (middle row has 0% row mod)
     const siege = makeCombatUnit({
+      row: 'middle',
       derived: { ...makeCombatUnit().derived, maxHp: 1000, defenseRating: 100, lastStandDefPct: 30 },
     });
     expect(getEffectiveUnitDefense({ ...siege, hp: 300 })).toBe(100);
@@ -384,7 +396,7 @@ describe('TASK S1c-1: Generic passive_stat engine & 16 passives table', () => {
       [caster, woundedAlly],
       'sup1',
       'skill',
-      undefined,
+      null,
       1,
       undefined,
       () => 0.5,
@@ -400,7 +412,7 @@ describe('TASK S1c-1: Generic passive_stat engine & 16 passives table', () => {
       [caster, woundedAlly],
       'sup1',
       'skill',
-      undefined,
+      null,
       1,
       undefined,
       () => 0.5,
@@ -413,7 +425,7 @@ describe('TASK S1c-1: Generic passive_stat engine & 16 passives table', () => {
       [caster, woundedAlly],
       'sup1',
       'skill',
-      undefined,
+      null,
       1,
       undefined,
       () => 0.5,
@@ -433,7 +445,7 @@ describe('TASK S1c-1: Generic passive_stat engine & 16 passives table', () => {
       [caster, woundedAlly],
       'sup1',
       'defend',
-      undefined,
+      null,
       1,
       undefined,
       () => 0.5
@@ -446,10 +458,11 @@ describe('TASK S1c-1: Generic passive_stat engine & 16 passives table', () => {
       [caster, woundedAlly],
       'sup1',
       'defend',
-      undefined,
+      null,
       1,
       undefined,
       () => 0.5,
+      undefined,
       undefined,
       { skipTurnStartTicks: true }
     );
