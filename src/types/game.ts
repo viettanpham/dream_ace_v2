@@ -1164,6 +1164,8 @@ export interface BattleSummary {
   creditsGained: number;
   warPointsGained: number;
   baseCaptureBonusWp: number;
+  supportExpPct?: number;
+  supportCreditPct?: number;
   leveledUp: boolean;
   previousLevel: number;
   newLevel: number;
@@ -1619,6 +1621,7 @@ export interface AdminConfig {
   oneHitKills: boolean;
   alwaysWin: boolean;
   rewardMultiplier: number;
+  battleRewards?: BattleRewardsConfig;
   battleSizeOverride: BattleSize | null;
   softEnrageEnabled: boolean;
   enrage?: EnrageConfig;
@@ -1686,6 +1689,17 @@ export interface AdminConfig {
   passiveSlots?: PassiveSlotsConfig;
   skillMods?: SkillModDefinition[];
   showRawI18nKeys: boolean;
+}
+
+export interface BattleRewardsConfig {
+  supportMaxLevel: number;
+  supportExpPerLevelPct: number;
+  supportCreditWpPerLevelPct: number;
+  defeatExpPct: number;
+  defeatCreditPct: number;
+  defeatWpPct: number;
+  defeatMaxPctOfVictory: number;
+  retreatRewardPct: number;
 }
 
 export interface PassiveSlotsConfig {

@@ -706,13 +706,15 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'summary.victoryDesc':
     'Toàn bộ địch bị tiêu diệt. Nhận 100% tiền thưởng, WP và EXP cho Gear xuất kích.',
   'summary.defeatDesc':
-    'Nhận 50% thưởng từ địch đã hạ cộng 20% hỗ trợ an ủi.',
+    'Nhận một phần thưởng từ địch đã hạ (có trần theo mức thắng).',
   'summary.levelUp': '{gear} thăng cấp: Lv.{prev} → Lv.{next}',
   'summary.levelUpDesc': 'Mở tab Nhân vật để cộng điểm chỉ số mới cho Gear này.',
   'summary.expEarned': 'EXP ({gear})',
   'summary.creditsAwarded': 'Credits nhận được',
   'summary.warPointsAwarded': 'Điểm Chiến Trận',
   'summary.captureBonusNote': 'Gồm +{wp} WP chiếm căn cứ',
+  'summary.nationalSupportNote':
+    'Hỗ trợ quốc gia: +{expPct}% EXP, +{creditPct}% Credit/WP',
   'summary.battlesToNext': 'Còn ~{count} trận thắng để lên Lv.{next}',
   'summary.maxLevelReached': 'Đã đạt Cấp tối đa (Lv.{level})',
   'summary.sectorUnlocked': 'Đã mở khu vực mới: {sector}',
@@ -2352,6 +2354,45 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
     'Đặt trực tiếp số vòng của trận đang mở để kiểm thử hiệu ứng cuối trận',
   'admin.fieldDesc.liveForceWin':
     'Kết thúc trận hiện tại với phần thắng thuộc về phe ta ngay lập tức',
+
+  // Admin CP — Thưởng trận (ECON-LOSS-a)
+  'admin.battleSection.battleRewards.title': 'Thưởng trận',
+  'admin.battleSection.battleRewards.desc':
+    'Hỗ trợ quốc gia cho Gear cấp thấp khi thắng và phần thưởng có trần khi thua/rút lui',
+  'admin.battleRewards.headerNote':
+    'Cấu hình hỗ trợ quốc gia khi thắng và tỉ lệ/trần thưởng khi thua hoặc rút lui',
+  'admin.battleRewards.reset': 'Khôi phục mặc định',
+  'admin.battleRewards.exWinLv1':
+    'Level 1 thắng: EXP {expPct}%, Credit/WP {creditWpPct}%',
+  'admin.battleRewards.exDefeatCap':
+    'Thua: tối đa {capPct}% phần thưởng thắng',
+  'admin.battleRewards.supportMaxLevel.title': 'Cấp tối đa nhận hỗ trợ quốc gia',
+  'admin.battleRewards.supportMaxLevel.desc':
+    'Gear từ cấp này trở xuống nhận thêm EXP, Credit và WP địch khi thắng (0–100)',
+  'admin.battleRewards.supportExpPerLevelPct.title':
+    '% EXP thêm mỗi cấp dưới mức',
+  'admin.battleRewards.supportExpPerLevelPct.desc':
+    'Cộng vào hệ số EXP thắng cho mỗi cấp dưới (cấp tối đa + 1) (0–500)',
+  'admin.battleRewards.supportCreditWpPerLevelPct.title':
+    '% Credit/WP thêm mỗi cấp dưới mức',
+  'admin.battleRewards.supportCreditWpPerLevelPct.desc':
+    'Cộng vào Credit và WP địch (không nhân WP thưởng chiếm căn cứ) (0–500)',
+  'admin.battleRewards.defeatExpPct.title': '% EXP địch đã hạ khi thua',
+  'admin.battleRewards.defeatExpPct.desc':
+    'Tỉ lệ EXP nhận từ địch đã hạ khi thua; nhập 0 để tắt EXP khi thua (0–100)',
+  'admin.battleRewards.defeatCreditPct.title': '% Credit địch đã hạ khi thua',
+  'admin.battleRewards.defeatCreditPct.desc':
+    'Tỉ lệ Credit nhận từ địch đã hạ khi thua; nhập 0 để tắt Credit khi thua (0–100)',
+  'admin.battleRewards.defeatWpPct.title': '% WP địch đã hạ khi thua',
+  'admin.battleRewards.defeatWpPct.desc':
+    'Tỉ lệ WP nhận từ địch đã hạ khi thua; nhập 0 để tắt WP khi thua (0–100)',
+  'admin.battleRewards.defeatMaxPctOfVictory.title':
+    'Trần phần thưởng thua (% thắng)',
+  'admin.battleRewards.defeatMaxPctOfVictory.desc':
+    'Giới hạn tối đa mỗi loại thưởng khi thua so với giá trị thắng đầy đủ (0–100)',
+  'admin.battleRewards.retreatRewardPct.title': '% thưởng khi rút lui',
+  'admin.battleRewards.retreatRewardPct.desc':
+    'Phần trăm giữ lại trên phần thưởng thua (sau khi áp trần) khi rút lui (0–100)',
 };
 
 

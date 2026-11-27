@@ -25,6 +25,7 @@ import { SupplyEconomyAdminBlock } from './admin/SupplyEconomyAdminBlock';
 import { NpcSupplyAdminBlock } from './admin/NpcSupplyAdminBlock';
 import { EnemyLevelAdminBlock } from './admin/EnemyLevelAdminBlock';
 import { EnrageAdminBlock } from './admin/EnrageAdminBlock';
+import { BattleRewardsAdminBlock } from './admin/BattleRewardsAdminBlock';
 import {
   AdminSection,
   AdminSectionsProvider,
@@ -1900,6 +1901,18 @@ export function AdminPanel() {
                   description={t('admin.battleSection.enrage.desc')}
                 >
                   <EnrageAdminBlock
+                    adminConfig={adminConfig}
+                    adminUpdateConfig={adminUpdateConfig}
+                  />
+                </AdminSection>
+
+                {/* 3b. Battle Rewards (National Support + Defeat/Retreat Caps) */}
+                <AdminSection
+                  id="battle-rewards"
+                  title={t('admin.battleSection.battleRewards.title')}
+                  description={t('admin.battleSection.battleRewards.desc')}
+                >
+                  <BattleRewardsAdminBlock
                     adminConfig={adminConfig}
                     adminUpdateConfig={adminUpdateConfig}
                   />

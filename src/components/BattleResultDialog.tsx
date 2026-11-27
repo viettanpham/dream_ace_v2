@@ -188,6 +188,19 @@ export function BattleResultDialog({
                   </div>
                 </div>
 
+                {((summary.supportExpPct ?? 0) > 0 ||
+                  (summary.supportCreditPct ?? 0) > 0) && (
+                  <div
+                    data-testid="battle-result-national-support"
+                    className="col-span-2 rounded border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1.5 text-[12px] font-mono-nums text-emerald-300"
+                  >
+                    {t('summary.nationalSupportNote', {
+                      expPct: Number((summary.supportExpPct ?? 0).toFixed(2)),
+                      creditPct: Number((summary.supportCreditPct ?? 0).toFixed(2)),
+                    })}
+                  </div>
+                )}
+
                 <div className="rounded border border-slate-800 bg-[#090D14] p-2.5 sm:p-3">
                   <div className="text-[12px] text-slate-400">
                     {t('summary.hostilesDestroyed')}

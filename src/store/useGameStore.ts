@@ -814,7 +814,10 @@ function finalizeBattleOutcome(
     won,
     effectiveRewardMult,
     battle.sectorId,
-    effectiveAlreadyCaptured
+    effectiveAlreadyCaptured,
+    state.adminConfig?.battleRewards,
+    deployedGear.level,
+    retreated
   );
   const droppedItems = rollBattleItemDrops(
     updatedUnits.filter((u) => u.side === 'enemy'),
@@ -1091,6 +1094,8 @@ function finalizeBattleOutcome(
         creditsGained: totalCreditsGained,
         warPointsGained: rewards.warPointsGained,
         baseCaptureBonusWp: rewards.baseCaptureBonusWp,
+        supportExpPct: rewards.supportExpPct,
+        supportCreditPct: rewards.supportCreditPct,
         leveledUp: levelResult.leveledUp,
         previousLevel: levelResult.previousLevel,
         newLevel: levelResult.newLevel,

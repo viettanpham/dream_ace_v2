@@ -386,7 +386,7 @@ describe('4. Rebalanced Reward Formula (Victory vs Defeat & Boss + War Points)',
     });
   });
 
-  it('grants 100% on victory (+ first-capture WP bonus) and 50% destroyed + 20% consolation on defeat', () => {
+  it('grants 100% on victory (+ first-capture WP bonus) and 5/20/50% destroyed shares (no consolation, 50% cap) on defeat', () => {
     const enemies = [
       makeEnemy('e1', 2, false),
       makeEnemy('e2', 2, false),
@@ -412,14 +412,18 @@ describe('4. Rebalanced Reward Formula (Victory vs Defeat & Boss + War Points)',
     );
 
     const defeatHalf = calculateBattleRewards(enemies, false, 2.0);
-    expect(defeatHalf.expGained).toBe(Math.round(82 + 65.6));
-    expect(defeatHalf.creditsGained).toBe(360);
+    // 2 of 4 enemies destroyed -> destroyed full = 164 EXP, 400 CR, 12 WP
+    // defeat shares: 5% EXP (8.2 -> 8), 20% CR (80), 50% WP (6)
+    expect(defeatHalf.expGained).toBe(8);
+    expect(defeatHalf.creditsGained).toBe(80);
+    expect(defeatHalf.warPointsGained).toBe(6);
     expect(defeatHalf.baseCaptureBonusWp).toBe(0);
 
     const allAlive = enemies.map((e) => ({ ...e, alive: true, hp: 100 }));
     const defeatZero = calculateBattleRewards(allAlive, false, 2.0);
-    expect(defeatZero.expGained).toBe(Math.round(328 * 0.2));
-    expect(defeatZero.creditsGained).toBe(Math.round(800 * 0.2));
+    expect(defeatZero.expGained).toBe(0);
+    expect(defeatZero.creditsGained).toBe(0);
+    expect(defeatZero.warPointsGained).toBe(0);
   });
 });
 

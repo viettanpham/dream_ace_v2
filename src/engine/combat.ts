@@ -9,6 +9,7 @@ import {
   getFluxPlannedAmountEach,
   getFluxTransferRule,
   getUnlockedPassiveSlots,
+  sanitizeBattleRewardsConfig,
   sanitizeFluxTransferConfig,
 } from '../data/balance';
 import { EMPTY_STAT_BLOCK, MECH_CLASSES, MECH_CLASS_LIST } from '../data/classes';
@@ -43,6 +44,7 @@ import type {
   ActiveStatusEffect,
   AdminConfig,
   BattleEvent,
+  BattleRewardsConfig,
   BattleKind,
   BattleRoundSnapshot,
   BattleSize,
@@ -5322,17 +5324,36 @@ export function calculateSingleEnemyReward(
   };
 }
 
+function resolveBattleRewardsInput(
+  configOrAdmin?: BattleRewardsConfig | AdminConfig | null
+): BattleRewardsConfig {
+  if (
+    configOrAdmin &&
+    typeof configOrAdmin === 'object' &&
+    ('battleRewards' in configOrAdmin || 'rewardMultiplier' in configOrAdmin)
+  ) {
+    return sanitizeBattleRewardsConfig(
+      (configOrAdmin as AdminConfig).battleRewards
+    );
+  }
+  return sanitizeBattleRewardsConfig(configOrAdmin);
+}
+
 /**
- * Rebalanced Battle Rewards + War Points (battle + first-time base capture bonus):
- * - Victory = 100% of full victory pool (+ baseCaptureBonusWp if first capture)
- * - Defeat / Retreat = 50% of destroyed enemies + 20% flat consolation of full victory
+ * Rebalanced Battle Rewards + War Points:
+ * - Victory: 100% + national support bonus for low-level Gears (enemy WP scaled, baseCaptureBonusWp unscaled)
+ * - Defeat: destroyed-enemy shares (EXP/Credit/WP %), capped at defeatMaxPctOfVictory% of full victory
+ * - Retreat: defeat result x retreatRewardPct%
  */
 export function calculateBattleRewards(
   units: CombatUnit[],
   won: boolean,
   rewardMult: number = BALANCE_CONFIG.rewardMultDefault,
   sectorId?: string,
-  alreadyCaptured = true
+  alreadyCaptured = true,
+  battleRewardsOrAdmin?: BattleRewardsConfig | AdminConfig | null,
+  gearLevel?: number,
+  retreated = false
 ): {
   expGained: number;
   creditsGained: number;
@@ -5340,7 +5361,10 @@ export function calculateBattleRewards(
   baseCaptureBonusWp: number;
   fullVictoryExp: number;
   fullVictoryCredits: number;
+  supportExpPct: number;
+  supportCreditPct: number;
 } {
+  const cfg = resolveBattleRewardsInput(battleRewardsOrAdmin);
   const enemies = units.filter((u) => u.side === 'enemy');
 
   let fullExpRaw = 0;
@@ -5372,35 +5396,59 @@ export function calculateBattleRewards(
   }
 
   if (won) {
+    const effectiveLevel =
+      typeof gearLevel === 'number' && Number.isFinite(gearLevel)
+        ? Math.max(1, Math.floor(gearLevel))
+        : cfg.supportMaxLevel + 1;
+    const bonusLevelSteps = Math.max(
+      0,
+      cfg.supportMaxLevel + 1 - effectiveLevel
+    );
+    const supportExpPct = bonusLevelSteps * cfg.supportExpPerLevelPct;
+    const supportCreditPct = bonusLevelSteps * cfg.supportCreditWpPerLevelPct;
+    const expMult = 1 + supportExpPct / 100;
+    const creditWpMult = 1 + supportCreditPct / 100;
+
     return {
-      expGained: Math.round(fullVictoryExp * BALANCE_CONFIG.victoryRewardRatio),
-      creditsGained: Math.round(
-        fullVictoryCredits * BALANCE_CONFIG.victoryRewardRatio
+      expGained: Math.round(
+        fullVictoryExp * BALANCE_CONFIG.victoryRewardRatio * expMult
       ),
-      warPointsGained: Math.round(fullWpRaw) + baseCaptureBonusWp,
+      creditsGained: Math.round(
+        fullVictoryCredits * BALANCE_CONFIG.victoryRewardRatio * creditWpMult
+      ),
+      warPointsGained: Math.round(fullWpRaw * creditWpMult) + baseCaptureBonusWp,
       baseCaptureBonusWp,
       fullVictoryExp,
       fullVictoryCredits,
+      supportExpPct,
+      supportCreditPct,
     };
   }
 
-  const destroyedExp =
-    destroyedExpRaw * rewardMult * BALANCE_CONFIG.defeatDestroyedRatio;
-  const destroyedCredits =
-    destroyedCreditsRaw * rewardMult * BALANCE_CONFIG.defeatDestroyedRatio;
-  const destroyedWp = destroyedWpRaw * BALANCE_CONFIG.defeatDestroyedRatio;
+  const rawDefeatExp =
+    destroyedExpRaw * rewardMult * (cfg.defeatExpPct / 100);
+  const rawDefeatCredits =
+    destroyedCreditsRaw * rewardMult * (cfg.defeatCreditPct / 100);
+  const rawDefeatWp = destroyedWpRaw * (cfg.defeatWpPct / 100);
 
-  const consolationExp = fullVictoryExp * BALANCE_CONFIG.defeatConsolationRatio;
-  const consolationCredits =
-    fullVictoryCredits * BALANCE_CONFIG.defeatConsolationRatio;
-  const consolationWp = fullWpRaw * BALANCE_CONFIG.defeatConsolationRatio;
+  const capExp = fullVictoryExp * (cfg.defeatMaxPctOfVictory / 100);
+  const capCredits = fullVictoryCredits * (cfg.defeatMaxPctOfVictory / 100);
+  const capWp = fullWpRaw * (cfg.defeatMaxPctOfVictory / 100);
+
+  const defeatExp = Math.round(Math.min(rawDefeatExp, capExp));
+  const defeatCredits = Math.round(Math.min(rawDefeatCredits, capCredits));
+  const defeatWp = Math.round(Math.min(rawDefeatWp, capWp));
+
+  const retreatMult = retreated ? cfg.retreatRewardPct / 100 : 1;
 
   return {
-    expGained: Math.round(destroyedExp + consolationExp),
-    creditsGained: Math.round(destroyedCredits + consolationCredits),
-    warPointsGained: Math.round(destroyedWp + consolationWp),
+    expGained: Math.round(defeatExp * retreatMult),
+    creditsGained: Math.round(defeatCredits * retreatMult),
+    warPointsGained: Math.round(defeatWp * retreatMult),
     baseCaptureBonusWp: 0,
     fullVictoryExp,
     fullVictoryCredits,
+    supportExpPct: 0,
+    supportCreditPct: 0,
   };
 }

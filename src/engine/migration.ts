@@ -1,10 +1,12 @@
 import {
   BALANCE_CONFIG,
+  cloneBattleRewardsConfig,
   cloneEnrageConfig,
   cloneFluxTransferConfig,
   clonePassiveSlotsConfig,
   cloneSpEconomyConfig,
   cloneStealthConfig,
+  DEFAULT_BATTLE_REWARDS_CONFIG,
   DEFAULT_ENRAGE_CONFIG,
   DEFAULT_FLUX_TRANSFER_CONFIG,
   DEFAULT_PASSIVE_SCALE_AFTER_5,
@@ -15,6 +17,7 @@ import {
   DEFAULT_STEALTH_CONFIG,
   getUnlockedPassiveSlots,
   MAX_SKILL_MAX_LEVEL,
+  sanitizeBattleRewardsConfig,
   sanitizeFluxTransferConfig,
   sanitizeMaxLevel,
   sanitizePassiveScaleAfter5,
@@ -399,6 +402,7 @@ export function createDefaultAdminConfig(): AdminConfig {
     battleSizeOverride: null,
     softEnrageEnabled: true,
     enrage: cloneEnrageConfig(DEFAULT_ENRAGE_CONFIG),
+    battleRewards: cloneBattleRewardsConfig(DEFAULT_BATTLE_REWARDS_CONFIG),
     forceBoss: false,
     battleLevelOffsetOverride: null,
     maxLevel: BALANCE_CONFIG.maxLevel,
@@ -917,6 +921,7 @@ export function migrateSaveData(
     passiveScaleAfter5: sanitizePassiveScaleAfter5(rawAdmin.passiveScaleAfter5),
     restorePctCap: sanitizeRestorePctCap(rawAdmin.restorePctCap),
     passiveSlots: sanitizePassiveSlotsConfig(rawAdmin.passiveSlots),
+    battleRewards: sanitizeBattleRewardsConfig(rawAdmin.battleRewards),
     skillMods: sanitizeSkillMods(
       rawAdmin.skillMods,
       Array.isArray(rawAdmin.iconCatalogMods) ? rawAdmin.iconCatalogMods : []

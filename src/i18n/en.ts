@@ -704,13 +704,15 @@ export const EN_TRANSLATIONS = {
   'summary.victoryDesc':
     'All hostile craft neutralized. Full bounty credited to your wallet and deployed Gear.',
   'summary.defeatDesc':
-    '50% bounty for destroyed hostiles plus 20% consolation payout awarded.',
+    'Partial bounty awarded for destroyed hostiles (capped relative to victory).',
   'summary.levelUp': '{gear} Leveled Up: Lv.{prev} → Lv.{next}',
   'summary.levelUpDesc': 'Visit the Character tab to allocate new stat points for this Gear.',
   'summary.expEarned': '{gear} EXP',
   'summary.creditsAwarded': 'Credits Earned',
   'summary.warPointsAwarded': 'War Points',
   'summary.captureBonusNote': 'Includes +{wp} WP Base Capture',
+  'summary.nationalSupportNote':
+    'National Support: +{expPct}% EXP, +{creditPct}% Credit/WP',
   'summary.battlesToNext': '~{count} wins to Lv.{next}',
   'summary.maxLevelReached': 'Max Level (Lv.{level})',
   'summary.sectorUnlocked': 'Unlocked Sector: {sector}',
@@ -2349,6 +2351,46 @@ export const EN_TRANSLATIONS = {
     'Jump the active battle directly to a target round for late-fight testing',
   'admin.fieldDesc.liveForceWin':
     'Immediately end the active battle with an allied victory',
+
+  // Admin CP — Battle Rewards (ECON-LOSS-a)
+  'admin.battleSection.battleRewards.title': 'Battle Rewards',
+  'admin.battleSection.battleRewards.desc':
+    'Low-level national support on victory and capped rewards on defeat or retreat',
+  'admin.battleRewards.headerNote':
+    'Configure national support bonuses on win and capped payout shares on defeat/retreat',
+  'admin.battleRewards.reset': 'Reset Defaults',
+  'admin.battleRewards.exWinLv1':
+    'Level 1 win: EXP {expPct}%, Credit/WP {creditWpPct}%',
+  'admin.battleRewards.exDefeatCap':
+    'Defeat: max {capPct}% of victory rewards',
+  'admin.battleRewards.supportMaxLevel.title': 'Max Level for National Support',
+  'admin.battleRewards.supportMaxLevel.desc':
+    'Gears at or below this level earn bonus EXP, Credits, and enemy WP on win (0–100)',
+  'admin.battleRewards.supportExpPerLevelPct.title':
+    'Bonus EXP % per Level Below Cap',
+  'admin.battleRewards.supportExpPerLevelPct.desc':
+    'Added to victory EXP multiplier per level below (max level + 1) (0–500)',
+  'admin.battleRewards.supportCreditWpPerLevelPct.title':
+    'Bonus Credit/WP % per Level Below Cap',
+  'admin.battleRewards.supportCreditWpPerLevelPct.desc':
+    'Added to Credits and enemy WP (base-capture bonus WP is unscaled) (0–500)',
+  'admin.battleRewards.defeatExpPct.title': 'Defeat EXP % of Destroyed Enemies',
+  'admin.battleRewards.defeatExpPct.desc':
+    'Share of destroyed-enemy EXP paid on defeat; 0 disables defeat EXP (0–100)',
+  'admin.battleRewards.defeatCreditPct.title':
+    'Defeat Credit % of Destroyed Enemies',
+  'admin.battleRewards.defeatCreditPct.desc':
+    'Share of destroyed-enemy Credits paid on defeat; 0 disables defeat Credits (0–100)',
+  'admin.battleRewards.defeatWpPct.title': 'Defeat WP % of Destroyed Enemies',
+  'admin.battleRewards.defeatWpPct.desc':
+    'Share of destroyed-enemy WP paid on defeat; 0 disables defeat WP (0–100)',
+  'admin.battleRewards.defeatMaxPctOfVictory.title':
+    'Defeat Reward Cap (% of Victory)',
+  'admin.battleRewards.defeatMaxPctOfVictory.desc':
+    'Maximum share of full victory payout allowed for each reward on defeat (0–100)',
+  'admin.battleRewards.retreatRewardPct.title': 'Retreat Reward % (of Defeat)',
+  'admin.battleRewards.retreatRewardPct.desc':
+    'Percentage of the capped defeat reward retained when retreating (0–100)',
 } as const;
 
 export type TranslationKey = keyof typeof EN_TRANSLATIONS;

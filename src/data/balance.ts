@@ -1,4 +1,5 @@
 import type {
+  BattleRewardsConfig,
   BattleSpeed,
   FluxTransferConfig,
   FluxTransferLevelRule,
@@ -46,10 +47,8 @@ export const BALANCE_CONFIG = {
     Elite: 140,
   } as Record<SectorDifficulty, number>,
 
-  // Victory = 100%; Defeat/Retreat = 50% of destroyed enemies + 20% flat consolation of full victory
+  // Victory = 100% base (+ national support for low-level Gears); Defeat/Retreat configured via DEFAULT_BATTLE_REWARDS_CONFIG
   victoryRewardRatio: 1.0,
-  defeatDestroyedRatio: 0.5,
-  defeatConsolationRatio: 0.2,
 
   // ---- Garage Unlock Prices (by number of Gears currently owned) ----
   garageUnlockPrices: [0, 800, 2000, 4500] as readonly number[],
@@ -665,4 +664,93 @@ export function setRuntimeMaxLevel(raw: unknown): number {
   runtimeMaxLevel = sanitizeMaxLevel(raw);
   return runtimeMaxLevel;
 }
+
+export const DEFAULT_BATTLE_REWARDS_CONFIG: BattleRewardsConfig = {
+  supportMaxLevel: 10,
+  supportExpPerLevelPct: 20,
+  supportCreditWpPerLevelPct: 10,
+  defeatExpPct: 5,
+  defeatCreditPct: 20,
+  defeatWpPct: 50,
+  defeatMaxPctOfVictory: 50,
+  retreatRewardPct: 50,
+};
+
+function clampBattleRewardNum(
+  raw: unknown,
+  min: number,
+  max: number,
+  fallback: number
+): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return fallback;
+  return Math.max(min, Math.min(max, raw));
+}
+
+export function cloneBattleRewardsConfig(
+  cfg: BattleRewardsConfig
+): BattleRewardsConfig {
+  return { ...cfg };
+}
+
+export function sanitizeBattleRewardsConfig(
+  raw: unknown
+): BattleRewardsConfig {
+  const obj =
+    raw && typeof raw === 'object' && !Array.isArray(raw)
+      ? (raw as Record<string, unknown>)
+      : {};
+  return {
+    supportMaxLevel: Math.round(
+      clampBattleRewardNum(
+        obj.supportMaxLevel,
+        0,
+        100,
+        DEFAULT_BATTLE_REWARDS_CONFIG.supportMaxLevel
+      )
+    ),
+    supportExpPerLevelPct: clampBattleRewardNum(
+      obj.supportExpPerLevelPct,
+      0,
+      500,
+      DEFAULT_BATTLE_REWARDS_CONFIG.supportExpPerLevelPct
+    ),
+    supportCreditWpPerLevelPct: clampBattleRewardNum(
+      obj.supportCreditWpPerLevelPct,
+      0,
+      500,
+      DEFAULT_BATTLE_REWARDS_CONFIG.supportCreditWpPerLevelPct
+    ),
+    defeatExpPct: clampBattleRewardNum(
+      obj.defeatExpPct,
+      0,
+      100,
+      DEFAULT_BATTLE_REWARDS_CONFIG.defeatExpPct
+    ),
+    defeatCreditPct: clampBattleRewardNum(
+      obj.defeatCreditPct,
+      0,
+      100,
+      DEFAULT_BATTLE_REWARDS_CONFIG.defeatCreditPct
+    ),
+    defeatWpPct: clampBattleRewardNum(
+      obj.defeatWpPct,
+      0,
+      100,
+      DEFAULT_BATTLE_REWARDS_CONFIG.defeatWpPct
+    ),
+    defeatMaxPctOfVictory: clampBattleRewardNum(
+      obj.defeatMaxPctOfVictory,
+      0,
+      100,
+      DEFAULT_BATTLE_REWARDS_CONFIG.defeatMaxPctOfVictory
+    ),
+    retreatRewardPct: clampBattleRewardNum(
+      obj.retreatRewardPct,
+      0,
+      100,
+      DEFAULT_BATTLE_REWARDS_CONFIG.retreatRewardPct
+    ),
+  };
+}
+
 
