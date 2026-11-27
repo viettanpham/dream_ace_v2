@@ -1,5 +1,5 @@
 import { registerBattleSourceProvider } from '../data/battleKinds';
-import { SECTORS_CATALOG } from '../data/maps';
+import { getMapNodeById, SECTORS_CATALOG } from '../data/maps';
 import type {
   AdminConfig,
   BattleSize,
@@ -22,7 +22,6 @@ export const DEFAULT_PIRATES_CONFIG: PiratesConfig = {
   rewardMult: 1.0,
 };
 
-const KNOWN_SECTOR_ID_SET = new Set<string>(SECTORS_CATALOG.map((s) => s.id));
 const VALID_PIRATE_SIZES: readonly BattleSize[] = [4, 6, 8];
 
 let pirateIncidentSeq = 1;
@@ -128,7 +127,7 @@ export function sanitizePirateIncidents(
     const expiresMonth = Number(obj.expiresMonth);
 
     if (!id || seenIds.has(id)) continue;
-    if (!nodeId || !KNOWN_SECTOR_ID_SET.has(nodeId) || seenNodes.has(nodeId)) {
+    if (!nodeId || !getMapNodeById(nodeId) || seenNodes.has(nodeId)) {
       continue;
     }
     if (!VALID_PIRATE_SIZES.includes(size)) continue;

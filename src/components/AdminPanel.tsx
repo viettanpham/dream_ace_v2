@@ -27,6 +27,7 @@ import { EnemyLevelAdminBlock } from './admin/EnemyLevelAdminBlock';
 import { EnrageAdminBlock } from './admin/EnrageAdminBlock';
 import { BattleRewardsAdminBlock } from './admin/BattleRewardsAdminBlock';
 import { BattlePenaltyAdminBlock } from './admin/BattlePenaltyAdminBlock';
+import { MapPackAdminBlock } from './admin/MapPackAdminBlock';
 import { VoucherAdminBlock } from './admin/VoucherAdminBlock';
 import {
   AdminSection,
@@ -3448,6 +3449,13 @@ export function AdminPanel() {
           {/* 6. CAMPAIGN TAB */}
           {tab === 'campaign' && (
             <div className="space-y-4">
+              <AdminSection
+                id="campaign-map-pack"
+                title={t('admin.campaignSection.mapPack.title')}
+                description={t('admin.campaignSection.mapPack.desc')}
+              >
+                <MapPackAdminBlock onFlash={flash} />
+              </AdminSection>
               <div className="p-3.5 rounded-lg border border-slate-800 bg-[#0D1422] flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-semibold text-slate-300">

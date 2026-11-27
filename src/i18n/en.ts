@@ -2538,6 +2538,32 @@ export const EN_TRANSLATIONS = {
   'warehouse.voucherSectionTitle': 'Voucher ({count})',
   'warehouse.voucherAutoToggle': 'Auto-use vouchers on defeat / retreat',
   'warehouse.voucherEmpty': 'No vouchers owned yet.',
+
+  // Admin CP — Map Pack (MAP-C2a)
+  'admin.campaignSection.mapPack.title': 'Map pack',
+  'admin.campaignSection.mapPack.desc':
+    'Inspect, export, or import campaign map pack JSON (uses built-in map by default)',
+  'admin.mapPack.counts': '{nodes} bases · {lanes} lanes',
+  'admin.mapPack.sourceLabel': 'Source:',
+  'admin.mapPack.sourceBuiltin': 'built-in',
+  'admin.mapPack.sourceMods': 'mods',
+  'admin.mapPack.exportJson': 'Export JSON',
+  'admin.mapPack.importJson': 'Import JSON',
+  'admin.mapPack.restoreBuiltin': 'Restore built-in map',
+  'admin.mapPack.confirmTitle': 'Confirm Map Pack Apply',
+  'admin.mapPack.confirmDesc':
+    'Applying a new map will RESET the world (bases, frontline, missions, world clock). Character and inventory stay untouched.',
+  'admin.mapPack.confirmCancel': 'Cancel',
+  'admin.mapPack.confirmApply': 'Apply & reset',
+  'admin.mapPack.errJsonParse': 'Invalid JSON file: {err}',
+  'admin.mapPack.errValidationTitle': 'Map pack validation failed:',
+  'admin.mapPack.errInBattle': 'Cannot apply map pack while a battle is active.',
+  'admin.mapPack.errAutoRepeat':
+    'Cannot apply map pack while auto-repeat is active.',
+  'admin.mapPack.errInvalid': 'Map pack is invalid.',
+  'admin.mapPack.appliedMsg': 'Applied map {name} and reset the world.',
+  'admin.mapPack.restoredMsg': 'Restored built-in map and reset the world.',
+  'admin.mapPack.exportedMsg': 'Exported map JSON.',
 } as const;
 
 export type TranslationKey = keyof typeof EN_TRANSLATIONS;

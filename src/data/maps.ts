@@ -90,10 +90,23 @@ function parseGarrisonList(raw: unknown): GarrisonShipSpec[] | null {
   return out;
 }
 
-export function validateMapPack(raw: unknown): MapPackDefinition | null {
+export interface MapPackValidationResult {
+  pack: MapPackDefinition | null;
+  errors: string[];
+}
+
+export function validateMapPackDetailed(
+  raw: unknown
+): MapPackValidationResult {
+  const errors: string[] = [];
+  const fail = (msg: string): MapPackValidationResult => {
+    errors.push(msg);
+    console.warn(msg);
+    return { pack: null, errors };
+  };
+
   if (!isPlainObject(raw)) {
-    console.warn('[maps] Invalid map pack root; expected plain object.');
-    return null;
+    return fail('[maps] Invalid map pack root; expected plain object.');
   }
 
   if (
@@ -101,17 +114,14 @@ export function validateMapPack(raw: unknown): MapPackDefinition | null {
     !Number.isInteger(raw.schemaVersion) ||
     raw.schemaVersion < 1
   ) {
-    console.warn('[maps] Invalid or missing schemaVersion.');
-    return null;
+    return fail('[maps] Invalid or missing schemaVersion.');
   }
   if (!isNonEmptyStr(raw.mapId) || !isNonEmptyStr(raw.nameVi) || !isNonEmptyStr(raw.nameEn)) {
-    console.warn('[maps] Missing mapId / nameVi / nameEn.');
-    return null;
+    return fail('[maps] Missing mapId / nameVi / nameEn.');
   }
 
   if (!isPlainObject(raw.bounds)) {
-    console.warn('[maps] Missing map bounds.');
-    return null;
+    return fail('[maps] Missing map bounds.');
   }
   const width = raw.bounds.width;
   const height = raw.bounds.height;
@@ -123,25 +133,21 @@ export function validateMapPack(raw: unknown): MapPackDefinition | null {
     width <= 0 ||
     height <= 0
   ) {
-    console.warn('[maps] Invalid map bounds dimensions.');
-    return null;
+    return fail('[maps] Invalid map bounds dimensions.');
   }
 
   if (!isNonEmptyStr(raw.defaultSelectedNodeId)) {
-    console.warn('[maps] Missing defaultSelectedNodeId.');
-    return null;
+    return fail('[maps] Missing defaultSelectedNodeId.');
   }
 
   if (!isPlainObject(raw.baseTypes)) {
-    console.warn('[maps] Missing baseTypes table.');
-    return null;
+    return fail('[maps] Missing baseTypes table.');
   }
   const baseTypes = {} as Record<BaseType, MapBaseTypeMeta>;
   for (const bt of BASE_TYPES) {
     const rawMeta = raw.baseTypes[bt];
     if (!isPlainObject(rawMeta)) {
-      console.warn(`[maps] Missing baseTypes.${bt} metadata.`);
-      return null;
+      return fail(`[maps] Missing baseTypes.${bt} metadata.`);
     }
     if (
       typeof rawMeta.battleSize !== 'number' ||
@@ -149,8 +155,7 @@ export function validateMapPack(raw: unknown): MapPackDefinition | null {
       typeof rawMeta.tokenShape !== 'string' ||
       !VALID_TOKEN_SHAPE_SET.has(rawMeta.tokenShape)
     ) {
-      console.warn(`[maps] Invalid baseTypes.${bt} metadata.`);
-      return null;
+      return fail(`[maps] Invalid baseTypes.${bt} metadata.`);
     }
     baseTypes[bt] = {
       battleSize: rawMeta.battleSize as BattleSize,
@@ -159,8 +164,7 @@ export function validateMapPack(raw: unknown): MapPackDefinition | null {
   }
 
   if (!Array.isArray(raw.nodes) || !Array.isArray(raw.lanes)) {
-    console.warn('[maps] Map pack must include nodes[] and lanes[].');
-    return null;
+    return fail('[maps] Map pack must include nodes[] and lanes[].');
   }
 
   const seenNodeIds = new Set<string>();
@@ -264,26 +268,23 @@ export function validateMapPack(raw: unknown): MapPackDefinition | null {
   });
 
   if (droppedNodes.length > 0) {
-    console.warn(
-      `[maps] Dropped ${droppedNodes.length} invalid map node(s): ${droppedNodes.join(', ')}`
-    );
+    const msg = `[maps] Dropped ${droppedNodes.length} invalid map node(s): ${droppedNodes.join(', ')}`;
+    errors.push(msg);
+    console.warn(msg);
   }
 
   if (validNodes.length === 0) {
-    console.warn('[maps] Map pack has no valid nodes.');
-    return null;
+    return fail('[maps] Map pack has no valid nodes.');
   }
 
   if (!validNodes.some((n) => n.initialFaction === 'allied')) {
-    console.warn('[maps] Map pack must contain at least 1 allied node.');
-    return null;
+    return fail('[maps] Map pack must contain at least 1 allied node.');
   }
 
   if (!seenNodeIds.has(raw.defaultSelectedNodeId)) {
-    console.warn(
+    return fail(
       `[maps] defaultSelectedNodeId "${raw.defaultSelectedNodeId}" does not match any valid node.`
     );
-    return null;
   }
 
   const seenLaneIds = new Set<string>();
@@ -324,9 +325,9 @@ export function validateMapPack(raw: unknown): MapPackDefinition | null {
   });
 
   if (droppedLanes.length > 0) {
-    console.warn(
-      `[maps] Dropped ${droppedLanes.length} invalid map lane(s): ${droppedLanes.join(', ')}`
-    );
+    const msg = `[maps] Dropped ${droppedLanes.length} invalid map lane(s): ${droppedLanes.join(', ')}`;
+    errors.push(msg);
+    console.warn(msg);
   }
 
   // Whole-map connectivity check (undirected BFS)
@@ -350,18 +351,16 @@ export function validateMapPack(raw: unknown): MapPackDefinition | null {
       }
     }
     if (visited.size !== validNodes.length) {
-      console.warn(
+      return fail(
         `[maps] Map graph is disconnected (${visited.size}/${validNodes.length} reachable nodes).`
       );
-      return null;
     }
   }
 
   let initialRaid: MapInitialRaid | null = null;
   if (raw.initialRaid !== undefined && raw.initialRaid !== null) {
     if (!isPlainObject(raw.initialRaid)) {
-      console.warn('[maps] Invalid initialRaid object.');
-      return null;
+      return fail('[maps] Invalid initialRaid object.');
     }
     const r = raw.initialRaid;
     if (
@@ -374,8 +373,7 @@ export function validateMapPack(raw: unknown): MapPackDefinition | null {
       !Number.isInteger(r.months) ||
       r.months < 1
     ) {
-      console.warn('[maps] Invalid initialRaid target/from/months.');
-      return null;
+      return fail('[maps] Invalid initialRaid target/from/months.');
     }
     initialRaid = {
       target: r.target,
@@ -385,40 +383,90 @@ export function validateMapPack(raw: unknown): MapPackDefinition | null {
   }
 
   return {
-    schemaVersion: raw.schemaVersion,
-    mapId: raw.mapId.trim(),
-    nameVi: raw.nameVi,
-    nameEn: raw.nameEn,
-    bounds: { width, height },
-    defaultSelectedNodeId: raw.defaultSelectedNodeId,
-    initialRaid,
-    baseTypes,
-    nodes: validNodes,
-    lanes: validLanes,
+    pack: {
+      schemaVersion: raw.schemaVersion,
+      mapId: raw.mapId.trim(),
+      nameVi: raw.nameVi,
+      nameEn: raw.nameEn,
+      bounds: { width, height },
+      defaultSelectedNodeId: raw.defaultSelectedNodeId,
+      initialRaid,
+      baseTypes,
+      nodes: validNodes,
+      lanes: validLanes,
+    },
+    errors,
   };
 }
 
-const VALIDATED_MAP_PACK = validateMapPack(rawMapData);
-if (!VALIDATED_MAP_PACK) {
-  throw new Error('[maps] Built-in maps.json failed validateMapPack().');
+export function validateMapPack(raw: unknown): MapPackDefinition | null {
+  return validateMapPackDetailed(raw).pack;
 }
 
+export function sanitizeMapPack(raw: unknown): MapPackDefinition | null {
+  if (raw === null || raw === undefined) {
+    return null;
+  }
+  return validateMapPack(raw);
+}
+
+const VALIDATED_MAP_PACK: MapPackDefinition = (() => {
+  const pack = validateMapPack(rawMapData);
+  if (!pack) {
+    throw new Error('[maps] Built-in maps.json failed validateMapPack().');
+  }
+  return pack;
+})();
+
 let activeMapPack: MapPackDefinition = VALIDATED_MAP_PACK;
+
+export const SECTORS_CATALOG: SectorDefinition[] = [...VALIDATED_MAP_PACK.nodes];
+
+export const MAP_LANES: MapLaneDefinition[] = [...VALIDATED_MAP_PACK.lanes];
+
+function syncCatalogArraysInPlace(pack: MapPackDefinition): void {
+  SECTORS_CATALOG.length = 0;
+  SECTORS_CATALOG.push(...pack.nodes);
+  MAP_LANES.length = 0;
+  MAP_LANES.push(...pack.lanes);
+}
+
+export function getBuiltInMapPack(): MapPackDefinition {
+  return VALIDATED_MAP_PACK;
+}
+
+export function isUsingCustomMapPack(): boolean {
+  return activeMapPack !== VALIDATED_MAP_PACK;
+}
+
+export function setActiveMapPack(
+  rawOrPack: MapPackDefinition | null | undefined
+): MapPackDefinition {
+  if (rawOrPack === null || rawOrPack === undefined) {
+    activeMapPack = VALIDATED_MAP_PACK;
+    syncCatalogArraysInPlace(activeMapPack);
+    return activeMapPack;
+  }
+  const validated = validateMapPack(rawOrPack);
+  activeMapPack = validated ?? VALIDATED_MAP_PACK;
+  syncCatalogArraysInPlace(activeMapPack);
+  return activeMapPack;
+}
 
 export function getActiveMap(): MapPackDefinition {
   return activeMapPack;
 }
 
 export function getMapNodes(): SectorDefinition[] {
-  return activeMapPack.nodes;
+  return SECTORS_CATALOG;
 }
 
 export function getMapLanes(): MapLaneDefinition[] {
-  return activeMapPack.lanes;
+  return MAP_LANES;
 }
 
 export function getMapNodeById(sectorId: string): SectorDefinition | undefined {
-  return activeMapPack.nodes.find((s) => s.id === sectorId);
+  return SECTORS_CATALOG.find((s) => s.id === sectorId);
 }
 
 export function getDefaultSelectedNodeId(): string {
@@ -450,10 +498,6 @@ export function getTokenShapeForBaseType(baseType: BaseType): BaseTokenShape {
     'round'
   );
 }
-
-export const SECTORS_CATALOG: SectorDefinition[] = getMapNodes();
-
-export const MAP_LANES: MapLaneDefinition[] = getMapLanes();
 
 export function createInitialBaseStates(): Record<string, BaseRuntimeState> {
   const map = getActiveMap();

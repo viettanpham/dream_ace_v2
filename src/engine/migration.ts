@@ -78,6 +78,8 @@ import {
   getFirstAlliedNodeId,
   getMapNodeById,
   getMapNodes,
+  sanitizeMapPack,
+  setActiveMapPack,
 } from '../data/maps';
 import {
   CLASS_STARTER_SKILLS,
@@ -485,6 +487,7 @@ export function createDefaultAdminConfig(): AdminConfig {
     restorePctCap: DEFAULT_RESTORE_PCT_CAP,
     passiveSlots: clonePassiveSlotsConfig(DEFAULT_PASSIVE_SLOTS_CONFIG),
     skillMods: [],
+    mapPack: null,
     showRawI18nKeys: false,
   };
 }
@@ -813,13 +816,18 @@ export function migrateSaveData(
   version: number,
   rng: () => number = Math.random
 ): PersistedCampaignState {
-  const fallback = createFreshCampaignState('Vance', 'striker', rng);
-
   if (!persistedState || typeof persistedState !== 'object') {
-    return fallback;
+    setActiveMapPack(null);
+    return createFreshCampaignState('Vance', 'striker', rng);
   }
 
   const raw = persistedState as Record<string, unknown>;
+  const defAdmin = createDefaultAdminConfig();
+  const rawAdmin = (raw.adminConfig ?? {}) as Partial<AdminConfig>;
+  const sanitizedMapPack = sanitizeMapPack(rawAdmin.mapPack);
+  setActiveMapPack(sanitizedMapPack);
+
+  const fallback = createFreshCampaignState('Vance', 'striker', rng);
   const language: Language =
     raw.language === 'en' || raw.language === 'vi' ? raw.language : 'vi';
   const rawSpeed = Number(raw.battleSpeed) as BattleSpeed;
@@ -837,8 +845,6 @@ export function migrateSaveData(
       ? raw.selectedSectorId
       : getDefaultSelectedNodeId();
 
-  const defAdmin = createDefaultAdminConfig();
-  const rawAdmin = (raw.adminConfig ?? {}) as Partial<AdminConfig>;
   const rawSizeOverride = Number(rawAdmin.battleSizeOverride) as BattleSize;
   const safeMinStock = Math.max(
     1,
@@ -991,6 +997,7 @@ export function migrateSaveData(
       rawAdmin.skillMods,
       Array.isArray(rawAdmin.iconCatalogMods) ? rawAdmin.iconCatalogMods : []
     ),
+    mapPack: sanitizedMapPack,
     showRawI18nKeys: Boolean(rawAdmin.showRawI18nKeys),
   };
 

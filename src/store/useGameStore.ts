@@ -21,9 +21,14 @@ import { sanitizeAutoEquipConfig } from '../data/autoEquipConfig';
 import { EMPTY_STAT_BLOCK, MECH_CLASS_LIST } from '../data/classes';
 import { EQUIPMENT_SLOTS, SHOP_CONFIG } from '../data/items';
 import {
+  createInitialBaseStates,
   getDefaultSelectedNodeId,
   getMapNodeById,
   getMapNodes,
+  MAP_LANES,
+  sanitizeMapPack,
+  setActiveMapPack,
+  validateMapPack,
 } from '../data/maps';
 import { WINGMAN_CHAT_KEYS } from '../data/pilots';
 import { SHOP_STOCK_CONFIG } from '../data/shopConfig';
@@ -98,6 +103,7 @@ import {
   mergeVisibleUnlockedSectors,
   pickDefaultBattle,
   validateBattleLaunch,
+  visibleNodeIds,
 } from '../engine/frontline';
 import {
   getDefaultInventoryFilterState,
@@ -224,6 +230,7 @@ import {
   getTotalAvailablePointsForLevel,
   resetGearStatAllocations,
 } from '../engine/stats';
+import { resetWorldClock } from '../engine/worldClock';
 import {
   chooseAction,
   createBlankTacticsRule,
@@ -271,6 +278,7 @@ import type {
   ItemRarity,
   Language,
   LaunchBattleOptions,
+  MapPackDefinition,
   MechClassId,
   PaperDollSlot,
   PilotAccount,
@@ -715,6 +723,14 @@ interface GameStoreState {
   adminUnlockAllSectors: () => void;
   adminApplyStarterToEmptySlots: () => number;
   adminUpdateConfig: (patch: Partial<AdminConfig>) => void;
+  applyMapPack: (
+    pack: MapPackDefinition | null
+  ) => {
+    ok: boolean;
+    reason?: 'in_battle' | 'auto_repeat_active' | 'invalid_pack';
+    nodes: number;
+    lanes: number;
+  };
   adminExportSaveJson: () => string;
   adminImportSaveJson: (rawJson: string) => { ok: boolean; error?: string };
 
@@ -1502,6 +1518,7 @@ export const useGameStore = create<GameStoreState>()(
         const state = get();
         soundFx.playConfirm();
         if (!state.hasSaveData) {
+          setActiveMapPack(state.adminConfig.mapPack ?? null);
           const cleanName =
             (pilotName ?? state.pilot.name).trim().slice(0, 18) || 'Vance';
           const chosenClass =
@@ -1556,6 +1573,7 @@ export const useGameStore = create<GameStoreState>()(
         const state = get();
         soundFx.playClick();
         clearImportBackupRaw();
+        setActiveMapPack(null);
         const fresh = createFreshCampaignState('Vance', 'striker');
         const deviceLoopPrefs = readDeviceLoopPrefs();
         const defaultAdmin = createDefaultAdminConfig();
@@ -5512,6 +5530,74 @@ export const useGameStore = create<GameStoreState>()(
         return filledCount;
       },
 
+      applyMapPack: (pack) => {
+        const state = get();
+        if (isBattleActive(state)) {
+          return {
+            ok: false,
+            reason: 'in_battle',
+            nodes: getMapNodes().length,
+            lanes: MAP_LANES.length,
+          };
+        }
+        if (state.autoRepeatSession?.active) {
+          return {
+            ok: false,
+            reason: 'auto_repeat_active',
+            nodes: getMapNodes().length,
+            lanes: MAP_LANES.length,
+          };
+        }
+
+        let validated: MapPackDefinition | null = null;
+        if (pack !== null) {
+          validated = validateMapPack(pack);
+          if (!validated) {
+            return {
+              ok: false,
+              reason: 'invalid_pack',
+              nodes: getMapNodes().length,
+              lanes: MAP_LANES.length,
+            };
+          }
+        }
+
+        const nextActiveMap = setActiveMapPack(validated);
+        const nextBaseStates = createInitialBaseStates();
+        const nextUnlocked = visibleNodeIds({
+          baseStates: nextBaseStates,
+          unlockedSectorIds: [],
+        });
+
+        soundFx.playConfirm();
+        set({
+          pilot: {
+            ...state.pilot,
+            baseStates: nextBaseStates,
+            unlockedSectorIds: nextUnlocked,
+            capturedSectorIds: [],
+            activeBonusMission: null,
+            hiredWingman: null,
+            pirateIncidents: [],
+            sectorSupply: undefined,
+            campaignMonth: 1,
+            worldClock: resetWorldClock(),
+          },
+          selectedSectorId: nextActiveMap.defaultSelectedNodeId,
+          adminConfig: {
+            ...state.adminConfig,
+            mapPack: validated,
+          },
+          hasSaveData: true,
+        });
+
+        return {
+          ok: true,
+          nodes: nextActiveMap.nodes.length,
+          lanes: nextActiveMap.lanes.length,
+        };
+      },
+
       adminUpdateConfig: (patch) => {
         set((state) => {
           const nextFormation = patch.formation
@@ -5979,23 +6065,21 @@ export const useGameStore = create<GameStoreState>()(
           if (state.language !== 'en' && state.language !== 'vi') {
             state.language = 'vi';
           }
-          if (
-            typeof state.selectedSectorId !== 'string' ||
-            !getMapNodeById(state.selectedSectorId)
-          ) {
-            state.selectedSectorId = getDefaultSelectedNodeId();
-          }
           if (!state.adminConfig || typeof state.adminConfig !== 'object') {
+            setActiveMapPack(null);
             state.adminConfig = createDefaultAdminConfig();
           } else {
             const rawAdmin = state.adminConfig as unknown as Record<
               string,
               unknown
             >;
+            const sanitizedMapPack = sanitizeMapPack(rawAdmin.mapPack);
+            setActiveMapPack(sanitizedMapPack);
             const sanitizedFormation = sanitizeFormationConfig(rawAdmin);
             state.adminConfig = {
               ...createDefaultAdminConfig(),
               ...state.adminConfig,
+              mapPack: sanitizedMapPack,
               maxLevel: sanitizeMaxLevel(rawAdmin.maxLevel),
               formation: sanitizedFormation,
               autoEquip: sanitizeAutoEquipConfig(rawAdmin.autoEquip),
@@ -6069,6 +6153,12 @@ export const useGameStore = create<GameStoreState>()(
             delete cleaned.backRowDamageReduction;
           }
           setRuntimeMaxLevel(state.adminConfig.maxLevel);
+          if (
+            typeof state.selectedSectorId !== 'string' ||
+            !getMapNodeById(state.selectedSectorId)
+          ) {
+            state.selectedSectorId = getDefaultSelectedNodeId();
+          }
           if (state.pilot && typeof state.pilot === 'object') {
             if (
               !Array.isArray(state.pilot.squadFormation) ||

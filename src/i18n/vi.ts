@@ -2540,6 +2540,32 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'warehouse.voucherSectionTitle': 'Voucher ({count})',
   'warehouse.voucherAutoToggle': 'Tự dùng voucher khi thua / rút lui',
   'warehouse.voucherEmpty': 'Chưa sở hữu voucher nào.',
+
+  // Admin CP — Bản đồ (MAP-C2a)
+  'admin.campaignSection.mapPack.title': 'Bản đồ',
+  'admin.campaignSection.mapPack.desc':
+    'Xem, xuất hoặc nhập gói bản đồ chiến dịch dạng JSON (mặc định dùng bản đồ gốc)',
+  'admin.mapPack.counts': '{nodes} căn cứ · {lanes} tuyến',
+  'admin.mapPack.sourceLabel': 'Nguồn:',
+  'admin.mapPack.sourceBuiltin': 'gốc',
+  'admin.mapPack.sourceMods': 'mods',
+  'admin.mapPack.exportJson': 'Xuất JSON',
+  'admin.mapPack.importJson': 'Nhập JSON',
+  'admin.mapPack.restoreBuiltin': 'Khôi phục bản đồ gốc',
+  'admin.mapPack.confirmTitle': 'Xác nhận áp dụng bản đồ',
+  'admin.mapPack.confirmDesc':
+    'Áp dụng bản đồ mới sẽ RESET thế giới (căn cứ, tiền tuyến, nhiệm vụ, đồng hồ). Nhân vật và đồ giữ nguyên.',
+  'admin.mapPack.confirmCancel': 'Hủy',
+  'admin.mapPack.confirmApply': 'Áp dụng & reset',
+  'admin.mapPack.errJsonParse': 'File JSON không hợp lệ: {err}',
+  'admin.mapPack.errValidationTitle': 'Gói bản đồ không hợp lệ:',
+  'admin.mapPack.errInBattle': 'Không thể đổi bản đồ khi đang giao tranh.',
+  'admin.mapPack.errAutoRepeat':
+    'Không thể đổi bản đồ khi đang tự động đánh lặp.',
+  'admin.mapPack.errInvalid': 'Gói bản đồ không hợp lệ.',
+  'admin.mapPack.appliedMsg': 'Đã áp dụng bản đồ {name} và reset thế giới.',
+  'admin.mapPack.restoredMsg': 'Đã khôi phục bản đồ gốc và reset thế giới.',
+  'admin.mapPack.exportedMsg': 'Đã xuất JSON bản đồ.',
 };
 
 

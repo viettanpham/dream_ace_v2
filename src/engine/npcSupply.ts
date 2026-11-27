@@ -1,5 +1,5 @@
 import { SUPPLY_TEMPLATES } from '../data/consumables';
-import { getSectorById, SECTORS_CATALOG } from '../data/maps';
+import { getMapNodeById, getSectorById, SECTORS_CATALOG } from '../data/maps';
 import rawNpcSupplyData from '../data/npcSupply.json';
 import type {
   AdminConfig,
@@ -364,15 +364,6 @@ export function sanitizeSupplyMaxPerTypePerBattle(raw: unknown): number {
   );
 }
 
-const KNOWN_SECTOR_IDS = new Set<string>(SECTORS_CATALOG.map((s) => s.id));
-
-/**
- * Sanitizes a PilotAccount.sectorSupply map:
- * - keeps only known sector ids from SECTORS_CATALOG
- * - clamps values to [0, 100]
- * - stores only entries < 100 (missing === 100)
- * Returns undefined when empty so old saves / full sectors stay compact.
- */
 export function sanitizeSectorSupply(
   raw: unknown
 ): Record<string, number> | undefined {
@@ -380,7 +371,7 @@ export function sanitizeSectorSupply(
   if (!src) return undefined;
   const cleaned: Record<string, number> = {};
   for (const [sectorId, rawVal] of Object.entries(src)) {
-    if (!KNOWN_SECTOR_IDS.has(sectorId)) continue;
+    if (!getMapNodeById(sectorId)) continue;
     if (typeof rawVal !== 'number' || !Number.isFinite(rawVal)) continue;
     const clamped = Math.max(0, Math.min(100, Math.round(rawVal * 100) / 100));
     if (clamped < 100) {
@@ -404,7 +395,7 @@ export function drainSectorSupply(
   sectorId: string,
   npcCfg?: Partial<NpcSupplyConfig> | Record<string, unknown> | null
 ): PilotAccount {
-  if (!KNOWN_SECTOR_IDS.has(sectorId)) return pilot;
+  if (!getMapNodeById(sectorId)) return pilot;
   const cfg = sanitizeNpcSupplyConfig(npcCfg);
   const drain = cfg.sector.drainPerBattle;
   if (drain <= 0) return pilot;

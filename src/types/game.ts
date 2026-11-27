@@ -1763,6 +1763,7 @@ export interface AdminConfig {
   npcSupply?: Partial<NpcSupplyConfig>;
   supplyMaxPerTypePerBattle?: number;
   skillMaxLevel?: number;
+  mapPack?: MapPackDefinition | null;
   passiveScaleAfter5?: number;
   restorePctCap?: number;
   passiveSlots?: PassiveSlotsConfig;
