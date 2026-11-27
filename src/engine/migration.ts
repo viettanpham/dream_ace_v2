@@ -25,14 +25,18 @@ import {
   sanitizeStealthConfig,
 } from '../data/balance';
 import {
+  DEFAULT_CARD_POPUP_END_SCALE_PCT,
   DEFAULT_CARD_POPUP_FLIGHT_MS,
   DEFAULT_CARD_POPUP_MAX_CONCURRENT,
   DEFAULT_CARD_POPUP_STAGGER_MS,
+  DEFAULT_CARD_POPUP_START_SCALE_PCT,
   DEFAULT_CARD_POPUP_ZONE_HEIGHT_PCT,
   DEFAULT_CARD_POPUP_ZONE_WIDTH_PCT,
+  sanitizeCardPopupEndScalePct,
   sanitizeCardPopupFlightMs,
   sanitizeCardPopupMaxConcurrent,
   sanitizeCardPopupStaggerMs,
+  sanitizeCardPopupStartScalePct,
   sanitizeCardPopupZoneHeightPct,
   sanitizeCardPopupZoneWidthPct,
 } from '../utils/cardPopupQueue';
@@ -412,6 +416,8 @@ export function createDefaultAdminConfig(): AdminConfig {
     cardPopupMaxConcurrent: DEFAULT_CARD_POPUP_MAX_CONCURRENT,
     cardPopupZoneWidthPct: DEFAULT_CARD_POPUP_ZONE_WIDTH_PCT,
     cardPopupZoneHeightPct: DEFAULT_CARD_POPUP_ZONE_HEIGHT_PCT,
+    cardPopupStartScalePct: DEFAULT_CARD_POPUP_START_SCALE_PCT,
+    cardPopupEndScalePct: DEFAULT_CARD_POPUP_END_SCALE_PCT,
     radarPopupStartScalePct: DEFAULT_RADAR_POPUP_START_SCALE_PCT,
     radarPopupSmallScalePct: DEFAULT_RADAR_POPUP_SMALL_SCALE_PCT,
     radarPopupLargeScalePct: DEFAULT_RADAR_POPUP_LARGE_SCALE_PCT,
@@ -845,6 +851,12 @@ export function migrateSaveData(
     ),
     cardPopupZoneHeightPct: sanitizeCardPopupZoneHeightPct(
       rawAdmin.cardPopupZoneHeightPct
+    ),
+    cardPopupStartScalePct: sanitizeCardPopupStartScalePct(
+      rawAdmin.cardPopupStartScalePct
+    ),
+    cardPopupEndScalePct: sanitizeCardPopupEndScalePct(
+      rawAdmin.cardPopupEndScalePct
     ),
     radarPopupStartScalePct: sanitizeRadarPopupStartScalePct(
       rawAdmin.radarPopupStartScalePct

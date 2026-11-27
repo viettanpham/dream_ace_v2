@@ -1889,6 +1889,9 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'admin.cardPopupMaxConcurrent': 'Số bay tối đa cùng lúc (>= 1)',
   'admin.cardPopupZoneWidthPct': 'Vùng đáp trung tâm — Rộng (%)',
   'admin.cardPopupZoneHeightPct': 'Vùng đáp trung tâm — Cao (%)',
+  'admin.cardPopupStartScalePct': 'Cỡ chữ popup lúc bắt đầu (%)',
+  'admin.cardPopupEndScalePct': 'Cỡ chữ popup khi vào giữa thẻ (%)',
+  'admin.cardPopupScaleExample': 'Ví dụ: {base}px -> {scaled}px (thẻ nhỏ: {smallBase}px -> {smallScaled}px)',
   'admin.radarPopupSubtitle':
     'Số nổi Radar (dùng chung thời gian bay ở trên): cỡ đầu %, cỡ cuối khi ít/đông tàu và ngưỡng số tàu sống.',
   'admin.radarPopupStartScalePct': 'Radar: Cỡ bắt đầu (%, 20–300)',

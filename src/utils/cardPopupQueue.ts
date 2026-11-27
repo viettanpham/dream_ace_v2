@@ -29,8 +29,14 @@ export const DEFAULT_CARD_POPUP_FLIGHT_MS = 200;
 export const DEFAULT_CARD_POPUP_MAX_CONCURRENT = 4;
 export const DEFAULT_CARD_POPUP_ZONE_WIDTH_PCT = 60;
 export const DEFAULT_CARD_POPUP_ZONE_HEIGHT_PCT = 45;
+export const DEFAULT_CARD_POPUP_START_SCALE_PCT = 100;
+export const DEFAULT_CARD_POPUP_END_SCALE_PCT = 125;
 export const CARD_POPUP_ZONE_MIN_PCT = 20;
 export const CARD_POPUP_ZONE_MAX_PCT = 100;
+export const CARD_POPUP_START_SCALE_MIN_PCT = 50;
+export const CARD_POPUP_START_SCALE_MAX_PCT = 200;
+export const CARD_POPUP_END_SCALE_MIN_PCT = 50;
+export const CARD_POPUP_END_SCALE_MAX_PCT = 250;
 export const CARD_POPUP_END_CANDIDATES = 6;
 export const CARD_POPUP_SETTLE_MS = 450;
 export const CARD_POPUP_INSET_PX = 9;
@@ -47,6 +53,8 @@ export interface CardPopupConfig {
   maxConcurrent: number;
   zoneWidthPct: number;
   zoneHeightPct: number;
+  startScalePct: number;
+  endScalePct: number;
 }
 
 export interface CardPopupQueueOptions {
@@ -55,6 +63,8 @@ export interface CardPopupQueueOptions {
   maxConcurrent: number;
   zoneWidthPct?: number;
   zoneHeightPct?: number;
+  startScalePct?: number;
+  endScalePct?: number;
   battleSpeed?: BattleSpeed;
   effectsMode?: BattleEffectsMode;
   lang?: Language;
@@ -139,12 +149,34 @@ export function sanitizeCardPopupZoneHeightPct(raw?: unknown): number {
   return sanitizeCardPopupZonePct(raw, DEFAULT_CARD_POPUP_ZONE_HEIGHT_PCT);
 }
 
+export function sanitizeCardPopupStartScalePct(raw?: unknown): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) {
+    return DEFAULT_CARD_POPUP_START_SCALE_PCT;
+  }
+  return Math.max(
+    CARD_POPUP_START_SCALE_MIN_PCT,
+    Math.min(CARD_POPUP_START_SCALE_MAX_PCT, Math.round(raw))
+  );
+}
+
+export function sanitizeCardPopupEndScalePct(raw?: unknown): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) {
+    return DEFAULT_CARD_POPUP_END_SCALE_PCT;
+  }
+  return Math.max(
+    CARD_POPUP_END_SCALE_MIN_PCT,
+    Math.min(CARD_POPUP_END_SCALE_MAX_PCT, Math.round(raw))
+  );
+}
+
 export function resolveCardPopupConfig(raw?: {
   cardPopupStaggerMs?: unknown;
   cardPopupFlightMs?: unknown;
   cardPopupMaxConcurrent?: unknown;
   cardPopupZoneWidthPct?: unknown;
   cardPopupZoneHeightPct?: unknown;
+  cardPopupStartScalePct?: unknown;
+  cardPopupEndScalePct?: unknown;
 } | null): CardPopupConfig {
   return {
     staggerMs: sanitizeCardPopupStaggerMs(raw?.cardPopupStaggerMs),
@@ -152,6 +184,8 @@ export function resolveCardPopupConfig(raw?: {
     maxConcurrent: sanitizeCardPopupMaxConcurrent(raw?.cardPopupMaxConcurrent),
     zoneWidthPct: sanitizeCardPopupZoneWidthPct(raw?.cardPopupZoneWidthPct),
     zoneHeightPct: sanitizeCardPopupZoneHeightPct(raw?.cardPopupZoneHeightPct),
+    startScalePct: sanitizeCardPopupStartScalePct(raw?.cardPopupStartScalePct),
+    endScalePct: sanitizeCardPopupEndScalePct(raw?.cardPopupEndScalePct),
   };
 }
 
@@ -829,7 +863,11 @@ export function pickCardPopupEndPoint(
 
 export function estimatePopupBoxSize(
   popup: CardPopupInput,
-  lang: Language = 'vi'
+  lang: Language = 'vi',
+  scale?: {
+    startScalePct?: number;
+    endScalePct?: number;
+  }
 ): {
   width: number;
   height: number;
@@ -846,11 +884,19 @@ export function estimatePopupBoxSize(
     if (seg.trailingIconKind) iconCount += 1;
   }
   const arrowBonus = parsed.arrow ? 10 : 0;
-  const width = Math.max(
+  const baseWidth = Math.max(
     36,
     Math.ceil((chars * charW + iconCount * 22 + arrowBonus + 6) * 1.15)
   );
-  const height = (isSmall ? 18 : 22) + 4;
+  const baseHeight = (isSmall ? 18 : 22) + 4;
+  const maxScale = scale
+    ? Math.max(
+        sanitizeCardPopupStartScalePct(scale.startScalePct),
+        sanitizeCardPopupEndScalePct(scale.endScalePct)
+      ) / 100
+    : 1;
+  const width = Math.max(36, Math.ceil(baseWidth * maxScale));
+  const height = Math.max(18, Math.ceil(baseHeight * maxScale));
   return { width, height };
 }
 
@@ -995,7 +1041,10 @@ export function syncCardPopupQueue(
       cardSize.width,
       cardSize.height,
       nextActive.map((a) => a.endPoint),
-      estimatePopupBoxSize(nextPopup, options.lang ?? 'vi'),
+      estimatePopupBoxSize(nextPopup, options.lang ?? 'vi', {
+        startScalePct: options.startScalePct,
+        endScalePct: options.endScalePct,
+      }),
       rng
     );
     nextActive.push({

@@ -117,12 +117,18 @@ import {
 import { AdminCapacityField } from './AdminCapacityField';
 import { PirateAdminBlock } from './admin/PirateAdminBlock';
 import {
+  CARD_POPUP_END_SCALE_MAX_PCT,
+  CARD_POPUP_END_SCALE_MIN_PCT,
+  CARD_POPUP_START_SCALE_MAX_PCT,
+  CARD_POPUP_START_SCALE_MIN_PCT,
   CARD_POPUP_ZONE_MAX_PCT,
   CARD_POPUP_ZONE_MIN_PCT,
   resolveCardPopupConfig,
+  sanitizeCardPopupEndScalePct,
   sanitizeCardPopupFlightMs,
   sanitizeCardPopupMaxConcurrent,
   sanitizeCardPopupStaggerMs,
+  sanitizeCardPopupStartScalePct,
   sanitizeCardPopupZoneHeightPct,
   sanitizeCardPopupZoneWidthPct,
 } from '../utils/cardPopupQueue';
@@ -3005,6 +3011,72 @@ export function AdminPanel() {
                           adminUpdateConfig({ cardPopupZoneHeightPct: zoneHeightPct })
                         }
                       />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <label className="space-y-1 block">
+                        <span className="text-[11px] text-slate-400 block">
+                          {t('admin.cardPopupStartScalePct')}
+                        </span>
+                        <input
+                          type="number"
+                          data-testid="admin-card-popup-start-scale"
+                          min={CARD_POPUP_START_SCALE_MIN_PCT}
+                          max={CARD_POPUP_START_SCALE_MAX_PCT}
+                          value={cardPopupCfg.startScalePct}
+                          onChange={(e) =>
+                            adminUpdateConfig({
+                              cardPopupStartScalePct: sanitizeCardPopupStartScalePct(
+                                Number(e.target.value)
+                              ),
+                            })
+                          }
+                          className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                        />
+                        <p
+                          data-testid="admin-card-popup-start-scale-example"
+                          className="text-[11px] font-mono-nums text-sky-300/90"
+                        >
+                          {t('admin.cardPopupScaleExample', {
+                            base: 15,
+                            scaled: Math.round((15 * cardPopupCfg.startScalePct) / 100),
+                            smallBase: 12,
+                            smallScaled: Math.round((12 * cardPopupCfg.startScalePct) / 100),
+                          })}
+                        </p>
+                      </label>
+
+                      <label className="space-y-1 block">
+                        <span className="text-[11px] text-slate-400 block">
+                          {t('admin.cardPopupEndScalePct')}
+                        </span>
+                        <input
+                          type="number"
+                          data-testid="admin-card-popup-end-scale"
+                          min={CARD_POPUP_END_SCALE_MIN_PCT}
+                          max={CARD_POPUP_END_SCALE_MAX_PCT}
+                          value={cardPopupCfg.endScalePct}
+                          onChange={(e) =>
+                            adminUpdateConfig({
+                              cardPopupEndScalePct: sanitizeCardPopupEndScalePct(
+                                Number(e.target.value)
+                              ),
+                            })
+                          }
+                          className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                        />
+                        <p
+                          data-testid="admin-card-popup-end-scale-example"
+                          className="text-[11px] font-mono-nums text-sky-300/90"
+                        >
+                          {t('admin.cardPopupScaleExample', {
+                            base: 15,
+                            scaled: Math.round((15 * cardPopupCfg.endScalePct) / 100),
+                            smallBase: 12,
+                            smallScaled: Math.round((12 * cardPopupCfg.endScalePct) / 100),
+                          })}
+                        </p>
+                      </label>
                     </div>
 
                     {(() => {

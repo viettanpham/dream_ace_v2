@@ -262,6 +262,12 @@ export const BattleUnitCard = memo(function BattleUnitCard({
   const cardPopupZoneHeightPct = useGameStore(
     (s) => s.adminConfig.cardPopupZoneHeightPct
   );
+  const cardPopupStartScalePct = useGameStore(
+    (s) => s.adminConfig.cardPopupStartScalePct
+  );
+  const cardPopupEndScalePct = useGameStore(
+    (s) => s.adminConfig.cardPopupEndScalePct
+  );
   const iconMods = useGameStore((s) => s.adminConfig.iconCatalogMods);
   const { settings: statusSettings, activeUnitRows } =
     useStatusDisplaySettings(adminStatusDefaults);
@@ -288,6 +294,8 @@ export const BattleUnitCard = memo(function BattleUnitCard({
         cardPopupMaxConcurrent,
         cardPopupZoneWidthPct,
         cardPopupZoneHeightPct,
+        cardPopupStartScalePct,
+        cardPopupEndScalePct,
       }),
     [
       cardPopupStaggerMs,
@@ -295,6 +303,8 @@ export const BattleUnitCard = memo(function BattleUnitCard({
       cardPopupMaxConcurrent,
       cardPopupZoneWidthPct,
       cardPopupZoneHeightPct,
+      cardPopupStartScalePct,
+      cardPopupEndScalePct,
     ]
   );
 
@@ -635,8 +645,10 @@ export const BattleUnitCard = memo(function BattleUnitCard({
                       left: '50%',
                       top: '50%',
                       maxWidth: 'calc(100% - 16px)',
+                      transformOrigin: 'center',
+                      '--card-pop-end-scale': String(cardPopupCfg.endScalePct / 100),
                       animationDuration: '600ms',
-                    }}
+                    } as CSSProperties}
                     className={`pointer-events-none absolute inline-flex items-center gap-0.5 whitespace-nowrap overflow-visible font-display font-bold tracking-wide drop-shadow-[0_1px_3px_rgba(0,0,0,0.95)] anim-card-popup-reduced ${sizeClass} ${colorClass}`}
                   >
                     {innerContent}
@@ -649,10 +661,13 @@ export const BattleUnitCard = memo(function BattleUnitCard({
                 left: '50%',
                 top: '50%',
                 maxWidth: 'calc(100% - 16px)',
+                transformOrigin: 'center',
                 '--card-pop-dx': `${sp.offsetFromCenterX}px`,
                 '--card-pop-dy': `${sp.offsetFromCenterY}px`,
                 '--card-pop-ex': `${ep.offsetFromCenterX}px`,
                 '--card-pop-ey': `${ep.offsetFromCenterY}px`,
+                '--card-pop-start-scale': String(cardPopupCfg.startScalePct / 100),
+                '--card-pop-end-scale': String(cardPopupCfg.endScalePct / 100),
                 animationDuration: `${cardPopupCfg.flightMs}ms`,
               } as CSSProperties;
 

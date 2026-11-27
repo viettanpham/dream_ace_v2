@@ -274,9 +274,11 @@ import type {
   WpMarketOffer,
 } from '../types/game';
 import {
+  sanitizeCardPopupEndScalePct,
   sanitizeCardPopupFlightMs,
   sanitizeCardPopupMaxConcurrent,
   sanitizeCardPopupStaggerMs,
+  sanitizeCardPopupStartScalePct,
   sanitizeCardPopupZoneHeightPct,
   sanitizeCardPopupZoneWidthPct,
 } from '../utils/cardPopupQueue';
@@ -5334,6 +5336,16 @@ export const useGameStore = create<GameStoreState>()(
                 ? patch.cardPopupZoneHeightPct
                 : state.adminConfig.cardPopupZoneHeightPct
             ),
+            cardPopupStartScalePct: sanitizeCardPopupStartScalePct(
+              patch.cardPopupStartScalePct !== undefined
+                ? patch.cardPopupStartScalePct
+                : state.adminConfig.cardPopupStartScalePct
+            ),
+            cardPopupEndScalePct: sanitizeCardPopupEndScalePct(
+              patch.cardPopupEndScalePct !== undefined
+                ? patch.cardPopupEndScalePct
+                : state.adminConfig.cardPopupEndScalePct
+            ),
             radarPopupStartScalePct: sanitizeRadarPopupStartScalePct(
               patch.radarPopupStartScalePct !== undefined
                 ? patch.radarPopupStartScalePct
@@ -5695,6 +5707,12 @@ export const useGameStore = create<GameStoreState>()(
               ),
               cardPopupZoneHeightPct: sanitizeCardPopupZoneHeightPct(
                 rawAdmin.cardPopupZoneHeightPct
+              ),
+              cardPopupStartScalePct: sanitizeCardPopupStartScalePct(
+                rawAdmin.cardPopupStartScalePct
+              ),
+              cardPopupEndScalePct: sanitizeCardPopupEndScalePct(
+                rawAdmin.cardPopupEndScalePct
               ),
               radarPopupStartScalePct: sanitizeRadarPopupStartScalePct(
                 rawAdmin.radarPopupStartScalePct
