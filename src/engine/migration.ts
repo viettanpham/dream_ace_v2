@@ -66,6 +66,11 @@ import {
 } from './moduleDrop';
 import { sanitizeEnrageConfig } from './enrage';
 import { sanitizeSectorSupply } from './npcSupply';
+import {
+  cloneSupplyRewardsConfig,
+  DEFAULT_SUPPLY_REWARDS_CONFIG,
+  sanitizeSupplyRewardsConfig,
+} from './supplyRewards';
 import { EMPTY_STAT_BLOCK, MECH_CLASS_LIST } from '../data/classes';
 import {
   BUILTIN_ITEM_REGISTRY_TAG,
@@ -490,6 +495,7 @@ export function createDefaultAdminConfig(): AdminConfig {
     restorePctCap: DEFAULT_RESTORE_PCT_CAP,
     passiveSlots: clonePassiveSlotsConfig(DEFAULT_PASSIVE_SLOTS_CONFIG),
     activeSlots: cloneActiveSlotsConfig(DEFAULT_ACTIVE_SLOTS_CONFIG),
+    supplyRewards: cloneSupplyRewardsConfig(DEFAULT_SUPPLY_REWARDS_CONFIG),
     skillMods: [],
     mapPack: null,
     showRawI18nKeys: false,
@@ -998,6 +1004,7 @@ export function migrateSaveData(
     battleRewards: sanitizeBattleRewardsConfig(rawAdmin.battleRewards),
     battlePenalty: sanitizeBattlePenaltyConfig(rawAdmin.battlePenalty),
     vouchers: sanitizeVoucherConfig(rawAdmin.vouchers),
+    supplyRewards: sanitizeSupplyRewardsConfig(rawAdmin.supplyRewards),
     skillMods: sanitizeSkillMods(
       rawAdmin.skillMods,
       Array.isArray(rawAdmin.iconCatalogMods) ? rawAdmin.iconCatalogMods : []

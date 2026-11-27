@@ -586,7 +586,8 @@ export type ConsumableKind =
   | 'enchant_stone'
   | 'respec_token'
   | 'exp_boost'
-  | 'battle_supply';
+  | 'battle_supply'
+  | 'supply_crate';
 
 export type SupplyFamily = 'hp_kit' | 'shield_kit' | 'sp_kit' | 'buff' | 'utility';
 
@@ -1188,7 +1189,9 @@ export type CombatLogTemplateKey =
   | 'log.prestageConfirm'
   | 'log.repairFreeDefeat'
   | 'log.repairFreeRetreat'
-  | 'log.repairFee';
+  | 'log.repairFee'
+  | 'log.supplyDrop'
+  | 'log.supplyDropLost';
 
 export interface CombatLogEntry {
   id: string;
@@ -1255,6 +1258,8 @@ export interface BattleSummary {
   totalEnemies: number;
   alliesSurviving: number;
   droppedItems: ItemInstance[];
+  supplyDrop?: { templateId: string; qty: number; lostQty?: number };
+  missionSupplyDrop?: { templateId: string; qty: number; lostQty?: number };
 }
 
 export interface WingmanChatter {
@@ -1771,7 +1776,30 @@ export interface AdminConfig {
   activeSlots?: ActiveSlotsConfig;
   skillMods?: SkillModDefinition[];
   vouchers?: VoucherConfig;
+  supplyRewards?: SupplyRewardsConfig;
   showRawI18nKeys: boolean;
+}
+
+export interface SupplyRewardSourceConfig {
+  chancePct: number;
+  qtyMin: number;
+  qtyMax: number;
+}
+
+export interface SupplyCrateRewardsConfig {
+  typesMin: number;
+  typesMax: number;
+  qtyMin: number;
+  qtyMax: number;
+}
+
+export interface SupplyRewardsConfig {
+  minTier: number;
+  maxTier: number;
+  victory: SupplyRewardSourceConfig;
+  mission: SupplyRewardSourceConfig;
+  event: SupplyRewardSourceConfig;
+  crate: SupplyCrateRewardsConfig;
 }
 
 export interface BattleRewardsConfig {

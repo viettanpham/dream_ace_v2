@@ -22,6 +22,8 @@ import {
   X,
 } from 'lucide-react';
 import { SupplyEconomyAdminBlock } from './admin/SupplyEconomyAdminBlock';
+import { SupplyRewardsAdminBlock } from './admin/SupplyRewardsAdminBlock';
+import { SupplyGiveAdminBlock } from './admin/SupplyGiveAdminBlock';
 import { NpcSupplyAdminBlock } from './admin/NpcSupplyAdminBlock';
 import { EnemyLevelAdminBlock } from './admin/EnemyLevelAdminBlock';
 import { EnrageAdminBlock } from './admin/EnrageAdminBlock';
@@ -3048,6 +3050,27 @@ export function AdminPanel() {
                   description={t('admin.battleSection.supplyEconomy.desc')}
                 >
                   <SupplyEconomyAdminBlock />
+                </AdminSection>
+
+                {/* 11b. Random Supply Rewards */}
+                <AdminSection
+                  id="supply-rewards"
+                  title={t('admin.battleSection.supplyRewards.title')}
+                  description={t('admin.battleSection.supplyRewards.desc')}
+                >
+                  <SupplyRewardsAdminBlock
+                    adminConfig={adminConfig}
+                    adminUpdateConfig={adminUpdateConfig}
+                  />
+                </AdminSection>
+
+                {/* 11c. Give Supplies (test) */}
+                <AdminSection
+                  id="supply-give-test"
+                  title={t('admin.battleSection.supplyGive.title')}
+                  description={t('admin.battleSection.supplyGive.desc')}
+                >
+                  <SupplyGiveAdminBlock />
                 </AdminSection>
 
                 {/* 12. Reward Multiplier */}

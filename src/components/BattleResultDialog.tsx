@@ -12,6 +12,7 @@ import {
   getSlotLabel,
   getStatShort,
 } from '../i18n';
+import { getSupplyName } from './SupplyLoadoutBar';
 import type { TranslationKey } from '../i18n/en';
 import type { BattleSummary, Language } from '../types/game';
 
@@ -285,6 +286,62 @@ export function BattleResultDialog({
                     })}
                   </div>
                 )}
+
+                {summary.supplyDrop &&
+                  (summary.supplyDrop.qty > 0 ||
+                    (summary.supplyDrop.lostQty ?? 0) > 0) && (
+                    <div
+                      data-testid="battle-result-supply-drop"
+                      className="col-span-2 rounded border border-sky-500/35 bg-sky-500/10 px-2.5 py-1.5 text-[12px] font-mono-nums text-sky-200"
+                    >
+                      {summary.supplyDrop.qty > 0
+                        ? t('summary.supplyDropLine', {
+                            name: getSupplyName(summary.supplyDrop.templateId, t),
+                            qty: summary.supplyDrop.qty,
+                          })
+                        : t('summary.supplyDropLostOnlyLine', {
+                            name: getSupplyName(summary.supplyDrop.templateId, t),
+                            lost: summary.supplyDrop.lostQty ?? 0,
+                          })}
+                      {summary.supplyDrop.qty > 0 &&
+                      (summary.supplyDrop.lostQty ?? 0) > 0
+                        ? t('summary.supplyDropOverflow', {
+                            lost: summary.supplyDrop.lostQty ?? 0,
+                          })
+                        : ''}
+                    </div>
+                  )}
+
+                {summary.missionSupplyDrop &&
+                  (summary.missionSupplyDrop.qty > 0 ||
+                    (summary.missionSupplyDrop.lostQty ?? 0) > 0) && (
+                    <div
+                      data-testid="battle-result-mission-supply-drop"
+                      className="col-span-2 rounded border border-emerald-500/35 bg-emerald-500/10 px-2.5 py-1.5 text-[12px] font-mono-nums text-emerald-200"
+                    >
+                      {summary.missionSupplyDrop.qty > 0
+                        ? t('summary.supplyDropLine', {
+                            name: getSupplyName(
+                              summary.missionSupplyDrop.templateId,
+                              t
+                            ),
+                            qty: summary.missionSupplyDrop.qty,
+                          })
+                        : t('summary.supplyDropLostOnlyLine', {
+                            name: getSupplyName(
+                              summary.missionSupplyDrop.templateId,
+                              t
+                            ),
+                            lost: summary.missionSupplyDrop.lostQty ?? 0,
+                          })}
+                      {summary.missionSupplyDrop.qty > 0 &&
+                      (summary.missionSupplyDrop.lostQty ?? 0) > 0
+                        ? t('summary.supplyDropOverflow', {
+                            lost: summary.missionSupplyDrop.lostQty ?? 0,
+                          })
+                        : ''}
+                    </div>
+                  )}
 
                 <div className="rounded border border-slate-800 bg-[#090D14] p-2.5 sm:p-3">
                   <div className="text-[12px] text-slate-400">

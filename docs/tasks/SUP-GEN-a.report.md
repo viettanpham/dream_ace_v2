@@ -1,0 +1,8 @@
+# TASK SUP-GEN-a Report
+- Items done: STEP A; ITEM 0 (Kho đồ > Tiêu hao `battle_supply` real name/icon/effect/tier, Bag/Sell buttons); ITEM 1 (`src/engine/supplyRewards.ts` + `adminConfig.supplyRewards` sanitizer); ITEM 2 (Victory & Bonus Mission hooks in `finalizeBattleOutcome`, `BattleResultDialog`, combat logs); ITEM 3 (`supply_crate` `"Hòm vật tư"`, `sanitizeConsumables` cap 99, `useConsumable` + `GearView` notice); ITEM 4 (Admin `"Vật tư ngẫu nhiên"` w/ live examples + `"Tặng vật tư (test)"`).
+- Icon choice: `supply_crate` reuses `<Gift>` (`equipment_crate` icon) tinted `text-amber-300` + amber card border/badge (`GameIcons.tsx`, `GearView.tsx`).
+- Files changed: `src/engine/supplyRewards.ts`, `src/engine/{supplies,migration}.ts`, `src/types/game.ts`, `src/store/useGameStore.ts`, `src/components/{GearView,BattleResultDialog,GameIcons,AdminPanel}.tsx`, `src/components/admin/{SupplyRewardsAdminBlock,SupplyGiveAdminBlock}.tsx`, `src/utils/combatLogFormat.ts`, `src/i18n/{index,vi,en}.ts`, `src/engine/__tests__/supplyRewardsGenA.test.tsx`, `docs/CODEMAP.md`, `docs/tasks/SUP-GEN-a.{md,progress.md,report.md}`.
+- Save version: `CURRENT_SAVE_VERSION = 15` unchanged (`supplyRewards` optional with sanitizer defaults; `supply_crate` stacks capped at 99).
+- Checks: `vitest --reporter=dot` 7 files / 41 tests passed (`supplyRewardsGenA`, `suppliesCs1`, `supplyShopCs3a`, `supplyLoadoutBarCsUi`, `battleKindsK1`, `admUi1`, `BattleResultDialog`); `tsc --noEmit` passed.
+- Not checked: full vitest suite, production build, shop UI changes (untouched for SUP-GEN-b), and 360px/desktop visual rendering in a live browser.
+CHƯA chạy trình duyệt thật

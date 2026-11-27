@@ -973,6 +973,30 @@ function formatCombatLogBody(
       return translate(lang, 'log.supplyScanNone');
     }
 
+    case 'log.supplyDrop':
+    case 'log.supplyDropLost': {
+      const tplId = String(p.templateId ?? '');
+      const supplyKey = `supply.${tplId}.name` as TranslationKey;
+      const resolvedSupply = translate(lang, supplyKey);
+      const name =
+        tplId === 'supply_crate'
+          ? translate(lang, 'consumable.supply_crate.name')
+          : resolvedSupply === supplyKey
+            ? tplId
+            : resolvedSupply;
+      if (entry.templateKey === 'log.supplyDropLost') {
+        return translate(lang, 'log.supplyDropLost', {
+          name,
+          lost: Math.max(0, Number(p.lost ?? 0)),
+          cap: Math.max(1, Number(p.cap ?? 99)),
+        });
+      }
+      return translate(lang, 'log.supplyDrop', {
+        name,
+        qty: Math.max(0, Number(p.qty ?? 0)),
+      });
+    }
+
     case 'log.emergencyResupplyAlly':
       return translate(lang, 'log.emergencyResupplyAlly');
 

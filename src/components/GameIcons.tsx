@@ -106,6 +106,8 @@ export function ConsumableIcon({
   switch (kind) {
     case 'equipment_crate':
       return <Gift className={className} aria-hidden="true" />;
+    case 'supply_crate':
+      return <Gift className={`${className} text-amber-300`} aria-hidden="true" />;
     case 'enchant_stone':
       return <Sparkles className={className} aria-hidden="true" />;
     case 'respec_token':

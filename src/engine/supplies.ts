@@ -297,6 +297,7 @@ export function sanitizeConsumables(rawConsumables: unknown): ConsumableItem[] {
 
   const result: ConsumableItem[] = [];
   const supplyIdxByTemplate = new Map<string, number>();
+  let supplyCrateIdx: number | null = null;
 
   for (const entry of rawConsumables) {
     if (!entry || typeof entry !== 'object') continue;
@@ -325,6 +326,25 @@ export function sanitizeConsumables(rawConsumables: unknown): ConsumableItem[] {
           id: c.id,
           kind: 'battle_supply',
           templateId: tplId,
+          quantity: Math.min(SUPPLY_STACK_CAP, qtyToAdd),
+        });
+      }
+      continue;
+    }
+
+    if (c.kind === 'supply_crate') {
+      const qtyToAdd = Math.max(1, Math.floor(c.quantity));
+      if (supplyCrateIdx !== null) {
+        const existing = result[supplyCrateIdx];
+        result[supplyCrateIdx] = {
+          ...existing,
+          quantity: Math.min(SUPPLY_STACK_CAP, existing.quantity + qtyToAdd),
+        };
+      } else {
+        supplyCrateIdx = result.length;
+        result.push({
+          id: 'supply_crate_stack',
+          kind: 'supply_crate',
           quantity: Math.min(SUPPLY_STACK_CAP, qtyToAdd),
         });
       }

@@ -171,6 +171,15 @@ import {
   pickAutoSupplies,
   sanitizeAutoSuppliesConfig,
 } from '../engine/supplyAi';
+import {
+  addSupplyCrateToConsumables,
+  addSupplyWithOverflow,
+  applySupplyRewardGrant,
+  getPilotMaxGearLevel,
+  rollSupplyCrateContents,
+  rollSupplyReward,
+  sanitizeSupplyRewardsConfig,
+} from '../engine/supplyRewards';
 import { computeSupplyPrice } from '../engine/itemPrice';
 import {
   clearModule as clearModuleEngine,
@@ -263,6 +272,7 @@ import type {
   BattleRoundSnapshot,
   BattleSpeed,
   BattleState,
+  BattleSummary,
   BattleViewMode,
   CombatFxEvent,
   CombatFxTone,
@@ -645,6 +655,7 @@ interface GameStoreState {
   useConsumable: (consumableId: string) => {
     ok: boolean;
     openedItem?: ItemInstance;
+    openedSupplies?: Array<{ templateId: string; qty: number; lost?: number }>;
     kind?: ConsumableItem['kind'];
   };
   sellItem: (instanceId: string) => { ok: boolean; creditsEarned: number };
@@ -725,6 +736,16 @@ interface GameStoreState {
   adminUnlockAllGears: () => void;
   adminUnlockAllSectors: () => void;
   adminApplyStarterToEmptySlots: () => number;
+  adminGiveSupply: (
+    target: string,
+    qty: number
+  ) => {
+    ok: boolean;
+    kind: 'supply_crate' | 'battle_supply';
+    templateId?: string;
+    added: number;
+    lost: number;
+  };
   adminUpdateConfig: (patch: Partial<AdminConfig>) => void;
   applyMapPack: (
     pack: MapPackDefinition | null
@@ -1013,7 +1034,7 @@ function finalizeBattleOutcome(
         ),
       };
   const nextUnlockedSectors = mergeVisibleUnlockedSectors(monthStep.pilot);
-  const nextPilot: PilotAccount = ensureIdle(
+  const nextPilotBase: PilotAccount = ensureIdle(
     {
       ...monthStep.pilot,
       unlockedSectorIds: nextUnlockedSectors,
@@ -1022,6 +1043,113 @@ function finalizeBattleOutcome(
     Math.random,
     state.adminConfig
   );
+
+  // Random supply rewards on Victory & Bonus Mission completion (SUP-GEN-a)
+  let pilotAfterSupplyRewards = nextPilotBase;
+  let supplyDrop: BattleSummary['supplyDrop'] = undefined;
+  let missionSupplyDrop: BattleSummary['missionSupplyDrop'] = undefined;
+  const supplyRewardLogs: CombatLogEntry[] = [];
+  if (won && !retreated) {
+    const winSupply = applySupplyRewardGrant(
+      pilotAfterSupplyRewards,
+      state.adminConfig,
+      'victory',
+      Math.random
+    );
+    pilotAfterSupplyRewards = winSupply.pilot;
+    if (winSupply.templateId && (winSupply.added > 0 || winSupply.lost > 0)) {
+      supplyDrop = {
+        templateId: winSupply.templateId,
+        qty: winSupply.added,
+        ...(winSupply.lost > 0 ? { lostQty: winSupply.lost } : {}),
+      };
+      if (winSupply.added > 0) {
+        supplyRewardLogs.push({
+          id: `log_supply_win_${Date.now()}_${extraTurnCounter}`,
+          round: battle.round,
+          actorName: 'SYSTEM',
+          tag: 'SYSTEM' as const,
+          templateKey: 'log.supplyDrop' as const,
+          params: {
+            templateId: winSupply.templateId,
+            qty: winSupply.added,
+          },
+        });
+      }
+      if (winSupply.lost > 0) {
+        supplyRewardLogs.push({
+          id: `log_supply_win_lost_${Date.now()}_${extraTurnCounter}`,
+          round: battle.round,
+          actorName: 'SYSTEM',
+          tag: 'SYSTEM' as const,
+          templateKey: 'log.supplyDropLost' as const,
+          params: {
+            templateId: winSupply.templateId,
+            lost: winSupply.lost,
+            cap: SUPPLY_STACK_CAP,
+          },
+        });
+      }
+    }
+
+    const bonusMissionCompleted =
+      baseConseq.bonusMissionCredits > 0 ||
+      baseConseq.bonusMissionWarPoints > 0 ||
+      Boolean(
+        kindRule.completesBonusMissionOnWin &&
+          state.pilot.activeBonusMission &&
+          !state.pilot.activeBonusMission.completed &&
+          state.pilot.activeBonusMission.targetSectorId === battle.sectorId &&
+          !baseConseq.pilot.activeBonusMission
+      );
+    if (bonusMissionCompleted) {
+      const missionSupply = applySupplyRewardGrant(
+        pilotAfterSupplyRewards,
+        state.adminConfig,
+        'mission',
+        Math.random
+      );
+      pilotAfterSupplyRewards = missionSupply.pilot;
+      if (
+        missionSupply.templateId &&
+        (missionSupply.added > 0 || missionSupply.lost > 0)
+      ) {
+        missionSupplyDrop = {
+          templateId: missionSupply.templateId,
+          qty: missionSupply.added,
+          ...(missionSupply.lost > 0 ? { lostQty: missionSupply.lost } : {}),
+        };
+        if (missionSupply.added > 0) {
+          supplyRewardLogs.push({
+            id: `log_supply_mission_${Date.now()}_${extraTurnCounter}`,
+            round: battle.round,
+            actorName: 'SYSTEM',
+            tag: 'SYSTEM' as const,
+            templateKey: 'log.supplyDrop' as const,
+            params: {
+              templateId: missionSupply.templateId,
+              qty: missionSupply.added,
+            },
+          });
+        }
+        if (missionSupply.lost > 0) {
+          supplyRewardLogs.push({
+            id: `log_supply_mission_lost_${Date.now()}_${extraTurnCounter}`,
+            round: battle.round,
+            actorName: 'SYSTEM',
+            tag: 'SYSTEM' as const,
+            templateKey: 'log.supplyDropLost' as const,
+            params: {
+              templateId: missionSupply.templateId,
+              lost: missionSupply.lost,
+              cap: SUPPLY_STACK_CAP,
+            },
+          });
+        }
+      }
+    }
+  }
+  const nextPilot: PilotAccount = pilotAfterSupplyRewards;
   const unlockedSectorId =
     nextUnlockedSectors.find(
       (id) => !state.pilot.unlockedSectorIds.includes(id)
@@ -1070,7 +1198,8 @@ function finalizeBattleOutcome(
   // Update Auto-Repeat batch session if active (or stopped manually during current run)
   let nextAutoRepeat = state.autoRepeatSession;
   let nextAutoRepeatToast: AutoRepeatRunToast | null = null;
-  let finalLog = extraLog;
+  let finalLog =
+    supplyRewardLogs.length > 0 ? [...extraLog, ...supplyRewardLogs] : extraLog;
   if (!won && (repairCheck.free || repairPaid > 0)) {
     finalLog = [
       ...finalLog,
@@ -1162,7 +1291,7 @@ function finalizeBattleOutcome(
         nextAutoRepeatToast = null;
         if (finalReason) {
           finalLog = [
-            ...extraLog,
+            ...finalLog,
             {
               id: `log_repeat_stop_${Date.now()}_${extraTurnCounter}`,
               round: battle.round,
@@ -1255,6 +1384,8 @@ function finalizeBattleOutcome(
         totalEnemies: enemies.length,
         alliesSurviving: aliveAllies.length,
         droppedItems,
+        ...(supplyDrop ? { supplyDrop } : {}),
+        ...(missionSupplyDrop ? { missionSupplyDrop } : {}),
       },
     },
   };
@@ -3575,6 +3706,50 @@ export const useGameStore = create<GameStoreState>()(
           return { ok: true, kind: entry.kind };
         }
 
+        if (entry.kind === 'supply_crate') {
+          const rewardsCfg = sanitizeSupplyRewardsConfig(
+            state.adminConfig.supplyRewards
+          );
+          const maxGearLevel = getPilotMaxGearLevel(state.pilot);
+          const rolledList = rollSupplyCrateContents(
+            maxGearLevel,
+            {
+              ...rewardsCfg.crate,
+              minTier: rewardsCfg.minTier,
+              maxTier: rewardsCfg.maxTier,
+            },
+            Math.random
+          );
+          let workingConsumables = nextConsumables;
+          const openedSupplies: Array<{
+            templateId: string;
+            qty: number;
+            lost?: number;
+          }> = [];
+          for (const item of rolledList) {
+            const addRes = addSupplyWithOverflow(
+              workingConsumables,
+              item.templateId,
+              item.qty
+            );
+            workingConsumables = addRes.consumables;
+            openedSupplies.push({
+              templateId: item.templateId,
+              qty: addRes.added,
+              ...(addRes.lost > 0 ? { lost: addRes.lost } : {}),
+            });
+          }
+          soundFx.playVictory();
+          set({
+            pilot: {
+              ...state.pilot,
+              consumables: workingConsumables,
+            },
+            hasSaveData: true,
+          });
+          return { ok: true, kind: entry.kind, openedSupplies };
+        }
+
         return { ok: false };
       },
 
@@ -5742,6 +5917,96 @@ export const useGameStore = create<GameStoreState>()(
         };
       },
 
+      adminGiveSupply: (target, qty) => {
+        const safeQty = Math.max(
+          1,
+          Math.min(SUPPLY_STACK_CAP, Math.round(Number.isFinite(qty) ? qty : 1))
+        );
+        const state = get();
+        if (target === 'supply_crate') {
+          const res = addSupplyCrateToConsumables(
+            state.pilot.consumables ?? [],
+            safeQty
+          );
+          soundFx.playConfirm();
+          set({
+            pilot: {
+              ...state.pilot,
+              consumables: res.consumables,
+            },
+            hasSaveData: true,
+          });
+          return {
+            ok: true,
+            kind: 'supply_crate',
+            added: res.added,
+            lost: res.lost,
+          };
+        }
+
+        let resolvedTemplateId: string | null = null;
+        if (target === 'random_supply') {
+          const cfg = sanitizeSupplyRewardsConfig(
+            state.adminConfig.supplyRewards
+          );
+          const maxGearLevel = getPilotMaxGearLevel(state.pilot);
+          const rolled =
+            rollSupplyReward(
+              maxGearLevel,
+              {
+                minTier: cfg.minTier,
+                maxTier: cfg.maxTier,
+                qtyMin: safeQty,
+                qtyMax: safeQty,
+              },
+              Math.random
+            ) ??
+            rollSupplyReward(
+              maxGearLevel,
+              {
+                minTier: 1,
+                maxTier: 5,
+                qtyMin: safeQty,
+                qtyMax: safeQty,
+              },
+              Math.random
+            );
+          resolvedTemplateId = rolled?.templateId ?? null;
+        } else if (getSupplyTemplateById(target)) {
+          resolvedTemplateId = target;
+        }
+
+        if (!resolvedTemplateId) {
+          return {
+            ok: false,
+            kind: 'battle_supply',
+            added: 0,
+            lost: 0,
+          };
+        }
+
+        const res = addSupplyWithOverflow(
+          state.pilot.consumables ?? [],
+          resolvedTemplateId,
+          safeQty
+        );
+        soundFx.playConfirm();
+        set({
+          pilot: {
+            ...state.pilot,
+            consumables: res.consumables,
+          },
+          hasSaveData: true,
+        });
+        return {
+          ok: true,
+          kind: 'battle_supply',
+          templateId: resolvedTemplateId,
+          added: res.added,
+          lost: res.lost,
+        };
+      },
+
       adminUpdateConfig: (patch) => {
         set((state) => {
           const nextFormation = patch.formation
@@ -5926,6 +6191,10 @@ export const useGameStore = create<GameStoreState>()(
             turnPhase: nextTurnPhase,
             prestage: nextPrestage,
             stealth: nextStealth,
+            supplyRewards:
+              patch.supplyRewards !== undefined
+                ? sanitizeSupplyRewardsConfig(patch.supplyRewards)
+                : sanitizeSupplyRewardsConfig(state.adminConfig.supplyRewards),
           };
           let updatedPilot =
             patch.formation &&

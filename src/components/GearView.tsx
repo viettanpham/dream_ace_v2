@@ -27,12 +27,15 @@ import {
   MECH_CLASS_LIST,
   STAT_KEYS,
 } from '../data/classes';
+import { getSupplyTemplateById } from '../data/consumables';
+import { getCatalogRow } from '../data/iconCatalog';
 import {
   ENCHANT_CONFIG,
   EQUIPMENT_SLOTS,
   EQUIPMENT_SLOT_META,
   ITEM_SLOTS,
   RARITY_META,
+  SHOP_CONFIG,
 } from '../data/items';
 import {
   getEffectiveItemStats,
@@ -45,6 +48,7 @@ import {
   sumGearSpecialTraits,
   validateEquipOnGear,
 } from '../engine/equipment';
+import { computeSupplyPrice } from '../engine/itemPrice';
 import {
   countActiveInventoryFilters,
   filterAndSortInventory,
@@ -57,6 +61,7 @@ import {
   calculateEffectiveStats,
   calculateGearPowerRating,
 } from '../engine/stats';
+import { sanitizeSupplyLoadoutSlots } from '../engine/supplies';
 import {
   formatEquipValidationReason,
   formatItemTraitsList,
@@ -83,11 +88,13 @@ import type {
   ItemRarity,
   PaperDollSlot,
   StatBlock,
+  SupplyTemplate,
 } from '../types/game';
 import { soundFx } from '../utils/sound';
 import { AutoEquipModal } from './AutoEquipModal';
 import { Notice } from './Notice';
 import { BottomSheet } from './BottomSheet';
+import { CatalogIcon } from './CatalogIcon';
 import { FighterSvg } from './FighterSvg';
 import { ClassIcon, ConsumableIcon, SlotIcon } from './GameIcons';
 import {
@@ -100,7 +107,12 @@ import {
 import { GearSwapPicker } from './GearSwapPicker';
 import { GearSocketRow, ModuleSocketList } from './ModuleSocketList';
 import { QuickSellModal } from './QuickSellModal';
-import { SupplyLoadoutBar } from './SupplyLoadoutBar';
+import {
+  formatSupplyEffectSummary,
+  getSupplyName,
+  SupplyLoadoutBar,
+} from './SupplyLoadoutBar';
+import { SupplyTradeConfirm } from './SupplyTradeConfirm';
 
 type GearSelection =
   | { kind: 'slot'; slot: PaperDollSlot }
@@ -188,6 +200,10 @@ export function GearView() {
   const undoAutoEquip = useGameStore((s) => s.undoAutoEquip);
   const clearAutoEquipUndo = useGameStore((s) => s.clearAutoEquipUndo);
   const useConsumable = useGameStore((s) => s.useConsumable);
+  const setSupplyLoadout = useGameStore((s) => s.setSupplyLoadout);
+  const sellSupply = useGameStore((s) => s.sellSupply);
+  const [pendingSellSupply, setPendingSellSupply] =
+    useState<SupplyTemplate | null>(null);
 
   const [selection, setSelection] = useState<GearSelection>(null);
   const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
@@ -674,13 +690,41 @@ export function GearView() {
 
   const handleUseConsumable = (c: ConsumableItem) => {
     const res = useConsumable(c.id);
-    if (!res.ok) return;
+    if (!res.ok) {
+      setInventoryNotice(t('inv.consumableUseFailed'));
+      return;
+    }
     if (res.kind === 'equipment_crate' && res.openedItem) {
       setInventoryNotice(
         t('inv.consumableOpenedFeedback', {
           item: getItemInstanceName(lang, res.openedItem, true),
         })
       );
+    } else if (res.kind === 'supply_crate') {
+      const entries = res.openedSupplies ?? [];
+      const gotParts = entries
+        .filter((e) => e.qty > 0)
+        .map((e) => `${getSupplyName(e.templateId, t)} x${e.qty}`);
+      const lostParts = entries
+        .filter((e) => (e.lost ?? 0) > 0)
+        .map((e) => `${getSupplyName(e.templateId, t)} x${e.lost}`);
+      if (gotParts.length === 0 && lostParts.length === 0) {
+        setInventoryNotice(t('inv.consumableSupplyCrateEmpty'));
+      } else {
+        const base =
+          gotParts.length > 0
+            ? t('inv.consumableSupplyCrateFeedback', {
+                items: gotParts.join(', '),
+              })
+            : t('inv.consumableSupplyCrateFeedback', { items: '0' });
+        const lostSuffix =
+          lostParts.length > 0
+            ? t('inv.consumableSupplyCrateLostPart', {
+                lostItems: lostParts.join(', '),
+              })
+            : '';
+        setInventoryNotice(`${base}${lostSuffix}`);
+      }
     } else if (res.kind === 'enchant_stone') {
       setInventoryNotice(
         t('inv.consumableEnchantFeedback', { pct: c.bonusPct ?? 20 })
@@ -696,6 +740,35 @@ export function GearView() {
         t('inv.consumableExpFeedback', { battles: c.battlesCount ?? 5 })
       );
     }
+  };
+
+  const handleAddSupplyToBag = (tpl: SupplyTemplate) => {
+    const current = activeGear.supplyLoadout ?? [];
+    const maxSlots = sanitizeSupplyLoadoutSlots(adminConfig.supplyLoadoutSlots);
+    if (current.length >= maxSlots) {
+      setInventoryNotice(t('inv.supplyBagFullNotice', { max: maxSlots }));
+      return;
+    }
+    const res = setSupplyLoadout(activeGear.classId, [...current, tpl.id]);
+    if (res.reason === 'locked') {
+      setInventoryNotice(t('supply.lockedHint'));
+      return;
+    }
+    if (res.rejected.some((r) => r.reason === 'over_slots')) {
+      setInventoryNotice(t('inv.supplyBagFullNotice', { max: maxSlots }));
+      return;
+    }
+    if (res.rejected.some((r) => r.reason === 'family_duplicate')) {
+      setInventoryNotice(t('inv.supplyBagDuplicateFamilyNotice'));
+      return;
+    }
+    if (!res.ok || res.rejected.length > 0) {
+      setInventoryNotice(t('inv.consumableUseFailed'));
+      return;
+    }
+    setInventoryNotice(
+      t('inv.supplyAddedToBagNotice', { name: getSupplyName(tpl.id, t) })
+    );
   };
 
   const toggleRarityFilter = (rarity: ItemRarity) => {
@@ -2665,14 +2738,107 @@ export function GearView() {
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-[380px] overflow-y-auto pr-1 tactical-scroll">
                   {consumablesList.map((c) => {
+                    const supplyTpl =
+                      c.kind === 'battle_supply' && c.templateId
+                        ? getSupplyTemplateById(c.templateId)
+                        : undefined;
+                    if (c.kind === 'battle_supply' && supplyTpl) {
+                      const realName = getSupplyName(supplyTpl.id, t);
+                      const effectText = formatSupplyEffectSummary(supplyTpl, t);
+                      const iconRow =
+                        getCatalogRow(
+                          supplyTpl.iconId,
+                          adminConfig.iconCatalogMods
+                        ) ?? null;
+                      const inLoadout = (
+                        activeGear.supplyLoadout ?? []
+                      ).includes(supplyTpl.id);
+
+                      return (
+                        <div
+                          key={c.id}
+                          data-testid={`consumable-supply-${supplyTpl.id}`}
+                          className="rounded-lg border border-sky-500/35 bg-[#080C14] p-3 flex flex-col justify-between gap-2.5 min-w-0"
+                        >
+                          <div className="flex items-start gap-2.5 min-w-0">
+                            <span className="h-9 w-9 rounded border border-sky-400/40 bg-sky-500/15 flex items-center justify-center shrink-0">
+                              <CatalogIcon
+                                row={iconRow}
+                                size="sm"
+                                showBadges={false}
+                                showArrowBadge={false}
+                              />
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-xs font-bold text-slate-100 truncate">
+                                  {realName}
+                                </span>
+                                <span className="font-mono-nums text-xs font-bold text-sky-300 shrink-0">
+                                  {t('inv.consumableQty', { qty: c.quantity })}
+                                </span>
+                              </div>
+                              <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                                <span className="text-[10px] font-mono-nums px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 shrink-0">
+                                  T{supplyTpl.tier}
+                                </span>
+                                <span className="text-[11px] text-emerald-300 truncate">
+                                  {effectText}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {inLoadout ? (
+                              <span
+                                data-testid={`supply-in-bag-${supplyTpl.id}`}
+                                className="min-h-[36px] flex-1 px-2.5 rounded border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 text-xs font-semibold inline-flex items-center justify-center"
+                              >
+                                {t('inv.supplyInBagLabel')}
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                data-testid={`supply-add-bag-${supplyTpl.id}`}
+                                onClick={() => handleAddSupplyToBag(supplyTpl)}
+                                className="min-h-[36px] flex-1 px-2.5 rounded bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold cursor-pointer"
+                              >
+                                {t('inv.supplyAddToBagBtn')}
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              data-testid={`supply-sell-one-${supplyTpl.id}`}
+                              onClick={() => setPendingSellSupply(supplyTpl)}
+                              className="min-h-[36px] px-3 rounded border border-amber-500/50 bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 text-xs font-semibold cursor-pointer shrink-0"
+                            >
+                              {t('inv.supplySellOneBtn')}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    }
+
                     const { name, desc } = renderConsumableText(c);
+                    const isSupplyCrate = c.kind === 'supply_crate';
                     return (
                       <div
                         key={c.id}
-                        className="rounded-lg border border-purple-500/35 bg-[#080C14] p-3 flex flex-col justify-between gap-2.5"
+                        className={`rounded-lg border bg-[#080C14] p-3 flex flex-col justify-between gap-2.5 ${
+                          isSupplyCrate
+                            ? 'border-amber-500/35'
+                            : 'border-purple-500/35'
+                        }`}
                       >
                         <div className="flex items-start gap-2.5">
-                          <span className="h-9 w-9 rounded border border-purple-400/40 bg-purple-500/15 text-purple-300 flex items-center justify-center shrink-0">
+                          <span
+                            className={`h-9 w-9 rounded border flex items-center justify-center shrink-0 ${
+                              isSupplyCrate
+                                ? 'border-amber-400/40 bg-amber-500/15 text-amber-300'
+                                : 'border-purple-400/40 bg-purple-500/15 text-purple-300'
+                            }`}
+                          >
                             <ConsumableIcon kind={c.kind} className="w-4 h-4" />
                           </span>
                           <div className="min-w-0 flex-1">
@@ -2680,7 +2846,11 @@ export function GearView() {
                               <span className="text-xs font-bold text-slate-100 truncate">
                                 {name}
                               </span>
-                              <span className="font-mono-nums text-xs font-bold text-purple-300 shrink-0">
+                              <span
+                                className={`font-mono-nums text-xs font-bold shrink-0 ${
+                                  isSupplyCrate ? 'text-amber-300' : 'text-purple-300'
+                                }`}
+                              >
                                 {t('inv.consumableQty', { qty: c.quantity })}
                               </span>
                             </div>
@@ -2694,9 +2864,13 @@ export function GearView() {
                           type="button"
                           data-testid={`use-consumable-${c.kind}`}
                           onClick={() => handleUseConsumable(c)}
-                          className="min-h-[36px] px-3 rounded bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold cursor-pointer"
+                          className={`min-h-[36px] px-3 rounded text-white text-xs font-semibold cursor-pointer ${
+                            isSupplyCrate
+                              ? 'bg-amber-600 hover:bg-amber-500'
+                              : 'bg-purple-600 hover:bg-purple-500'
+                          }`}
                         >
-                          {c.kind === 'equipment_crate'
+                          {c.kind === 'equipment_crate' || c.kind === 'supply_crate'
                             ? t('inv.consumableOpenBtn')
                             : t('inv.consumableUseBtn')}
                         </button>
@@ -3019,6 +3193,43 @@ export function GearView() {
           setSwapPickerSocketIndex(null);
         }}
         onEquipped={(equippedSlot) => { setSelection({ kind: 'slot', slot: equippedSlot }); setConfirmingSellId(null); }}
+      />
+
+      {/* Supply Sell Confirmation */}
+      <SupplyTradeConfirm
+        mode="sell"
+        currency="CR"
+        template={pendingSellSupply}
+        voucher={null}
+        qty={1}
+        unitPrice={
+          pendingSellSupply
+            ? Math.round(
+                computeSupplyPrice(pendingSellSupply, adminConfig) *
+                  SHOP_CONFIG.sellPriceRatio
+              )
+            : 0
+        }
+        credits={pilot.credits}
+        iconCatalogMods={adminConfig.iconCatalogMods}
+        onConfirm={() => {
+          const tpl = pendingSellSupply;
+          setPendingSellSupply(null);
+          if (!tpl) return;
+          const res = sellSupply(tpl.id, 1);
+          if (res.ok && res.sold > 0) {
+            setInventoryNotice(
+              t('shop.supplySellNotice', {
+                qty: res.sold,
+                name: getSupplyName(tpl.id, t),
+                credits: res.creditsEarned.toLocaleString(),
+              })
+            );
+          } else {
+            setInventoryNotice(t('shop.supplySellFailed'));
+          }
+        }}
+        onCancel={() => setPendingSellSupply(null)}
       />
     </div>
   );
