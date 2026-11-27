@@ -93,7 +93,7 @@ export const ENEMY_ARCHETYPE_DEFS: Record<
     shieldMult: 1.3,
     attackMult: 1.05,
     speedMult: 0.82,
-    inflictsStatus: 'shield_break',
+    inflictsStatus: 'shield_cracked',
     statusChance: 0.45,
   },
   sniper: {

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
   ArrowDown,
@@ -12,15 +12,26 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { BALANCE_CONFIG } from '../data/balance';
+import {
+  BALANCE_CONFIG,
+  getUnlockedActiveSlots,
+} from '../data/balance';
 import { getSkillById } from '../data/skills';
 import { getSkillsForClass } from '../engine/skills';
 import {
   createDefaultSimpleTactics,
+  MAX_PRIORITY_SKILLS,
   TACTICS_BUFF_OPTIONS,
   TACTICS_CONDITION_KINDS,
   TACTICS_TARGET_SELECTORS,
 } from '../engine/tactics';
+import { sanitizeLidarAutoConfig } from '../engine/lidarAuto';
+import { sanitizeFluxAutoConfig } from '../engine/fluxAuto';
+import {
+  AUTO_SUPPLIES_MAX_PCT,
+  AUTO_SUPPLIES_MIN_PCT,
+  sanitizeAutoSuppliesConfig,
+} from '../engine/supplyAi';
 import {
   formatSimpleTacticsSummary,
   formatTacticsRuleSentence,
@@ -121,8 +132,11 @@ function defaultNumberForCondition(kind: TacticsConditionKind): number {
   }
 }
 
-function defaultTargetForSkill(skillId: string): TacticsTargetSelector {
-  const sk = getSkillById(skillId);
+function defaultTargetForSkill(
+  skillId: string,
+  skillMods?: Parameters<typeof getSkillById>[1]
+): TacticsTargetSelector {
+  const sk = getSkillById(skillId, skillMods);
   if (!sk) return 'lowest_hp_enemy';
   switch (sk.targetType) {
     case 'self':
@@ -140,6 +154,8 @@ export function AutoTacticsModal() {
   const { lang, t } = useI18n();
   const open = useGameStore((s) => s.tacticsModalOpen);
   const pilot = useGameStore((s) => s.pilot);
+  const skillMods = useGameStore((s) => s.adminConfig.skillMods);
+  const activeSlotsConfig = useGameStore((s) => s.adminConfig.activeSlots);
   const setTacticsModalOpen = useGameStore((s) => s.setTacticsModalOpen);
   const loadTacticsPreset = useGameStore((s) => s.loadTacticsPreset);
   const addTacticsRule = useGameStore((s) => s.addTacticsRule);
@@ -162,44 +178,153 @@ export function AutoTacticsModal() {
 
   // Strictly class-allowed active skills (bar skills listed first)
   const allowedActiveSkills = useMemo(() => {
-    const all = getSkillsForClass(activeGear.classId).filter(
+    const all = getSkillsForClass(activeGear.classId, skillMods).filter(
       (s) => s.category !== 'passive'
     );
     const barSet = new Set(activeGear.equippedSkillBar);
     const onBar = activeGear.equippedSkillBar
-      .map((id) => getSkillById(id))
+      .map((id) => getSkillById(id, skillMods))
       .filter((s): s is NonNullable<typeof s> => Boolean(s));
     const others = all.filter((s) => !barSet.has(s.id));
     return [...onBar, ...others];
-  }, [activeGear.classId, activeGear.equippedSkillBar]);
+  }, [activeGear.classId, activeGear.equippedSkillBar, skillMods]);
 
   const equippedBarSkills = useMemo(() => {
     return activeGear.equippedSkillBar
-      .map((id) => getSkillById(id))
+      .map((id) => getSkillById(id, skillMods))
       .filter((s): s is NonNullable<typeof s> => Boolean(s));
-  }, [activeGear.equippedSkillBar]);
+  }, [activeGear.equippedSkillBar, skillMods]);
+
+  const maxPrioritySlots = getUnlockedActiveSlots(
+    activeGear.level,
+    activeSlotsConfig
+  );
+  const simpleConfig =
+    activeGear.tactics.simple ??
+    createDefaultSimpleTactics(
+      activeGear.classId,
+      activeGear.equippedSkillBar,
+      maxPrioritySlots
+    );
+  const lidarCfg = sanitizeLidarAutoConfig(simpleConfig.lidarAuto);
+  const fluxCfg = sanitizeFluxAutoConfig(simpleConfig.fluxAuto);
+  const suppliesCfg = sanitizeAutoSuppliesConfig(simpleConfig.autoSupplies);
+
+  const [fluxAllyDraft, setFluxAllyDraft] = useState<string>(() =>
+    String(fluxCfg.allySpBelowPct)
+  );
+  const [fluxKeepDraft, setFluxKeepDraft] = useState<string>(() =>
+    String(fluxCfg.keepSelfPct)
+  );
+  const [supHpDraft, setSupHpDraft] = useState<string>(() =>
+    String(suppliesCfg.hpBelowPct)
+  );
+  const [supShieldDraft, setSupShieldDraft] = useState<string>(() =>
+    String(suppliesCfg.shieldBelowPct)
+  );
+  const [supSpDraft, setSupSpDraft] = useState<string>(() =>
+    String(suppliesCfg.spBelowPct)
+  );
+
+  useEffect(() => {
+    setFluxAllyDraft(String(fluxCfg.allySpBelowPct));
+  }, [fluxCfg.allySpBelowPct, open]);
+
+  useEffect(() => {
+    setFluxKeepDraft(String(fluxCfg.keepSelfPct));
+  }, [fluxCfg.keepSelfPct, open]);
+
+  useEffect(() => {
+    setSupHpDraft(String(suppliesCfg.hpBelowPct));
+  }, [suppliesCfg.hpBelowPct, open]);
+
+  useEffect(() => {
+    setSupShieldDraft(String(suppliesCfg.shieldBelowPct));
+  }, [suppliesCfg.shieldBelowPct, open]);
+
+  useEffect(() => {
+    setSupSpDraft(String(suppliesCfg.spBelowPct));
+  }, [suppliesCfg.spBelowPct, open]);
 
   if (!open) return null;
 
   const { rules, safety } = activeGear.tactics;
   const isCustomMode = activeGear.tactics.mode === 'custom';
-  const simpleConfig =
-    activeGear.tactics.simple ??
-    createDefaultSimpleTactics(
-      activeGear.classId,
-      activeGear.equippedSkillBar
-    );
   const maxRules = BALANCE_CONFIG.maxTacticsRules;
+
+  const parseFluxPctDraft = (raw: string): number | null => {
+    const trimmed = raw.trim();
+    if (trimmed === '') return null;
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed) || parsed < 0 || parsed > 100) return null;
+    return Math.round(parsed);
+  };
+
+  const commitFluxAllyPct = () => {
+    const next = parseFluxPctDraft(fluxAllyDraft);
+    if (next === null) {
+      setFluxAllyDraft(String(fluxCfg.allySpBelowPct));
+      return;
+    }
+    setFluxAllyDraft(String(next));
+    applySimpleTactics({
+      fluxAuto: {
+        ...fluxCfg,
+        allySpBelowPct: next,
+      },
+    });
+  };
+
+  const commitFluxKeepPct = () => {
+    const next = parseFluxPctDraft(fluxKeepDraft);
+    if (next === null) {
+      setFluxKeepDraft(String(fluxCfg.keepSelfPct));
+      return;
+    }
+    setFluxKeepDraft(String(next));
+    applySimpleTactics({
+      fluxAuto: {
+        ...fluxCfg,
+        keepSelfPct: next,
+      },
+    });
+  };
+
+  const commitSupplyPct = (
+    field: 'hpBelowPct' | 'shieldBelowPct' | 'spBelowPct',
+    draft: string,
+    setDraft: (v: string) => void
+  ) => {
+    const trimmed = draft.trim();
+    const parsed = Number(trimmed);
+    if (
+      trimmed === '' ||
+      !Number.isFinite(parsed) ||
+      parsed < AUTO_SUPPLIES_MIN_PCT ||
+      parsed > AUTO_SUPPLIES_MAX_PCT
+    ) {
+      setDraft(String(suppliesCfg[field]));
+      return;
+    }
+    const next = Math.round(parsed);
+    setDraft(String(next));
+    applySimpleTactics({
+      autoSupplies: {
+        ...suppliesCfg,
+        [field]: next,
+      },
+    });
+  };
 
   const handleTogglePrioritySkill = (skillId: string) => {
     const cur = [...simpleConfig.prioritySkillIds];
     const existingIdx = cur.indexOf(skillId);
     if (existingIdx >= 0) {
       cur.splice(existingIdx, 1);
-    } else if (cur.length < 3) {
+    } else if (cur.length < maxPrioritySlots) {
       cur.push(skillId);
     } else {
-      cur[2] = skillId;
+      cur[cur.length - 1] = skillId;
     }
     applySimpleTactics({ prioritySkillIds: cur });
   };
@@ -253,7 +378,7 @@ export function AutoTacticsModal() {
       const skillId = rawVal.slice('skill:'.length);
       updateTacticsRule(rule.id, {
         action: { type: 'skill', skillId },
-        targetSelector: defaultTargetForSkill(skillId),
+        targetSelector: defaultTargetForSkill(skillId, skillMods),
       });
     }
   };
@@ -285,7 +410,10 @@ export function AutoTacticsModal() {
     }
   };
 
-  const priorityRankLabels = ['A', 'B', 'C'];
+  const priorityRankLabels = Array.from(
+    { length: Math.max(maxPrioritySlots, simpleConfig.prioritySkillIds.length) },
+    (_, i) => String.fromCharCode(65 + i)
+  );
 
   return (
     <div
@@ -581,7 +709,7 @@ export function AutoTacticsModal() {
             <div className="rounded-lg border border-slate-800 bg-[#090E18] p-3.5 space-y-2.5">
               <div>
                 <div className="text-sm font-semibold text-slate-100">
-                  {t('auto.simple.priorityLabel')}
+                  {t('auto.simple.priorityLabel', { max: maxPrioritySlots })}
                 </div>
                 <p className="text-xs text-slate-400 mt-0.5">
                   {t('auto.simple.priorityHelp')}
@@ -596,7 +724,7 @@ export function AutoTacticsModal() {
               ) : (
                 <div className="flex flex-wrap items-center gap-2">
                   {simpleConfig.prioritySkillIds.map((sid, idx) => {
-                    const sk = getSkillById(sid);
+                    const sk = getSkillById(sid, skillMods);
                     if (!sk) return null;
                     return (
                       <div
@@ -611,7 +739,7 @@ export function AutoTacticsModal() {
                           className="w-3.5 h-3.5 text-emerald-300 shrink-0"
                         />
                         <span className="font-semibold text-slate-100">
-                          {getSkillName(lang, sid)}
+                          {getSkillName(sk, lang)}
                         </span>
                         {idx > 0 && (
                           <button
@@ -674,7 +802,7 @@ export function AutoTacticsModal() {
                             className="w-3.5 h-3.5 shrink-0"
                           />
                           <span className="text-xs font-medium truncate">
-                            {getSkillName(lang, sk.id)}
+                            {getSkillName(sk, lang)}
                           </span>
                         </div>
                         {picked ? (
@@ -691,6 +819,340 @@ export function AutoTacticsModal() {
                   })}
                 </div>
               )}
+            </div>
+
+            {/* Control 6: Auto Lidar */}
+            <div
+              data-testid="auto-lidar-section"
+              className="rounded-lg border border-slate-800 bg-[#090E18] p-3.5 space-y-2.5"
+            >
+              <div className="flex items-center justify-between gap-2 min-w-0">
+                <span className="text-sm font-semibold text-slate-100 truncate">
+                  {t('auto.simple.lidarLabel')}
+                </span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={lidarCfg.enabled}
+                  aria-label={t('auto.simple.lidarLabel')}
+                  data-testid="auto-lidar-toggle"
+                  onClick={() =>
+                    applySimpleTactics({
+                      lidarAuto: {
+                        ...lidarCfg,
+                        enabled: !lidarCfg.enabled,
+                      },
+                    })
+                  }
+                  className={`min-h-[36px] min-w-[52px] px-2.5 rounded-lg border text-xs font-semibold transition-colors cursor-pointer shrink-0 ${
+                    lidarCfg.enabled
+                      ? 'border-emerald-400 bg-emerald-500/25 text-emerald-200'
+                      : 'border-slate-700 bg-slate-900 text-slate-400'
+                  }`}
+                >
+                  {lidarCfg.enabled ? 'ON' : 'OFF'}
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-1.5">
+                {(['smart', 'fixed'] as const).map((mode) => {
+                  const active = lidarCfg.mode === mode;
+                  const labelKey =
+                    mode === 'smart'
+                      ? 'auto.simple.lidarModeSmart'
+                      : 'auto.simple.lidarModeFixed';
+                  return (
+                    <button
+                      key={mode}
+                      type="button"
+                      data-testid={`auto-lidar-mode-${mode}`}
+                      onClick={() =>
+                        applySimpleTactics({
+                          lidarAuto: {
+                            ...lidarCfg,
+                            mode,
+                          },
+                        })
+                      }
+                      className={`min-h-[40px] px-3 py-1.5 rounded border text-xs font-medium transition-colors cursor-pointer ${
+                        active
+                          ? 'border-cyan-400 bg-cyan-500/20 text-cyan-100 font-semibold'
+                          : 'border-slate-700/90 bg-slate-950/70 hover:border-slate-600 text-slate-300'
+                      }`}
+                    >
+                      {t(labelKey)}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {lidarCfg.mode === 'fixed' && (
+                <label className="flex items-center justify-between gap-2 min-w-0 pt-0.5">
+                  <span className="text-xs text-slate-300 shrink-0">
+                    {t('auto.simple.lidarMinSpLabel')}
+                  </span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <input
+                      type="number"
+                      data-testid="auto-lidar-min-sp-input"
+                      min={0}
+                      max={100}
+                      step={5}
+                      value={lidarCfg.minSpPct}
+                      onChange={(e) =>
+                        applySimpleTactics({
+                          lidarAuto: {
+                            ...lidarCfg,
+                            minSpPct: Math.max(
+                              0,
+                              Math.min(
+                                100,
+                                Math.round(Number(e.target.value) || 0)
+                              )
+                            ),
+                          },
+                        })
+                      }
+                      className="w-20 h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums text-slate-100 text-right"
+                    />
+                    <span className="text-xs font-mono-nums text-slate-400">
+                      %
+                    </span>
+                  </div>
+                </label>
+              )}
+            </div>
+
+            {/* Control 7: Auto Flux Transfer (Support only) */}
+            {activeGear.classId === 'support' && (
+              <div
+                data-testid="auto-flux-section"
+                className="rounded-lg border border-slate-800 bg-[#090E18] p-3.5 space-y-2.5"
+              >
+                <div className="flex items-center justify-between gap-2 min-w-0">
+                  <span className="text-sm font-semibold text-slate-100 truncate">
+                    {t('auto.simple.fluxLabel')}
+                  </span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={fluxCfg.enabled}
+                    aria-label={t('auto.simple.fluxLabel')}
+                    data-testid="auto-flux-toggle"
+                    onClick={() =>
+                      applySimpleTactics({
+                        fluxAuto: {
+                          ...fluxCfg,
+                          enabled: !fluxCfg.enabled,
+                        },
+                      })
+                    }
+                    className={`min-h-[36px] min-w-[52px] px-2.5 rounded-lg border text-xs font-semibold transition-colors cursor-pointer shrink-0 ${
+                      fluxCfg.enabled
+                        ? 'border-emerald-400 bg-emerald-500/25 text-emerald-200'
+                        : 'border-slate-700 bg-slate-900 text-slate-400'
+                    }`}
+                  >
+                    {fluxCfg.enabled ? 'ON' : 'OFF'}
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-1.5">
+                  {(['smart', 'fixed'] as const).map((mode) => {
+                    const active = fluxCfg.mode === mode;
+                    const labelKey =
+                      mode === 'smart'
+                        ? 'auto.simple.fluxModeSmart'
+                        : 'auto.simple.fluxModeFixed';
+                    return (
+                      <button
+                        key={mode}
+                        type="button"
+                        data-testid={`auto-flux-mode-${mode}`}
+                        onClick={() =>
+                          applySimpleTactics({
+                            fluxAuto: {
+                              ...fluxCfg,
+                              mode,
+                            },
+                          })
+                        }
+                        className={`min-h-[40px] px-3 py-1.5 rounded border text-xs font-medium transition-colors cursor-pointer ${
+                          active
+                            ? 'border-cyan-400 bg-cyan-500/20 text-cyan-100 font-semibold'
+                            : 'border-slate-700/90 bg-slate-950/70 hover:border-slate-600 text-slate-300'
+                        }`}
+                      >
+                        {t(labelKey)}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {fluxCfg.mode === 'smart' && (
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    {t('auto.simple.fluxSmartDesc')}
+                  </p>
+                )}
+
+                {fluxCfg.enabled && fluxCfg.mode === 'fixed' && (
+                  <div className="space-y-2 pt-0.5">
+                    <label className="flex items-center justify-between gap-2 min-w-0">
+                      <span className="text-xs text-slate-300 leading-snug min-w-0 flex-1">
+                        {t('auto.simple.fluxAllySpLabel')}
+                      </span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <input
+                          type="number"
+                          data-testid="auto-flux-ally-sp-input"
+                          min={0}
+                          max={100}
+                          value={fluxAllyDraft}
+                          onChange={(e) => setFluxAllyDraft(e.target.value)}
+                          onBlur={commitFluxAllyPct}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              commitFluxAllyPct();
+                            }
+                          }}
+                          className="w-16 sm:w-20 h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums text-slate-100 text-right"
+                        />
+                        <span className="text-xs font-mono-nums text-slate-400 whitespace-nowrap">
+                          % SP
+                        </span>
+                      </div>
+                    </label>
+
+                    <label className="flex items-center justify-between gap-2 min-w-0">
+                      <span className="text-xs text-slate-300 leading-snug min-w-0 flex-1">
+                        {t('auto.simple.fluxKeepSelfPrefix')}
+                      </span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <input
+                          type="number"
+                          data-testid="auto-flux-keep-self-input"
+                          min={0}
+                          max={100}
+                          value={fluxKeepDraft}
+                          onChange={(e) => setFluxKeepDraft(e.target.value)}
+                          onBlur={commitFluxKeepPct}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              commitFluxKeepPct();
+                            }
+                          }}
+                          className="w-16 sm:w-20 h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums text-slate-100 text-right"
+                        />
+                        <span className="text-xs font-mono-nums text-slate-400 whitespace-nowrap">
+                          {t('auto.simple.fluxKeepSelfSuffix')}
+                        </span>
+                      </div>
+                    </label>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Control 8: Auto-use Supplies */}
+            <div
+              data-testid="auto-supplies-section"
+              className="rounded-lg border border-slate-800 bg-[#090E18] p-3.5 space-y-2.5"
+            >
+              <div className="flex items-center justify-between gap-2 min-w-0">
+                <span className="text-sm font-semibold text-slate-100 truncate">
+                  {t('auto.simple.suppliesLabel')}
+                </span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={suppliesCfg.enabled}
+                  aria-label={t('auto.simple.suppliesLabel')}
+                  data-testid="auto-supplies-toggle"
+                  onClick={() =>
+                    applySimpleTactics({
+                      autoSupplies: {
+                        ...suppliesCfg,
+                        enabled: !suppliesCfg.enabled,
+                      },
+                    })
+                  }
+                  className={`min-h-[36px] min-w-[52px] px-2.5 rounded-lg border text-xs font-semibold transition-colors cursor-pointer shrink-0 ${
+                    suppliesCfg.enabled
+                      ? 'border-emerald-400 bg-emerald-500/25 text-emerald-200'
+                      : 'border-slate-700 bg-slate-900 text-slate-400'
+                  }`}
+                >
+                  {suppliesCfg.enabled ? 'ON' : 'OFF'}
+                </button>
+              </div>
+
+              {suppliesCfg.enabled && (
+                <div className="space-y-2 pt-0.5">
+                  {(
+                    [
+                      {
+                        field: 'hpBelowPct' as const,
+                        testId: 'auto-supplies-hp-input',
+                        labelKey: 'auto.simple.suppliesHpLabel',
+                        draft: supHpDraft,
+                        setDraft: setSupHpDraft,
+                      },
+                      {
+                        field: 'shieldBelowPct' as const,
+                        testId: 'auto-supplies-shield-input',
+                        labelKey: 'auto.simple.suppliesShieldLabel',
+                        draft: supShieldDraft,
+                        setDraft: setSupShieldDraft,
+                      },
+                      {
+                        field: 'spBelowPct' as const,
+                        testId: 'auto-supplies-sp-input',
+                        labelKey: 'auto.simple.suppliesSpLabel',
+                        draft: supSpDraft,
+                        setDraft: setSupSpDraft,
+                      },
+                    ] as const
+                  ).map((row) => (
+                    <label
+                      key={row.field}
+                      className="flex items-center justify-between gap-2 min-w-0"
+                    >
+                      <span className="text-xs text-slate-300 leading-snug min-w-0 flex-1 truncate">
+                        {t(row.labelKey)}
+                      </span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <input
+                          type="number"
+                          data-testid={row.testId}
+                          min={AUTO_SUPPLIES_MIN_PCT}
+                          max={AUTO_SUPPLIES_MAX_PCT}
+                          value={row.draft}
+                          onChange={(e) => row.setDraft(e.target.value)}
+                          onBlur={() =>
+                            commitSupplyPct(row.field, row.draft, row.setDraft)
+                          }
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              commitSupplyPct(row.field, row.draft, row.setDraft);
+                            }
+                          }}
+                          className="w-16 sm:w-20 h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums text-slate-100 text-right"
+                        />
+                        <span className="text-xs font-mono-nums text-slate-400">
+                          %
+                        </span>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              )}
+
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                {t('auto.simple.suppliesHelp')}
+              </p>
             </div>
           </div>
         ) : (
@@ -933,7 +1395,7 @@ export function AutoTacticsModal() {
                               >
                                 {allowedActiveSkills.map((sk) => (
                                   <option key={sk.id} value={sk.id}>
-                                    {getSkillName(lang, sk.id)}
+                                    {getSkillName(sk, lang)}
                                   </option>
                                 ))}
                               </select>
@@ -963,7 +1425,7 @@ export function AutoTacticsModal() {
                                   activeGear.equippedSkillBar.includes(sk.id);
                                 return (
                                   <option key={sk.id} value={`skill:${sk.id}`}>
-                                    {getSkillName(lang, sk.id)} ({sk.spCost} SP)
+                                    {getSkillName(sk, lang)} ({sk.spCost} SP)
                                     {onBar ? '' : ` ${t('auto.notOnBar')}`}
                                   </option>
                                 );

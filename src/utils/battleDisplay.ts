@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { FORMATION_ROWS } from '../data/formationConfig';
+import { getStatusEntry, isDebuffType } from '../data/statusEffects';
 import {
   buildTurnQueue,
   getValidEnemyTargets,
@@ -81,7 +82,10 @@ export const RADAR_MIN_HIT_AREA_PX = 44;
 export const SPEECH_BUBBLE_MAX_CHARS = 28;
 export const SPEECH_BUBBLE_DURATION_MS = 1500;
 export const RADAR_RING_MIN_MARKER_RADIUS = 17;
+export const RADAR_SP_RING_MIN_MARKER_RADIUS = 30;
 export const RADAR_RING_DEFAULT_STROKE_WIDTH = 3;
+export const RADAR_SPLIT_RING_STROKE_WIDTH = 4;
+export const RADAR_SP_RING_STROKE_WIDTH = 2;
 export const RADAR_LOW_HP_THRESHOLD = 0.25;
 export const RADAR_STATUS_MAX_VISIBLE = 3;
 export const QUEUE_VISIBLE_ROWS = 5;
@@ -158,8 +162,15 @@ export function getTurnQueueSidebarListHeightPx(rowCount: number): number {
   );
 }
 
-export function getTurnQueueSidebarTotalHeightPx(rowCount: number): number {
+export function getTurnQueueSidebarTotalHeightPx(
+  rowCount: number,
+  hideActingRow = false
+): number {
   const listPx = getTurnQueueSidebarListHeightPx(rowCount);
+  const actingRowOverheadPx = hideActingRow
+    ? 0
+    : TURN_QUEUE_SIDEBAR_HEIGHTS.outerGapPx +
+      TURN_QUEUE_SIDEBAR_HEIGHTS.actingRowPx;
   const nextSectionOverheadPx =
     rowCount > 0
       ? TURN_QUEUE_SIDEBAR_HEIGHTS.outerGapPx +
@@ -170,8 +181,7 @@ export function getTurnQueueSidebarTotalHeightPx(rowCount: number): number {
     TURN_QUEUE_SIDEBAR_HEIGHTS.borderPx +
     TURN_QUEUE_SIDEBAR_HEIGHTS.padYPx +
     TURN_QUEUE_SIDEBAR_HEIGHTS.headerPx +
-    TURN_QUEUE_SIDEBAR_HEIGHTS.outerGapPx +
-    TURN_QUEUE_SIDEBAR_HEIGHTS.actingRowPx +
+    actingRowOverheadPx +
     nextSectionOverheadPx +
     listPx
   );
@@ -731,12 +741,17 @@ export interface RadarRingArcSpec {
   max: number;
   ratio: number;
   circumference: number;
+  sweepFraction: number;
+  arcLength: number;
   filledLength: number;
   strokeDasharray: string;
   strokeDashoffset: string;
+  trackDasharray: string;
+  transform: string;
   color: string;
   trackColor: string;
   isLowHp: boolean;
+  hasCapacity: boolean;
   tickY: number;
 }
 
@@ -744,8 +759,12 @@ export interface UnitRingArcsResult {
   hpOnlyMode: boolean;
   isLowHp: boolean;
   outerRadius: number;
+  innerCircleRadius: number;
   innerShapeRadius: number;
+  ringRadius: number;
+  hasShield: boolean;
   arcs: RadarRingArcSpec[];
+  spArc: RadarRingArcSpec | null;
 }
 
 export interface StatusIconLayoutResult {
@@ -774,19 +793,20 @@ export interface UpcomingTurnListResult {
   upcoming: UpcomingTurnItem[];
 }
 
-const DEFAULT_DEBUFF_TYPES: ReadonlySet<StatusEffectType> = new Set([
-  'burn',
-  'shield_break',
-  'slow',
-  'silence',
-  'vulnerable',
-  'def_down',
-]);
+function isDefaultDebuff(status: Pick<ActiveStatusEffect, 'type' | 'registryId'>): boolean {
+  if (status.registryId) {
+    return getStatusEntry(status.registryId)?.polarity === 'debuff';
+  }
+  return isDebuffType(status.type);
+}
 
 /**
- * Pure concentric ring arc computation for radar unit markers.
- * Uses stroke-dasharray / stroke-dashoffset attributes (zero animated SVG transforms)
- * starting at 12 o'clock (top) and progressing clockwise.
+ * Pure ring arc computation for radar unit markers.
+ * Uses stroke-dasharray / stroke-dashoffset attributes (zero animated SVG transforms).
+ * - Full-circle (`sweepFraction = 1`): starts at 12 o'clock and progresses clockwise (`rotate(-90)`).
+ * - Split-ring (`sweepFraction = 0.5`):
+ *   - `hp` (left half): fills bottom (6 o'clock) -> left (9) -> top (12) via `rotate(90)`.
+ *   - `shield` (right half): fills bottom (6 o'clock) -> right (3) -> top (12) via `scale(-1, 1) rotate(90)`.
  */
 export function computeRingArcSpec(
   kind: RadarRingKind,
@@ -796,15 +816,27 @@ export function computeRingArcSpec(
   max: number,
   color: string,
   trackColor: string,
-  isLowHp = false
+  isLowHp = false,
+  sweepFraction = 1,
+  minStrokeWidth = RADAR_RING_DEFAULT_STROKE_WIDTH
 ): RadarRingArcSpec {
   const safeRadius = Math.max(1, radius);
-  const safeStroke = Math.max(RADAR_RING_DEFAULT_STROKE_WIDTH, strokeWidth);
+  const safeStroke = Math.max(minStrokeWidth, strokeWidth);
+  const safeSweep = Number.isFinite(sweepFraction)
+    ? Math.max(0.05, Math.min(1, sweepFraction))
+    : 1;
   const safeMax = Number.isFinite(max) && max > 0 ? max : 0;
   const safeCur = Number.isFinite(current) ? Math.max(0, current) : 0;
   const ratio = safeMax > 0 ? Math.max(0, Math.min(1, safeCur / safeMax)) : 0;
   const circumference = 2 * Math.PI * safeRadius;
-  const filledLength = circumference * ratio;
+  const arcLength = circumference * safeSweep;
+  const filledLength = arcLength * ratio;
+  const transform =
+    safeSweep >= 0.999
+      ? 'rotate(-90)'
+      : kind === 'shield'
+      ? 'scale(-1, 1) rotate(90)'
+      : 'rotate(90)';
 
   return {
     kind,
@@ -814,20 +846,31 @@ export function computeRingArcSpec(
     max: safeMax,
     ratio: Number(ratio.toFixed(4)),
     circumference: Number(circumference.toFixed(2)),
+    sweepFraction: Number(safeSweep.toFixed(4)),
+    arcLength: Number(arcLength.toFixed(2)),
     filledLength: Number(filledLength.toFixed(2)),
     strokeDasharray: `${filledLength.toFixed(2)} ${circumference.toFixed(2)}`,
     strokeDashoffset: '0',
+    trackDasharray:
+      safeSweep >= 0.999
+        ? `${circumference.toFixed(2)} 0`
+        : `${arcLength.toFixed(2)} ${circumference.toFixed(2)}`,
+    transform,
     color,
     trackColor,
     isLowHp,
+    hasCapacity: safeMax > 0,
     tickY: Number((-safeRadius).toFixed(2)),
   };
 }
 
 /**
- * Computes the 3 concentric ring arcs (Shield outer blue, HP middle green, SP inner purple)
- * for a radar unit marker. Falls back to HP-only when markerRadius < RADAR_RING_MIN_MARKER_RADIUS.
- * Marks low HP strictly below 25% (hp / maxHp < 0.25) with red-orange color & pulse flag.
+ * Computes radar marker ring geometry across 3 markerRadius tiers:
+ * - R >= 30: full mode — size-aware split ring (HP left, Shield right, stroke 3..5px, 4px at 80px)
+ *   + thin 2px full-circle inner SP ring (#f59e0b, track #3a2a0c, 1px inner gap).
+ * - 17 <= R < 30: split ring only (no SP ring), larger inner disc accordingly.
+ * - R < 17: HP-only full ring (3px stroke).
+ * Keeps desktop outerRadius = 40 (80px diameter at markerRadius = 41) unchanged.
  */
 export function computeUnitRingArcs(
   unit: CombatUnit,
@@ -841,15 +884,19 @@ export function computeUnitRingArcs(
   const isLowHp =
     unit.alive && hpRatio > 0 && hpRatio < RADAR_LOW_HP_THRESHOLD;
   const hpOnlyMode = safeMarkerRadius < RADAR_RING_MIN_MARKER_RADIUS;
-  const strokeWidth = RADAR_RING_DEFAULT_STROKE_WIDTH;
-  const hpColor = isLowHp ? '#f97316' : '#22c55e';
+  const hpColor = isLowHp ? '#ef4444' : '#22c55e';
   const hpTrack = isLowHp
-    ? 'rgba(249, 115, 22, 0.24)'
-    : 'rgba(34, 197, 94, 0.20)';
+    ? 'rgba(127, 29, 29, 0.55)'
+    : 'rgba(26, 46, 36, 0.85)';
 
   if (hpOnlyMode) {
+    const strokeWidth = RADAR_RING_DEFAULT_STROKE_WIDTH;
     const innerShapeRadius = Math.max(8, safeMarkerRadius - 3);
     const hpR = innerShapeRadius + 3;
+    const outerRadius = Number((hpR + strokeWidth / 2).toFixed(2));
+    const innerCircleRadius = Number(
+      Math.max(4, hpR - strokeWidth / 2).toFixed(2)
+    );
     const hpArc = computeRingArcSpec(
       'hp',
       hpR,
@@ -857,60 +904,96 @@ export function computeUnitRingArcs(
       unit.hp,
       unit.derived.maxHp,
       hpColor,
-      hpTrack,
-      isLowHp
+      isLowHp ? 'rgba(239, 68, 68, 0.24)' : 'rgba(34, 197, 94, 0.20)',
+      isLowHp,
+      1
     );
     return {
       hpOnlyMode: true,
       isLowHp,
-      outerRadius: Number((hpR + strokeWidth / 2).toFixed(2)),
+      outerRadius,
+      innerCircleRadius,
       innerShapeRadius,
+      ringRadius: hpR,
+      hasShield: false,
       arcs: [hpArc],
+      spArc: null,
     };
   }
 
-  const innerShapeRadius = Math.max(10, Math.round(safeMarkerRadius * 0.68));
-  const spR = innerShapeRadius + 2.5;
-  const hpR = spR + 4;
-  const shieldR = hpR + 4;
-
-  const shieldArc = computeRingArcSpec(
-    'shield',
-    shieldR,
-    strokeWidth,
-    unit.shield,
-    unit.derived.maxShield,
-    '#38bdf8',
-    'rgba(56, 189, 248, 0.18)',
-    false
+  const outerRadius = Number(
+    (Math.max(10, Math.round(safeMarkerRadius * 0.68)) + 12).toFixed(2)
   );
+  const strokeWidth = Math.max(3, Math.min(5, Math.round(outerRadius * 0.09)));
+  const ringRadius = Number((outerRadius - strokeWidth / 2).toFixed(2));
+  const showSpRing = safeMarkerRadius >= RADAR_SP_RING_MIN_MARKER_RADIUS;
+  const innerCircleRadius = Number(
+    Math.max(
+      6,
+      showSpRing
+        ? outerRadius - strokeWidth - 1 - RADAR_SP_RING_STROKE_WIDTH - 1
+        : outerRadius - strokeWidth - 1
+    ).toFixed(2)
+  );
+  const innerShapeRadius = Math.max(10, Math.round(innerCircleRadius - 2));
+
   const hpArc = computeRingArcSpec(
     'hp',
-    hpR,
+    ringRadius,
     strokeWidth,
     unit.hp,
     unit.derived.maxHp,
     hpColor,
     hpTrack,
-    isLowHp
+    isLowHp,
+    0.5
   );
-  const spArc = computeRingArcSpec(
-    'sp',
-    spR,
+
+  const hasShield =
+    Number.isFinite(unit.derived.maxShield) && unit.derived.maxShield > 0;
+  const shieldTrack = hasShield
+    ? 'rgba(20, 44, 72, 0.85)'
+    : 'rgba(148, 163, 184, 0.28)';
+  const shieldArc = computeRingArcSpec(
+    'shield',
+    ringRadius,
     strokeWidth,
-    unit.sp,
-    unit.derived.maxSp,
-    '#c084fc',
-    'rgba(192, 132, 252, 0.20)',
-    false
+    hasShield ? unit.shield : 0,
+    unit.derived.maxShield,
+    '#38bdf8',
+    shieldTrack,
+    false,
+    0.5
   );
+
+  const spRingRadius = Number(
+    Math.max(4, outerRadius - strokeWidth - 2).toFixed(2)
+  );
+  const spArc = showSpRing
+    ? computeRingArcSpec(
+        'sp',
+        spRingRadius,
+        RADAR_SP_RING_STROKE_WIDTH,
+        unit.sp,
+        unit.derived.maxSp,
+        '#f59e0b',
+        '#3a2a0c',
+        false,
+        1,
+        RADAR_SP_RING_STROKE_WIDTH
+      )
+    : null;
 
   return {
     hpOnlyMode: false,
     isLowHp,
-    outerRadius: Number((shieldR + strokeWidth / 2).toFixed(2)),
+    outerRadius,
+    innerCircleRadius,
     innerShapeRadius,
-    arcs: [shieldArc, hpArc, spArc],
+    ringRadius,
+    hasShield,
+    arcs: [hpArc, shieldArc],
+    spArc,
   };
 }
 
@@ -936,7 +1019,7 @@ export function getStatusIconMeta(status: ActiveStatusEffect): StatusIconMeta {
   const isDebuff =
     status.isDebuff !== undefined
       ? Boolean(status.isDebuff)
-      : DEFAULT_DEBUFF_TYPES.has(status.type);
+      : isDefaultDebuff(status);
 
   let symbol = '▲';
   switch (status.type) {
@@ -945,6 +1028,9 @@ export function getStatusIconMeta(status: ActiveStatusEffect): StatusIconMeta {
       break;
     case 'shield_break':
       symbol = '✕';
+      break;
+    case 'shield_cracked':
+      symbol = '⊗';
       break;
     case 'def_down':
       symbol = '↓';

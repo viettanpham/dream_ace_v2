@@ -4,8 +4,16 @@ import {
   MAP_LANES,
   SECTORS_CATALOG,
 } from '../data/maps';
+import { BATTLE_KIND_RULES } from '../data/battleKinds';
+import {
+  isContested,
+  mergeVisibleUnlockedSectors,
+  neighbours,
+} from './frontline';
+import { sanitizeSectorSupply } from './npcSupply';
 import type {
   BaseRuntimeState,
+  BattleKind,
   BonusMissionState,
   MechClassId,
   PilotAccount,
@@ -143,7 +151,10 @@ export interface MonthAdvanceSummary {
  * - Ticks Under Attack countdowns (unanswered raids damage the base).
  * - Schedules a fresh frontier raid warning on a connected Allied base if none is under attack.
  */
-export function advanceCampaignMonth(pilot: PilotAccount): MonthAdvanceSummary {
+export function advanceCampaignMonth(
+  pilot: PilotAccount,
+  regenPerMonth = 10
+): MonthAdvanceSummary {
   const income = getTotalMonthlyIncome(pilot);
   const nextMonth = (pilot.campaignMonth || 1) + 1;
   const nextBaseStates: Record<string, BaseRuntimeState> = {};
@@ -210,13 +221,29 @@ export function advanceCampaignMonth(pilot: PilotAccount): MonthAdvanceSummary {
     }
   }
 
+  const regen =
+    typeof regenPerMonth === 'number' && Number.isFinite(regenPerMonth)
+      ? Math.max(0, Math.min(100, regenPerMonth))
+      : 10;
+  const currentSupply = sanitizeSectorSupply(pilot.sectorSupply);
+  let nextSectorSupply: Record<string, number> | undefined = currentSupply;
+  if (currentSupply && regen > 0) {
+    const bumped: Record<string, number> = {};
+    for (const [secId, val] of Object.entries(currentSupply)) {
+      bumped[secId] = Math.min(100, val + regen);
+    }
+    nextSectorSupply = sanitizeSectorSupply(bumped);
+  }
+  const { sectorSupply: _droppedSupply, ...pilotBase } = pilot;
+
   return {
     pilot: {
-      ...pilot,
+      ...pilotBase,
       campaignMonth: nextMonth,
       credits: pilot.credits + income.credits,
       warPoints: pilot.warPoints + income.warPoints,
       baseStates: nextBaseStates,
+      ...(nextSectorSupply ? { sectorSupply: nextSectorSupply } : {}),
     },
     newMonth: nextMonth,
     creditsEarned: income.credits,
@@ -286,15 +313,30 @@ export function acceptBaseBonusMission(
     return { ok: false, reason: 'already_active', pilot };
   }
 
-  // Prefer an unlocked non-allied sector, else any unlocked sector
+  // BFS shortest lane-hop distance from the source base
+  const hopDist = new Map<string, number>();
+  hopDist.set(sector.id, 0);
+  const queue: string[] = [sector.id];
+  for (let head = 0; head < queue.length; head++) {
+    const cur = queue[head];
+    const dist = hopDist.get(cur) ?? 0;
+    for (const nb of neighbours(cur)) {
+      if (!hopDist.has(nb)) {
+        hopDist.set(nb, dist + 1);
+        queue.push(nb);
+      }
+    }
+  }
+
+  // Target a CONTESTED node only: fewest lane hops from source base, ties broken by lower baseLevel
   const targetSector =
-    SECTORS_CATALOG.find(
-      (s) =>
-        pilot.unlockedSectorIds.includes(s.id) &&
-        getBaseState(pilot, s.id).faction !== 'allied'
-    ) ??
-    SECTORS_CATALOG.find((s) => pilot.unlockedSectorIds.includes(s.id)) ??
-    SECTORS_CATALOG[0];
+    SECTORS_CATALOG.filter((s) => isContested(pilot, s.id) && hopDist.has(s.id))
+      .sort((a, b) => {
+        const da = hopDist.get(a.id) ?? Number.MAX_SAFE_INTEGER;
+        const db = hopDist.get(b.id) ?? Number.MAX_SAFE_INTEGER;
+        if (da !== db) return da - db;
+        return a.baseLevel - b.baseLevel;
+      })[0] ?? null;
 
   if (!targetSector) {
     return { ok: false, reason: 'no_target_sector', pilot };
@@ -355,13 +397,15 @@ export function applyBaseEngineerBoost(
 export function applyBattleBaseConsequences(
   pilot: PilotAccount,
   sectorId: string,
-  won: boolean
+  won: boolean,
+  kind: BattleKind = 'assault'
 ): {
   pilot: PilotAccount;
   bonusMissionCredits: number;
   bonusMissionWarPoints: number;
   capturedFreshly: boolean;
 } {
+  const rule = BATTLE_KIND_RULES[kind];
   const curBase = getBaseState(pilot, sectorId);
   const nextBaseStates: Record<string, BaseRuntimeState> = {
     ...(pilot.baseStates ?? createInitialBaseStates()),
@@ -369,7 +413,7 @@ export function applyBattleBaseConsequences(
   let capturedFreshly = false;
 
   if (won) {
-    if (curBase.faction !== 'allied') {
+    if (rule.capturesOnWin && curBase.faction !== 'allied') {
       // Freshly captured base starts DAMAGED!
       nextBaseStates[sectorId] = {
         faction: 'allied',
@@ -380,7 +424,7 @@ export function applyBattleBaseConsequences(
         attackFromSectorId: null,
       };
       capturedFreshly = true;
-    } else if (curBase.underAttack) {
+    } else if (rule.clearsRaid && curBase.faction === 'allied' && curBase.underAttack) {
       // Successfully defended Allied base from incoming raid
       nextBaseStates[sectorId] = {
         ...curBase,
@@ -391,23 +435,19 @@ export function applyBattleBaseConsequences(
     }
   }
 
-  // Unlock adjacent sectors connected by star lanes when capturing a base
-  let nextUnlocked = pilot.unlockedSectorIds;
-  if (won) {
-    const connected = MAP_LANES.filter(
-      (l) => l.from === sectorId || l.to === sectorId
-    ).map((l) => (l.from === sectorId ? l.to : l.from));
-    if (connected.length > 0) {
-      nextUnlocked = Array.from(new Set([...nextUnlocked, ...connected]));
-    }
-  }
+  // Cumulative visibility history: add every visible node, never remove one
+  const nextUnlocked = mergeVisibleUnlockedSectors({
+    baseStates: nextBaseStates,
+    unlockedSectorIds: pilot.unlockedSectorIds,
+  });
 
-  // Check Bonus Mission completion
+  // Check Bonus Mission completion (overlay: assault or defend win at target base)
   let bonusMissionCredits = 0;
   let bonusMissionWarPoints = 0;
   let nextBonusMission = pilot.activeBonusMission;
   if (
     won &&
+    rule.completesBonusMissionOnWin &&
     pilot.activeBonusMission &&
     !pilot.activeBonusMission.completed &&
     pilot.activeBonusMission.targetSectorId === sectorId

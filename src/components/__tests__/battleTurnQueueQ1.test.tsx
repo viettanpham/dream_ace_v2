@@ -492,7 +492,7 @@ describe('TASK Q1 — Turn queue fixed rows & full names (desktop/tablet right s
   });
 
   it('6) Header stays 32px, acting row stays 36px even when no actor / at battle end, vi/en keys synced, save version 9', () => {
-    expect(CURRENT_SAVE_VERSION).toBe(9);
+    expect(CURRENT_SAVE_VERSION).toBe(12);
     expect(Object.keys(VI_TRANSLATIONS).sort()).toEqual(
       Object.keys(EN_TRANSLATIONS).sort()
     );

@@ -1,0 +1,19 @@
+TASK G4b-S — Card mode "Sân khấu hành động" (action stage: who hits whom). Model: Hydrogen (Neon only if a retry fails). If this prompt looks cut off, STOP and tell me the last words you can see.
+
+STEP A (resume): save this prompt verbatim to docs/tasks/G4b-S.md, checklist docs/tasks/G4b-S.progress.md, tick items, final report docs/tasks/G4b-S.report.md and print it. On retry continue from the first unticked item.
+
+TOKEN SAVING: read docs/CODEMAP.md first. Open ONLY src/components/EffectsSettingsPanel.tsx (settings rows + preview box ~357-470); src/components/TurnQueueBar.tsx acting chip ~165-240; BattleScreen.tsx actingTargetName ~974-990, view mode ~559, TurnQueueBar uses ~2300-2320 (phone) and ~3100-3120 (desktop sidebar), phone control row / force bar; src/components/BattleUnitCard.tsx root + popups ~350-410; src/utils/fxTone.ts (G4b); battleVfx.ts resolveEffectiveVfxConfig (read only). Related tests only, full vitest once at the end. Add CODEMAP lines. Do not enable Firebase.
+
+SCOPE: CARD mode only. Radar mode, radar VFX, engine, save untouched; do not edit battleVfx.ts / BattleVfxOverlay.tsx. No empty reserved space: the stage is never empty and renders nothing (0px) when off, in radar mode or when battle.summary is set. New strings in vi.ts AND en.ts. CURRENT_SAVE_VERSION unchanged.
+
+ITEM 1 — ActionStage + setting. New src/components/ActionStage.tsx. Move the Effects preview tokens/projectile markup into exported parts StageToken / StageProjectile and make EffectsSettingsPanel use them (reuse, not a copy; its testids stay). Stage: LEFT attacker token (side color, short name, mini HP bar); RIGHT target tokens max 3 stacked + "+N"; projectile in resolveFxTone color; hit flash on target (damage red, heal green, shield blue, sp orange, buff yellow); result text above the target from its newest popup (CRIT -278, EVADED, +65); one caption "<actor> dùng <skill/weapon>" from the actor's newest log entry (truncate). Source = newest battle.fxEvents item + popups + log; LATEST action only (a new action replaces the running one). Idle = current actor > its target (actingTargetName data), static. Speed >= 5 or showProjectiles false: flash + text, no projectile; reducedMotion: existing reduced marker; effectsMode off: static tokens. Setting "Sân khấu hành động" Bật/Tắt in the Hiệu ứng panel, key dreamAce.actionStage.v1 (new src/utils/actionStagePrefs.ts, subscribe like useFxSettings), default ON.
+ITEM 2 — Placement. Desktop/tablet (>640px) card mode: in the right sidebar the stage (84px) REPLACES the TurnQueueBar acting row (36px) via a prop; radar mode keeps the acting row. Phone (<=640px) card mode: a 56px strip in page flow between the control row and the force bar (tokens + projectile + short text, no caption). Report the desktop budget at 1440x900 (queue + stage + unit panel + log >= 220).
+ITEM 3 — Cards while the stage is ON: attacker card glows ~0.6s, target card border flashes in the tone color ~0.6s (CSS classes keyed by fx id), card floating numbers NOT rendered. Stage OFF: G4b inside-card popups, no glow.
+
+HARD LIMITS: desktop log min-height 220 kept; G4a-L1 header limits unchanged; nothing at x<8; no horizontal overflow; no nested scroll on phone; 0px when hidden.
+
+TESTS: stage absent (no wrapper) when off / radar / summary; idle shows actor + target; new fx replaces old (max 1) incl. 10x; speed 5 no projectile; AoE 5 targets -> 3 tokens + "+2"; tone colors; desktop card mode hides the acting row, radar keeps it; phone strip between control row and force bar; cards glow/flash and no popups when ON, popups when OFF; Effects preview uses StageToken/StageProjectile with old testids; vi/en parity; setting persists.
+
+CHECKS: npx vitest run (once), tsc --noEmit / lint_applet, production build.
+
+REPORT: items done + files changed; sidebar height budget; tests old (327) -> new; NOT checked in a real browser (readability at 84/56px, 10x-30x, phone).

@@ -1,11 +1,23 @@
-import { BALANCE_CONFIG, getSkillPurchaseCost } from '../data/balance';
 import {
+  ACTIVE_SLOTS_HARD_MAX,
+  BALANCE_CONFIG,
+  getEffectiveSkillMaxLevel,
+  getFluxMinCastCost,
+  getSkillPurchaseCost,
+  getUnlockedActiveSlots,
+  getUnlockedPassiveSlots,
+  sanitizeSpEconomyConfig,
+} from '../data/balance';
+import {
+  getMergedSkills,
   getOpeningCardById,
   getScaledSkillStats,
   getSkillById,
-  SKILLS_LIST,
+  type SkillModsSource,
 } from '../data/skills';
 import type {
+  ActiveSlotsConfig,
+  AdminConfig,
   BattleSkillUsability,
   CombatUnit,
   GearUnit,
@@ -15,14 +27,65 @@ import type {
   SkillValidationResult,
 } from '../types/game';
 
-export const MAX_ACTIVE_SKILL_BAR = BALANCE_CONFIG.maxEquippedActiveSkills;
+export const MAX_ACTIVE_SKILL_BAR = ACTIVE_SLOTS_HARD_MAX;
+
+function extractActiveSlotsConfig(
+  source?: SkillModsSource
+): Partial<ActiveSlotsConfig> | null | undefined {
+  if (!source || Array.isArray(source) || typeof source !== 'object') {
+    return undefined;
+  }
+  return 'activeSlots' in source
+    ? (source as { activeSlots?: Partial<ActiveSlotsConfig> | null }).activeSlots
+    : undefined;
+}
 
 export interface GearPassiveBonuses {
   skillDmgPct: number; // e.g., 0.15 for +15%
+  attackPct: number; // e.g., 0.15 for +15%
   defPct: number; // e.g., 0.12 for +12%
   evaPct: number; // e.g., 0.09 for +9%
   speedPct: number; // e.g., 0.06 for +6%
-  spRegenPerTurn: number; // e.g., +3 SP/turn
+  speedFlat: number; // e.g., +3 SPD
+  spRegenPerTurn: number; // e.g., +3 SP/turn (legacy + spRegenFlat)
+  spRegenFlat: number; // e.g., +3 SP/turn from passive_stat
+  maxHpPct: number; // e.g., 0.09 for +9%
+  maxShieldPct: number; // e.g., 0.15 for +15%
+  critFlat: number; // e.g., +4.5% crit chance
+  critDamagePct: number; // e.g., +25% crit damage
+  dodgeFlat: number; // e.g., +5% dodge chance
+  armorPierceFlat: number; // e.g., +6% armor pierce
+  healPowerPct: number; // e.g., +30% heal power
+  shieldPowerPct: number; // e.g., +30% shield restore power
+  shieldRegenPctAdd: number; // e.g., +1.5% per-turn shield regen + cap
+  hpRegenPctAdd: number; // e.g., +0.9% own-turn-start self HP regen
+  executeDmgPct: number; // e.g., +30% dmg vs <30% HP targets
+  lastStandDefPct: number; // e.g., +18% own DEF when <30% HP
+}
+
+export function createEmptyGearPassiveBonuses(): GearPassiveBonuses {
+  return {
+    skillDmgPct: 0,
+    attackPct: 0,
+    defPct: 0,
+    evaPct: 0,
+    speedPct: 0,
+    speedFlat: 0,
+    spRegenPerTurn: 0,
+    spRegenFlat: 0,
+    maxHpPct: 0,
+    maxShieldPct: 0,
+    critFlat: 0,
+    critDamagePct: 0,
+    dodgeFlat: 0,
+    armorPierceFlat: 0,
+    healPowerPct: 0,
+    shieldPowerPct: 0,
+    shieldRegenPctAdd: 0,
+    hpRegenPctAdd: 0,
+    executeDmgPct: 0,
+    lastStandDefPct: 0,
+  };
 }
 
 /**
@@ -36,21 +99,28 @@ export function isSkillAllowedForClass(
 }
 
 /**
- * Returns all skills belonging to a Gear's class + General skills.
+ * Returns all skills belonging to a Gear's class + General skills (merging enabled admin skill mods).
  */
-export function getSkillsForClass(classId: MechClassId): SkillDefinition[] {
-  return SKILLS_LIST.filter((s) => isSkillAllowedForClass(s, classId));
+export function getSkillsForClass(
+  classId: MechClassId,
+  skillModsOrAdmin?: SkillModsSource
+): SkillDefinition[] {
+  return getMergedSkills(skillModsOrAdmin).filter((s) =>
+    isSkillAllowedForClass(s, classId)
+  );
 }
 
 /**
- * Gear level required for skill level n (1..5):
+ * Gear level required for skill level n (1..cap):
  * requiredGearLevel = unlockLevel + 4 * (n - 1)
  */
 export function getRequiredGearLevelForSkillLevel(
   skill: SkillDefinition,
-  targetSkillLevel: number
+  targetSkillLevel: number,
+  adminOrCap?: Pick<AdminConfig, 'skillMaxLevel'> | number | null
 ): number {
-  const n = Math.max(1, Math.min(BALANCE_CONFIG.skillMaxLevel, targetSkillLevel));
+  const maxLv = getEffectiveSkillMaxLevel(adminOrCap);
+  const n = Math.max(1, Math.min(maxLv, Math.floor(targetSkillLevel || 1)));
   return skill.unlockLevel + BALANCE_CONFIG.skillLevelReqStep * (n - 1);
 }
 
@@ -65,41 +135,115 @@ export function getSkillLearnOrUpgradeCost(
 }
 
 /**
- * Computes active passive bonuses for a Gear (passives are always ON once learned).
- * Strictly ignores any passive skill that does not belong to this Gear's class.
+ * Computes active passive bonuses for a Gear from equipped passives (up to unlocked slots).
+ * Strictly ignores unequipped passives, locked overflow slots, duplicates, and cross-class skills.
  */
-export function getGearPassiveBonuses(gear: GearUnit): GearPassiveBonuses {
-  let skillDmgPct = 0;
-  let defPct = 0;
-  let evaPct = 0;
-  let speedPct = 0;
-  let spRegenPerTurn = 0;
+export function getGearPassiveBonuses(
+  gear: Pick<GearUnit, 'classId' | 'level' | 'skillLevels' | 'equippedPassives'>,
+  admin?: Pick<
+    AdminConfig,
+    'skillMaxLevel' | 'passiveScaleAfter5' | 'restorePctCap' | 'passiveSlots' | 'skillMods'
+  > | null
+): GearPassiveBonuses {
+  const bonuses = createEmptyGearPassiveBonuses();
+  let legacySpRegen = 0;
 
-  for (const [skillId, level] of Object.entries(gear.skillLevels)) {
+  const unlockedSlots = getUnlockedPassiveSlots(gear.level, admin?.passiveSlots);
+  const rawEquipped = Array.isArray(gear.equippedPassives)
+    ? gear.equippedPassives.filter(
+        (id) => !(typeof id === 'string' && id.startsWith('mod_') && !getSkillById(id, admin))
+      )
+    : [];
+  const activeSlice = rawEquipped.slice(0, unlockedSlots);
+  const seen = new Set<string>();
+
+  for (const skillId of activeSlice) {
+    if (!skillId || seen.has(skillId)) continue;
+    seen.add(skillId);
+    const level = gear.skillLevels[skillId] ?? 0;
     if (!level || level < 1) continue;
-    const skill = getSkillById(skillId);
+    const skill = getSkillById(skillId, admin);
     if (!skill || skill.category !== 'passive') continue;
     if (!isSkillAllowedForClass(skill, gear.classId)) continue;
 
-    const scaled = getScaledSkillStats(skill, level);
+    const scaled = getScaledSkillStats(skill, level, admin);
     switch (skill.effectKind) {
       case 'passive_skill_dmg':
-        skillDmgPct += scaled.buffMagnitude;
+        bonuses.skillDmgPct += scaled.buffMagnitude;
         break;
       case 'passive_def_pct':
-        defPct += scaled.buffMagnitude;
+        bonuses.defPct += scaled.buffMagnitude;
         break;
       case 'passive_eva_spd':
-        evaPct += scaled.buffMagnitude;
-        speedPct += scaled.secondaryMagnitude;
+        bonuses.evaPct += scaled.buffMagnitude;
+        bonuses.speedPct += scaled.secondaryMagnitude;
         break;
       case 'passive_sp_regen':
-        spRegenPerTurn += scaled.spAmount;
+        legacySpRegen += scaled.spAmount;
         break;
+      case 'passive_stat': {
+        for (const entry of scaled.passiveStats ?? []) {
+          switch (entry.key) {
+            case 'attackPct':
+              bonuses.attackPct += entry.value / 100;
+              break;
+            case 'defPct':
+              bonuses.defPct += entry.value / 100;
+              break;
+            case 'evaPct':
+              bonuses.evaPct += entry.value / 100;
+              break;
+            case 'maxHpPct':
+              bonuses.maxHpPct += entry.value / 100;
+              break;
+            case 'maxShieldPct':
+              bonuses.maxShieldPct += entry.value / 100;
+              break;
+            case 'speedFlat':
+              bonuses.speedFlat += entry.value;
+              break;
+            case 'spRegenFlat':
+              bonuses.spRegenFlat += entry.value;
+              break;
+            case 'critFlat':
+              bonuses.critFlat += entry.value;
+              break;
+            case 'critDamagePct':
+              bonuses.critDamagePct += entry.value;
+              break;
+            case 'dodgeFlat':
+              bonuses.dodgeFlat += entry.value;
+              break;
+            case 'armorPierceFlat':
+              bonuses.armorPierceFlat += entry.value;
+              break;
+            case 'healPowerPct':
+              bonuses.healPowerPct += entry.value;
+              break;
+            case 'shieldPowerPct':
+              bonuses.shieldPowerPct += entry.value;
+              break;
+            case 'shieldRegenPctAdd':
+              bonuses.shieldRegenPctAdd += entry.value;
+              break;
+            case 'hpRegenPctAdd':
+              bonuses.hpRegenPctAdd += entry.value;
+              break;
+            case 'executeDmgPct':
+              bonuses.executeDmgPct += entry.value;
+              break;
+            case 'lastStandDefPct':
+              bonuses.lastStandDefPct += entry.value;
+              break;
+          }
+        }
+        break;
+      }
     }
   }
 
-  return { skillDmgPct, defPct, evaPct, speedPct, spRegenPerTurn };
+  bonuses.spRegenPerTurn = legacySpRegen + bonuses.spRegenFlat;
+  return bonuses;
 }
 
 /**
@@ -108,14 +252,15 @@ export function getGearPassiveBonuses(gear: GearUnit): GearPassiveBonuses {
 export function validateLearnOrUpgradeSkill(
   pilot: PilotAccount,
   gearId: MechClassId,
-  skillId: string
+  skillId: string,
+  admin?: Pick<AdminConfig, 'skillMaxLevel' | 'skillMods'> | null
 ): SkillValidationResult {
   const gear = pilot.gears[gearId];
   if (!gear || !gear.owned) {
     return { ok: false, reason: 'invalid_gear' };
   }
 
-  const skill = getSkillById(skillId);
+  const skill = getSkillById(skillId, admin);
   if (!skill) {
     return { ok: false, reason: 'invalid_skill' };
   }
@@ -125,13 +270,18 @@ export function validateLearnOrUpgradeSkill(
     return { ok: false, reason: 'class_mismatch' };
   }
 
+  const maxSkillLv = getEffectiveSkillMaxLevel(admin);
   const currentLv = gear.skillLevels[skillId] ?? 0;
-  if (currentLv >= BALANCE_CONFIG.skillMaxLevel) {
+  if (currentLv >= maxSkillLv) {
     return { ok: false, reason: 'max_level' };
   }
 
   const nextLv = currentLv + 1;
-  const requiredGearLevel = getRequiredGearLevelForSkillLevel(skill, nextLv);
+  const requiredGearLevel = getRequiredGearLevelForSkillLevel(
+    skill,
+    nextLv,
+    maxSkillLv
+  );
   const cost = getSkillLearnOrUpgradeCost(skill, nextLv);
 
   // Special & Elite skills require owning their Opening Card (bought with War Points)
@@ -172,14 +322,16 @@ export function validateLearnOrUpgradeSkill(
 
 /**
  * Pure engine action: Learn or upgrade a skill on a specific Gear using Credits.
- * Newly learned active skills automatically slot into the Gear's bar if there is room (< 6).
+ * Newly learned active skills auto-slot into the Gear's bar if there is room (< 6).
+ * Newly learned passive skills auto-slot into equippedPassives if there is an open passive slot.
  */
 export function learnOrUpgradeSkillOnGear(
   pilot: PilotAccount,
   gearId: MechClassId,
-  skillId: string
+  skillId: string,
+  admin?: Pick<AdminConfig, 'skillMaxLevel' | 'passiveSlots' | 'activeSlots' | 'skillMods'> | null
 ): { pilot: PilotAccount; validation: SkillValidationResult; newLevel: number } {
-  const validation = validateLearnOrUpgradeSkill(pilot, gearId, skillId);
+  const validation = validateLearnOrUpgradeSkill(pilot, gearId, skillId, admin);
   const gear = pilot.gears[gearId];
   const currentLv = gear?.skillLevels[skillId] ?? 0;
 
@@ -187,18 +339,41 @@ export function learnOrUpgradeSkillOnGear(
     return { pilot, validation, newLevel: currentLv };
   }
 
-  const skill = getSkillById(skillId)!;
+  const skill = getSkillById(skillId, admin)!;
   const nextLv = currentLv + 1;
   const cost = validation.cost ?? 0;
 
+  const unlockedActiveSlots = getUnlockedActiveSlots(
+    gear.level,
+    admin?.activeSlots
+  );
   let nextBar = gear.equippedSkillBar;
   if (
     currentLv === 0 &&
     skill.category !== 'passive' &&
     !nextBar.includes(skillId) &&
-    nextBar.length < MAX_ACTIVE_SKILL_BAR
+    nextBar.length < unlockedActiveSlots
   ) {
     nextBar = [...nextBar, skillId];
+  }
+
+  let nextPassives = Array.isArray(gear.equippedPassives)
+    ? [...gear.equippedPassives]
+    : [];
+  const unlockedPassiveSlots = getUnlockedPassiveSlots(
+    gear.level,
+    admin?.passiveSlots
+  );
+  const activePassivesCount = nextPassives.filter(
+    (id) => !(id.startsWith('mod_') && !getSkillById(id, admin))
+  ).length;
+  if (
+    currentLv === 0 &&
+    skill.category === 'passive' &&
+    !nextPassives.includes(skillId) &&
+    activePassivesCount < unlockedPassiveSlots
+  ) {
+    nextPassives = [...nextPassives, skillId];
   }
 
   const nextGear: GearUnit = {
@@ -208,6 +383,7 @@ export function learnOrUpgradeSkillOnGear(
       [skillId]: nextLv,
     },
     equippedSkillBar: nextBar,
+    equippedPassives: nextPassives,
   };
 
   return {
@@ -229,9 +405,10 @@ export function learnOrUpgradeSkillOnGear(
  */
 export function validateEquipSkillOnBar(
   gear: GearUnit,
-  skillId: string
+  skillId: string,
+  skillModsOrAdmin?: SkillModsSource
 ): SkillValidationResult {
-  const skill = getSkillById(skillId);
+  const skill = getSkillById(skillId, skillModsOrAdmin);
   if (!skill) {
     return { ok: false, reason: 'invalid_skill' };
   }
@@ -252,7 +429,11 @@ export function validateEquipSkillOnBar(
     return { ok: false, reason: 'already_equipped' };
   }
 
-  if (gear.equippedSkillBar.length >= MAX_ACTIVE_SKILL_BAR) {
+  const unlockedActiveSlots = getUnlockedActiveSlots(
+    gear.level,
+    extractActiveSlotsConfig(skillModsOrAdmin)
+  );
+  if (gear.equippedSkillBar.length >= unlockedActiveSlots) {
     return { ok: false, reason: 'bar_full' };
   }
 
@@ -262,14 +443,15 @@ export function validateEquipSkillOnBar(
 export function equipSkillToGearBar(
   pilot: PilotAccount,
   gearId: MechClassId,
-  skillId: string
+  skillId: string,
+  skillModsOrAdmin?: SkillModsSource
 ): { pilot: PilotAccount; validation: SkillValidationResult } {
   const gear = pilot.gears[gearId];
   if (!gear || !gear.owned) {
     return { pilot, validation: { ok: false, reason: 'invalid_gear' } };
   }
 
-  const validation = validateEquipSkillOnBar(gear, skillId);
+  const validation = validateEquipSkillOnBar(gear, skillId, skillModsOrAdmin);
   if (!validation.ok) {
     return { pilot, validation };
   }
@@ -303,6 +485,91 @@ export function unequipSkillFromGearBar(
       [gearId]: {
         ...gear,
         equippedSkillBar: gear.equippedSkillBar.filter((id) => id !== skillId),
+      },
+    },
+  };
+}
+
+export function validateEquipPassiveSkill(
+  gear: GearUnit,
+  skillId: string,
+  admin?: Pick<AdminConfig, 'passiveSlots' | 'skillMods'> | null
+): SkillValidationResult {
+  const skill = getSkillById(skillId, admin);
+  if (!skill || skill.category !== 'passive') {
+    return { ok: false, reason: 'invalid_skill' };
+  }
+  if (!isSkillAllowedForClass(skill, gear.classId)) {
+    return { ok: false, reason: 'class_mismatch' };
+  }
+  if ((gear.skillLevels[skillId] ?? 0) < 1) {
+    return { ok: false, reason: 'not_learned' };
+  }
+  const equipped = Array.isArray(gear.equippedPassives)
+    ? gear.equippedPassives
+    : [];
+  if (equipped.includes(skillId)) {
+    return { ok: false, reason: 'already_equipped' };
+  }
+  const unlocked = getUnlockedPassiveSlots(gear.level, admin?.passiveSlots);
+  const activeEquippedCount = equipped.filter(
+    (id) => !(id.startsWith('mod_') && !getSkillById(id, admin))
+  ).length;
+  if (activeEquippedCount >= unlocked) {
+    return { ok: false, reason: 'passive_slots_full' };
+  }
+  return { ok: true, reason: 'ok' };
+}
+
+export function equipPassiveToGear(
+  pilot: PilotAccount,
+  gearId: MechClassId,
+  skillId: string,
+  admin?: Pick<AdminConfig, 'passiveSlots' | 'skillMods'> | null
+): { pilot: PilotAccount; validation: SkillValidationResult } {
+  const gear = pilot.gears[gearId];
+  if (!gear || !gear.owned) {
+    return { pilot, validation: { ok: false, reason: 'invalid_gear' } };
+  }
+  const validation = validateEquipPassiveSkill(gear, skillId, admin);
+  if (!validation.ok) {
+    return { pilot, validation };
+  }
+  const current = Array.isArray(gear.equippedPassives)
+    ? gear.equippedPassives
+    : [];
+  return {
+    pilot: {
+      ...pilot,
+      gears: {
+        ...pilot.gears,
+        [gearId]: {
+          ...gear,
+          equippedPassives: [...current, skillId],
+        },
+      },
+    },
+    validation,
+  };
+}
+
+export function unequipPassiveFromGear(
+  pilot: PilotAccount,
+  gearId: MechClassId,
+  skillId: string
+): PilotAccount {
+  const gear = pilot.gears[gearId];
+  const current = Array.isArray(gear?.equippedPassives)
+    ? gear.equippedPassives
+    : [];
+  if (!gear || !current.includes(skillId)) return pilot;
+  return {
+    ...pilot,
+    gears: {
+      ...pilot.gears,
+      [gearId]: {
+        ...gear,
+        equippedPassives: current.filter((id) => id !== skillId),
       },
     },
   };
@@ -350,6 +617,26 @@ export function buyOpeningCard(
   };
 }
 
+export function getEffectiveSpCost(
+  skill: SkillDefinition,
+  unit: Pick<CombatUnit, 'level'> & { statuses?: CombatUnit['statuses'] },
+  admin?: Pick<AdminConfig, 'spEconomy'> | null
+): number {
+  if (skill.spCost <= 0) return 0;
+  const isToggleActive = Boolean(
+    unit.statuses &&
+      ((skill.effectKind === 'toggle_siege_mode' &&
+        unit.statuses.some((s) => s.type === 'siege_mode')) ||
+        (skill.effectKind === 'toggle_siege_defense' &&
+          unit.statuses.some((s) => s.type === 'siege_defense')))
+  );
+  if (isToggleActive) return 0;
+  const cfg = sanitizeSpEconomyConfig(admin?.spEconomy);
+  return Math.round(
+    skill.spCost * (1 + cfg.costLevelPct * Math.max(0, unit.level - 1))
+  );
+}
+
 /**
  * Pure battle usability check for a unit casting `skillId`.
  * Enforces class-lock, bar membership, Silence, Charging lock, Cooldown,
@@ -357,9 +644,11 @@ export function buyOpeningCard(
  */
 export function canUnitUseSkill(
   unit: CombatUnit,
-  skillId: string
+  skillId: string,
+  admin?: Pick<AdminConfig, 'spEconomy' | 'fluxTransfer' | 'skillMaxLevel' | 'skillMods'> | null,
+  turnLockedSkillIds?: readonly string[]
 ): BattleSkillUsability {
-  const skill = getSkillById(skillId);
+  const skill = getSkillById(skillId, admin);
   if (!skill || skill.category === 'passive') {
     return {
       canUse: false,
@@ -369,12 +658,20 @@ export function canUnitUseSkill(
     };
   }
 
+  const isToggleActive =
+    (skill.effectKind === 'toggle_siege_mode' &&
+      unit.statuses.some((s) => s.type === 'siege_mode')) ||
+    (skill.effectKind === 'toggle_siege_defense' &&
+      unit.statuses.some((s) => s.type === 'siege_defense'));
+
+  const effectiveSpCost = getEffectiveSpCost(skill, unit, admin);
+
   if (!isSkillAllowedForClass(skill, unit.classId)) {
     return {
       canUse: false,
       reason: 'class_mismatch',
       cooldownRemaining: 0,
-      spCost: skill.spCost,
+      spCost: effectiveSpCost,
     };
   }
 
@@ -383,17 +680,10 @@ export function canUnitUseSkill(
       canUse: false,
       reason: 'not_equipped',
       cooldownRemaining: 0,
-      spCost: skill.spCost,
+      spCost: effectiveSpCost,
     };
   }
 
-  const isToggleActive =
-    (skill.effectKind === 'toggle_siege_mode' &&
-      unit.statuses.some((s) => s.type === 'siege_mode')) ||
-    (skill.effectKind === 'toggle_siege_defense' &&
-      unit.statuses.some((s) => s.type === 'siege_defense'));
-
-  const effectiveSpCost = isToggleActive ? 0 : skill.spCost;
   const cd = unit.skillCooldowns[skillId] ?? 0;
 
   if (unit.statuses.some((s) => s.type === 'charging')) {
@@ -426,6 +716,16 @@ export function canUnitUseSkill(
     };
   }
 
+  if (turnLockedSkillIds?.includes(skillId)) {
+    return {
+      canUse: false,
+      reason: 'used_this_turn',
+      cooldownRemaining: cd,
+      spCost: effectiveSpCost,
+      isToggleActive,
+    };
+  }
+
   if (cd > 0) {
     return {
       canUse: false,
@@ -450,6 +750,21 @@ export function canUnitUseSkill(
     };
   }
 
+  // Revealed this round blocks re-entering stealth until next round
+  if (
+    (skill.effectKind === 'stealth_turns' ||
+      skill.effectKind === 'stealth_until_attack') &&
+    unit.revealedThisRound
+  ) {
+    return {
+      canUse: false,
+      reason: 'revealed_this_round',
+      cooldownRemaining: cd,
+      spCost: effectiveSpCost,
+      isToggleActive,
+    };
+  }
+
   if (unit.sp < effectiveSpCost) {
     return {
       canUse: false,
@@ -458,6 +773,25 @@ export function canUnitUseSkill(
       spCost: effectiveSpCost,
       isToggleActive,
     };
+  }
+
+  if (skill.effectKind === 'sp_transfer') {
+    const skillLv = unit.skillLevels[skill.id] ?? unit.skillLevel ?? 1;
+    const minCost = getFluxMinCastCost(
+      unit.sp,
+      skillLv,
+      admin?.fluxTransfer,
+      getEffectiveSkillMaxLevel(admin)
+    );
+    if (unit.sp < minCost) {
+      return {
+        canUse: false,
+        reason: 'flux_min_sp',
+        cooldownRemaining: cd,
+        spCost: minCost,
+        isToggleActive,
+      };
+    }
   }
 
   return {

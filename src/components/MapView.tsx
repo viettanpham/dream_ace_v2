@@ -1,11 +1,19 @@
-import { useRef, useState, type PointerEvent, type WheelEvent } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent,
+  type WheelEvent,
+} from 'react';
 import {
   AlertTriangle,
   Calendar,
   ChevronDown,
   ChevronUp,
   Coins,
+  Compass,
   FastForward,
+  Info,
   Lock,
   Maximize2,
   Rocket,
@@ -13,6 +21,7 @@ import {
   Shield,
   ShoppingBag,
   Skull,
+  Swords,
   UserPlus,
   Wrench,
   ZoomIn,
@@ -21,12 +30,27 @@ import {
 import { MECH_CLASS_LIST } from '../data/classes';
 import { DROP_CONFIG } from '../data/items';
 import {
+  getActiveMap,
   getSectorById,
   getTokenShapeForBaseType,
   MAP_LANES,
   SECTORS_CATALOG,
 } from '../data/maps';
-import { calculateSingleEnemyReward } from '../engine/combat';
+import { ENEMY_ARCHETYPE_DEFS } from '../data/pilots';
+import {
+  ARCHETYPE_ROSTER_BY_SIZE,
+  calculateSingleEnemyReward,
+} from '../engine/combat';
+import { clampEnemyLevel, getEnemyLevelBand } from '../engine/enemyLevel';
+import { levelConClass } from '../utils/levelCon';
+import {
+  getBattleOptions,
+  isAlliedFrontline,
+  isContested,
+  isVisible,
+  pickDefaultBattle,
+} from '../engine/frontline';
+import { getActivePirateIncidentForNode } from '../engine/pirates';
 import {
   ENGINEER_OVERCHARGE_COST,
   getBaseMonthlyIncome,
@@ -43,17 +67,194 @@ import {
   getSectorRegion,
   useI18n,
 } from '../i18n';
+import type { TranslationKey } from '../i18n/en';
 import { useGameStore } from '../store/useGameStore';
 import type {
   BaseFaction,
   BaseNpcRole,
   BaseType,
+  MapBounds,
   MechClassId,
+  PilotAccount,
   SectorDifficulty,
 } from '../types/game';
+import { useBattleLayoutMode } from '../utils/battleDisplay';
 import { soundFx } from '../utils/sound';
 import { BottomSheet } from './BottomSheet';
 import { FighterSvg } from './FighterSvg';
+
+export const MAP_VIEWBOX_WIDTH = 840;
+export const MAP_VIEWBOX_HEIGHT = 310;
+export const MAP_SVG_LABEL_FONT_SIZE = 11.5;
+export const MAP_MIN_PHONE_LABEL_PX = 11;
+export const MAP_MIN_ZOOM = 0.75;
+export const MAP_MAX_ZOOM = 3.2;
+
+export type MapNodeVisualState =
+  | 'allied'
+  | 'allied-frontline'
+  | 'contested'
+  | 'locked'
+  | 'hidden';
+
+export type MapLaneVisualKind = 'allied-to-contested' | 'allied-allied' | 'other';
+
+export function getMapNodeVisualState(
+  pilot: PilotAccount,
+  sectorId: string
+): MapNodeVisualState {
+  if (!isVisible(pilot, sectorId)) {
+    return 'hidden';
+  }
+  const faction = getBaseState(pilot, sectorId).faction;
+  if (faction === 'allied') {
+    return isAlliedFrontline(pilot, sectorId) ? 'allied-frontline' : 'allied';
+  }
+  return isContested(pilot, sectorId) ? 'contested' : 'locked';
+}
+
+export function getMapLaneVisualKind(
+  pilot: PilotAccount,
+  lane: { from: string; to: string }
+): MapLaneVisualKind | 'hidden' {
+  const fromState = getMapNodeVisualState(pilot, lane.from);
+  const toState = getMapNodeVisualState(pilot, lane.to);
+  if (fromState === 'hidden' || toState === 'hidden') {
+    return 'hidden';
+  }
+  const fromAllied = fromState === 'allied' || fromState === 'allied-frontline';
+  const toAllied = toState === 'allied' || toState === 'allied-frontline';
+  if (fromAllied && toAllied) {
+    return 'allied-allied';
+  }
+  if ((fromAllied && toState === 'contested') || (toAllied && fromState === 'contested')) {
+    return 'allied-to-contested';
+  }
+  return 'other';
+}
+
+export function getMaxMapZoom(
+  bounds: MapBounds = getActiveMap().bounds
+): number {
+  const widthRatio = bounds.width / MAP_VIEWBOX_WIDTH;
+  const heightRatio = bounds.height / MAP_VIEWBOX_HEIGHT;
+  const scaleRatio = Math.max(1, widthRatio, heightRatio);
+  return Math.max(
+    MAP_MAX_ZOOM,
+    Number((MAP_MAX_ZOOM * scaleRatio).toFixed(2))
+  );
+}
+
+export function clampMapZoom(
+  z: number,
+  bounds: MapBounds = getActiveMap().bounds
+): number {
+  return Math.max(MAP_MIN_ZOOM, Math.min(getMaxMapZoom(bounds), z));
+}
+
+export function clampMapPan(
+  x: number,
+  y: number,
+  zoom: number,
+  boxWidth: number,
+  boxHeight: number,
+  bounds: MapBounds = getActiveMap().bounds
+): { x: number; y: number } {
+  const safeW = Math.max(120, boxWidth);
+  const safeH = Math.max(120, boxHeight);
+  const viewW = Math.max(1, bounds.width);
+  const viewH = Math.max(1, bounds.height);
+  const baseScale = Math.min(safeW / viewW, safeH / viewH);
+  const scaledW = viewW * baseScale * zoom;
+  const scaledH = viewH * baseScale * zoom;
+  const maxPanX = Math.abs(scaledW - safeW) / 2;
+  const maxPanY = Math.abs(scaledH - safeH) / 2;
+  return {
+    x: Number(Math.max(-maxPanX, Math.min(maxPanX, x)).toFixed(2)),
+    y: Number(Math.max(-maxPanY, Math.min(maxPanY, y)).toFixed(2)),
+  };
+}
+
+export function computeInitialPhoneMapView(
+  targetPos: { x: number; y: number },
+  boxWidth: number,
+  boxHeight: number,
+  bounds: MapBounds = getActiveMap().bounds
+): { zoom: number; pan: { x: number; y: number } } {
+  const safeW = Math.max(120, boxWidth);
+  const safeH = Math.max(120, boxHeight);
+  const viewW = Math.max(1, bounds.width);
+  const viewH = Math.max(1, bounds.height);
+  const baseScale = Math.min(safeW / viewW, safeH / viewH);
+  const neededZoom =
+    MAP_MIN_PHONE_LABEL_PX / (MAP_SVG_LABEL_FONT_SIZE * baseScale);
+  const zoom = clampMapZoom(
+    Math.max(1, Math.ceil(neededZoom * 100) / 100),
+    bounds
+  );
+  const rawPanX = -(targetPos.x - viewW / 2) * baseScale * zoom;
+  const rawPanY = -(targetPos.y - viewH / 2) * baseScale * zoom;
+  return {
+    zoom,
+    pan: clampMapPan(rawPanX, rawPanY, zoom, safeW, safeH, bounds),
+  };
+}
+
+export function computeInitialGeneratedMapView(
+  startPos: { x: number; y: number },
+  neighborPositions: ReadonlyArray<{ x: number; y: number }>,
+  boxWidth: number,
+  boxHeight: number,
+  bounds: MapBounds = getActiveMap().bounds
+): { zoom: number; pan: { x: number; y: number } } {
+  const safeW = Math.max(120, boxWidth);
+  const safeH = Math.max(120, boxHeight);
+  const viewW = Math.max(1, bounds.width);
+  const viewH = Math.max(1, bounds.height);
+  const baseScale = Math.min(safeW / viewW, safeH / viewH);
+
+  const pts = [startPos, ...neighborPositions];
+  const padX = 90;
+  const padY = 75;
+  const minX = Math.max(0, Math.min(...pts.map((p) => p.x)) - padX);
+  const maxX = Math.min(viewW, Math.max(...pts.map((p) => p.x)) + padX);
+  const minY = Math.max(0, Math.min(...pts.map((p) => p.y)) - padY);
+  const maxY = Math.min(viewH, Math.max(...pts.map((p) => p.y)) + padY);
+  const subW = Math.max(220, maxX - minX);
+  const subH = Math.max(160, maxY - minY);
+
+  const fitZoom = Math.min(
+    safeW / (subW * baseScale),
+    safeH / (subH * baseScale)
+  );
+  const zoom = clampMapZoom(Math.max(1.2, Number(fitZoom.toFixed(2))), bounds);
+  const rawPanX = -(startPos.x - viewW / 2) * baseScale * zoom;
+  const rawPanY = -(startPos.y - viewH / 2) * baseScale * zoom;
+
+  return {
+    zoom,
+    pan: clampMapPan(rawPanX, rawPanY, zoom, safeW, safeH, bounds),
+  };
+}
+
+function getFallbackMapBoxSize(phone: boolean): {
+  width: number;
+  height: number;
+} {
+  if (typeof window === 'undefined') {
+    return phone ? { width: 364, height: 420 } : { width: 760, height: 320 };
+  }
+  if (!phone) {
+    return {
+      width: Math.max(320, window.innerWidth - 220),
+      height: 320,
+    };
+  }
+  return {
+    width: Math.max(296, window.innerWidth - 26),
+    height: Math.max(360, Math.min(560, Math.round(window.innerHeight * 0.62))),
+  };
+}
 
 const DIFFICULTY_TEXT_CLASS: Record<SectorDifficulty, string> = {
   Standard: 'text-emerald-400',
@@ -159,12 +360,59 @@ export function MapView() {
   const acceptMissionAtBase = useGameStore((s) => s.acceptMissionAtBase);
   const useEngineerAtBase = useGameStore((s) => s.useEngineerAtBase);
 
-  const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const layoutMode = useBattleLayoutMode();
+  const isPhone = layoutMode === 'phone-portrait';
+  const activeMap = getActiveMap();
+  const activeMapBounds = activeMap.bounds;
+  const isGeneratedMap = activeMap.mapId !== 'sys_orbital_6';
+  const startNode =
+    activeMap.nodes.find((n) => n.id === activeMap.defaultSelectedNodeId) ??
+    getSectorById(selectedSectorId);
+  const startNeighborIds = new Set<string>();
+  for (const lane of activeMap.lanes) {
+    if (lane.from === startNode.id) startNeighborIds.add(lane.to);
+    else if (lane.to === startNode.id) startNeighborIds.add(lane.from);
+  }
+  const startNeighborPositions = activeMap.nodes
+    .filter((n) => startNeighborIds.has(n.id))
+    .map((n) => n.mapPos);
+
+  const initialSelectedSector = getSectorById(selectedSectorId);
+  const initialFallbackSize = getFallbackMapBoxSize(isPhone);
+  const initialView = isGeneratedMap
+    ? computeInitialGeneratedMapView(
+        startNode.mapPos,
+        startNeighborPositions,
+        initialFallbackSize.width,
+        initialFallbackSize.height,
+        activeMapBounds
+      )
+    : isPhone
+      ? computeInitialPhoneMapView(
+          initialSelectedSector.mapPos,
+          initialFallbackSize.width,
+          initialFallbackSize.height,
+          activeMapBounds
+        )
+      : { zoom: 1, pan: { x: 0, y: 0 } };
+
+  const [zoom, setZoom] = useState(initialView.zoom);
+  const [pan, setPan] = useState(initialView.pan);
+  const [mapBoxSize, setMapBoxSize] = useState(initialFallbackSize);
+  const [hintFaded, setHintFaded] = useState(false);
+  const [mapInfoOpen, setMapInfoOpen] = useState(false);
   const [mobileBriefingOpen, setMobileBriefingOpen] = useState(false);
   const [preBattleDetailsOpen, setPreBattleDetailsOpen] = useState(false);
+  const [expandedOption, setExpandedOption] = useState<{
+    sectorId: string;
+    key: string;
+  } | null>(null);
   const [hireClass, setHireClass] = useState<MechClassId>('interceptor');
 
+  const mapViewportRef = useRef<HTMLDivElement | null>(null);
+  const userInteractedRef = useRef(false);
+  const prevIsPhoneRef = useRef(isPhone);
+  const prevMapIdRef = useRef(activeMap.mapId);
   // Pointer drag-to-pan & 2-finger pinch-to-zoom state
   const pointersRef = useRef(new Map<number, { x: number; y: number }>());
   const pinchBaseRef = useRef<{ dist: number; zoom: number } | null>(null);
@@ -174,6 +422,7 @@ export function MapView() {
     panX: number;
     panY: number;
     moved: boolean;
+    captured: boolean;
   } | null>(null);
 
   const activeGear = pilot.gears[pilot.activeGearId];
@@ -186,13 +435,62 @@ export function MapView() {
   const servicesAvailable = isBaseServicesAvailable(selectedBaseState);
   const totalIncome = getTotalMonthlyIncome(pilot);
 
+  const selectedBattleOptions = getBattleOptions(
+    pilot,
+    selectedSector.id,
+    adminConfig
+  );
+  const selectedAllowedMapOptions = selectedBattleOptions.filter(
+    (opt) =>
+      opt.allowed &&
+      (opt.kind === 'assault' ||
+        opt.kind === 'defend' ||
+        opt.kind === 'patrol' ||
+        opt.kind === 'event')
+  );
+  const selectedDefaultBattleKind = pickDefaultBattle(selectedBattleOptions);
+  const selectedCanDeploy = selectedDefaultBattleKind !== null;
+  const selectedBlockedReasonKey = !selectedCanDeploy
+    ? selectedBattleOptions.find((opt) => !opt.allowed && opt.reasonKey)
+        ?.reasonKey ?? 'map.reason.notFrontline'
+    : null;
+  const selectedBlockedReasonText = selectedBlockedReasonKey
+    ? t(selectedBlockedReasonKey)
+    : undefined;
+  const selectedBriefingBlockedReasonText =
+    selectedBlockedReasonKey === 'map.reason.notFrontline'
+      ? t('map.briefingReason.notFrontline')
+      : selectedBlockedReasonKey === 'map.reason.rearBase'
+      ? t('map.briefingReason.rearBase')
+      : selectedBlockedReasonKey === 'map.reason.hidden'
+      ? t('map.briefingReason.hidden')
+      : selectedBlockedReasonText;
+
   const effectiveSquadSize =
     adminConfig.battleSizeOverride ?? selectedSector.squadSize;
   const selectedDropConfig = DROP_CONFIG[selectedSector.difficulty];
-  const estimatedEnemyLevel = Math.max(
-    1,
-    activeGear.level + selectedSector.levelOffset
+  const selectedDefaultBattleOption = selectedDefaultBattleKind
+    ? selectedBattleOptions.find(
+        (opt) => opt.allowed && opt.kind === selectedDefaultBattleKind
+      )
+    : undefined;
+  const defaultLevelBand = getEnemyLevelBand(
+    selectedDefaultBattleKind ?? 'assault',
+    adminConfig.enemyLevel,
+    {
+      sourceId: selectedDefaultBattleOption?.sourceId,
+      hasBoss: selectedSector.hasBoss,
+      forceBoss: Boolean(adminConfig.forceBoss),
+    }
   );
+  const estimatedEnemyLevel =
+    adminConfig.battleLevelOffsetOverride !== undefined &&
+    adminConfig.battleLevelOffsetOverride !== null
+      ? Math.max(1, activeGear.level + adminConfig.battleLevelOffsetOverride)
+      : clampEnemyLevel(
+          activeGear.level + defaultLevelBand.mid + selectedSector.levelOffset,
+          adminConfig.enemyLevel
+        );
 
   const estRegular = calculateSingleEnemyReward(estimatedEnemyLevel, false);
   const estBoss = selectedSector.hasBoss
@@ -210,23 +508,161 @@ export function MapView() {
       adminConfig.rewardMultiplier
   );
 
-  const clampZoom = (z: number) => Math.max(0.75, Math.min(2.4, z));
-  const clampPan = (x: number, y: number) => ({
-    x: Math.max(-260, Math.min(260, x)),
-    y: Math.max(-150, Math.min(150, y)),
-  });
+  const getCurrentMapBoxSize = () => {
+    const el = mapViewportRef.current;
+    if (el && el.clientWidth > 0 && el.clientHeight > 0) {
+      return { width: el.clientWidth, height: el.clientHeight };
+    }
+    return mapBoxSize;
+  };
+
+  const clampZoom = (z: number) => clampMapZoom(z, activeMapBounds);
+  const clampPan = (x: number, y: number, targetZoom = zoom) => {
+    const size = getCurrentMapBoxSize();
+    return clampMapPan(
+      x,
+      y,
+      targetZoom,
+      size.width,
+      size.height,
+      activeMapBounds
+    );
+  };
+
+  const computePreferredInitialView = (size: { width: number; height: number }) => {
+    if (isGeneratedMap) {
+      return computeInitialGeneratedMapView(
+        startNode.mapPos,
+        startNeighborPositions,
+        size.width,
+        size.height,
+        activeMapBounds
+      );
+    }
+    if (isPhone) {
+      return computeInitialPhoneMapView(
+        selectedSector.mapPos,
+        size.width,
+        size.height,
+        activeMapBounds
+      );
+    }
+    return { zoom: 1, pan: { x: 0, y: 0 } };
+  };
+
+  const resetMapView = () => {
+    userInteractedRef.current = false;
+    const size = getCurrentMapBoxSize();
+    const view = computePreferredInitialView(size);
+    setZoom(view.zoom);
+    setPan(view.pan);
+  };
+
+  useEffect(() => {
+    if (prevMapIdRef.current !== activeMap.mapId) {
+      prevMapIdRef.current = activeMap.mapId;
+      userInteractedRef.current = false;
+      const size = getCurrentMapBoxSize();
+      const view = computePreferredInitialView(size);
+      setZoom(view.zoom);
+      setPan(view.pan);
+    }
+  }, [activeMap.mapId]);
+
+  useEffect(() => {
+    const el = mapViewportRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const syncSize = () => {
+      if (el.clientWidth > 0 && el.clientHeight > 0) {
+        const nextSize = { width: el.clientWidth, height: el.clientHeight };
+        setMapBoxSize(nextSize);
+        if ((isPhone || isGeneratedMap) && !userInteractedRef.current) {
+          const view = computePreferredInitialView(nextSize);
+          setZoom(view.zoom);
+          setPan(view.pan);
+        }
+      }
+    };
+    syncSize();
+    const ro = new ResizeObserver(syncSize);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [
+    isPhone,
+    isGeneratedMap,
+    activeMap.mapId,
+    selectedSector.mapPos,
+    activeMapBounds.width,
+    activeMapBounds.height,
+  ]);
+
+  useEffect(() => {
+    const fallback = getFallbackMapBoxSize(isPhone);
+    setMapBoxSize((prev) => {
+      const el = mapViewportRef.current;
+      if (el && el.clientWidth > 0 && el.clientHeight > 0) {
+        return { width: el.clientWidth, height: el.clientHeight };
+      }
+      return prev.width > 0 && prev.height > 0 && prevIsPhoneRef.current === isPhone
+        ? prev
+        : fallback;
+    });
+
+    if (prevIsPhoneRef.current !== isPhone) {
+      prevIsPhoneRef.current = isPhone;
+      userInteractedRef.current = false;
+      const el = mapViewportRef.current;
+      const size =
+        el && el.clientWidth > 0 && el.clientHeight > 0
+          ? { width: el.clientWidth, height: el.clientHeight }
+          : fallback;
+      const view = computePreferredInitialView(size);
+      setZoom(view.zoom);
+      setPan(view.pan);
+      if (!isPhone) {
+        setMapInfoOpen(false);
+      }
+    }
+  }, [
+    isPhone,
+    isGeneratedMap,
+    activeMap.mapId,
+    selectedSector.mapPos,
+    activeMapBounds.width,
+    activeMapBounds.height,
+  ]);
+
+  useEffect(() => {
+    if (!isPhone) {
+      setHintFaded(false);
+      return;
+    }
+    setHintFaded(false);
+    const timer = window.setTimeout(() => {
+      setHintFaded(true);
+    }, 4000);
+    return () => window.clearTimeout(timer);
+  }, [isPhone]);
 
   const handleSelectSector = (sectorId: string) => {
     if (dragOriginRef.current?.moved) return;
-    if (!pilot.unlockedSectorIds.includes(sectorId)) return;
+    if (!isVisible(pilot, sectorId)) return;
     soundFx.playClick();
     selectSector(sectorId);
     setPreBattleDetailsOpen(false);
     setMobileBriefingOpen(true);
   };
 
+  const applyZoomDelta = (delta: number) => {
+    userInteractedRef.current = true;
+    setZoom((z) => {
+      const nextZoom = clampZoom(z + delta);
+      setPan((prevPan) => clampPan(prevPan.x, prevPan.y, nextZoom));
+      return nextZoom;
+    });
+  };
+
   const handlePointerDown = (e: PointerEvent<HTMLDivElement>) => {
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
     if (pointersRef.current.size === 1) {
@@ -236,6 +672,7 @@ export function MapView() {
         panX: pan.x,
         panY: pan.y,
         moved: false,
+        captured: false,
       };
       pinchBaseRef.current = null;
     } else if (pointersRef.current.size === 2) {
@@ -251,25 +688,38 @@ export function MapView() {
     pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
     if (pointersRef.current.size === 2 && pinchBaseRef.current) {
+      userInteractedRef.current = true;
       const pts = Array.from(pointersRef.current.values());
       const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
       const nextZoom = clampZoom(
         pinchBaseRef.current.zoom * (dist / pinchBaseRef.current.dist)
       );
       setZoom(nextZoom);
+      setPan((prevPan) => clampPan(prevPan.x, prevPan.y, nextZoom));
     } else if (pointersRef.current.size === 1 && dragOriginRef.current) {
       const dx = e.clientX - dragOriginRef.current.x;
       const dy = e.clientY - dragOriginRef.current.y;
       if (Math.hypot(dx, dy) > 6) {
         dragOriginRef.current.moved = true;
+        userInteractedRef.current = true;
+        if (!dragOriginRef.current.captured) {
+          dragOriginRef.current.captured = true;
+          (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+        }
       }
-      setPan(
-        clampPan(dragOriginRef.current.panX + dx, dragOriginRef.current.panY + dy)
-      );
+      if (dragOriginRef.current.moved) {
+        setPan(
+          clampPan(dragOriginRef.current.panX + dx, dragOriginRef.current.panY + dy)
+        );
+      }
     }
   };
 
   const handlePointerUp = (e: PointerEvent<HTMLDivElement>) => {
+    const target = e.currentTarget as HTMLElement;
+    if (target.hasPointerCapture?.(e.pointerId)) {
+      target.releasePointerCapture?.(e.pointerId);
+    }
     pointersRef.current.delete(e.pointerId);
     if (pointersRef.current.size < 2) {
       pinchBaseRef.current = null;
@@ -283,7 +733,7 @@ export function MapView() {
 
   const handleWheel = (e: WheelEvent<HTMLDivElement>) => {
     const delta = e.deltaY > 0 ? -0.15 : 0.15;
-    setZoom((z) => clampZoom(z + delta));
+    applyZoomDelta(delta);
   };
 
   const renderNpcRow = (npc: BaseNpcRole) => {
@@ -450,11 +900,18 @@ export function MapView() {
     const isDamaged = selectedBaseState.status === 'damaged';
     const isRepairing = selectedBaseState.status === 'repairing';
 
-    const deployCtaLabel = selectedBaseState.underAttack
-      ? t('map.defendBtn', { size: effectiveSquadSize })
-      : isAllied
-      ? t('map.patrolBtn', { size: effectiveSquadSize })
-      : t('map.assaultBtn', { size: effectiveSquadSize });
+    const defaultBattleKind = selectedDefaultBattleKind;
+    const canDeploy = selectedCanDeploy;
+    const blockedReasonText = selectedBlockedReasonText;
+
+    const deployCtaLabel =
+      defaultBattleKind === 'defend' ||
+      (defaultBattleKind === null && selectedBaseState.underAttack)
+        ? t('map.defendBtn', { size: effectiveSquadSize })
+        : defaultBattleKind === 'patrol' ||
+          (defaultBattleKind === null && isAllied)
+        ? t('map.patrolBtn', { size: effectiveSquadSize })
+        : t('map.assaultBtn', { size: effectiveSquadSize });
 
     return (
       <div className="space-y-4">
@@ -719,77 +1176,383 @@ export function MapView() {
           </div>
         </div>
 
+        {/* Available Battle Options ("Trận có thể đánh") */}
+        <div
+          data-testid="map-briefing-options"
+          className="rounded-lg border border-slate-800 bg-[#080C15] p-3 space-y-2"
+        >
+          <div className="text-xs font-semibold text-slate-200">
+            {t('map.briefingOptionsTitle')}
+          </div>
+          {selectedAllowedMapOptions.length > 0 ? (
+            <div className="space-y-1.5">
+              {selectedAllowedMapOptions.map((opt) => {
+                const OptionIcon =
+                  opt.kind === 'defend'
+                    ? Shield
+                    : opt.kind === 'patrol'
+                    ? Compass
+                    : Swords;
+                const iconColor =
+                  opt.kind === 'defend'
+                    ? 'text-red-400'
+                    : opt.kind === 'patrol'
+                    ? 'text-emerald-400'
+                    : opt.kind === 'event'
+                    ? 'text-rose-400'
+                    : 'text-amber-400';
+                const optionSize = opt.sizeOverride ?? effectiveSquadSize;
+                const optionKey = `${opt.kind}_${opt.sourceId ?? 'default'}`;
+                const isExpanded =
+                  expandedOption?.sectorId === selectedSector.id &&
+                  expandedOption.key === optionKey;
+                const toggleExpand = () =>
+                  setExpandedOption((prev) =>
+                    prev?.sectorId === selectedSector.id &&
+                    prev.key === optionKey
+                      ? null
+                      : { sectorId: selectedSector.id, key: optionKey }
+                  );
+                const rowLabel = opt.labelKey
+                  ? `${t(opt.labelKey as TranslationKey)} ${optionSize}v${optionSize}`
+                  : t(`map.optionLabel.${opt.kind}` as TranslationKey, {
+                      size: optionSize,
+                    });
+
+                const isBoss =
+                  selectedSector.hasBoss || Boolean(adminConfig.forceBoss);
+                const hasLevelOverride =
+                  adminConfig.battleLevelOffsetOverride !== undefined &&
+                  adminConfig.battleLevelOffsetOverride !== null;
+                const optBand = hasLevelOverride
+                  ? null
+                  : getEnemyLevelBand(opt.kind, adminConfig.enemyLevel, {
+                      sourceId: opt.sourceId,
+                      hasBoss: selectedSector.hasBoss,
+                      forceBoss: Boolean(adminConfig.forceBoss),
+                    });
+                const optMinLv = hasLevelOverride
+                  ? Math.max(
+                      1,
+                      activeGear.level + adminConfig.battleLevelOffsetOverride!
+                    )
+                  : clampEnemyLevel(
+                      activeGear.level +
+                        optBand!.min +
+                        selectedSector.levelOffset,
+                      adminConfig.enemyLevel
+                    );
+                const optMaxLv = hasLevelOverride
+                  ? optMinLv
+                  : clampEnemyLevel(
+                      activeGear.level +
+                        optBand!.max +
+                        selectedSector.levelOffset,
+                      adminConfig.enemyLevel
+                    );
+                const optMidLv = hasLevelOverride
+                  ? optMinLv
+                  : clampEnemyLevel(
+                      activeGear.level +
+                        optBand!.mid +
+                        selectedSector.levelOffset,
+                      adminConfig.enemyLevel
+                    );
+                const maxDiff = optMaxLv - activeGear.level;
+                const rangeColorClass = levelConClass(maxDiff);
+
+                const roster = ARCHETYPE_ROSTER_BY_SIZE[selectedSector.squadSize];
+                const classCounts = new Map<MechClassId, number>();
+                if (roster && roster.length > 0) {
+                  for (let i = 0; i < optionSize; i++) {
+                    const arch = roster[i % roster.length];
+                    const cls = ENEMY_ARCHETYPE_DEFS[arch].classId;
+                    classCounts.set(cls, (classCounts.get(cls) ?? 0) + 1);
+                  }
+                }
+                const mixParts = MECH_CLASS_LIST.flatMap((c) => {
+                  const cnt = classCounts.get(c.id) ?? 0;
+                  return cnt > 0 ? [`${cnt} ${getClassName(lang, c.id)}`] : [];
+                });
+
+                const optRegularReward = calculateSingleEnemyReward(
+                  optMidLv,
+                  false
+                );
+                const optBossReward = isBoss
+                  ? calculateSingleEnemyReward(optMidLv + 1, true)
+                  : null;
+                const optRegularCount = isBoss
+                  ? Math.max(1, optionSize - 1)
+                  : optionSize;
+                const optExp = Math.round(
+                  (optRegularReward.exp * optRegularCount +
+                    (optBossReward?.exp ?? 0)) *
+                    adminConfig.rewardMultiplier
+                );
+                const optCr = Math.round(
+                  (optRegularReward.credits * optRegularCount +
+                    (optBossReward?.credits ?? 0)) *
+                    adminConfig.rewardMultiplier
+                );
+
+                return (
+                  <div key={optionKey}>
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      aria-expanded={isExpanded}
+                      data-testid={`map-option-row-${opt.kind}`}
+                      onClick={toggleExpand}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          toggleExpand();
+                        }
+                      }}
+                      className="flex items-center justify-between gap-2 rounded border border-slate-800/90 bg-slate-950/80 px-2.5 py-2 cursor-pointer hover:border-slate-700 transition-colors"
+                    >
+                      <div className="flex items-center gap-2 min-w-0 text-xs font-semibold text-slate-100">
+                        <OptionIcon
+                          className={`w-4 h-4 shrink-0 ${iconColor}`}
+                        />
+                        <span className="truncate">{rowLabel}</span>
+                        {isExpanded ? (
+                          <ChevronUp className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+                        ) : (
+                          <ChevronDown className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        data-testid={`map-option-deploy-${opt.kind}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setMobileBriefingOpen(false);
+                          startBattle(selectedSector.id, {
+                            kind: opt.kind,
+                            sourceId: opt.sourceId ?? null,
+                          });
+                        }}
+                        onKeyDown={(e) => e.stopPropagation()}
+                        className="min-h-[36px] px-3 rounded-md bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs inline-flex items-center gap-1 shrink-0 cursor-pointer whitespace-nowrap"
+                      >
+                        <Rocket className="w-3.5 h-3.5 shrink-0" />
+                        <span>{t('map.deployShort')}</span>
+                      </button>
+                    </div>
+                    {isExpanded && (
+                      <div
+                        data-testid={`map-option-preview-${opt.kind}`}
+                        className="mt-1 rounded border border-slate-800/90 bg-slate-900/75 px-2.5 py-2 text-[11px] leading-snug space-y-1"
+                      >
+                        <div className="flex flex-wrap items-center gap-x-1">
+                          <span className="text-slate-400 font-semibold">
+                            {t('map.preview.allyLabel')}:
+                          </span>
+                          <span className="text-slate-100 font-mono-nums">
+                            {t('map.preview.shipsLv', {
+                              size: optionSize,
+                              level: activeGear.level,
+                            })}
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-x-1">
+                          <span className="text-slate-400 font-semibold">
+                            {t('map.preview.enemyLabel')}:
+                          </span>
+                          <span
+                            className={`font-mono-nums font-semibold ${rangeColorClass}`}
+                          >
+                            {t('map.preview.shipsLvRange', {
+                              size: optionSize,
+                              min: optMinLv,
+                              max: optMaxLv,
+                            })}
+                          </span>
+                          {isBoss && (
+                            <span className="ml-1 px-1.5 py-0.5 rounded bg-red-950/80 border border-red-500/40 text-red-300 text-[10px] font-bold uppercase">
+                              {t('map.preview.bossTag')}
+                            </span>
+                          )}
+                        </div>
+                        {mixParts.length > 0 && (
+                          <div className="text-slate-300 break-words">
+                            <span className="text-slate-400">
+                              {t('map.preview.mixLabel')}:{' '}
+                            </span>
+                            {mixParts.join(' · ')}
+                          </div>
+                        )}
+                        <div className="flex flex-wrap items-center gap-x-1">
+                          <span className="text-slate-400">
+                            {t('map.preview.rewardLabel')}:
+                          </span>
+                          <span className="font-mono-nums text-emerald-300">
+                            ~{optExp} EXP · ~{optCr.toLocaleString()} CR
+                          </span>
+                        </div>
+                        {maxDiff >= 5 && (
+                          <div
+                            data-testid={`map-option-preview-warn-${opt.kind}`}
+                            className="text-red-400 font-semibold"
+                          >
+                            {t('map.preview.highDangerWarn', {
+                              diff: maxDiff,
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p
+              data-testid="map-briefing-options-blocked"
+              className="text-xs text-slate-400 leading-relaxed"
+            >
+              {selectedBriefingBlockedReasonText}
+            </p>
+          )}
+        </div>
+
         {/* Deploy Button */}
         <button
           type="button"
+          data-testid="map-deploy-btn"
+          disabled={!canDeploy}
+          title={blockedReasonText}
           onClick={() => {
+            if (!defaultBattleKind) return;
             setMobileBriefingOpen(false);
             startBattle(selectedSector.id);
           }}
-          className={`w-full min-h-[48px] px-4 inline-flex items-center justify-center gap-2 rounded-lg font-bold text-sm transition-colors cursor-pointer ${
-            selectedBaseState.underAttack
-              ? 'bg-red-500 hover:bg-red-400 text-white'
-              : 'bg-amber-500 hover:bg-amber-400 text-slate-950'
+          className={`w-full min-h-[48px] px-4 inline-flex items-center justify-center gap-2 rounded-lg font-bold text-sm transition-colors disabled:opacity-45 disabled:cursor-not-allowed ${
+            !canDeploy
+              ? 'bg-slate-800 text-slate-400 border border-slate-700'
+              : selectedBaseState.underAttack
+              ? 'bg-red-500 hover:bg-red-400 text-white cursor-pointer'
+              : 'bg-amber-500 hover:bg-amber-400 text-slate-950 cursor-pointer'
           }`}
         >
           <Rocket className="w-4 h-4" />
           <span>{deployCtaLabel}</span>
         </button>
+        {!canDeploy && blockedReasonText && (
+          <p
+            data-testid="map-deploy-blocked-reason"
+            className="text-xs text-slate-400 text-center"
+          >
+            {blockedReasonText}
+          </p>
+        )}
       </div>
     );
   };
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-5 space-y-3.5 sm:space-y-4">
-      {/* Header: Title + Campaign Month + Income + Advance Month + Quick Deploy */}
-      <div className="rounded-lg border border-slate-800/90 bg-[#0C121D]/95 p-3.5 sm:p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="font-display text-2xl font-bold tracking-wide text-slate-100">
+    <div
+      data-testid="map-scroll-container"
+      className={
+        isPhone
+          ? 'flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-3 pt-2.5 space-y-3'
+          : 'flex-1 min-h-0 overflow-y-auto p-3 sm:p-5 space-y-3.5 sm:space-y-4'
+      }
+    >
+      {/* Header: Compact <=72px on Phone, Full Header + Actions on Desktop/Tablet */}
+      {isPhone ? (
+        <div
+          data-testid="map-compact-header"
+          className="rounded-lg border border-slate-800/90 bg-[#0C121D]/95 px-2.5 py-1 space-y-1 max-h-[72px]"
+        >
+          <div className="flex items-center justify-between gap-2 h-8 min-w-0">
+            <h1 className="font-display text-base font-bold tracking-wide text-slate-100 truncate min-w-0">
               {t('map.pageTitle')}
             </h1>
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-sky-500/40 bg-sky-500/12 text-xs font-mono-nums font-semibold text-sky-200">
-              <Calendar className="w-3.5 h-3.5 text-sky-400" />
+            <button
+              type="button"
+              data-testid="map-info-btn"
+              onClick={() => setMapInfoOpen(true)}
+              aria-label={t('map.infoBtnAria')}
+              title={t('map.pageSubtitle')}
+              className="w-10 h-10 -my-1 -mr-1.5 shrink-0 inline-flex items-center justify-center rounded-lg text-slate-300 hover:text-sky-300 hover:bg-slate-800/80 transition-colors cursor-pointer"
+            >
+              <Info className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-sky-500/40 bg-sky-500/12 text-[11px] leading-4 font-mono-nums font-semibold text-sky-200 shrink-0 whitespace-nowrap">
+              <Calendar className="w-3 h-3 text-sky-400" />
               {t('map.monthBadge', { month: pilot.campaignMonth ?? 1 })}
             </span>
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-emerald-500/40 bg-emerald-500/10 text-xs font-mono-nums font-semibold text-emerald-300">
-              {t('map.monthlyTotal', {
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded border border-emerald-500/40 bg-emerald-500/10 text-[11px] leading-4 font-mono-nums font-semibold text-emerald-300 truncate min-w-0">
+              {t('map.monthlyTotalShort', {
                 cr: totalIncome.credits.toLocaleString(),
                 wp: totalIncome.warPoints,
               })}
             </span>
           </div>
-          <p className="text-xs text-slate-400 mt-0.5">
-            {t('map.pageSubtitle')}
-          </p>
         </div>
+      ) : (
+        <div
+          data-testid="map-desktop-header"
+          className="rounded-lg border border-slate-800/90 bg-[#0C121D]/95 p-3.5 sm:p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3"
+        >
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="font-display text-2xl font-bold tracking-wide text-slate-100">
+                {t('map.pageTitle')}
+              </h1>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-sky-500/40 bg-sky-500/12 text-xs font-mono-nums font-semibold text-sky-200">
+                <Calendar className="w-3.5 h-3.5 text-sky-400" />
+                {t('map.monthBadge', { month: pilot.campaignMonth ?? 1 })}
+              </span>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-emerald-500/40 bg-emerald-500/10 text-xs font-mono-nums font-semibold text-emerald-300">
+                {t('map.monthlyTotal', {
+                  cr: totalIncome.credits.toLocaleString(),
+                  wp: totalIncome.warPoints,
+                })}
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 mt-0.5">
+              {t('map.pageSubtitle')}
+            </p>
+          </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              soundFx.playClick();
-              advanceMonth();
-            }}
-            className="flex-1 sm:flex-none min-h-[44px] px-3.5 inline-flex items-center justify-center gap-1.5 rounded-lg border border-sky-500/50 bg-sky-500/15 hover:bg-sky-500/25 text-sky-200 font-semibold text-xs sm:text-sm transition-colors cursor-pointer whitespace-nowrap"
-          >
-            <FastForward className="w-4 h-4" />
-            <span>{t('map.advanceMonth')}</span>
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                soundFx.playClick();
+                advanceMonth();
+              }}
+              className="flex-1 sm:flex-none min-h-[44px] px-3.5 inline-flex items-center justify-center gap-1.5 rounded-lg border border-sky-500/50 bg-sky-500/15 hover:bg-sky-500/25 text-sky-200 font-semibold text-xs sm:text-sm transition-colors cursor-pointer whitespace-nowrap"
+            >
+              <FastForward className="w-4 h-4" />
+              <span>{t('map.advanceMonth')}</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => startBattle(selectedSector.id)}
-            className="flex-1 sm:flex-none min-h-[44px] px-4 inline-flex items-center justify-center gap-2 rounded-lg bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-slate-950 font-semibold text-xs sm:text-sm transition-colors cursor-pointer whitespace-nowrap"
-          >
-            <Rocket className="w-4 h-4" />
-            <span>
-              {t('hangar.deploySquad')} ({getClassName(lang, activeGear.classId)}{' '}
-              Lv.{activeGear.level})
-            </span>
-          </button>
+            <button
+              type="button"
+              disabled={!selectedCanDeploy}
+              title={selectedBlockedReasonText}
+              onClick={() => {
+                if (!selectedDefaultBattleKind) return;
+                startBattle(selectedSector.id);
+              }}
+              className="flex-1 sm:flex-none min-h-[44px] px-4 inline-flex items-center justify-center gap-2 rounded-lg bg-amber-500 hover:bg-amber-400 active:bg-amber-600 disabled:opacity-45 disabled:cursor-not-allowed text-slate-950 font-semibold text-xs sm:text-sm transition-colors cursor-pointer whitespace-nowrap"
+            >
+              <Rocket className="w-4 h-4" />
+              <span>
+                {t('hangar.deploySquad')} ({getClassName(lang, activeGear.classId)}{' '}
+                Lv.{activeGear.level})
+              </span>
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Active Pre-Battle Buffs & Bonus Mission Strip */}
       {(pilot.hiredWingman ||
@@ -835,50 +1598,86 @@ export function MapView() {
 
       {/* Interactive Pan & Pinch-to-Zoom Star Chart + Legend */}
       <section className="rounded-lg border border-slate-800/90 bg-[#080C14] relative overflow-hidden">
-        <div className="absolute top-2 left-2.5 z-10 text-[11px] text-slate-400 bg-slate-950/85 border border-slate-800 rounded px-2 py-1 pointer-events-none">
-          {t('mobile.mapPanHint')}
-        </div>
-
-        <div className="absolute top-2 right-2 z-10 flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => setZoom((z) => clampZoom(z + 0.25))}
-            aria-label={t('mobile.mapZoomIn')}
-            className="min-w-[44px] min-h-[44px] rounded-lg border border-slate-700 bg-slate-900/90 hover:bg-slate-800 text-slate-200 flex items-center justify-center cursor-pointer"
-          >
-            <ZoomIn className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setZoom((z) => clampZoom(z - 0.25))}
-            aria-label={t('mobile.mapZoomOut')}
-            className="min-w-[44px] min-h-[44px] rounded-lg border border-slate-700 bg-slate-900/90 hover:bg-slate-800 text-slate-200 flex items-center justify-center cursor-pointer"
-          >
-            <ZoomOut className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setZoom(1);
-              setPan({ x: 0, y: 0 });
-            }}
-            aria-label={t('mobile.mapResetView')}
-            className="min-w-[44px] min-h-[44px] rounded-lg border border-slate-700 bg-slate-900/90 hover:bg-slate-800 text-slate-200 flex items-center justify-center cursor-pointer"
-          >
-            <Maximize2 className="w-4 h-4" />
-          </button>
-        </div>
-
         <div
+          ref={mapViewportRef}
+          data-testid="map-viewport-box"
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerUp}
           onWheel={handleWheel}
-          className="w-full h-72 sm:h-80 touch-none cursor-grab active:cursor-grabbing overflow-hidden flex items-center justify-center"
+          style={isPhone ? { height: 'clamp(360px, 62dvh, 560px)' } : undefined}
+          className={
+            isPhone
+              ? 'relative w-full touch-none cursor-grab active:cursor-grabbing overflow-hidden flex items-center justify-center'
+              : 'relative w-full h-72 sm:h-80 touch-none cursor-grab active:cursor-grabbing overflow-hidden flex items-center justify-center'
+          }
         >
+          <div
+            data-testid="map-pan-hint"
+            data-hint-faded={isPhone && hintFaded ? 'true' : 'false'}
+            className={
+              isPhone
+                ? `absolute bottom-2 left-2 z-10 max-w-[calc(100%-148px)] text-[11px] leading-tight text-slate-300 bg-slate-950/85 border border-slate-800 rounded px-2 py-1 pointer-events-none transition-opacity duration-500 ${
+                    hintFaded ? 'opacity-0' : 'opacity-100'
+                  }`
+                : 'absolute top-2 left-2.5 z-10 text-[11px] text-slate-400 bg-slate-950/85 border border-slate-800 rounded px-2 py-1 pointer-events-none'
+            }
+          >
+            {t('mobile.mapPanHint')}
+          </div>
+
+          <div
+            data-testid="map-zoom-controls"
+            className={
+              isPhone
+                ? 'absolute bottom-2 right-2 z-10 flex items-center gap-1'
+                : 'absolute top-2 right-2 z-10 flex items-center gap-1'
+            }
+          >
+            <button
+              type="button"
+              onClick={() => applyZoomDelta(0.25)}
+              onPointerDown={(e) => e.stopPropagation()}
+              aria-label={t('mobile.mapZoomIn')}
+              className={
+                isPhone
+                  ? 'w-10 h-10 min-w-[40px] min-h-[40px] rounded-lg border border-slate-700 bg-slate-900/90 hover:bg-slate-800 text-slate-200 flex items-center justify-center cursor-pointer'
+                  : 'min-w-[44px] min-h-[44px] rounded-lg border border-slate-700 bg-slate-900/90 hover:bg-slate-800 text-slate-200 flex items-center justify-center cursor-pointer'
+              }
+            >
+              <ZoomIn className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => applyZoomDelta(-0.25)}
+              onPointerDown={(e) => e.stopPropagation()}
+              aria-label={t('mobile.mapZoomOut')}
+              className={
+                isPhone
+                  ? 'w-10 h-10 min-w-[40px] min-h-[40px] rounded-lg border border-slate-700 bg-slate-900/90 hover:bg-slate-800 text-slate-200 flex items-center justify-center cursor-pointer'
+                  : 'min-w-[44px] min-h-[44px] rounded-lg border border-slate-700 bg-slate-900/90 hover:bg-slate-800 text-slate-200 flex items-center justify-center cursor-pointer'
+              }
+            >
+              <ZoomOut className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={resetMapView}
+              onPointerDown={(e) => e.stopPropagation()}
+              aria-label={t('mobile.mapResetView')}
+              className={
+                isPhone
+                  ? 'w-10 h-10 min-w-[40px] min-h-[40px] rounded-lg border border-slate-700 bg-slate-900/90 hover:bg-slate-800 text-slate-200 flex items-center justify-center cursor-pointer'
+                  : 'min-w-[44px] min-h-[44px] rounded-lg border border-slate-700 bg-slate-900/90 hover:bg-slate-800 text-slate-200 flex items-center justify-center cursor-pointer'
+              }
+            >
+              <Maximize2 className="w-4 h-4" />
+            </button>
+          </div>
+
           <svg
-            viewBox="0 0 840 310"
+            viewBox={`0 0 ${activeMapBounds.width} ${activeMapBounds.height}`}
             className="w-full h-full select-none transition-transform duration-75"
             style={{
               transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
@@ -888,20 +1687,20 @@ export function MapView() {
           >
             {/* Subtle orbital grid rings */}
             <ellipse
-              cx="420"
-              cy="165"
-              rx="375"
-              ry="135"
+              cx={Math.round((activeMapBounds.width * 420) / MAP_VIEWBOX_WIDTH)}
+              cy={Math.round((activeMapBounds.height * 165) / MAP_VIEWBOX_HEIGHT)}
+              rx={Math.round((activeMapBounds.width * 375) / MAP_VIEWBOX_WIDTH)}
+              ry={Math.round((activeMapBounds.height * 135) / MAP_VIEWBOX_HEIGHT)}
               fill="none"
               stroke="#1E293B"
               strokeWidth="1"
               strokeDasharray="6 6"
             />
             <ellipse
-              cx="420"
-              cy="165"
-              rx="235"
-              ry="90"
+              cx={Math.round((activeMapBounds.width * 420) / MAP_VIEWBOX_WIDTH)}
+              cy={Math.round((activeMapBounds.height * 165) / MAP_VIEWBOX_HEIGHT)}
+              rx={Math.round((activeMapBounds.width * 235) / MAP_VIEWBOX_WIDTH)}
+              ry={Math.round((activeMapBounds.height * 90) / MAP_VIEWBOX_HEIGHT)}
               fill="none"
               stroke="#1E293B"
               strokeWidth="1"
@@ -910,6 +1709,9 @@ export function MapView() {
 
             {/* Star Lanes + Animated Incoming Raid Dots */}
             {MAP_LANES.map((lane) => {
+              const laneKind = getMapLaneVisualKind(pilot, lane);
+              if (laneKind === 'hidden') return null;
+
               const sFrom = getSectorById(lane.from);
               const sTo = getSectorById(lane.to);
               const stFrom = getBaseState(pilot, lane.from);
@@ -926,17 +1728,42 @@ export function MapView() {
               const pathId = `lane-${lane.from}-${lane.to}`;
               const pathD = `M ${startPos.x} ${startPos.y} L ${endPos.x} ${endPos.y}`;
 
+              const stroke = isIncomingLane
+                ? '#EF4444'
+                : laneKind === 'allied-to-contested'
+                ? '#F59E0B'
+                : '#334155';
+              const strokeWidth = isIncomingLane
+                ? '2.6'
+                : laneKind === 'allied-to-contested'
+                ? '2'
+                : '1.8';
+              const strokeDasharray = isIncomingLane
+                ? '6 6'
+                : laneKind === 'allied-to-contested'
+                ? '6 4'
+                : '5 5';
+              const opacity = isIncomingLane
+                ? 0.92
+                : laneKind === 'allied-to-contested'
+                ? 0.9
+                : laneKind === 'allied-allied'
+                ? 0.72
+                : 0.35;
+
               return (
                 <g key={pathId}>
                   <path
                     id={pathId}
+                    data-testid={`map-lane-${lane.id}`}
+                    data-kind={laneKind}
                     d={pathD}
                     fill="none"
-                    stroke={isIncomingLane ? '#EF4444' : '#334155'}
-                    strokeWidth={isIncomingLane ? '2.6' : '1.8'}
-                    strokeDasharray={isIncomingLane ? '6 6' : '5 5'}
+                    stroke={stroke}
+                    strokeWidth={strokeWidth}
+                    strokeDasharray={strokeDasharray}
                     className={isIncomingLane ? 'anim-lane-flow' : undefined}
-                    opacity={isIncomingLane ? 0.92 : 0.72}
+                    opacity={opacity}
                   />
                   {isIncomingLane && (
                     <>
@@ -964,26 +1791,75 @@ export function MapView() {
 
             {/* Base Nodes (Round = Outpost/Colony/Relay, Square = Fortress/Shipyard/Capital) */}
             {SECTORS_CATALOG.map((sector) => {
+              const nodeState = getMapNodeVisualState(pilot, sector.id);
+              if (nodeState === 'hidden') return null;
+
               const pos = sector.mapPos;
-              const unlocked = pilot.unlockedSectorIds.includes(sector.id);
               const isSelected = sector.id === selectedSector.id;
               const baseState = getBaseState(pilot, sector.id);
-              const ringHex = unlocked
-                ? FACTION_RING_HEX[baseState.faction]
-                : '#475569';
+              const ringHex = FACTION_RING_HEX[baseState.faction];
               const tokenShape = getTokenShapeForBaseType(sector.baseType);
               const isSquare = tokenShape === 'square';
               const scale = adminConfig.battleSizeOverride ?? sector.squadSize;
+              const pirateIncident = getActivePirateIncidentForNode(
+                pilot,
+                sector.id,
+                adminConfig.pirates
+              );
+              const pirateMonthsLeft = pirateIncident
+                ? Math.max(1, pirateIncident.expiresMonth - pilot.campaignMonth)
+                : 0;
+              const pirateTitle = pirateIncident
+                ? t('map.pirateBadgeTitle', {
+                    size: pirateIncident.size,
+                    months: pirateMonthsLeft,
+                  })
+                : '';
 
               return (
                 <g
                   key={sector.id}
+                  data-testid={`map-node-${sector.id}`}
+                  data-state={nodeState}
+                  opacity={nodeState === 'locked' ? 0.45 : undefined}
                   onClick={() => handleSelectSector(sector.id)}
-                  className={unlocked ? 'cursor-pointer' : 'opacity-45'}
+                  className={
+                    nodeState === 'locked'
+                      ? 'cursor-pointer opacity-45'
+                      : 'cursor-pointer'
+                  }
                 >
+                  {/* Contested Node Orange 2px Slow Pulse Ring */}
+                  {nodeState === 'contested' &&
+                    (isSquare ? (
+                      <rect
+                        data-testid={`map-node-contested-ring-${sector.id}`}
+                        x={pos.x - 24}
+                        y={pos.y - 24}
+                        width="48"
+                        height="48"
+                        rx="8"
+                        fill="none"
+                        stroke="#F59E0B"
+                        strokeWidth="2"
+                        className="anim-contested-pulse"
+                      />
+                    ) : (
+                      <circle
+                        data-testid={`map-node-contested-ring-${sector.id}`}
+                        cx={pos.x}
+                        cy={pos.y}
+                        r="25"
+                        fill="none"
+                        stroke="#F59E0B"
+                        strokeWidth="2"
+                        className="anim-contested-pulse"
+                      />
+                    ))}
+
                   {/* Pulsing Under Attack Warning Halo */}
-                  {baseState.underAttack && unlocked && (
-                    isSquare ? (
+                  {baseState.underAttack &&
+                    (isSquare ? (
                       <rect
                         x={pos.x - 28}
                         y={pos.y - 28}
@@ -1007,12 +1883,11 @@ export function MapView() {
                         strokeWidth="2.2"
                         className="anim-raid-pulse"
                       />
-                    )
-                  )}
+                    ))}
 
                   {/* Selected Outer Highlight Ring */}
-                  {isSelected && unlocked && (
-                    isSquare ? (
+                  {isSelected &&
+                    (isSquare ? (
                       <rect
                         x={pos.x - 26}
                         y={pos.y - 26}
@@ -1036,11 +1911,10 @@ export function MapView() {
                         strokeWidth="1.8"
                         strokeDasharray="4 3"
                       />
-                    )
-                  )}
+                    ))}
 
                   {/* Enlarged >= 44px transparent hit target */}
-                  <circle cx={pos.x} cy={pos.y} r="32" fill="transparent" />
+                  <circle cx={pos.x} cy={pos.y} r="32" fill="transparent" pointerEvents="all" />
 
                   {/* Main Token Body (Round or Square) */}
                   {isSquare ? (
@@ -1073,6 +1947,48 @@ export function MapView() {
                     color={ringHex}
                   />
 
+                  {/* Allied Frontline Orange Top-Right Dot */}
+                  {nodeState === 'allied-frontline' && (
+                    <circle
+                      data-testid={`map-node-frontline-dot-${sector.id}`}
+                      cx={pos.x + 17}
+                      cy={baseState.underAttack ? pos.y - 10 : pos.y - 17}
+                      r="4.5"
+                      fill="#f59e0b"
+                      stroke="#0D131D"
+                      strokeWidth="1.5"
+                    />
+                  )}
+
+                  {/* Locked Visible Node Small Padlock Badge */}
+                  {nodeState === 'locked' && (
+                    <g
+                      data-testid={`map-node-lock-${sector.id}`}
+                      transform={`translate(${pos.x + 16}, ${pos.y - 16})`}
+                    >
+                      <circle
+                        r="8"
+                        fill="#0F172A"
+                        stroke="#64748B"
+                        strokeWidth="1.2"
+                      />
+                      <path
+                        d="M -2.5 -1 V -2.8 A 2.5 2.5 0 0 1 2.5 -2.8 V -1"
+                        fill="none"
+                        stroke="#CBD5E1"
+                        strokeWidth="1.3"
+                      />
+                      <rect
+                        x="-3.8"
+                        y="-1"
+                        width="7.6"
+                        height="5.2"
+                        rx="1.2"
+                        fill="#CBD5E1"
+                      />
+                    </g>
+                  )}
+
                   {/* Level Badge (Bottom-Right) */}
                   <g transform={`translate(${pos.x + 15}, ${pos.y + 13})`}>
                     <rect
@@ -1098,7 +2014,7 @@ export function MapView() {
                   </g>
 
                   {/* Under Attack Countdown Pill (Top-Right) */}
-                  {baseState.underAttack && unlocked && (
+                  {baseState.underAttack && (
                     <g transform={`translate(${pos.x + 18}, ${pos.y - 22})`}>
                       <rect
                         x="-18"
@@ -1154,6 +2070,37 @@ export function MapView() {
                       </g>
                     )}
 
+                  {/* Pirate Incident Skull Badge (Top-Left) */}
+                  {pirateIncident && (
+                    <g
+                      data-testid={`map-node-pirate-${sector.id}`}
+                      data-pirate="true"
+                      transform={`translate(${pos.x - 18}, ${
+                        baseState.faction === 'allied' &&
+                        baseState.status !== 'operational'
+                          ? pos.y - 36
+                          : pos.y - 19
+                      })`}
+                      aria-label={pirateTitle}
+                      {...({ title: pirateTitle } as Record<string, string>)}
+                    >
+                      <title>{pirateTitle}</title>
+                      <circle
+                        r="8.5"
+                        fill="#4C0519"
+                        stroke="#FB7185"
+                        strokeWidth="1.2"
+                      />
+                      <Skull
+                        x={-5}
+                        y={-5}
+                        width={10}
+                        height={10}
+                        className="text-rose-200"
+                      />
+                    </g>
+                  )}
+
                   {/* Base Label */}
                   <text
                     x={pos.x}
@@ -1165,17 +2112,45 @@ export function MapView() {
                   >
                     {getSectorName(lang, sector.id)}
                   </text>
+
+                  {/* Contested Chip Under Name */}
+                  {nodeState === 'contested' && (
+                    <g
+                      data-testid={`map-node-contested-chip-${sector.id}`}
+                      transform={`translate(${pos.x}, ${pos.y + 50})`}
+                    >
+                      <rect
+                        x="-31"
+                        y="-7"
+                        width="62"
+                        height="14"
+                        rx="7"
+                        fill="#451A03"
+                        stroke="#F59E0B"
+                        strokeWidth="1"
+                      />
+                      <text
+                        x="0"
+                        y="3"
+                        textAnchor="middle"
+                        fill="#FDE68A"
+                        fontSize="8.5"
+                        fontWeight="700"
+                      >
+                        {t('map.nodeChipContested')}
+                      </text>
+                    </g>
+                  )}
+
                   <text
                     x={pos.x}
-                    y={pos.y + 52}
+                    y={nodeState === 'contested' ? pos.y + 66 : pos.y + 52}
                     textAnchor="middle"
                     fill={ringHex}
                     fontSize="10"
                     fontWeight="600"
                   >
-                    {unlocked
-                      ? `${scale}v${scale}${sector.hasBoss ? ' · BOSS' : ''}`
-                      : t('common.locked')}
+                    {`${scale}v${scale}${sector.hasBoss ? ' · BOSS' : ''}`}
                   </text>
                 </g>
               );
@@ -1208,15 +2183,42 @@ export function MapView() {
             <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" />
             <span>{t('map.faction.neutral')}</span>
           </span>
+          <span
+            data-testid="map-legend-contested"
+            className="inline-flex items-center gap-1.5 text-amber-300"
+          >
+            <span className="w-3 h-3 rounded-full border-2 border-amber-500 inline-block" />
+            <span>{t('map.legendContested')}</span>
+          </span>
+          <span
+            data-testid="map-legend-locked"
+            className="inline-flex items-center gap-1.5 text-slate-400 opacity-75"
+          >
+            <Lock className="w-3 h-3 shrink-0" />
+            <span>{t('map.legendLocked')}</span>
+          </span>
           <span className="inline-flex items-center gap-1.5 text-orange-300">
             <span className="w-4 border-t-2 border-dashed border-red-500 inline-block" />
             <span>{t('map.legendIncoming')}</span>
+          </span>
+          <span
+            data-testid="map-legend-pirates"
+            className="inline-flex items-center gap-1.5 text-rose-300"
+          >
+            <span className="w-4 h-4 rounded-full bg-rose-950 border border-rose-400 inline-flex items-center justify-center shrink-0">
+              <Skull className="w-2.5 h-2.5 text-rose-200" />
+            </span>
+            <span>{t('map.legendPirates')}</span>
           </span>
         </div>
       </section>
 
       {/* Base List + Desktop Inline Base Panel */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+      <div
+        className={`grid grid-cols-1 lg:grid-cols-12 gap-4 items-start ${
+          isPhone ? 'pb-16' : ''
+        }`}
+      >
         <div className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-3">
           {SECTORS_CATALOG.map((sector) => {
             const unlocked = pilot.unlockedSectorIds.includes(sector.id);
@@ -1340,6 +2342,83 @@ export function MapView() {
           {renderBriefingBody()}
         </section>
       </div>
+
+      {/* Phone Sticky Bottom Action Bar (< 640px, sits above bottom tab bar) */}
+      {isPhone && (
+        <div
+          data-testid="map-phone-action-bar"
+          className="sticky bottom-0 z-20 -mx-3 px-3 py-2 border-t border-slate-800/95 bg-slate-900/95 flex items-center gap-2"
+        >
+          <button
+            type="button"
+            data-testid="map-phone-advance-btn"
+            onClick={() => {
+              soundFx.playClick();
+              advanceMonth();
+            }}
+            className="flex-1 min-h-[44px] h-[44px] px-2.5 inline-flex items-center justify-center gap-1.5 rounded-lg border border-sky-500/50 bg-sky-500/15 active:bg-sky-500/25 text-sky-200 font-semibold text-xs transition-colors cursor-pointer whitespace-nowrap"
+          >
+            <FastForward className="w-4 h-4 shrink-0" />
+            <span>{t('map.advanceMonthShort')}</span>
+          </button>
+
+          <button
+            type="button"
+            data-testid="map-phone-deploy-btn"
+            disabled={!selectedCanDeploy}
+            title={
+              selectedCanDeploy
+                ? `${t('hangar.deploySquad')} (${getClassName(
+                    lang,
+                    activeGear.classId
+                  )} Lv.${activeGear.level})`
+                : selectedBlockedReasonText
+            }
+            onClick={() => {
+              if (!selectedDefaultBattleKind) return;
+              startBattle(selectedSector.id);
+            }}
+            className={`flex-1 min-w-0 min-h-[44px] h-[44px] px-2.5 inline-flex flex-col items-center justify-center leading-tight rounded-lg font-semibold transition-colors whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed ${
+              selectedCanDeploy
+                ? 'bg-amber-500 active:bg-amber-600 text-slate-950 cursor-pointer'
+                : 'bg-slate-800 text-slate-400 border border-slate-700'
+            }`}
+          >
+            <span className="inline-flex items-center gap-1 text-xs font-bold">
+              <Rocket className="w-3.5 h-3.5 shrink-0" />
+              <span>{t('map.deployShort')}</span>
+            </span>
+            {selectedCanDeploy ? (
+              <span className="text-[10px] font-mono-nums font-bold opacity-85">
+                Lv.{activeGear.level}
+              </span>
+            ) : (
+              <span
+                data-testid="map-phone-deploy-sublabel"
+                className="text-[10px] font-medium truncate max-w-full opacity-90"
+              >
+                {selectedBlockedReasonText}
+              </span>
+            )}
+          </button>
+        </div>
+      )}
+
+      {/* Mobile Map Subtitle Info Sheet (< 640px) */}
+      {isPhone && (
+        <BottomSheet
+          open={mapInfoOpen}
+          onClose={() => setMapInfoOpen(false)}
+          title={t('map.pageTitle')}
+        >
+          <p
+            data-testid="map-info-subtitle"
+            className="text-sm text-slate-300 leading-relaxed"
+          >
+            {t('map.pageSubtitle')}
+          </p>
+        </BottomSheet>
+      )}
 
       {/* Mobile Base Panel BottomSheet (< lg) */}
       <div className="lg:hidden">

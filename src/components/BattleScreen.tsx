@@ -25,13 +25,15 @@ import { BALANCE_CONFIG } from '../data/balance';
 import { getScaledSkillStats, getSkillById } from '../data/skills';
 import {
   getEffectiveUnitSpeed,
-  getEnemyEnrageBonusPct,
   getTeamColorRole,
   getValidEnemyTargets,
   hasStatus,
   isLongRangeAction,
 } from '../engine/combat';
+import { getEnrageState } from '../engine/enrage';
 import { canUnitUseSkill } from '../engine/skills';
+import { getBattleSupplyRows } from '../engine/supplies';
+import { sanitizeTurnPhaseConfig } from '../engine/turnPhase';
 import {
   getAutoStopReasonLabel,
   getBattleSkillReason,
@@ -43,6 +45,10 @@ import {
   getTeamTagLabel,
   useI18n,
 } from '../i18n';
+import {
+  getBattleSummaryCharges,
+  pickVouchersSmallestSufficient,
+} from '../engine/battlePenalty';
 import { useGameStore } from '../store/useGameStore';
 import type {
   AutoRepeatDefeatRule,
@@ -67,14 +73,18 @@ import {
   SP_COLOR_TOKENS,
   SPEECH_BUBBLE_DURATION_MS,
   useBattleLayoutMode,
+  usePrefersReducedMotion,
   writeSpeechBubblesEnabled,
-  type RowExposureState,
 } from '../utils/battleDisplay';
 import {
   computeFxCleanupDelayMs,
   POPUP_CLEANUP_DELAY_MS,
+  resolveEffectiveVfxConfig,
+  resolveReducedMotion,
   useFxSettings,
 } from '../utils/battleVfx';
+import { useActionStageEnabled } from '../utils/actionStagePrefs';
+import { resolveFxTone, STAGE_HIT_FLASH_COLORS } from '../utils/fxTone';
 import {
   parseStructuredCombatLogRow,
   readCombatLogExpandAll,
@@ -88,6 +98,8 @@ import {
   type SidebarCombatLogMode,
 } from '../utils/combatLogFormat';
 import { useStatusDisplaySettings } from '../utils/statusDisplayPrefs';
+import { useAutoVoucherPref } from '../utils/voucherAutoPrefs';
+import { ActionStage, resolveStageFxActorAndTargets } from './ActionStage';
 import {
   AutoRepeatBatchSummaryModal,
   AutoRepeatToast,
@@ -95,6 +107,7 @@ import {
 import { BattleMoreActionsMenu } from './BattleMoreActionsMenu';
 import { BattleRadarView } from './BattleRadarView';
 import { BattleResultDialog } from './BattleResultDialog';
+import { PrestageDialog } from './PrestageDialog';
 import { CombatLogPopupSheet, PhoneUnitDetailSheet } from './BattleSheets';
 import { BattleStatsModal } from './BattleStatsModal';
 import { BattleUnitCard } from './BattleUnitCard';
@@ -106,6 +119,8 @@ import {
   FixedStatusArea,
   countStatusChipRows,
 } from './FixedStatusArea';
+import { FluxTransferPicker } from './FluxTransferPicker';
+import { LevelBadge } from './LevelBadge';
 import { PhoneSkillsSheet } from './PhoneSkillsSheet';
 import {
   RadarStatusBoard,
@@ -115,6 +130,11 @@ import {
 import { SkillIcon } from './SkillIcon';
 import { StatBar } from './StatBar';
 import { TurnQueueBar } from './TurnQueueBar';
+import { TurnStepLine } from './TurnStepLine';
+import {
+  hasUsableVoucherForSummary,
+  VoucherRedeemDialog,
+} from './VoucherRedeemDialog';
 
 const REPEAT_OPTIONS: AutoRepeatLimit[] = [1, 5, 10, 20, 'infinite'];
 const ROWS_ORDER: CombatRow[] = ['front', 'middle', 'back'];
@@ -147,6 +167,7 @@ export function BattleScreen() {
   const selectTarget = useGameStore((s) => s.selectTarget);
   const selectAllyTarget = useGameStore((s) => s.selectAllyTarget);
   const performPlayerAction = useGameStore((s) => s.performPlayerAction);
+  const useBattleSupply = useGameStore((s) => s.useBattleSupply);
   const performAutoPlayerTurn = useGameStore((s) => s.performAutoPlayerTurn);
   const performAiTurn = useGameStore((s) => s.performAiTurn);
   const logRadarInvalidTarget = useGameStore((s) => s.logRadarInvalidTarget);
@@ -157,6 +178,8 @@ export function BattleScreen() {
   const clearWingmanChat = useGameStore((s) => s.clearWingmanChat);
   const returnToHangar = useGameStore((s) => s.returnToHangar);
   const startBattle = useGameStore((s) => s.startBattle);
+  const reloadBattle = useGameStore((s) => s.reloadBattle);
+  const confirmPrestage = useGameStore((s) => s.confirmPrestage);
   const setBattleSpeed = useGameStore((s) => s.setBattleSpeed);
   const setBattleViewMode = useGameStore((s) => s.setBattleViewMode);
   const toggleSkipAnimations = useGameStore((s) => s.toggleSkipAnimations);
@@ -176,6 +199,7 @@ export function BattleScreen() {
   const clearAutoRepeatSummary = useGameStore((s) => s.clearAutoRepeatSummary);
   const clearAutoRepeatToast = useGameStore((s) => s.clearAutoRepeatToast);
   const toggleAdminPanel = useGameStore((s) => s.toggleAdminPanel);
+  const redeemVouchers = useGameStore((s) => s.redeemVouchers);
 
   const layoutMode = useBattleLayoutMode();
   const isPhonePortrait = layoutMode === 'phone-portrait';
@@ -190,6 +214,8 @@ export function BattleScreen() {
   const [logSheetOpen, setLogSheetOpen] = useState(false);
   const [skillsSheetOpen, setSkillsSheetOpen] = useState(false);
   const [suppliesSheetOpen, setSuppliesSheetOpen] = useState(false);
+  const [fluxPickerOpen, setFluxPickerOpen] = useState(false);
+  const fluxSkillBtnRef = useRef<HTMLButtonElement | null>(null);
   const [moreActionsOpen, setMoreActionsOpen] = useState(false);
   const [retreatConfirmOpen, setRetreatConfirmOpen] = useState(false);
   const [loopPopoverOpen, setLoopPopoverOpen] = useState(false);
@@ -223,6 +249,8 @@ export function BattleScreen() {
     () => readSpeechBubblesEnabled()
   );
   const [fxSettings] = useFxSettings();
+  const [actionStageEnabled] = useActionStageEnabled();
+  const osReducedMotion = usePrefersReducedMotion();
   const [sidebarLogMode, setSidebarLogMode] = useState<SidebarCombatLogMode>(
     () => readSidebarLogMode()
   );
@@ -238,6 +266,8 @@ export function BattleScreen() {
     readStatusBoardCollapsed()
   );
   const [cardToast, setCardToast] = useState<string | null>(null);
+  const [voucherSkipped, setVoucherSkipped] = useState<boolean>(false);
+  const [autoVoucherEnabled] = useAutoVoucherPref();
   const popupCleanupTimersRef = useRef<Map<string, number>>(new Map());
   const fxCleanupTimersRef = useRef<Map<string, number>>(new Map());
   const explodedCleanupTimersRef = useRef<Map<string, number>>(new Map());
@@ -293,6 +323,7 @@ export function BattleScreen() {
       setLoopPopoverOpen(false);
       setDesktopSpeedPopoverOpen(false);
       setPhoneSpeedPopoverOpen(false);
+      setFluxPickerOpen(false);
     }
   }, [battle?.summary]);
 
@@ -555,6 +586,16 @@ export function BattleScreen() {
   }, [battle, pilot]);
 
   const bypassFx = skipAnimations;
+  const resolvedReducedMotion = resolveReducedMotion(
+    fxSettings.reducedMotionMode,
+    osReducedMotion
+  );
+  const vfxConfig = resolveEffectiveVfxConfig(
+    fxSettings.effectsMode,
+    battleSpeed,
+    resolvedReducedMotion,
+    bypassFx
+  );
 
   const effectiveViewMode =
     battleViewMode ?? (isPhonePortrait ? 'radar' : 'radar');
@@ -572,6 +613,13 @@ export function BattleScreen() {
       activeUnit.alive &&
       !isPlayerCharging
   );
+
+  const battleSupplyView = useMemo(
+    () => getBattleSupplyRows(battle, pilot, adminConfig),
+    [battle, pilot, adminConfig]
+  );
+  const usableSupplyCount = battleSupplyView.usableCount;
+  const turnStep2Max = sanitizeTurnPhaseConfig(adminConfig.turnPhase).maxStep2PerTurn;
 
   const currentBattleMeta = useMemo(() => {
     if (!battle) return null;
@@ -778,7 +826,9 @@ export function BattleScreen() {
 
   // Automatic AI (and player Charge Shot auto-release) scheduler
   useEffect(() => {
-    if (!battle || battle.summary || isPlayerTurn) return;
+    if (!battle || battle.summary || battle.prestage?.active || isPlayerTurn) {
+      return;
+    }
     const baseDelay = BALANCE_CONFIG.battleSpeedDelays[battleSpeed] ?? 760;
     const delayMs = skipAnimations ? Math.min(baseDelay, 40) : baseDelay;
     const timer = window.setTimeout(() => {
@@ -789,6 +839,7 @@ export function BattleScreen() {
     battle?.activeTurnIndex,
     battle?.round,
     battle?.summary,
+    battle?.prestage?.active,
     isPlayerTurn,
     battleSpeed,
     skipAnimations,
@@ -800,6 +851,7 @@ export function BattleScreen() {
     if (
       !battle ||
       battle.summary ||
+      battle.prestage?.active ||
       !isPlayerTurn ||
       !autoBattleEnabled ||
       tacticsModalOpen
@@ -818,6 +870,7 @@ export function BattleScreen() {
     battle?.activeTurnIndex,
     battle?.round,
     battle?.summary,
+    battle?.prestage?.active,
     isPlayerTurn,
     autoBattleEnabled,
     tacticsModalOpen,
@@ -836,7 +889,15 @@ export function BattleScreen() {
         ? 320
         : 850;
     const timer = window.setTimeout(() => {
-      startBattle(autoRepeatSession.sectorId);
+      startBattle(
+        autoRepeatSession.sectorId,
+        autoRepeatSession.kind
+          ? {
+              kind: autoRepeatSession.kind,
+              sourceId: autoRepeatSession.sourceId ?? null,
+            }
+          : undefined
+      );
     }, delayMs);
     return () => window.clearTimeout(timer);
   }, [
@@ -844,10 +905,40 @@ export function BattleScreen() {
     autoRepeatSession?.active,
     autoRepeatSession?.completedRuns,
     autoRepeatSession?.sectorId,
+    autoRepeatSession?.kind,
+    autoRepeatSession?.sourceId,
     battleSpeed,
     skipAnimations,
     startBattle,
   ]);
+
+  const handleManualSkillTrigger = useCallback(
+    (skillId: string) => {
+      if (
+        !isPlayerTurn ||
+        autoBattleEnabled ||
+        battle?.summary ||
+        battle?.prestage?.active
+      ) {
+        return;
+      }
+      const def = getSkillById(skillId, adminConfig);
+      if (def?.effectKind === 'sp_transfer') {
+        setFluxPickerOpen((prev) => !prev);
+        return;
+      }
+      setFluxPickerOpen(false);
+      performPlayerAction('skill', skillId);
+    },
+    [
+      isPlayerTurn,
+      autoBattleEnabled,
+      battle?.summary,
+      battle?.prestage?.active,
+      adminConfig,
+      performPlayerAction,
+    ]
+  );
 
   // Keyboard shortcuts: A Auto/Manual, M Mute, 1 Fire, 2-7 Skills, Q Shield, Tab Cycle Enemy
   useEffect(() => {
@@ -873,7 +964,14 @@ export function BattleScreen() {
         toggleMute();
         return;
       }
-      if (battle.summary || !isPlayerTurn || autoBattleEnabled) return;
+      if (
+        battle.summary ||
+        battle.prestage?.active ||
+        !isPlayerTurn ||
+        autoBattleEnabled
+      ) {
+        return;
+      }
 
       const playerUnit = battle.units.find((u) => u.isPlayer);
       if (!playerUnit) return;
@@ -887,9 +985,17 @@ export function BattleScreen() {
       } else if (['2', '3', '4', '5', '6', '7'].includes(e.key)) {
         const slotIdx = Number(e.key) - 2;
         const skillId = playerUnit.equippedSkillIds[slotIdx];
-        if (skillId && canUnitUseSkill(playerUnit, skillId).canUse) {
+        if (
+          skillId &&
+          canUnitUseSkill(
+            playerUnit,
+            skillId,
+            adminConfig,
+            battle.turnLockedSkillIds
+          ).canUse
+        ) {
           e.preventDefault();
-          performPlayerAction('skill', skillId);
+          handleManualSkillTrigger(skillId);
         }
       } else if (e.key === 'Tab') {
         e.preventDefault();
@@ -917,6 +1023,7 @@ export function BattleScreen() {
     autoBattleEnabled,
     tacticsModalOpen,
     performPlayerAction,
+    handleManualSkillTrigger,
     selectTarget,
     toggleAutoBattle,
     toggleMute,
@@ -950,7 +1057,7 @@ export function BattleScreen() {
   const playerUnit = playerUnitForTargets;
   const playerSkillIds = playerUnit?.equippedSkillIds ?? [];
   const hasSingleAllySkill = playerSkillIds.some(
-    (id) => getSkillById(id)?.targetType === 'single_ally'
+    (id) => getSkillById(id, adminConfig)?.targetType === 'single_ally'
   );
   const playerHasLongRangeBasic = playerUnit
     ? isLongRangeAction(playerUnit, 'attack')
@@ -992,25 +1099,48 @@ export function BattleScreen() {
     return firstValidAlly?.name ?? null;
   })();
 
+  const showActionStage = Boolean(
+    actionStageEnabled && effectiveViewMode === 'card' && !battle.summary
+  );
+  const latestCardFx =
+    showActionStage && battle.fxEvents.length > 0
+      ? battle.fxEvents[battle.fxEvents.length - 1]
+      : null;
+  const latestCardFxActors = latestCardFx
+    ? resolveStageFxActorAndTargets(latestCardFx, battle)
+    : null;
+  const latestCardFxActorId = latestCardFxActors?.actor?.id ?? null;
+  const latestCardFxTargetIds = new Set(
+    (latestCardFxActors?.targets ?? []).map((u) => u.id)
+  );
+  const latestCardFxToneColor = latestCardFx
+    ? STAGE_HIT_FLASH_COLORS[resolveFxTone(latestCardFx)]
+    : null;
+
   const sectorLabel = getSectorName(lang, battle.sectorId);
-  const enrageBonusPct = getEnemyEnrageBonusPct(
-    battle.round,
-    adminConfig.softEnrageEnabled
+  const enrageState = useMemo(
+    () => getEnrageState(battle.round, adminConfig),
+    [battle.round, adminConfig]
   );
 
   const inspectedSkill = inspectedSkillId
-    ? getSkillById(inspectedSkillId)
+    ? getSkillById(inspectedSkillId, adminConfig)
     : undefined;
   const inspectedUsability =
     playerUnit && inspectedSkill
-      ? canUnitUseSkill(playerUnit, inspectedSkill.id)
+      ? canUnitUseSkill(
+          playerUnit,
+          inspectedSkill.id,
+          adminConfig,
+          battle.turnLockedSkillIds
+        )
       : null;
   const inspectedLv =
     playerUnit && inspectedSkill
       ? playerUnit.skillLevels[inspectedSkill.id] ?? 1
       : 1;
   const inspectedScaled = inspectedSkill
-    ? getScaledSkillStats(inspectedSkill, inspectedLv)
+    ? getScaledSkillStats(inspectedSkill, inspectedLv, adminConfig)
     : null;
 
   const repeatLabelFor = (opt: AutoRepeatLimit): string => {
@@ -1419,11 +1549,71 @@ export function BattleScreen() {
       : null;
 
   const canPlayerManualAct = isPlayerTurn && !autoBattleEnabled;
+
+  useEffect(() => {
+    if (!canPlayerManualAct || battle?.summary) {
+      setFluxPickerOpen(false);
+    }
+  }, [canPlayerManualAct, battle?.summary]);
   const showRepeatBatchSummary = Boolean(
     autoRepeatSession &&
       !autoRepeatSession.active &&
       (battle.summary || autoRepeatSession.stopReason === 'inventory_full')
   );
+
+  useEffect(() => {
+    if (!battle?.summary) {
+      setVoucherSkipped(false);
+    }
+  }, [battle?.summary]);
+
+  useEffect(() => {
+    const summary = battle?.summary;
+    if (
+      !summary ||
+      autoRepeatSession?.active ||
+      showRepeatBatchSummary ||
+      !autoVoucherEnabled
+    ) {
+      return;
+    }
+    if (!hasUsableVoucherForSummary(summary, pilot.vouchers, adminConfig)) {
+      return;
+    }
+    const { creditCharged, expCharged } = getBattleSummaryCharges(summary);
+    const creditSel =
+      creditCharged > 0
+        ? pickVouchersSmallestSufficient(
+            pilot.vouchers,
+            'credit',
+            creditCharged,
+            adminConfig
+          )
+        : {};
+    const expSel =
+      expCharged > 0
+        ? pickVouchersSmallestSufficient(
+            pilot.vouchers,
+            'exp',
+            expCharged,
+            adminConfig
+          )
+        : {};
+    if (
+      Object.keys(creditSel).length > 0 ||
+      Object.keys(expSel).length > 0
+    ) {
+      redeemVouchers({ credit: creditSel, exp: expSel });
+    }
+  }, [
+    battle?.summary,
+    autoRepeatSession?.active,
+    showRepeatBatchSummary,
+    autoVoucherEnabled,
+    pilot.vouchers,
+    adminConfig,
+    redeemVouchers,
+  ]);
 
   const allyRemainingHp = allies.reduce(
     (acc, u) => acc + (u.alive ? u.hp : 0),
@@ -1456,13 +1646,6 @@ export function BattleScreen() {
       ? t('common.middleRow')
       : t('common.backRow');
 
-  const getExposureLabel = (state: RowExposureState) =>
-    state === 'exposed'
-      ? t('battle.rowExposed')
-      : state === 'protected'
-      ? t('battle.rowProtected')
-      : t('battle.rowEmpty');
-
   const getCardInvalidReason = (unit: CombatUnit): string | null => {
     const actor =
       activeUnit?.isPlayer && activeUnit.alive ? activeUnit : playerUnit ?? null;
@@ -1482,6 +1665,17 @@ export function BattleScreen() {
     const isEnemy = unit.side === 'enemy';
     const frontBlocked =
       isEnemy && unit.alive && !validBasicTargetIds.has(unit.id);
+    const stageFxRole: 'attacker' | 'target' | null =
+      showActionStage && latestCardFx
+        ? unit.id === latestCardFxActorId &&
+          (latestCardFxTargetIds.size === 0 ||
+            latestCardFxTargetIds.size > 1 ||
+            !latestCardFxTargetIds.has(unit.id))
+          ? 'attacker'
+          : latestCardFxTargetIds.has(unit.id)
+          ? 'target'
+          : null
+        : null;
 
     return (
       <BattleUnitCard
@@ -1509,6 +1703,9 @@ export function BattleScreen() {
         autoActive={unit.isPlayer && autoBattleEnabled}
         showStatusLabels={fxSettings.showStatusLabels}
         popups={battle.popups.filter((p) => p.unitId === unit.id)}
+        stageFxRole={stageFxRole}
+        stageFxColor={stageFxRole === 'target' ? latestCardFxToneColor : null}
+        stageFxKey={latestCardFx?.id ?? null}
         onSelect={
           isEnemy
             ? () => {
@@ -1787,8 +1984,6 @@ export function BattleScreen() {
         : hpRatio <= 0.55
         ? 'bg-orange-400'
         : 'bg-emerald-500';
-    const exposure =
-      (isEnemy ? enemyExposure : allyExposure)?.[sidebarUnit.row] ?? 'empty';
     const isBlocked =
       isEnemy && sidebarUnit.alive && !validBasicTargetIds.has(sidebarUnit.id);
     const isStealthed = hasStatus(sidebarUnit, 'stealth');
@@ -1832,6 +2027,17 @@ export function BattleScreen() {
             >
               {getTeamTagLabel(lang, teamRole)}
             </span>
+            {isEnemy && (
+              <LevelBadge
+                level={sidebarUnit.level}
+                refLevel={
+                  playerUnitForTargets?.level ??
+                  pilot.gears[battle.deployedGearId]?.level ??
+                  1
+                }
+                side={sidebarUnit.side}
+              />
+            )}
             <span
               data-testid="sidebar-unit-name"
               className="font-display text-[14px] font-bold truncate min-w-0 flex-1"
@@ -1843,11 +2049,9 @@ export function BattleScreen() {
             <span
               data-testid="sidebar-unit-lane"
               className="text-[11px] font-mono-nums text-slate-300 truncate min-w-0 max-w-[48%] shrink"
-              title={`${getRowTitle(sidebarUnit.row)} · ${getExposureLabel(
-                exposure
-              )}`}
+              title={getRowTitle(sidebarUnit.row)}
             >
-              {getRowTitle(sidebarUnit.row)} · {getExposureLabel(exposure)}
+              {getRowTitle(sidebarUnit.row)}
             </span>
           </div>
 
@@ -2325,7 +2529,7 @@ export function BattleScreen() {
             battle={battle}
             battleSpeed={battleSpeed}
             skipAnimations={skipAnimations}
-            enrageBonusPct={enrageBonusPct}
+            enrageState={enrageState}
             variant="phone"
             targetName={actingTargetName}
             onSelectUnit={(id) => {
@@ -2337,7 +2541,7 @@ export function BattleScreen() {
           {/* 3) Sticky compact control row (max 48px): Auto, Speed Cycle, View Switch (icon-only), Loop (icon+num / running chip), "..." More */}
           <div
             data-testid="battle-phone-controls"
-            className="sticky top-0 z-30 h-12 max-h-[48px] shrink-0 border-b border-slate-800/80 bg-[#080D16]/95 backdrop-blur-sm px-1.5 flex items-center justify-between gap-1 flex-nowrap overflow-x-hidden"
+            className="sticky top-0 z-30 h-12 max-h-[48px] shrink-0 border-b border-slate-800/80 bg-slate-900/95 px-1.5 flex items-center justify-between gap-1 flex-nowrap overflow-x-hidden"
           >
             <button
               type="button"
@@ -2431,6 +2635,18 @@ export function BattleScreen() {
               <MoreHorizontal className="w-5 h-5" />
             </button>
           </div>
+
+          {/* Phone Card Mode Action Stage strip (0px / null when OFF, radar mode, or summary) */}
+          <ActionStage
+            battle={battle}
+            activeUnit={activeUnit}
+            actingTargetName={actingTargetName}
+            battleSpeed={battleSpeed}
+            vfxConfig={vfxConfig}
+            enabled={actionStageEnabled}
+            viewMode={effectiveViewMode}
+            variant="phone"
+          />
 
           {/* Force-Ratio Strip + 1-Row Collapsed Player Status Bar */}
           <div
@@ -2584,7 +2800,15 @@ export function BattleScreen() {
 
           {/* 6) Single-row bottom action dock (hidden in Auto mode — no separate AUTO bar) */}
           {!autoBattleEnabled && (
-            <div className="shrink-0 border-t border-slate-800/90 bg-[#0A0F18]/98 px-2 py-1.5 pb-safe">
+            <div className="shrink-0 border-t border-slate-800/90 bg-[#0A0F18]/98 px-2 py-1.5 pb-safe space-y-1">
+              {canPlayerManualAct && turnStep2Max > 0 && (
+                <TurnStepLine
+                  supplyUsed={battleSupplyView.usedThisTurn > 0}
+                  step2Used={battle.turnStep2Used ?? 0}
+                  step2Max={turnStep2Max}
+                  compact
+                />
+              )}
               <div
                 data-testid="battle-manual-dock"
                 className="grid grid-cols-4 gap-2"
@@ -2629,6 +2853,14 @@ export function BattleScreen() {
                 >
                   <Backpack className="w-4 h-4 text-amber-400 shrink-0" />
                   <span className="truncate">{t('battle.actionItem')}</span>
+                  {usableSupplyCount > 0 && (
+                    <span
+                      data-testid="battle-action-item-badge"
+                      className="min-w-[18px] h-[18px] px-1 rounded bg-amber-400 text-slate-950 font-mono-nums text-[11px] font-bold leading-none inline-flex items-center justify-center shrink-0"
+                    >
+                      {usableSupplyCount}
+                    </span>
+                  )}
                 </button>
               </div>
             </div>
@@ -2954,6 +3186,14 @@ export function BattleScreen() {
                     </div>
                   </div>
 
+                  {canPlayerManualAct && turnStep2Max > 0 && (
+                    <TurnStepLine
+                      supplyUsed={battleSupplyView.usedThisTurn > 0}
+                      step2Used={battle.turnStep2Used ?? 0}
+                      step2Max={turnStep2Max}
+                    />
+                  )}
+
                   {/* Single-Row Core + Skill Controls */}
                   <div
                     data-testid="battle-manual-dock"
@@ -3002,6 +3242,14 @@ export function BattleScreen() {
                         <span className="hidden xl:inline">
                           {t('battle.actionItem')}
                         </span>
+                        {usableSupplyCount > 0 && (
+                          <span
+                            data-testid="battle-action-item-badge"
+                            className="min-w-[18px] h-[18px] px-1 rounded bg-amber-400 text-slate-950 font-mono-nums text-[11px] font-bold leading-none inline-flex items-center justify-center shrink-0"
+                          >
+                            {usableSupplyCount}
+                          </span>
+                        )}
                       </button>
                     </div>
 
@@ -3013,9 +3261,14 @@ export function BattleScreen() {
                         </div>
                       ) : (
                         playerSkillIds.slice(0, 6).map((skillId, idx) => {
-                          const skill = getSkillById(skillId);
+                          const skill = getSkillById(skillId, adminConfig);
                           if (!skill || !playerUnit) return null;
-                          const usability = canUnitUseSkill(playerUnit, skill.id);
+                          const usability = canUnitUseSkill(
+                            playerUnit,
+                            skill.id,
+                            adminConfig,
+                            battle.turnLockedSkillIds
+                          );
                           const clickable = canPlayerManualAct && usability.canUse;
                           const reasonText = getBattleSkillReason(lang, usability);
                           const lv = playerUnit.skillLevels[skill.id] ?? 1;
@@ -3034,22 +3287,26 @@ export function BattleScreen() {
                             ? 'border-purple-400/80 bg-purple-500/15 hover:bg-purple-500/25 text-purple-100'
                             : 'border-sky-500/50 bg-sky-500/15 hover:bg-sky-500/25 text-sky-100';
 
+                          const isFluxSkill = skill.effectKind === 'sp_transfer';
+
                           return (
                             <button
                               key={skill.id}
+                              ref={isFluxSkill ? fluxSkillBtnRef : undefined}
                               type="button"
                               data-testid={`battle-skill-btn-${skill.id}`}
+                              aria-expanded={isFluxSkill ? fluxPickerOpen : undefined}
                               disabled={!clickable}
                               onClick={() => {
                                 if (clickable) {
-                                  performPlayerAction('skill', skill.id);
+                                  handleManualSkillTrigger(skill.id);
                                 }
                               }}
                               onMouseEnter={() => setInspectedSkillId(skill.id)}
                               onFocus={() => setInspectedSkillId(skill.id)}
-                              title={`${getSkillName(lang, skill.id)} (Lv.${lv}) — ${getSkillDesc(
-                                lang,
-                                skill.id
+                              title={`${getSkillName(skill, lang)} (Lv.${lv}) — ${getSkillDesc(
+                                skill,
+                                lang
                               )}${reasonText ? ` [${reasonText}]` : ''}`}
                               className={`min-w-0 min-h-[44px] px-2 py-1 rounded-lg border text-left transition-colors flex flex-col justify-between gap-0.5 overflow-hidden ${borderClass} ${
                                 clickable
@@ -3081,8 +3338,16 @@ export function BattleScreen() {
                                 </span>
                               </div>
                               <div className="text-[12px] font-semibold leading-tight truncate">
-                                {getSkillName(lang, skill.id)}
+                                {getSkillName(skill, lang)}
                               </div>
+                              {usability.reason === 'used_this_turn' && reasonText && (
+                                <div
+                                  data-testid={`battle-skill-used-turn-${skill.id}`}
+                                  className="text-[10px] leading-none text-amber-300 font-semibold truncate"
+                                >
+                                  {reasonText}
+                                </div>
+                              )}
                             </button>
                           );
                         })
@@ -3096,13 +3361,14 @@ export function BattleScreen() {
                       <div className="flex items-center gap-1.5 min-w-0 flex-1">
                         <Info className="w-3.5 h-3.5 text-sky-400 shrink-0" />
                         <span className="font-semibold text-slate-100 shrink-0">
-                          {getSkillName(lang, inspectedSkill.id)} (Lv.{inspectedLv})
+                          {getSkillName(inspectedSkill, lang)} (Lv.{inspectedLv})
                         </span>
                         <span className="text-slate-400 truncate">
-                          {getSkillDesc(lang, inspectedSkill.id)}
+                          {getSkillDesc(inspectedSkill, lang)}
                         </span>
                       </div>
                       <span className="font-mono-nums text-sky-300 shrink-0">
+                        {inspectedUsability.spCost} SP ·{' '}
                         {getSkillTargetLabel(lang, inspectedSkill.targetType)}
                       </span>
                     </div>
@@ -3121,10 +3387,22 @@ export function BattleScreen() {
               battle={battle}
               battleSpeed={battleSpeed}
               skipAnimations={skipAnimations}
-              enrageBonusPct={enrageBonusPct}
+              enrageState={enrageState}
               variant="sidebar"
               targetName={actingTargetName}
+              hideActingRow={showActionStage}
               onSelectUnit={(id) => setInspectedUnitId(id)}
+            />
+
+            <ActionStage
+              battle={battle}
+              activeUnit={activeUnit}
+              actingTargetName={actingTargetName}
+              battleSpeed={battleSpeed}
+              vfxConfig={vfxConfig}
+              enabled={actionStageEnabled}
+              viewMode={effectiveViewMode}
+              variant="desktop"
             />
 
             {renderSidebarSelectedUnit()}
@@ -3234,11 +3512,37 @@ export function BattleScreen() {
         playerUnit={playerUnit}
         playerSkillIds={playerSkillIds}
         canPlayerManualAct={canPlayerManualAct}
+        adminConfig={adminConfig}
+        turnLockedSkillIds={battle.turnLockedSkillIds}
         lang={lang}
         t={t}
         onClose={() => setSkillsSheetOpen(false)}
-        onUseSkill={(skillId) => performPlayerAction('skill', skillId)}
+        onUseSkill={(skillId) => handleManualSkillTrigger(skillId)}
       />
+
+      {/* ==================== FLUX TRANSFER COUNT PICKER ==================== */}
+      {playerUnit && (
+        <FluxTransferPicker
+          open={
+            fluxPickerOpen &&
+            canPlayerManualAct &&
+            !autoBattleEnabled &&
+            !battle.summary
+          }
+          units={battle.units}
+          actorId={playerUnit.id}
+          fluxConfig={adminConfig.fluxTransfer}
+          skillMaxLevel={adminConfig.skillMaxLevel}
+          isPhone={isPhonePortrait}
+          anchorRef={fluxSkillBtnRef}
+          t={t}
+          onCancel={() => setFluxPickerOpen(false)}
+          onConfirm={(transferCount) => {
+            setFluxPickerOpen(false);
+            performPlayerAction('skill', 'sup_flux_transfer', transferCount);
+          }}
+        />
+      )}
 
       {/* ==================== AUTO-REPEAT PER-BATTLE TOAST ==================== */}
       {autoRepeatToast && !showRepeatBatchSummary && (
@@ -3256,7 +3560,7 @@ export function BattleScreen() {
         title={t('auto.repeatSummaryTitle')}
         resetKey={showRepeatBatchSummary}
         onClose={clearAutoRepeatSummary}
-        onReloadBattle={() => startBattle(battle.sectorId)}
+        onReloadBattle={() => reloadBattle(battle.sectorId)}
       >
         {showRepeatBatchSummary && autoRepeatSession && (
           <AutoRepeatBatchSummaryModal
@@ -3275,17 +3579,47 @@ export function BattleScreen() {
         )}
       </ErrorBoundary>
 
+      {/* ==================== PRE-STAGE DIALOG ==================== */}
+      {battle.prestage?.active && !battle.summary && (
+        <PrestageDialog
+          battle={battle}
+          supplyRows={battleSupplyView.rows}
+          adminConfig={adminConfig}
+          autoLoopActive={Boolean(autoRepeatSession?.active)}
+          lang={lang}
+          t={t}
+          onConfirm={confirmPrestage}
+        />
+      )}
+
       {/* ==================== VICTORY / DEFEAT / RETREAT RESULTS MODAL ==================== */}
       <ErrorBoundary
         variant="panel"
         title={t('summary.victory')}
         resetKey={Boolean(battle.summary)}
         onClose={returnToHangar}
-        onReloadBattle={() => startBattle(battle.sectorId)}
+        onReloadBattle={() => reloadBattle(battle.sectorId)}
       >
         {battle.summary &&
           !autoRepeatSession?.active &&
-          !showRepeatBatchSummary && (
+          !showRepeatBatchSummary &&
+          (!autoVoucherEnabled &&
+          !voucherSkipped &&
+          hasUsableVoucherForSummary(
+            battle.summary,
+            pilot.vouchers,
+            adminConfig
+          ) ? (
+            <VoucherRedeemDialog
+              summary={battle.summary}
+              ownedVouchers={pilot.vouchers}
+              adminConfig={adminConfig}
+              lang={lang}
+              t={t}
+              onConfirm={(sel) => redeemVouchers(sel)}
+              onSkip={() => setVoucherSkipped(true)}
+            />
+          ) : (
             <BattleResultDialog
               summary={battle.summary}
               squadSize={battle.squadSize}
@@ -3296,7 +3630,7 @@ export function BattleScreen() {
               onReturnHangar={returnToHangar}
               onNextSortie={() => startBattle()}
             />
-          )}
+          ))}
       </ErrorBoundary>
 
       {/* ==================== PHONE UNIT DETAIL SHEET (full name & stats) ==================== */}
@@ -3305,10 +3639,15 @@ export function BattleScreen() {
         title={phoneSheetUnit?.name ?? 'Unit Telemetry'}
         resetKey={phoneUnitSheetId ?? 'none'}
         onClose={() => setPhoneUnitSheetId(null)}
-        onReloadBattle={() => startBattle(battle.sectorId)}
+        onReloadBattle={() => reloadBattle(battle.sectorId)}
       >
         <PhoneUnitDetailSheet
           unit={phoneSheetUnit}
+          refLevel={
+            playerUnitForTargets?.level ??
+            pilot.gears[battle.deployedGearId]?.level ??
+            1
+          }
           selectedTargetId={battle.selectedTargetId}
           selectedAllyTargetId={battle.selectedAllyTargetId}
           hasSingleAllySkill={hasSingleAllySkill}
@@ -3326,7 +3665,7 @@ export function BattleScreen() {
         title={t('battle.combatLog')}
         resetKey={logSheetOpen}
         onClose={() => setLogSheetOpen(false)}
-        onReloadBattle={() => startBattle(battle.sectorId)}
+        onReloadBattle={() => reloadBattle(battle.sectorId)}
       >
         {logSheetOpen && (
           <CombatLogPopupSheet
@@ -3352,7 +3691,13 @@ export function BattleScreen() {
         t={t}
         onClose={() => setSuppliesSheetOpen(false)}
         onOpenTactics={() => setTacticsModalOpen(true)}
-        onReloadBattle={() => startBattle(battle.sectorId)}
+        onReloadBattle={() => reloadBattle(battle.sectorId)}
+        rows={battleSupplyView.rows}
+        usedThisTurn={battleSupplyView.usedThisTurn}
+        usesPerTurn={battleSupplyView.usesPerTurn}
+        hasLoadout={battleSupplyView.hasLoadout}
+        iconCatalogMods={adminConfig.iconCatalogMods}
+        onUseSupply={useBattleSupply}
       />
 
       {/* ==================== LIVE PROGRESS / END-OF-BATTLE REPORT MODAL ==================== */}
@@ -3361,13 +3706,13 @@ export function BattleScreen() {
         title={battle.summary ? t('stats.reportTitle') : t('stats.progressTitle')}
         resetKey={statsModalOpen}
         onClose={() => setStatsModalOpen(false)}
-        onReloadBattle={() => startBattle(battle.sectorId)}
+        onReloadBattle={() => reloadBattle(battle.sectorId)}
       >
         <BattleStatsModal
           open={statsModalOpen}
           onClose={() => setStatsModalOpen(false)}
           battle={battle}
-          enrageBonusPct={enrageBonusPct}
+          enrageState={enrageState}
           onOpenLog={handleOpenCombatLogPopup}
         />
       </ErrorBoundary>

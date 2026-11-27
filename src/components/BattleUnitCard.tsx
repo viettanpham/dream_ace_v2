@@ -1,4 +1,4 @@
-import { memo, useRef } from 'react';
+import { memo, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Crosshair, Info, Lock, Skull, X } from 'lucide-react';
 import { getTeamColorRole, hasStatus } from '../engine/combat';
 import {
@@ -20,6 +20,20 @@ import {
   usePrefersReducedMotion,
 } from '../utils/battleDisplay';
 import { resolveReducedMotion, useFxSettings } from '../utils/battleVfx';
+import {
+  advanceCardPopupQueue,
+  CARD_POPUP_FALLBACK_HEIGHT_PX,
+  CARD_POPUP_FALLBACK_WIDTH_PX,
+  CARD_POPUP_SETTLE_MS,
+  createCardPopupQueueState,
+  getCardPopupSymbol,
+  getNextCardPopupQueueWakeupMs,
+  isSpPopupText,
+  parseCardPopupDisplay,
+  resolveCardPopupConfig,
+  syncCardPopupQueue,
+  type CardPopupQueueState,
+} from '../utils/cardPopupQueue';
 import { useStatusDisplaySettings } from '../utils/statusDisplayPrefs';
 import {
   CARD_STATUS_FALLBACK_WIDTH_PX,
@@ -41,6 +55,9 @@ interface BattleUnitCardProps {
   showStatusLabels?: boolean;
   /** Explicit per-lane status row budget (0 = omit status area, 1..2 = fixed rows). Undefined keeps standalone activeUnitRows fallback. */
   statusRows?: number;
+  stageFxRole?: 'attacker' | 'target' | null;
+  stageFxColor?: string | null;
+  stageFxKey?: string | null;
   onSelect?: () => void;
   onInspect?: () => void;
 }
@@ -97,7 +114,13 @@ function getAnimClass(unit: CombatUnit, skip: boolean): string {
   }
 }
 
-function getPopupColor(tone: FloatingPopup['tone']): string {
+function getPopupColor(
+  tone: FloatingPopup['tone'],
+  text: string = ''
+): string {
+  if (isSpPopupText(text) && (tone === 'buff' || tone === 'heal')) {
+    return SP_COLOR_TOKENS.textClass;
+  }
   switch (tone) {
     case 'crit':
       return 'text-amber-300';
@@ -212,13 +235,38 @@ export const BattleUnitCard = memo(function BattleUnitCard({
   popups,
   showStatusLabels = true,
   statusRows,
+  stageFxRole = null,
+  stageFxColor = null,
+  stageFxKey = null,
   onSelect,
   onInspect,
 }: BattleUnitCardProps) {
   const { lang, t } = useI18n();
   const [fxSettings] = useFxSettings();
+  const battleSpeed = useGameStore((s) => s.battleSpeed);
   const adminStatusDefaults = useGameStore(
     (s) => s.adminConfig.statusDisplayDefaults
+  );
+  const cardPopupStaggerMs = useGameStore(
+    (s) => s.adminConfig.cardPopupStaggerMs
+  );
+  const cardPopupFlightMs = useGameStore(
+    (s) => s.adminConfig.cardPopupFlightMs
+  );
+  const cardPopupMaxConcurrent = useGameStore(
+    (s) => s.adminConfig.cardPopupMaxConcurrent
+  );
+  const cardPopupZoneWidthPct = useGameStore(
+    (s) => s.adminConfig.cardPopupZoneWidthPct
+  );
+  const cardPopupZoneHeightPct = useGameStore(
+    (s) => s.adminConfig.cardPopupZoneHeightPct
+  );
+  const cardPopupStartScalePct = useGameStore(
+    (s) => s.adminConfig.cardPopupStartScalePct
+  );
+  const cardPopupEndScalePct = useGameStore(
+    (s) => s.adminConfig.cardPopupEndScalePct
   );
   const iconMods = useGameStore((s) => s.adminConfig.iconCatalogMods);
   const { settings: statusSettings, activeUnitRows } =
@@ -234,8 +282,128 @@ export const BattleUnitCard = memo(function BattleUnitCard({
   );
   const skipCardMotion = skipAnimations || resolvedReducedMotion;
 
+  const cardRef = useRef<HTMLDivElement | null>(null);
   const longPressTimerRef = useRef<number | null>(null);
   const longPressFiredRef = useRef(false);
+
+  const cardPopupCfg = useMemo(
+    () =>
+      resolveCardPopupConfig({
+        cardPopupStaggerMs,
+        cardPopupFlightMs,
+        cardPopupMaxConcurrent,
+        cardPopupZoneWidthPct,
+        cardPopupZoneHeightPct,
+        cardPopupStartScalePct,
+        cardPopupEndScalePct,
+      }),
+    [
+      cardPopupStaggerMs,
+      cardPopupFlightMs,
+      cardPopupMaxConcurrent,
+      cardPopupZoneWidthPct,
+      cardPopupZoneHeightPct,
+      cardPopupStartScalePct,
+      cardPopupEndScalePct,
+    ]
+  );
+
+  const [popupQueue, setPopupQueue] = useState<CardPopupQueueState>(() => {
+    if (skipAnimations || fxSettings.effectsMode === 'off' || !unit.alive) {
+      return createCardPopupQueueState();
+    }
+    return syncCardPopupQueue(
+      createCardPopupQueueState(),
+      popups,
+      Date.now(),
+      {
+        ...cardPopupCfg,
+        battleSpeed,
+        effectsMode: fxSettings.effectsMode,
+        lang,
+      },
+      {
+        width: CARD_POPUP_FALLBACK_WIDTH_PX,
+        height: CARD_POPUP_FALLBACK_HEIGHT_PX,
+      }
+    );
+  });
+
+  useEffect(() => {
+    if (skipAnimations || fxSettings.effectsMode === 'off' || !unit.alive) {
+      setPopupQueue((prev) =>
+        prev.active.length === 0 && prev.pending.length === 0
+          ? prev
+          : createCardPopupQueueState()
+      );
+      return;
+    }
+    const cardWidth = cardRef.current?.clientWidth || CARD_POPUP_FALLBACK_WIDTH_PX;
+    const cardHeight =
+      cardRef.current?.clientHeight || CARD_POPUP_FALLBACK_HEIGHT_PX;
+    setPopupQueue((prev) =>
+      syncCardPopupQueue(
+        prev,
+        popups,
+        Date.now(),
+        {
+          ...cardPopupCfg,
+          battleSpeed,
+          effectsMode: fxSettings.effectsMode,
+          lang,
+        },
+        { width: cardWidth, height: cardHeight }
+      )
+    );
+  }, [
+    popups,
+    cardPopupCfg,
+    battleSpeed,
+    fxSettings.effectsMode,
+    lang,
+    skipAnimations,
+    unit.alive,
+  ]);
+
+  useEffect(() => {
+    if (skipAnimations || fxSettings.effectsMode === 'off' || !unit.alive) {
+      return;
+    }
+    const wakeupMs = getNextCardPopupQueueWakeupMs(
+      popupQueue,
+      Date.now(),
+      cardPopupCfg
+    );
+    if (wakeupMs === null) return;
+    const timerId = window.setTimeout(() => {
+      const cardWidth =
+        cardRef.current?.clientWidth || CARD_POPUP_FALLBACK_WIDTH_PX;
+      const cardHeight =
+        cardRef.current?.clientHeight || CARD_POPUP_FALLBACK_HEIGHT_PX;
+      setPopupQueue((prev) =>
+        advanceCardPopupQueue(
+          prev,
+          Date.now(),
+          {
+            ...cardPopupCfg,
+            battleSpeed,
+            effectsMode: fxSettings.effectsMode,
+            lang,
+          },
+          { width: cardWidth, height: cardHeight }
+        )
+      );
+    }, wakeupMs);
+    return () => window.clearTimeout(timerId);
+  }, [
+    popupQueue,
+    cardPopupCfg,
+    battleSpeed,
+    fxSettings.effectsMode,
+    lang,
+    skipAnimations,
+    unit.alive,
+  ]);
 
   const isEnemy = unit.side === 'enemy';
   const shortName = formatShortUnitName(unit.name, 10);
@@ -346,12 +514,15 @@ export const BattleUnitCard = memo(function BattleUnitCard({
 
   return (
     <div
+      ref={cardRef}
       data-testid={`unit-row-${unit.id}`}
       data-unit-id={unit.id}
       data-unit-collapsed="false"
       data-acting={isActiveTurn ? 'true' : 'false'}
       data-targeted={isTargeted ? 'true' : 'false'}
       data-reduced-motion={resolvedReducedMotion ? 'true' : 'false'}
+      data-stage-fx-role={stageFxRole ?? undefined}
+      data-stage-fx-id={stageFxKey ?? undefined}
       role={isClickable ? 'button' : undefined}
       tabIndex={isClickable ? 0 : undefined}
       onClick={isClickable ? handleRowClick : undefined}
@@ -376,36 +547,157 @@ export const BattleUnitCard = memo(function BattleUnitCard({
         frontBlocked ? 'opacity-65' : ''
       } ${getAnimClass(unit, skipCardMotion)}`}
     >
-      {/* Compact Staggered Floating Popups strictly clipped & contained inside this card */}
-      {!skipAnimations && popups.length > 0 && (
-        <div
-          data-testid={`card-popups-container-${unit.id}`}
-          className="pointer-events-none absolute inset-0 overflow-hidden z-20"
-        >
-          {popups.slice(-6).map((pop, idx) => {
-            const isSmall = isCompactPopupTone(pop.tone);
-            return (
-              <div
-                key={pop.id}
-                data-testid="damage-popup"
-                data-popup-compact={isSmall ? 'true' : 'false'}
-                style={{
-                  top: `${2 + (idx % 3) * 14}px`,
-                  animationDelay: `${idx * 100}ms`,
-                  animationDuration: '800ms',
-                }}
-                className={`pointer-events-none absolute left-1/2 -translate-x-1/2 font-display font-bold tracking-wide drop-shadow-[0_1px_3px_rgba(0,0,0,0.95)] whitespace-nowrap ${
-                  isSmall
-                    ? 'text-[12px] anim-popup-tight'
-                    : 'text-[15px] anim-popup'
-                } ${getPopupColor(pop.tone)}`}
-              >
-                {pop.text}
-              </div>
-            );
-          })}
-        </div>
+      {/* Action Stage card highlight: attacker glows ~0.6s, target border flashes in tone color ~0.6s */}
+      {!skipAnimations && stageFxRole && stageFxKey && (
+        <span
+          key={`stage-fx-${stageFxKey}-${stageFxRole}`}
+          data-testid={`card-stage-fx-${stageFxRole}-${unit.id}`}
+          data-fx-id={stageFxKey}
+          data-fx-tone-color={stageFxColor ?? undefined}
+          className={`pointer-events-none absolute inset-0 rounded-lg z-10 ${
+            stageFxRole === 'attacker'
+              ? 'anim-stage-card-glow border border-amber-300/80'
+              : 'anim-stage-card-flash border-2'
+          }`}
+          style={
+            stageFxRole === 'target' && stageFxColor
+              ? {
+                  borderColor: stageFxColor,
+                  boxShadow: `0 0 12px ${stageFxColor}, inset 0 0 8px ${stageFxColor}40`,
+                }
+              : undefined
+          }
+        />
       )}
+
+      {/* Queued perimeter-to-center floating popups strictly clipped & contained inside this card */}
+      {!skipAnimations &&
+        fxSettings.effectsMode !== 'off' &&
+        popupQueue.active.length > 0 && (
+          <div
+            data-testid={`card-popups-container-${unit.id}`}
+            className="pointer-events-none absolute inset-0 overflow-hidden z-20"
+          >
+            {popupQueue.active.map((item) => {
+              const pop = item.popup;
+              const sp = item.startPoint;
+              const isSmall =
+                isCompactPopupTone(pop.tone) && !isSpPopupText(pop.text);
+              const display = parseCardPopupDisplay(pop, lang);
+              const arrow = display.arrow;
+              const iconPx = isSmall ? 12 : pop.tone === 'crit' ? 15 : 14;
+              const colorClass = getPopupColor(pop.tone, pop.text);
+              const sizeClass = isSmall ? 'text-[12px]' : 'text-[15px]';
+              const innerContent = (
+                <>
+                  {arrow === 'up' && <span aria-hidden="true">↑</span>}
+                  {arrow === 'down' && <span aria-hidden="true">↓</span>}
+                  {display.segments.map((seg, idx) => (
+                    <span
+                      key={idx}
+                      className={`inline-flex items-center gap-0.5 ${
+                        seg.colorClass ?? ''
+                      }`}
+                    >
+                      {seg.iconKind && (
+                        <span
+                          data-testid="card-popup-icon"
+                          data-popup-icon-kind={seg.iconKind}
+                          className="material-symbols-outlined leading-none select-none shrink-0"
+                          style={{ fontSize: `${iconPx}px` }}
+                          aria-hidden="true"
+                        >
+                          {getCardPopupSymbol(seg.iconKind, iconMods)}
+                        </span>
+                      )}
+                      <span>{seg.text}</span>
+                      {seg.trailingIconKind && (
+                        <span
+                          data-testid="card-popup-icon"
+                          data-popup-icon-kind={seg.trailingIconKind}
+                          data-popup-icon-role="trailing"
+                          className={`material-symbols-outlined leading-none select-none shrink-0 ${
+                            seg.trailingColorClass ?? ''
+                          }`}
+                          style={{
+                            fontSize: `${
+                              seg.trailingSmall ? Math.max(10, iconPx - 2) : iconPx
+                            }px`,
+                          }}
+                          aria-hidden="true"
+                        >
+                          {getCardPopupSymbol(seg.trailingIconKind, iconMods)}
+                        </span>
+                      )}
+                    </span>
+                  ))}
+                </>
+              );
+
+              if (resolvedReducedMotion) {
+                return (
+                  <div
+                    key={pop.id}
+                    data-testid="damage-popup"
+                    data-popup-compact={isSmall ? 'true' : 'false'}
+                    data-popup-edge={sp.edge}
+                    style={{
+                      left: '50%',
+                      top: '50%',
+                      maxWidth: 'calc(100% - 16px)',
+                      transformOrigin: 'center',
+                      '--card-pop-end-scale': String(cardPopupCfg.endScalePct / 100),
+                      animationDuration: '600ms',
+                    } as CSSProperties}
+                    className={`pointer-events-none absolute inline-flex items-center gap-0.5 whitespace-nowrap overflow-visible font-display font-bold tracking-wide drop-shadow-[0_1px_3px_rgba(0,0,0,0.95)] anim-card-popup-reduced ${sizeClass} ${colorClass}`}
+                  >
+                    {innerContent}
+                  </div>
+                );
+              }
+
+              const ep = item.endPoint;
+              const flightStyle = {
+                left: '50%',
+                top: '50%',
+                maxWidth: 'calc(100% - 16px)',
+                transformOrigin: 'center',
+                '--card-pop-dx': `${sp.offsetFromCenterX}px`,
+                '--card-pop-dy': `${sp.offsetFromCenterY}px`,
+                '--card-pop-ex': `${ep.offsetFromCenterX}px`,
+                '--card-pop-ey': `${ep.offsetFromCenterY}px`,
+                '--card-pop-start-scale': String(cardPopupCfg.startScalePct / 100),
+                '--card-pop-end-scale': String(cardPopupCfg.endScalePct / 100),
+                animationDuration: `${cardPopupCfg.flightMs}ms`,
+              } as CSSProperties;
+
+              return (
+                <div
+                  key={pop.id}
+                  data-testid="damage-popup"
+                  data-popup-compact={isSmall ? 'true' : 'false'}
+                  data-popup-edge={sp.edge}
+                  data-popup-start-x={Math.round(sp.x)}
+                  data-popup-start-y={Math.round(sp.y)}
+                  data-popup-end-x={Math.round(ep.x)}
+                  data-popup-end-y={Math.round(ep.y)}
+                  style={flightStyle}
+                  className={`pointer-events-none absolute whitespace-nowrap overflow-visible font-display font-bold tracking-wide drop-shadow-[0_1px_3px_rgba(0,0,0,0.95)] anim-card-popup-flight ${sizeClass} ${colorClass}`}
+                >
+                  <span
+                    style={{
+                      animationDelay: `${cardPopupCfg.flightMs}ms`,
+                      animationDuration: `${CARD_POPUP_SETTLE_MS}ms`,
+                    }}
+                    className="inline-flex items-center gap-0.5 anim-card-popup-pop-fade"
+                  >
+                    {innerContent}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
       <div className="flex items-center gap-2 min-w-0">
         {/* 1. Role / Team Shape Icon */}

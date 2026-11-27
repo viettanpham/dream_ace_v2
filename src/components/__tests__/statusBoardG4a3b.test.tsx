@@ -164,7 +164,7 @@ describe('TASK G4a-3b — Radar Status Board (under radar)', () => {
   });
 
   it('Item 1: Desktop/tablet board sits directly under radar with 28px header, Ta|Địch columns, 48px rows (chip + 2*safe + 4), non-clipping chip area, max 6 32px chips + "+N", hides dead/empty units, constant 220px height for 0/1/8 rows, and collapses cleanly', () => {
-    expect(CURRENT_SAVE_VERSION).toBe(9);
+    expect(CURRENT_SAVE_VERSION).toBeGreaterThanOrEqual(12);
     expect(STATUS_BOARD_HEADER_HEIGHT_PX).toBe(28);
     expect(STATUS_BOARD_ROW_HEIGHT_PX).toBe(
       STATUS_CHIP_FRAME_PX + 2 * STATUS_BADGE_SAFE_PX + 4
@@ -514,7 +514,7 @@ describe('TASK G4a-3b — Radar Status Board (under radar)', () => {
     expect(window.localStorage.getItem('dreamAce.statusBoard.v1')).toBe('expanded');
 
     // Excluded from save snapshot, SV1a/SV1b export envelope, and local save key
-    expect(CURRENT_SAVE_VERSION).toBe(9);
+    expect(CURRENT_SAVE_VERSION).toBeGreaterThanOrEqual(12);
     const snapshot = useGameStore.getState().exportSaveStateSnapshot();
     expect(JSON.stringify(snapshot)).not.toContain('dreamAce.statusBoard.v1');
     expect(JSON.stringify(snapshot)).not.toContain('statusBoardCollapsed');

@@ -1,8 +1,9 @@
 import { Award, BarChart3, Package, ScrollText } from 'lucide-react';
-import { BALANCE_CONFIG } from '../data/balance';
+import { getMaxLevel } from '../data/balance';
 import { STAT_KEYS } from '../data/classes';
 import { RARITY_META } from '../data/items';
 import { getEffectiveItemStats } from '../engine/equipment';
+import { isPirateIncidentId } from '../engine/pirates';
 import {
   getClassName,
   getItemInstanceName,
@@ -11,6 +12,7 @@ import {
   getSlotLabel,
   getStatShort,
 } from '../i18n';
+import { getSupplyName } from './SupplyLoadoutBar';
 import type { TranslationKey } from '../i18n/en';
 import type { BattleSummary, Language } from '../types/game';
 
@@ -87,6 +89,19 @@ export function BattleResultDialog({
                 <p className="text-[13px] text-slate-400 leading-relaxed">
                   {outcomeDesc}
                 </p>
+                <p
+                  data-testid="battle-result-kind"
+                  className="text-[12px] text-slate-300"
+                >
+                  {t('summary.battleKindLine', {
+                    kind: t(
+                      (summary.kind === 'event' &&
+                      isPirateIncidentId(summary.sourceId)
+                        ? 'battle.kind.pirates'
+                        : `battle.kind.${summary.kind ?? 'assault'}`) as TranslationKey
+                    ),
+                  })}
+                </p>
               </div>
 
               {summary.leveledUp && (
@@ -137,8 +152,8 @@ export function BattleResultDialog({
                     +{summary.expGained} EXP
                   </div>
                   <div className="text-[12px] font-mono-nums text-slate-400 mt-0.5">
-                    {summary.newLevel >= BALANCE_CONFIG.maxLevel
-                      ? t('summary.maxLevelReached')
+                    {summary.newLevel >= getMaxLevel()
+                      ? t('summary.maxLevelReached', { level: getMaxLevel() })
                       : t('summary.battlesToNext', {
                           count: summary.battlesToNextLevel,
                           next: summary.newLevel + 1,
@@ -173,6 +188,160 @@ export function BattleResultDialog({
                     +{summary.warPointsGained} WP
                   </div>
                 </div>
+
+                {((summary.supportExpPct ?? 0) > 0 ||
+                  (summary.supportCreditPct ?? 0) > 0) && (
+                  <div
+                    data-testid="battle-result-national-support"
+                    className="col-span-2 rounded border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1.5 text-[12px] font-mono-nums text-emerald-300"
+                  >
+                    {t('summary.nationalSupportNote', {
+                      expPct: Number((summary.supportExpPct ?? 0).toFixed(2)),
+                      creditPct: Number((summary.supportCreditPct ?? 0).toFixed(2)),
+                    })}
+                  </div>
+                )}
+
+                {(summary.outcome === 'defeat' || summary.retreated) &&
+                  (summary.repairFree || (summary.repairFee ?? 0) > 0) && (
+                    <div
+                      data-testid="battle-result-repair-line"
+                      className={`col-span-2 rounded px-2.5 py-1.5 text-[12px] font-mono-nums border ${
+                        summary.repairFree
+                          ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                          : 'border-rose-500/30 bg-rose-500/10 text-rose-300'
+                      }`}
+                    >
+                      {summary.repairFree
+                        ? t('summary.repairFreeLine')
+                        : t('summary.repairFeeLine', {
+                            fee: Math.round(summary.repairFee ?? 0).toLocaleString(
+                              lang === 'vi' ? 'vi-VN' : 'en-US'
+                            ),
+                          })}
+                    </div>
+                  )}
+
+                {((summary.retreatPenaltyExp ?? 0) > 0 ||
+                  (summary.retreatPenaltyCredit ?? 0) > 0 ||
+                  (summary.retreatPenaltyWp ?? 0) > 0) && (
+                  <div
+                    data-testid="battle-result-retreat-penalty"
+                    className="col-span-2 rounded border border-rose-500/30 bg-rose-500/10 px-2.5 py-1.5 text-[12px] font-mono-nums text-rose-300"
+                  >
+                    {t('summary.retreatPenaltyLine', {
+                      exp: Math.round(summary.retreatPenaltyExp ?? 0).toLocaleString(
+                        lang === 'vi' ? 'vi-VN' : 'en-US'
+                      ),
+                      credit: Math.round(
+                        summary.retreatPenaltyCredit ?? 0
+                      ).toLocaleString(lang === 'vi' ? 'vi-VN' : 'en-US'),
+                      wp: Math.round(summary.retreatPenaltyWp ?? 0).toLocaleString(
+                        lang === 'vi' ? 'vi-VN' : 'en-US'
+                      ),
+                    })}
+                  </div>
+                )}
+
+                {!summary.retreated &&
+                  summary.outcome === 'defeat' &&
+                  (summary.defeatPenaltyExp ?? 0) > 0 && (
+                    <div
+                      data-testid="battle-result-defeat-exp-penalty"
+                      className="col-span-2 rounded border border-rose-500/30 bg-rose-500/10 px-2.5 py-1.5 text-[12px] font-mono-nums text-rose-300"
+                    >
+                      {t('summary.defeatExpPenaltyLine', {
+                        exp: Math.round(
+                          summary.defeatPenaltyExp ?? 0
+                        ).toLocaleString(lang === 'vi' ? 'vi-VN' : 'en-US'),
+                      })}
+                    </div>
+                  )}
+
+                {((summary.voucherCreditRefund ?? 0) > 0 ||
+                  (summary.voucherExpRefund ?? 0) > 0) && (
+                  <div
+                    data-testid="battle-result-voucher-line"
+                    className="col-span-2 rounded border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1.5 text-[12px] font-mono-nums text-emerald-300"
+                  >
+                    {t('summary.voucherLine', {
+                      parts: [
+                        (summary.voucherCreditRefund ?? 0) > 0
+                          ? t('summary.voucherCreditPart', {
+                              amount: Math.round(
+                                summary.voucherCreditRefund ?? 0
+                              ).toLocaleString(lang === 'vi' ? 'vi-VN' : 'en-US'),
+                            })
+                          : null,
+                        (summary.voucherExpRefund ?? 0) > 0
+                          ? t('summary.voucherExpPart', {
+                              amount: Math.round(
+                                summary.voucherExpRefund ?? 0
+                              ).toLocaleString(lang === 'vi' ? 'vi-VN' : 'en-US'),
+                            })
+                          : null,
+                      ]
+                        .filter(Boolean)
+                        .join(' / '),
+                    })}
+                  </div>
+                )}
+
+                {summary.supplyDrop &&
+                  (summary.supplyDrop.qty > 0 ||
+                    (summary.supplyDrop.lostQty ?? 0) > 0) && (
+                    <div
+                      data-testid="battle-result-supply-drop"
+                      className="col-span-2 rounded border border-sky-500/35 bg-sky-500/10 px-2.5 py-1.5 text-[12px] font-mono-nums text-sky-200"
+                    >
+                      {summary.supplyDrop.qty > 0
+                        ? t('summary.supplyDropLine', {
+                            name: getSupplyName(summary.supplyDrop.templateId, t),
+                            qty: summary.supplyDrop.qty,
+                          })
+                        : t('summary.supplyDropLostOnlyLine', {
+                            name: getSupplyName(summary.supplyDrop.templateId, t),
+                            lost: summary.supplyDrop.lostQty ?? 0,
+                          })}
+                      {summary.supplyDrop.qty > 0 &&
+                      (summary.supplyDrop.lostQty ?? 0) > 0
+                        ? t('summary.supplyDropOverflow', {
+                            lost: summary.supplyDrop.lostQty ?? 0,
+                          })
+                        : ''}
+                    </div>
+                  )}
+
+                {summary.missionSupplyDrop &&
+                  (summary.missionSupplyDrop.qty > 0 ||
+                    (summary.missionSupplyDrop.lostQty ?? 0) > 0) && (
+                    <div
+                      data-testid="battle-result-mission-supply-drop"
+                      className="col-span-2 rounded border border-emerald-500/35 bg-emerald-500/10 px-2.5 py-1.5 text-[12px] font-mono-nums text-emerald-200"
+                    >
+                      {summary.missionSupplyDrop.qty > 0
+                        ? t('summary.supplyDropLine', {
+                            name: getSupplyName(
+                              summary.missionSupplyDrop.templateId,
+                              t
+                            ),
+                            qty: summary.missionSupplyDrop.qty,
+                          })
+                        : t('summary.supplyDropLostOnlyLine', {
+                            name: getSupplyName(
+                              summary.missionSupplyDrop.templateId,
+                              t
+                            ),
+                            lost: summary.missionSupplyDrop.lostQty ?? 0,
+                          })}
+                      {summary.missionSupplyDrop.qty > 0 &&
+                      (summary.missionSupplyDrop.lostQty ?? 0) > 0
+                        ? t('summary.supplyDropOverflow', {
+                            lost: summary.missionSupplyDrop.lostQty ?? 0,
+                          })
+                        : ''}
+                    </div>
+                  )}
 
                 <div className="rounded border border-slate-800 bg-[#090D14] p-2.5 sm:p-3">
                   <div className="text-[12px] text-slate-400">

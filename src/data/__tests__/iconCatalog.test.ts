@@ -18,9 +18,9 @@ import {
 import type { AdminConfig } from '../../types/game';
 
 describe('iconCatalog data & loader (G4a-1 part 1)', () => {
-  it('JSON has exactly 98 sys rows, unique ids, expected group counts, kind counts, and composite SS12 layers', () => {
+  it('JSON has exactly 99 sys rows, unique ids, expected group counts, kind counts, and composite SS12 layers', () => {
     expect(Array.isArray(rawIconCatalog)).toBe(true);
-    expect(rawIconCatalog).toHaveLength(98);
+    expect(rawIconCatalog).toHaveLength(99);
 
     const ids = new Set<string>();
     const groupCounts: Record<string, number> = {};
@@ -39,7 +39,7 @@ describe('iconCatalog data & loader (G4a-1 part 1)', () => {
       BS: 6,
       SS: 16,
       BF: 20,
-      DB: 11,
+      DB: 12,
       DT: 6,
       CC: 13,
       EV: 16,
@@ -49,7 +49,7 @@ describe('iconCatalog data & loader (G4a-1 part 1)', () => {
     expect(kindCounts).toEqual({
       normal: 54,
       buff: 20,
-      debuff: 24,
+      debuff: 25,
     });
 
     const ss12 = rawIconCatalog.find((row) => row.id === 'SS12');
@@ -70,7 +70,7 @@ describe('iconCatalog data & loader (G4a-1 part 1)', () => {
     const forbidden = new Set<string>(FORBIDDEN_ICON_SYMBOLS);
 
     const catalog = getCatalog();
-    expect(catalog).toHaveLength(98);
+    expect(catalog).toHaveLength(99);
 
     for (const row of catalog) {
       const symbols = row.layers
@@ -118,9 +118,9 @@ describe('iconCatalog data & loader (G4a-1 part 1)', () => {
     ).toThrow(/does not match id prefix/i);
   });
 
-  it('returns 98 sys rows when no mods provided and merges append/override mods rows cleanly', () => {
+  it('returns 99 sys rows when no mods provided and merges append/override mods rows cleanly', () => {
     const base = getCatalog();
-    expect(base).toHaveLength(98);
+    expect(base).toHaveLength(99);
     expect(base.every((r) => r.tag === 'sys')).toBe(true);
     expect(ICON_CATALOG_GROUPS).toHaveLength(8);
     expect(getCatalogRow('SS12')?.layers).toHaveLength(2);
@@ -142,7 +142,7 @@ describe('iconCatalog data & loader (G4a-1 part 1)', () => {
       },
     ]);
 
-    expect(merged).toHaveLength(99);
+    expect(merged).toHaveLength(100);
 
     const overridden = merged.find((r) => r.id === 'BS01');
     expect(overridden).toMatchObject({
@@ -167,12 +167,12 @@ describe('iconCatalog data & loader (G4a-1 part 1)', () => {
   });
 
   it('keeps CURRENT_SAVE_VERSION = 9 and loads old AdminConfig without iconCatalogMods', () => {
-    expect(CURRENT_SAVE_VERSION).toBe(9);
+    expect(CURRENT_SAVE_VERSION).toBe(11);
 
     const oldAdmin = { ...createDefaultAdminConfig() } as Partial<AdminConfig>;
     delete oldAdmin.iconCatalogMods;
 
-    expect(getCatalog(oldAdmin.iconCatalogMods)).toHaveLength(98);
+    expect(getCatalog(oldAdmin.iconCatalogMods)).toHaveLength(99);
 
     const fresh = createFreshCampaignState('Vance', 'striker');
     const migrated = migrateSaveData(
@@ -183,6 +183,6 @@ describe('iconCatalog data & loader (G4a-1 part 1)', () => {
       CURRENT_SAVE_VERSION
     );
     expect(migrated.adminConfig.iconCatalogMods).toEqual([]);
-    expect(getCatalog(migrated.adminConfig.iconCatalogMods)).toHaveLength(98);
+    expect(getCatalog(migrated.adminConfig.iconCatalogMods)).toHaveLength(99);
   });
 });

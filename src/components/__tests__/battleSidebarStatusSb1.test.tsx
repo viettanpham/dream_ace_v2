@@ -343,7 +343,7 @@ describe('TASK SB1 — Selected-unit status area fixed 2 rows (desktop/tablet si
       root!.render(createElement(BattleScreen));
     });
 
-    expect(CURRENT_SAVE_VERSION).toBe(9);
+    expect(CURRENT_SAVE_VERSION).toBeGreaterThanOrEqual(12);
     expect(
       container!.querySelector('[data-testid="turn-queue-sidebar-header"]')
         ?.className

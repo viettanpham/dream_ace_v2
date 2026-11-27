@@ -1,0 +1,21 @@
+TASK MAP-M1 — phone map layout (phone only, desktop unchanged). Model: Hydrogen. If this prompt looks cut off, STOP and tell me the last words you can see.
+
+RESUME: save this prompt to docs/tasks/MAP-M1.md, the checklist to docs/tasks/MAP-M1.progress.md, the final report to docs/tasks/MAP-M1.report.md (print it at the end). If those files exist, continue from the first unticked item.
+
+TOKEN SAVING: read docs/CODEMAP.md first, grep by symbol, open only line ranges of src/components/MapView.tsx (1359 lines): header card about 743-792, map section about 859-1000, sector list from about 1210. Run only the related test files while working and the full `npx vitest run` once at the end. Append CODEMAP lines. Do NOT enable Firebase. Baseline: 308 tests.
+
+PROBLEM (phone, about 390px wide): the header card above the map is about 280px tall (big title, month chip, income chip, 3-line subtitle, two full-width buttons "Qua tháng (+1 tháng)" and "Xuất kích Phi đội (Interceptor Lv.18)"), so the map is tiny. The map hint "Kéo để di chuyển..." collides with the zoom buttons. IMPORTANT FINDING: the map SVG uses viewBox 0 0 840 310 (wide, about 2.7:1), so on a 390px phone it only fills about 145px of the drag box height; making the box taller does NOT make it bigger. The phone needs an initial zoom.
+
+STEP 0 (report in the progress file, no code yet): how does this app detect "phone" (existing hook / breakpoint / sm: classes)? Reuse that, do not invent a new one. Report the current rendered heights of the header card, the map box and the zoom button area at 390px, and how pan/zoom clamping works (clampZoom, pan state, handlePointerDown/Move/Up, handleWheel).
+
+ITEM 1 — Compact header (phone < 640px only): row 1 = title (text-base, one line, truncate) + an (i) button that opens the subtitle text (map.pageSubtitle) in a small sheet or popover; row 2 = the month chip and the income chip on one line (small, may shorten the income text but keep CR and WP numbers). The two big buttons leave the header on phone (see item 3). Total header height at most 72px. Desktop and tablet keep the current header exactly.
+
+ITEM 2 — Big map (phone only): the map box height = clamp(360px, 62dvh, 560px). Initial zoom chosen so that sector labels are at least 11px on screen (compute from the SVG scale; the map is then wider than the screen and panned), centered on the currently selected sector (or the player's sector), pan clamped so the map never leaves the box, the existing pinch / drag / wheel keep working. Zoom buttons: 40px, floating bottom-right inside the map box. The hint text moves bottom-left and fades out after 4 seconds (CSS opacity, no layout shift), it must never overlap the zoom buttons. Reset-view button returns to the initial phone zoom + centering.
+
+ITEM 3 — Sticky action bar (phone only): at the bottom of the scroll container (position sticky, bottom 0, above the tab bar, with a dark background and top border) two 44px-high buttons side by side: [Qua tháng] and [Xuất kích] with a small second line or suffix "Lv.<level>" (class name stays in a title attribute). Add short i18n keys in vi.ts and en.ts (map.advanceMonthShort, map.deployShort); the old long keys stay for desktop. Same handlers as today (advanceMonth(), startBattle(selectedSector.id)). The sector list and base panel below the map are unchanged and scroll normally; the bar must not hide the last list item (add bottom padding equal to the bar height).
+
+HARD LIMITS: desktop/tablet (>= 640px) layout, map content, sector data and game logic unchanged; no horizontal page overflow; nothing at x < 8px on phone; every tap target >= 40px; do not touch battle files.
+
+TESTS: add src/components/__tests__/mapM1.test.tsx (jsdom): on a phone width the header has the (i) button and no subtitle paragraph, the action bar has two buttons with the short labels and calls advanceMonth / startBattle, desktop width still renders the long labels; plus a pure test of the initial zoom/centering function (extract it as a pure helper so it is testable). Update any existing test that asserts the old phone header.
+
+REPORT at the end: tests old -> new, tsc --noEmit, production build, files changed, and "NOT checked in a real browser" (say specifically: real phone map size and label readability, pinch/drag feel, sticky bar over the tab bar).

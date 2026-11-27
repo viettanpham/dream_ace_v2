@@ -1,0 +1,7 @@
+# TASK MAP-C1 Report
+- Items done: STEP A, ITEM 1 (`src/data/maps.json` + `validateMapPack` + typed getters), ITEM 2 (no hard-coded node ids + `baseStates` sanitizer + `frontline.ts` + `totalSectorsCount`), TESTS & CHECKS.
+- Files changed: `src/data/maps.json`, `src/data/maps.ts`, `src/types/game.ts`, `src/engine/frontline.ts`, `src/engine/stats.ts`, `src/engine/migration.ts`, `src/engine/saveExport.ts`, `src/store/useGameStore.ts`, `src/i18n/index.ts`, `src/data/__tests__/mapDataLoader.test.ts`, `docs/CODEMAP.md`, `docs/tasks/MAP-C1.{md,progress.md,report.md}`.
+- Removed hard-coded ids (orig lines): `maps.ts:44-296` (6 nodes, 8 lanes, `'aegis_relay'`/`'border_outpost'` raid, `SECTORS_CATALOG[0]`, `campaignChain`); `migration.ts:540,832,1135,1215,1578-1606` (`SECTORS_CATALOG[0..2]`, `'aegis_relay'`, `'veridian_colony'`); `stats.ts:326-330` (`SECTORS_CATALOG[0]`, `'aegis_relay'`, `'veridian_colony'`); `useGameStore.ts:5380,5979` (`SECTORS_CATALOG[last/0]`); `saveExport.ts:882` (`SECTORS_CATALOG.length`); `i18n/index.ts:802` (`'border_outpost'`).
+- Checks: `mapDataLoader.test.ts` (5/5), `frontline.test.ts`, `frontlineIntegrationF1b.test.tsx`, `mapFrontlineF2.test.tsx`, `mapM1.test.tsx`, `saveExportUi.test.tsx`, `pirates.test.ts` -> 7 files / 39 tests passed (`--reporter=dot`) + `npx tsc --noEmit` exit 0.
+- Not checked: full vitest suite, production build, and live browser rendering/interactions.
+CHƯA chạy trình duyệt thật

@@ -1,10 +1,11 @@
+import '../data/statusEffects';
 import {
   formatStatusChipShortValue,
-  getCatalogRowForStatus,
+  getCatalogRowForActiveStatus,
   getFirstExpiringTurns,
   getStatusVisualKind,
 } from '../data/statusIconMap';
-import { formatStatusEffectDetail, translate } from '../i18n';
+import { formatStatusEffectDetail, getStatusDesc, translate } from '../i18n';
 import type {
   ActiveStatusEffect,
   CombatUnit,
@@ -60,7 +61,7 @@ export function StatusChip({
   labelTestId,
   className = '',
 }: StatusChipProps) {
-  const catalogRow = getCatalogRowForStatus(status.type, iconMods);
+  const catalogRow = getCatalogRowForActiveStatus(status, iconMods);
   const visualKind = getStatusVisualKind(status, catalogRow);
   const shortValue = formatStatusChipShortValue(
     lang,
@@ -72,7 +73,9 @@ export function StatusChip({
   const turnsLeft = getFirstExpiringTurns(status, stackTurns, allowStack);
   const fullDetail = formatStatusEffectDetail(lang, status, unit);
   const effectiveStacks =
-    allowStack && Number.isFinite(stacks) && stacks >= 2
+    Number.isFinite(status.stacks) && (status.stacks as number) >= 2
+      ? Math.floor(status.stacks as number)
+      : allowStack && Number.isFinite(stacks) && stacks >= 2
       ? Math.floor(stacks)
       : 1;
   const turnsText =
@@ -83,7 +86,11 @@ export function StatusChip({
   const nameAndValue = fullDetail.valueText
     ? `${fullDetail.label}: ${fullDetail.valueText}`
     : fullDetail.label;
-  const accessibleSummary = `${nameAndValue} · ${turnsText} · ${stacksText}`;
+  const extraDesc =
+    status.type === 'shield_break' || status.type === 'shield_cracked'
+      ? ` · ${getStatusDesc(lang, status.type, turnsLeft ?? 1)}`
+      : '';
+  const accessibleSummary = `${nameAndValue} · ${turnsText} · ${stacksText}${extraDesc}`;
 
   const isMini = size === 'xs';
   const framePx = STATUS_ICON_SIZE_SPECS[size].boxPx;

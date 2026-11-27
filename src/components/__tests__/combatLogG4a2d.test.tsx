@@ -257,7 +257,7 @@ describe('TASK G4a-2d — Combat log newest-first order, jump pill & compact 2-r
         ?.getAttribute('aria-pressed')
     ).toBe('true');
 
-    expect(CURRENT_SAVE_VERSION).toBe(9);
+    expect(CURRENT_SAVE_VERSION).toBe(12);
     const snapshot = useGameStore.getState().exportSaveStateSnapshot();
     const env = await buildExportEnvelope(snapshot);
     expect(JSON.stringify(env)).not.toContain('dreamAce.logOrder.v1');

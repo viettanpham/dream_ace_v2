@@ -1,0 +1,5 @@
+# TASK SHOP-CONFIRM Report
+- Đã xong: ITEM 0 (đổi `CURRENT_SAVE_VERSION` sang `.toBeGreaterThanOrEqual(12)` ở 9 file test liệt kê), ITEM 1 (tạo `SupplyTradeConfirm.tsx` trên `BottomSheet` nhỏ sẵn có: icon/tên/tier/effect, Số lượng, Đơn giá, Tổng đậm, Credits hiện có -> Sau giao dịch đỏ & khóa nút khi < 0, Esc/ngoài/Hủy đóng không trừ tiền), ITEM 2 (`SupplyShopPanel.tsx` hiện tổng giá trên nút x1/x5/x10 và tiền nhận trên nút Bán, bấm mở confirm dialog rồi mới gọi `handleBuy`/`handleSell`).
+- Files sửa: `src/components/SupplyTradeConfirm.tsx`, `src/components/SupplyShopPanel.tsx`, `src/i18n/vi.ts`, `src/i18n/en.ts`, `src/components/__tests__/supplyShopConfirm.test.tsx`, 9 file test ở ITEM 0, `docs/CODEMAP.md`, `docs/tasks/SHOP-CONFIRM.{md,progress.md,report.md}`.
+- Kiểm thử: PASS `npx tsc --noEmit` + `supplyShopConfirm.test.tsx` (4/4) + `statusChipG4aC1.test.tsx` (4/4) + `supplyShopCs3a.test.ts` (7/7); `statusChipsG4a1` & `suppliesCs1` chỉ fail assert `saveVersion === 12` cũ chưa thuộc scope ITEM 0 (`supplyShopUiCs3b` test 3 cũ chưa cập nhật confirm flow theo rule giữ nguyên test cũ).
+NOT checked in a real browser (phone sheet).

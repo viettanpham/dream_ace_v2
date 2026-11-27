@@ -8,6 +8,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { getScaledSkillStats, getSkillById } from '../data/skills';
+import { getEffectiveSpCost } from '../engine/skills';
 import {
   getEffectiveUnitSpeed,
   getTeamColorRole,
@@ -37,11 +38,13 @@ import { useStatusDisplaySettings } from '../utils/statusDisplayPrefs';
 import { BottomSheet } from './BottomSheet';
 import { CatalogIcon } from './CatalogIcon';
 import { FighterSvg } from './FighterSvg';
+import { LevelBadge } from './LevelBadge';
 import { SkillIcon } from './SkillIcon';
 import { StatBar } from './StatBar';
 
 interface UnitDetailSheetProps {
   unit: CombatUnit | null;
+  refLevel?: number;
   onClose: () => void;
   isTargeted: boolean;
   canLockEnemy: boolean;
@@ -75,6 +78,7 @@ function formatStatusDuration(st: ActiveStatusEffect): string {
 
 export function UnitDetailSheet({
   unit,
+  refLevel,
   onClose,
   isTargeted,
   canLockEnemy,
@@ -88,6 +92,8 @@ export function UnitDetailSheet({
     (s) => s.adminConfig.statusDisplayDefaults
   );
   const iconMods = useGameStore((s) => s.adminConfig.iconCatalogMods);
+  const spEconomy = useGameStore((s) => s.adminConfig.spEconomy);
+  const skillMods = useGameStore((s) => s.adminConfig.skillMods);
   const { settings: statusSettings } =
     useStatusDisplaySettings(adminStatusDefaults);
 
@@ -196,6 +202,13 @@ export function UnitDetailSheet({
           >
             {teamTag}
           </span>
+          {isEnemy && (
+            <LevelBadge
+              level={unit.level}
+              refLevel={refLevel ?? unit.level}
+              side={unit.side}
+            />
+          )}
           <span className="truncate" style={{ color: unit.alive ? teamColor : undefined }}>
             {unit.name}
           </span>
@@ -369,7 +382,7 @@ export function UnitDetailSheet({
                         {detail.fullText}
                       </div>
                       <div className="text-xs text-slate-300 mt-0.5 leading-snug">
-                        {getStatusDesc(lang, st.type)}
+                        {getStatusDesc(lang, st.type, st.turnsRemaining)}
                       </div>
                     </div>
                     <span className="font-mono-nums text-xs font-bold px-1.5 py-0.5 rounded bg-slate-950/70 text-slate-200 shrink-0">
@@ -391,11 +404,13 @@ export function UnitDetailSheet({
             </div>
             <div className="space-y-1.5">
               {unit.equippedSkillIds.map((skillId) => {
-                const skill = getSkillById(skillId);
+                const skill = getSkillById(skillId, skillMods);
                 if (!skill) return null;
                 const lv = unit.skillLevels[skillId] ?? 1;
-                const scaled = getScaledSkillStats(skill, lv);
                 const cdRem = unit.skillCooldowns[skillId] ?? 0;
+                const effectiveCost = getEffectiveSpCost(skill, unit, {
+                  spEconomy,
+                });
                 return (
                   <div
                     key={skillId}
@@ -407,15 +422,15 @@ export function UnitDetailSheet({
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-xs font-bold text-slate-100 truncate">
-                          {getSkillName(lang, skill.id)} · Lv.{lv}
+                          {getSkillName(skill, lang)} · Lv.{lv}
                         </span>
                         <span className="text-[11px] font-mono-nums text-amber-300 shrink-0">
-                          {scaled.spCost} SP
+                          {effectiveCost} SP
                           {cdRem > 0 ? ` · CD ${cdRem}` : ''}
                         </span>
                       </div>
                       <div className="text-[11px] text-slate-400 mt-0.5 leading-snug">
-                        {getSkillDesc(lang, skill.id)}
+                        {getSkillDesc(skill, lang)}
                       </div>
                       <div className="text-[10px] font-mono-nums text-sky-400/90 mt-1 flex items-center gap-1.5">
                         <Shield className="w-3 h-3" />

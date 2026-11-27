@@ -209,6 +209,7 @@ describe('FX-fix: Battle VFX lifetime & persistence across x1..x10', () => {
           fxEvents: [],
           popups: [],
           explodedUnitIds: [],
+          prestage: { active: false, appliedByUnit: {} },
         },
       });
 
@@ -308,6 +309,7 @@ describe('FX-fix: Battle VFX lifetime & persistence across x1..x10', () => {
         selectedTargetId: enemy.id,
         fxEvents: [],
         popups: [],
+        prestage: { active: false, appliedByUnit: {} },
       },
     });
 
@@ -482,7 +484,10 @@ describe('FX-fix: Fallback proportional coordinates when measurement is 0 or NaN
       const popups = popupsLayer!.querySelectorAll('[data-testid="damage-popup"]');
       expect(popups.length).toBe(2);
       expect(popupsLayer!.textContent).toContain('-120');
-      expect(popupsLayer!.textContent).toContain('WPN +30%');
+      expect(popupsLayer!.textContent).toContain('+30%');
+      expect(
+        popupsLayer!.querySelector('[data-popup-icon-kind="wpn"]')?.textContent
+      ).toBe('swords');
     } finally {
       rectSpy.mockRestore();
     }

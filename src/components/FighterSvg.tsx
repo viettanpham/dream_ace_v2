@@ -93,14 +93,16 @@ export function FighterSvg({
     : 'anim-ship-hover';
 
   return (
-    <div className={`relative inline-flex items-center justify-center ${SIZE_CLASSES[size]} ${className}`}>
+    <div
+      className={`relative inline-flex items-center justify-center ${SIZE_CLASSES[size]} ${hoverClass} ${className}`}
+    >
       <svg
         viewBox="0 0 120 120"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
         className={`w-full h-full select-none ${
           destroyed ? 'opacity-25 grayscale' : ''
-        } ${hoverClass}`}
+        }`}
         aria-hidden="true"
       >
         {/* Subtle engine ambient glow */}

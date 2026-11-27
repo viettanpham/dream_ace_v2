@@ -1,0 +1,20 @@
+TASK U2a — Nhân vật tab: character summary, total stats with source breakdown, faster point allocation. Model: Hydrogen. If this prompt looks cut off, STOP and tell me the last words you can see.
+
+STEP A (resume): save this prompt verbatim to docs/tasks/U2a.md, checklist docs/tasks/U2a.progress.md, tick items, final report docs/tasks/U2a.report.md and print it. On retry continue from the first unticked item.
+
+TOKEN SAVING: read docs/CODEMAP.md first; grep by symbol. Open ONLY src/components/GarageView.tsx (609 lines; stat rows ~436-530, derived cards ~163 and ~540, buttons ~500-520), calculateEffectiveStats in src/engine/stats.ts (~42), sumGearEquipmentStats (equipment.ts ~342), getGearPassiveBonuses (skills.ts ~71), src/components/BottomSheet.tsx (props only). Related tests only + tsc. Do not enable Firebase. CURRENT_SAVE_VERSION unchanged. No store or save change.
+
+SCOPE: tab Nhân vật only (GarageView). Desktop and phone both. Battle, GEAR tab, shop, map untouched. New strings vi.ts AND en.ts. No empty placeholders.
+
+ITEM 1 — Summary + total stats with sources.
+(a) New pure src/engine/statBreakdown.ts getStatBreakdown(gear, equipBonuses, traits, passives, pending?) -> per StatKey { base, levelGrowth, allocated (points x perPointGain, incl. pending), equipment, other (traits + passives = total minus the four above, may be negative), total } where total is EXACTLY calculateEffectiveStats(...) for the same inputs (do not duplicate the formula: compute total with it, derive "other" by difference).
+(b) GarageView: page title "Nhân vật" / "Character" (replace garage.title "Garage Phi Cơ" and its subtitle wording); under the header a summary block of the active Gear (name, class, Lv, EXP to next level, Power, record, "+N điểm chưa cộng"). New block "Tổng chỉ số": 6 rows, each = short name + full name, TOTAL number, a segmented bar by source with the numbers, and a legend of 5 sources with fixed colours that avoid green and red: Gốc slate #94a3b8, Cấp sky #38bdf8, Điểm cộng violet #a78bfa, Trang bị amber #fbbf24, Nội tại pink #f472b6; every segment also shows its number or an abbreviation (never colour alone); a source with 0 is not drawn; negative "other" is only listed in the detail. Tap a row (desktop: expand a detail line under it; phone: BottomSheet) = "Gốc 12 + Cấp 3 + Điểm cộng 10 + Trang bị 8 + Nội tại 2 = 35". The allocation block, roster and derived cards stay below as they are (only the new block is added).
+ITEM 2 — Allocation controls (same block, no layout change beyond the buttons). Next to + add [+5] and [MAX] (MAX puts ALL remaining points into that stat); the existing preview stays. PRESS AND HOLD on + and − repeats automatically: first step at pointerdown, after 400 ms repeat every 120 ms, after 1.2 s of holding every 60 ms; stops on pointerup / pointerleave / pointercancel / blur / unmount; clamps to the remaining points and to the pending value (never negative); a plain tap = exactly one step (no double fire from pointer + click); touch: touch-action manipulation, no text selection, no context menu on the buttons; sound click only once per hold. Keep aria-labels and 44px targets; the three buttons (+5, MAX, hold) must still fit at 360px without overflow (icon-only + / − ok, short labels "+5" and "MAX").
+
+HARD LIMITS: no horizontal overflow; nothing at x<8; no nested scroll box on phone; engine results and saves unchanged.
+
+TESTS: getStatBreakdown sum of the 5 sources === total for every class, with and without equipment, traits, passives, pending, negative evasionMod; summary shows level and unspent points; breakdown row opens and shows the formula; hold repeat with fake timers (tap = 1, hold 500 ms = more than 1, release stops, clamps at 0 and at remaining, MAX uses all remaining, +5 clamps); vi/en parity; no overflow class regressions.
+
+CHECKS: related tests + tsc --noEmit / lint_applet only (no full vitest, no build).
+
+REPORT: items done + files changed; tests old (410) -> new; NOT checked in a real browser (hold on touch, bar at 360px).

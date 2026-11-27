@@ -1,21 +1,59 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import { BALANCE_CONFIG, getGarageUnlockCost } from '../data/balance';
+import {
+  BALANCE_CONFIG,
+  getEffectiveSkillMaxLevel,
+  getGarageUnlockCost,
+  getMaxLevel,
+  getUnlockedActiveSlots,
+  getUnlockedPassiveSlots,
+  sanitizeActiveSlotsConfig,
+  sanitizeFluxTransferConfig,
+  sanitizeMaxLevel,
+  sanitizePassiveScaleAfter5,
+  sanitizePassiveSlotsConfig,
+  sanitizeRestorePctCap,
+  sanitizeSkillMaxLevel,
+  sanitizeSpEconomyConfig,
+  sanitizeStealthConfig,
+  setRuntimeMaxLevel,
+} from '../data/balance';
+import { BATTLE_KIND_RULES } from '../data/battleKinds';
 import { sanitizeAutoEquipConfig } from '../data/autoEquipConfig';
 import { EMPTY_STAT_BLOCK, MECH_CLASS_LIST } from '../data/classes';
-import { EQUIPMENT_SLOTS } from '../data/items';
-import { getNextSectorId, SECTORS_CATALOG } from '../data/maps';
+import { EQUIPMENT_SLOTS, SHOP_CONFIG } from '../data/items';
+import {
+  createInitialBaseStates,
+  getDefaultSelectedNodeId,
+  getMapNodeById,
+  getMapNodes,
+  MAP_LANES,
+  sanitizeMapPack,
+  setActiveMapPack,
+  validateMapPack,
+} from '../data/maps';
 import { WINGMAN_CHAT_KEYS } from '../data/pilots';
 import { SHOP_STOCK_CONFIG } from '../data/shopConfig';
 import { sanitizeStarterSetConfig } from '../data/starterConfig';
-import { getSkillById, OPENING_CARDS_LIST } from '../data/skills';
+import { getSupplyTemplateById, SUPPLY_TEMPLATES } from '../data/consumables';
+import {
+  getVoucherById,
+  getVoucherPriceWp,
+  sanitizeVoucherShopStockWp,
+} from '../data/vouchers';
+import { getSkillById, OPENING_CARDS_LIST, sanitizeSkillMods } from '../data/skills';
 import {
   calculateBattleRewards,
   chooseAiDecision,
+  clearRevealedFlags,
+  computeFluxBattlePressure,
   createInitialBattleState,
   createRoundHpSnapshot,
+  getMaxAffordableFluxCount,
   getValidEnemyTargets,
+  pickFluxCount,
   reconcileRemainingTurnOrder,
+  resolveMultiStepTurn,
   resolveUnitAction,
   sortTurnOrder,
 } from '../engine/combat';
@@ -24,6 +62,25 @@ import {
   buildAutoEquipPlan,
   undoAutoEquipSnapshot,
 } from '../engine/autoEquip';
+import {
+  applyVoucherRefund,
+  computeDefeatExpPenalty,
+  computeRepairFee,
+  computeRetreatPenalty,
+  getBattleSummaryCharges,
+} from '../engine/battlePenalty';
+import {
+  evaluateTurnPhaseAfterAction,
+  sanitizeTurnPhaseConfig,
+} from '../engine/turnPhase';
+import { sanitizePrestageConfig } from '../engine/prestage';
+import { LIDAR_SKILL_ID, pickLidarCast } from '../engine/lidarAuto';
+import {
+  FLUX_SKILL_ID,
+  pickFluxAutoCount,
+  sanitizeFluxAutoConfig,
+} from '../engine/fluxAuto';
+import { buildEnrageActivationLogs } from '../engine/enrage';
 import {
   equipItemOnGear,
   generateItemInstance,
@@ -43,6 +100,15 @@ import {
   sanitizeFormationConfig,
 } from '../engine/formation';
 import {
+  type BattleOptionReasonKey,
+  getBattleOptions,
+  isVisible,
+  mergeVisibleUnlockedSectors,
+  pickDefaultBattle,
+  validateBattleLaunch,
+  visibleNodeIds,
+} from '../engine/frontline';
+import {
   getDefaultInventoryFilterState,
   RARITY_RANK,
 } from '../engine/inventory';
@@ -60,9 +126,65 @@ import {
   createDefaultAdminConfig,
   createFreshCampaignState,
   CURRENT_SAVE_VERSION,
+  getBoxCapacity,
   migrateSaveData,
   type PersistedCampaignState,
 } from '../engine/migration';
+import {
+  moveAllUnusedToWarehouse as moveAllUnusedToWarehouseEngine,
+  moveToBox as moveToBoxEngine,
+  moveToWarehouse as moveToWarehouseEngine,
+  type WarehouseTransferResult,
+} from '../engine/warehouse';
+import {
+  clearPirateIncidentById,
+  ensureIdle,
+  registerPirateBattleSourceProvider,
+  rollIncident,
+  sanitizePirateIncidents,
+  sanitizePiratesConfig,
+  spawnOnMonth,
+} from '../engine/pirates';
+import { sanitizeEnemyLevelConfig } from '../engine/enemyLevel';
+import { sanitizeModuleDropConfig } from '../engine/moduleDrop';
+import {
+  addSupplyToConsumables,
+  applyBattleSupplyUse,
+  buildSupplyUseFeedback,
+  getSupplyStockCount,
+  sanitizeSupplyEconomyConfig,
+  sanitizeSupplyLoadout,
+  sanitizeSupplyLoadoutSlots,
+  sanitizeSupplyScanCount,
+  sanitizeSupplyUsesPerTurn,
+  setSupplyLoadout as setSupplyLoadoutEngine,
+  SUPPLY_STACK_CAP,
+  tickBattleSupplyForUnit,
+  type SupplyLoadoutReject,
+} from '../engine/supplies';
+import {
+  drainSectorSupply,
+  runNpcSupplyStep,
+  sanitizeNpcSupplyConfig,
+} from '../engine/npcSupply';
+import {
+  pickAutoSupplies,
+  sanitizeAutoSuppliesConfig,
+} from '../engine/supplyAi';
+import {
+  addSupplyCrateToConsumables,
+  addSupplyWithOverflow,
+  applySupplyRewardGrant,
+  getPilotMaxGearLevel,
+  rollSupplyCrateContents,
+  rollSupplyReward,
+  sanitizeSupplyRewardsConfig,
+} from '../engine/supplyRewards';
+import { computeSupplyPrice } from '../engine/itemPrice';
+import {
+  clearModule as clearModuleEngine,
+  setModule as setModuleEngine,
+} from '../engine/extenders';
 import {
   isValidSavePayloadShape,
   SAVE_IMPORT_BACKUP_STORAGE_KEY,
@@ -72,14 +194,28 @@ import { DEFAULT_QUICK_SELL_CONFIG } from '../engine/quickSell';
 import {
   buildShopOptionsFromState,
   generateCategorizedShopStock,
+  generateSupplyShopStock,
+  generateSupplyShopStockWp,
   generateWpMarketOffers,
+  rollVoucherShopStockWp,
+  getMaxGearLevel,
+  getSupplyWpPrice,
   hasOperationalShipyard,
+  sanitizeSupplyShopConfig,
+  sanitizeSupplyShopExtraConfig,
+  sanitizeSupplyShopMaxRefreshes,
+  sanitizeSupplyShopRefresh,
+  sanitizeSupplyShopRefreshBaseCost,
+  sanitizeSupplyShopStock,
+  sanitizeSupplyShopStockWp,
 } from '../engine/shop';
 import {
   buyOpeningCard,
+  equipPassiveToGear,
   equipSkillToGearBar,
   getSkillsForClass,
   learnOrUpgradeSkillOnGear,
+  unequipPassiveFromGear,
   unequipSkillFromGearBar,
 } from '../engine/skills';
 import { sanitizeStatusDisplayDefaults } from '../utils/statusDisplayPrefs';
@@ -106,6 +242,7 @@ import {
   getTotalAvailablePointsForLevel,
   resetGearStatAllocations,
 } from '../engine/stats';
+import { resetWorldClock } from '../engine/worldClock';
 import {
   chooseAction,
   createBlankTacticsRule,
@@ -131,23 +268,32 @@ import type {
   BaseFaction,
   BaseTab,
   BattleEvent,
+  BattleKind,
   BattleRoundSnapshot,
   BattleSpeed,
   BattleState,
+  BattleSummary,
   BattleViewMode,
+  CombatFxEvent,
+  CombatFxTone,
   CombatLogEntry,
   CombatRow,
+  ExtenderEquipFailureReason,
   CombatUnit,
   ConsumableItem,
   EnchantAttemptResult,
   EquipmentSlot,
   EquipValidationResult,
+  FloatingPopup,
   GearTacticsProfile,
   InventoryFilterState,
   ItemInstance,
   ItemRarity,
   Language,
+  LaunchBattleOptions,
+  MapPackDefinition,
   MechClassId,
+  PaperDollSlot,
   PilotAccount,
   QuickSellFilterConfig,
   QuickSellUndoState,
@@ -157,10 +303,29 @@ import type {
   SimpleTacticsPresetId,
   SkillValidationResult,
   StatBlock,
+  SupplyShopListing,
+  SupplyShopRefreshState,
+  SupplyShopWpListing,
   TacticsPresetId,
   TacticsRule,
+  VoucherShopListing,
   WpMarketOffer,
 } from '../types/game';
+import {
+  sanitizeCardPopupEndScalePct,
+  sanitizeCardPopupFlightMs,
+  sanitizeCardPopupMaxConcurrent,
+  sanitizeCardPopupStaggerMs,
+  sanitizeCardPopupStartScalePct,
+  sanitizeCardPopupZoneHeightPct,
+  sanitizeCardPopupZoneWidthPct,
+} from '../utils/cardPopupQueue';
+import {
+  sanitizeRadarPopupBigMaxUnits,
+  sanitizeRadarPopupLargeScalePct,
+  sanitizeRadarPopupSmallScalePct,
+  sanitizeRadarPopupStartScalePct,
+} from '../utils/radarPopup';
 import { soundFx } from '../utils/sound';
 
 export const ENABLE_ADMIN_CP: boolean =
@@ -255,6 +420,10 @@ function buildSaveSnapshotFromState(state: GameStoreState): SaveSnapshotPayload 
   return {
     pilot: state.pilot,
     shopStock: state.shopStock,
+    supplyShopStock: state.supplyShopStock,
+    supplyShopStockWp: state.supplyShopStockWp,
+    voucherShopStockWp: state.voucherShopStockWp,
+    supplyShopRefresh: state.supplyShopRefresh,
     wpMarketOffers: state.wpMarketOffers,
     battlesUntilRestock: state.battlesUntilRestock,
     inventoryFilterState: state.inventoryFilterState,
@@ -271,12 +440,16 @@ function buildSaveSnapshotFromState(state: GameStoreState): SaveSnapshotPayload 
   };
 }
 
-export type ShopSubTab = 'buy' | 'sell' | 'warpoints';
+export type ShopSubTab = 'buy' | 'sell' | 'warpoints' | 'supply';
 
 interface GameStoreState {
   // Persisted state (v7 per-Gear + full Skill System + Random Shop + Inventory Filters + Admin CP)
   pilot: PilotAccount;
   shopStock: ShopItemListing[];
+  supplyShopStock: SupplyShopListing[];
+  supplyShopStockWp: SupplyShopWpListing[];
+  voucherShopStockWp: VoucherShopListing[];
+  supplyShopRefresh: SupplyShopRefreshState;
   wpMarketOffers: WpMarketOffer[];
   battlesUntilRestock: number;
   inventoryFilterState: InventoryFilterState;
@@ -305,6 +478,11 @@ interface GameStoreState {
   autoRepeatStopOnDefeat: boolean;
   autoRepeatSession: AutoRepeatSession | null;
   autoRepeatToast: AutoRepeatRunToast | null;
+  battleLaunchToast: {
+    id: string;
+    reasonKey: BattleOptionReasonKey;
+    sectorId: string;
+  } | null;
   quickSellUndo: QuickSellUndoState | null;
   autoEquipUndo: AutoEquipUndoSnapshot | null;
   hasImportBackup: boolean;
@@ -354,6 +532,8 @@ interface GameStoreState {
   ) => { validation: SkillValidationResult; newLevel: number };
   equipSkillToBar: (skillId: string) => SkillValidationResult;
   unequipSkillFromBar: (skillId: string) => void;
+  equipPassiveSkill: (skillId: string) => SkillValidationResult;
+  unequipPassiveSkill: (skillId: string) => void;
   buyOpeningCardAction: (cardId: string) => {
     ok: boolean;
     reason: 'ok' | 'invalid_card' | 'already_owned' | 'insufficient_wp';
@@ -378,10 +558,15 @@ interface GameStoreState {
   setAutoRepeatDefeatRule: (rule: AutoRepeatDefeatRule) => void;
   setAutoRepeatDefeatStreakLimit: (limit: number) => void;
   setAutoRepeatStopOnDefeat: (stopOnDefeat: boolean) => void;
-  startAutoRepeat: (limit?: AutoRepeatLimit, sectorId?: string) => void;
+  startAutoRepeat: (
+    limit?: AutoRepeatLimit,
+    sectorId?: string,
+    opts?: LaunchBattleOptions
+  ) => void;
   stopAutoRepeat: (reason?: AutoStopReason) => void;
   clearAutoRepeatSummary: () => void;
   clearAutoRepeatToast: () => void;
+  clearBattleLaunchToast: () => void;
 
   // Equipment, Inventory, Quick Sell, Shop, WP Market & Consumables actions
   setInventoryFilterState: (patch: Partial<InventoryFilterState>) => void;
@@ -399,6 +584,24 @@ interface GameStoreState {
     soldCount: number;
     creditsEarned: number;
   };
+  moveToWarehouse: (ids: string[]) => WarehouseTransferResult;
+  moveToBox: (ids: string[]) => WarehouseTransferResult;
+  moveAllUnusedToWarehouse: () => WarehouseTransferResult;
+  setSupplyLoadout: (
+    gearId: MechClassId,
+    ids: string[]
+  ) => { ok: boolean; rejected: SupplyLoadoutReject[]; reason?: 'locked' };
+  setExtenderModule: (
+    gearId: MechClassId,
+    index: number,
+    instanceId: string | null
+  ) => {
+    ok: boolean;
+    reason?: ExtenderEquipFailureReason | 'locked';
+    reasonKey?: string | null;
+    conflictSocket?: number;
+    reasonParams?: { socket: number };
+  };
   undoQuickSell: () => { ok: boolean; restoredCount: number };
   clearQuickSellUndo: () => void;
   previewAutoEquip: (
@@ -411,9 +614,38 @@ interface GameStoreState {
   undoAutoEquip: () => { ok: boolean; restoredGearsCount: number };
   clearAutoEquipUndo: () => void;
   equipItem: (instanceId: string) => EquipValidationResult;
-  unequipSlot: (slot: EquipmentSlot) => void;
+  unequipSlot: (slot: PaperDollSlot) => void;
   unequipInstanceEverywhere: (instanceId: string) => void;
   buyShopItem: (instanceId: string) => { ok: boolean };
+  buySupply: (
+    templateId: string,
+    qty: number
+  ) => { ok: boolean; bought: number; reason?: string };
+  buySupplyWp: (
+    slotId: string,
+    qty: number
+  ) => { ok: boolean; bought: number; reason?: string };
+  buyVoucher: (
+    id: string,
+    qty: number
+  ) => { ok: boolean; bought: number; reason?: string };
+  redeemVouchers: (selection: {
+    credit?: Record<string, number>;
+    exp?: Record<string, number>;
+  }) => {
+    ok: boolean;
+    reason?: 'no_summary' | 'already_redeemed' | 'not_chargeable';
+    creditUsed: Record<string, number>;
+    expUsed: Record<string, number>;
+    creditRefund: number;
+    expRefund: number;
+  };
+  refreshSupplyShop: () => {
+    ok: boolean;
+    cost?: number;
+    reason?: 'locked' | 'limit' | 'credits';
+    battlesLeft?: number;
+  };
   refreshShopStock: () => { ok: boolean; cost: number };
   buyWpMarketOffer: (offerId: string) => {
     ok: boolean;
@@ -423,17 +655,25 @@ interface GameStoreState {
   useConsumable: (consumableId: string) => {
     ok: boolean;
     openedItem?: ItemInstance;
+    openedSupplies?: Array<{ templateId: string; qty: number; lost?: number }>;
     kind?: ConsumableItem['kind'];
   };
   sellItem: (instanceId: string) => { ok: boolean; creditsEarned: number };
-  enchantEquippedSlot: (slot: EquipmentSlot) => EnchantAttemptResult | null;
+  sellSupply: (
+    templateId: string,
+    qty: number
+  ) => { ok: boolean; sold: number; creditsEarned: number };
+  enchantEquippedSlot: (slot: PaperDollSlot) => EnchantAttemptResult | null;
 
   // Battle actions
-  startBattle: (sectorId?: string) => void;
+  startBattle: (sectorId?: string, opts?: LaunchBattleOptions) => void;
+  reloadBattle: (sectorId?: string, opts?: LaunchBattleOptions) => void;
+  confirmPrestage: () => void;
   selectTarget: (unitId: string) => void;
   selectAllyTarget: (unitId: string) => void;
   logRadarInvalidTarget: (targetName: string, reasonKey: string) => void;
-  performPlayerAction: (action: ActionType, skillId?: string) => void;
+  performPlayerAction: (action: ActionType, skillId?: string, transferCount?: number) => void;
+  useBattleSupply: (templateId: string) => void;
   performAutoPlayerTurn: () => void;
   performAiTurn: () => void;
   retreatBattle: () => void;
@@ -489,10 +729,40 @@ interface GameStoreState {
   adminSetCampaignMonth: (month: number) => void;
   adminSetBaseFaction: (sectorId: string, faction: BaseFaction) => void;
   adminTriggerEnemyAttack: (sectorId: string) => void;
+  adminSpawnPirateIncident: () => boolean;
+  adminClearPirateIncidents: () => void;
+  adminRemovePirateIncident: (incidentId: string) => void;
+  adminRefillAllSectorSupply: () => void;
   adminUnlockAllGears: () => void;
   adminUnlockAllSectors: () => void;
   adminApplyStarterToEmptySlots: () => number;
+  adminGiveSupply: (
+    target: string,
+    qty: number
+  ) => {
+    ok: boolean;
+    kind: 'supply_crate' | 'battle_supply';
+    templateId?: string;
+    added: number;
+    lost: number;
+  };
   adminUpdateConfig: (patch: Partial<AdminConfig>) => void;
+  applyMapPack: (
+    pack: MapPackDefinition | null
+  ) => {
+    ok: boolean;
+    reason?: 'in_battle' | 'auto_repeat_active' | 'invalid_pack';
+    nodes: number;
+    lanes: number;
+  };
+  applyWorldAndResetProgress: (
+    pack: MapPackDefinition | null
+  ) => {
+    ok: boolean;
+    reason?: 'in_battle' | 'auto_repeat_active' | 'invalid_pack';
+    nodes: number;
+    lanes: number;
+  };
   adminExportSaveJson: () => string;
   adminImportSaveJson: (rawJson: string) => { ok: boolean; error?: string };
 
@@ -610,22 +880,35 @@ function finalizeBattleOutcome(
   extraEvents = battle.events,
   extraTurnCounter = battle.turnCounter
 ): Partial<GameStoreState> {
+  const battleKind: BattleKind = battle.kind ?? 'assault';
+  const kindRule = BATTLE_KIND_RULES[battleKind];
   const deployedGearId = battle.deployedGearId;
   const deployedGear = state.pilot.gears[deployedGearId];
   const alreadyCaptured = state.pilot.capturedSectorIds.includes(battle.sectorId);
+  const effectiveAlreadyCaptured = kindRule.capturesOnWin
+    ? alreadyCaptured
+    : true;
+  const effectiveRewardMult =
+    state.adminConfig.rewardMultiplier * (battle.rewardMult ?? 1);
 
   const rewards = calculateBattleRewards(
     updatedUnits,
     won,
-    state.adminConfig.rewardMultiplier,
+    effectiveRewardMult,
     battle.sectorId,
-    alreadyCaptured
+    effectiveAlreadyCaptured,
+    state.adminConfig?.battleRewards,
+    deployedGear.level,
+    retreated
   );
   const droppedItems = rollBattleItemDrops(
     updatedUnits.filter((u) => u.side === 'enemy'),
     battle.sectorId,
     deployedGear.level,
-    won
+    won,
+    Math.random,
+    state.adminConfig?.itemLevels,
+    state.adminConfig?.moduleDrop
   );
 
   // Active EXP Boost consumable (+50% EXP for N battles)
@@ -638,53 +921,239 @@ function finalizeBattleOutcome(
 
   // Per-Gear EXP: ONLY the deployed Gear receives EXP & battle record!
   const levelResult = applyExpToGear(deployedGear, effectiveExpGained, { won });
+  const postRewardCredits = state.pilot.credits + rewards.creditsGained;
+  const postRewardWp = state.pilot.warPoints + rewards.warPointsGained;
+
+  // Order in finalizeBattleOutcome: rewards -> retreat/defeat penalty -> repair fee (defeat or retreat; victory never)
+  const retreatPenalty =
+    !won && retreated
+      ? computeRetreatPenalty(
+          levelResult.updatedGear.level,
+          levelResult.updatedGear.exp,
+          postRewardCredits,
+          postRewardWp,
+          state.adminConfig?.battlePenalty
+        )
+      : {
+          expPenalty: 0,
+          creditPenalty: 0,
+          wpPenalty: 0,
+          nextExp: levelResult.updatedGear.exp,
+          nextCredits: postRewardCredits,
+          nextWarPoints: postRewardWp,
+        };
+  const defeatPenalty =
+    !won && !retreated
+      ? computeDefeatExpPenalty(
+          levelResult.updatedGear.level,
+          levelResult.updatedGear.exp,
+          state.adminConfig?.battlePenalty
+        )
+      : {
+          expPenalty: 0,
+          nextExp: retreatPenalty.nextExp,
+          free: true,
+        };
+  const gearAfterPenalty = {
+    ...levelResult.updatedGear,
+    exp: !won && !retreated ? defeatPenalty.nextExp : retreatPenalty.nextExp,
+  };
+
+  const repairCheck = !won
+    ? computeRepairFee(
+        retreated ? 'retreat' : 'defeat',
+        gearAfterPenalty.level,
+        retreatPenalty.nextCredits,
+        updatedUnits,
+        state.adminConfig?.battlePenalty
+      )
+    : { fee: 0, free: false };
+  const repairPaid = repairCheck.free
+    ? 0
+    : Math.min(Math.max(0, retreatPenalty.nextCredits), repairCheck.fee);
+  const finalCredits = Math.max(0, retreatPenalty.nextCredits - repairPaid);
+  const finalWarPoints = Math.max(0, retreatPenalty.nextWarPoints);
+
   const battlesToNextLevel = estimateBattlesToNextLevel(
-    levelResult.updatedGear,
+    gearAfterPenalty,
     rewards.fullVictoryExp
   );
 
-  // Unlock next campaign sector & record base capture on victory
-  let unlockedSectorId: string | null = null;
-  let nextUnlockedSectors = state.pilot.unlockedSectorIds;
+  // Record base capture only when kind captures on win; unlockedSectorIds is cumulative visibility history (never shrinks)
   let nextCapturedSectors = state.pilot.capturedSectorIds;
-  if (won) {
-    if (!alreadyCaptured) {
-      nextCapturedSectors = [...state.pilot.capturedSectorIds, battle.sectorId];
-    }
-    const candidateNext = getNextSectorId(battle.sectorId);
-    if (candidateNext && !state.pilot.unlockedSectorIds.includes(candidateNext)) {
-      unlockedSectorId = candidateNext;
-      nextUnlockedSectors = [...state.pilot.unlockedSectorIds, candidateNext];
-    }
+  if (won && kindRule.capturesOnWin && !alreadyCaptured) {
+    nextCapturedSectors = [...state.pilot.capturedSectorIds, battle.sectorId];
   }
 
-  const basePilotBeforeConsequences: PilotAccount = {
+  const pilotWithBaseRewards: PilotAccount = {
     ...state.pilot,
-    credits: state.pilot.credits + rewards.creditsGained,
-    warPoints: state.pilot.warPoints + rewards.warPointsGained,
+    credits: finalCredits,
+    warPoints: finalWarPoints,
     inventory: [...droppedItems, ...state.pilot.inventory],
     gears: {
       ...state.pilot.gears,
-      [deployedGearId]: levelResult.updatedGear,
+      [deployedGearId]: gearAfterPenalty,
     },
-    unlockedSectorIds: nextUnlockedSectors,
+    unlockedSectorIds: state.pilot.unlockedSectorIds,
     capturedSectorIds: nextCapturedSectors,
     activeExpBoostBattles: expBoostActive
       ? Math.max(0, (state.pilot.activeExpBoostBattles ?? 1) - 1)
       : 0,
   };
+  const basePilotBeforeConsequences = pilotWithBaseRewards;
+  const totalCreditsGained = rewards.creditsGained;
 
-  // Freshly captured bases start Damaged; repelled raids clear alert; hired wingman/engineer boost consumed; bonus missions paid
+  // Freshly captured bases start Damaged (assault only); repelled raids clear alert (defend only); bonus missions paid (assault/defend)
   const baseConseq = applyBattleBaseConsequences(
     basePilotBeforeConsequences,
     battle.sectorId,
-    won
+    won,
+    battleKind
+  );
+  const pilotAfterPirateClear =
+    won && battleKind === 'event' && battle.sourceId
+      ? clearPirateIncidentById(baseConseq.pilot, battle.sourceId)
+      : baseConseq.pilot;
+  const npcSupplyCfg = sanitizeNpcSupplyConfig(state.adminConfig.npcSupply);
+  const pilotAfterSupplyDrain = drainSectorSupply(
+    pilotAfterPirateClear,
+    battle.sectorId,
+    npcSupplyCfg
   );
   // Advance campaign calendar 1 month after each completed non-retreat sortie
   const monthStep = retreated
-    ? { pilot: baseConseq.pilot }
-    : advanceCampaignMonth(baseConseq.pilot);
-  const nextPilot: PilotAccount = monthStep.pilot;
+    ? { pilot: pilotAfterSupplyDrain }
+    : {
+        pilot: spawnOnMonth(
+          advanceCampaignMonth(
+            pilotAfterSupplyDrain,
+            npcSupplyCfg.sector.regenPerMonth
+          ).pilot,
+          state.adminConfig.pirates,
+          Math.random
+        ),
+      };
+  const nextUnlockedSectors = mergeVisibleUnlockedSectors(monthStep.pilot);
+  const nextPilotBase: PilotAccount = ensureIdle(
+    {
+      ...monthStep.pilot,
+      unlockedSectorIds: nextUnlockedSectors,
+    },
+    state.adminConfig.pirates,
+    Math.random,
+    state.adminConfig
+  );
+
+  // Random supply rewards on Victory & Bonus Mission completion (SUP-GEN-a)
+  let pilotAfterSupplyRewards = nextPilotBase;
+  let supplyDrop: BattleSummary['supplyDrop'] = undefined;
+  let missionSupplyDrop: BattleSummary['missionSupplyDrop'] = undefined;
+  const supplyRewardLogs: CombatLogEntry[] = [];
+  if (won && !retreated) {
+    const winSupply = applySupplyRewardGrant(
+      pilotAfterSupplyRewards,
+      state.adminConfig,
+      'victory',
+      Math.random
+    );
+    pilotAfterSupplyRewards = winSupply.pilot;
+    if (winSupply.templateId && (winSupply.added > 0 || winSupply.lost > 0)) {
+      supplyDrop = {
+        templateId: winSupply.templateId,
+        qty: winSupply.added,
+        ...(winSupply.lost > 0 ? { lostQty: winSupply.lost } : {}),
+      };
+      if (winSupply.added > 0) {
+        supplyRewardLogs.push({
+          id: `log_supply_win_${Date.now()}_${extraTurnCounter}`,
+          round: battle.round,
+          actorName: 'SYSTEM',
+          tag: 'SYSTEM' as const,
+          templateKey: 'log.supplyDrop' as const,
+          params: {
+            templateId: winSupply.templateId,
+            qty: winSupply.added,
+          },
+        });
+      }
+      if (winSupply.lost > 0) {
+        supplyRewardLogs.push({
+          id: `log_supply_win_lost_${Date.now()}_${extraTurnCounter}`,
+          round: battle.round,
+          actorName: 'SYSTEM',
+          tag: 'SYSTEM' as const,
+          templateKey: 'log.supplyDropLost' as const,
+          params: {
+            templateId: winSupply.templateId,
+            lost: winSupply.lost,
+            cap: SUPPLY_STACK_CAP,
+          },
+        });
+      }
+    }
+
+    const bonusMissionCompleted =
+      baseConseq.bonusMissionCredits > 0 ||
+      baseConseq.bonusMissionWarPoints > 0 ||
+      Boolean(
+        kindRule.completesBonusMissionOnWin &&
+          state.pilot.activeBonusMission &&
+          !state.pilot.activeBonusMission.completed &&
+          state.pilot.activeBonusMission.targetSectorId === battle.sectorId &&
+          !baseConseq.pilot.activeBonusMission
+      );
+    if (bonusMissionCompleted) {
+      const missionSupply = applySupplyRewardGrant(
+        pilotAfterSupplyRewards,
+        state.adminConfig,
+        'mission',
+        Math.random
+      );
+      pilotAfterSupplyRewards = missionSupply.pilot;
+      if (
+        missionSupply.templateId &&
+        (missionSupply.added > 0 || missionSupply.lost > 0)
+      ) {
+        missionSupplyDrop = {
+          templateId: missionSupply.templateId,
+          qty: missionSupply.added,
+          ...(missionSupply.lost > 0 ? { lostQty: missionSupply.lost } : {}),
+        };
+        if (missionSupply.added > 0) {
+          supplyRewardLogs.push({
+            id: `log_supply_mission_${Date.now()}_${extraTurnCounter}`,
+            round: battle.round,
+            actorName: 'SYSTEM',
+            tag: 'SYSTEM' as const,
+            templateKey: 'log.supplyDrop' as const,
+            params: {
+              templateId: missionSupply.templateId,
+              qty: missionSupply.added,
+            },
+          });
+        }
+        if (missionSupply.lost > 0) {
+          supplyRewardLogs.push({
+            id: `log_supply_mission_lost_${Date.now()}_${extraTurnCounter}`,
+            round: battle.round,
+            actorName: 'SYSTEM',
+            tag: 'SYSTEM' as const,
+            templateKey: 'log.supplyDropLost' as const,
+            params: {
+              templateId: missionSupply.templateId,
+              lost: missionSupply.lost,
+              cap: SUPPLY_STACK_CAP,
+            },
+          });
+        }
+      }
+    }
+  }
+  const nextPilot: PilotAccount = pilotAfterSupplyRewards;
+  const unlockedSectorId =
+    nextUnlockedSectors.find(
+      (id) => !state.pilot.unlockedSectorIds.includes(id)
+    ) ?? null;
 
   // Auto-restock Credits Shop & WP Market based on restockEveryNBattles cadence
   const nextBattlesUntilRestock = Math.max(0, (state.battlesUntilRestock || 1) - 1);
@@ -695,6 +1164,27 @@ function finalizeBattleOutcome(
         buildShopOptionsFromState(nextPilot, state.adminConfig)
       )
     : state.shopStock;
+  const refreshedSupplyShopStock = shouldRestock
+    ? generateSupplyShopStock(
+        getMaxGearLevel(nextPilot),
+        state.adminConfig,
+        SUPPLY_TEMPLATES
+      )
+    : state.supplyShopStock;
+  const refreshedSupplyShopStockWp = shouldRestock
+    ? generateSupplyShopStockWp(
+        getMaxGearLevel(nextPilot),
+        state.adminConfig,
+        refreshedSupplyShopStock.length,
+        SUPPLY_TEMPLATES
+      )
+    : state.supplyShopStockWp;
+  const refreshedVoucherShopStockWp = shouldRestock
+    ? rollVoucherShopStockWp(state.adminConfig)
+    : state.voucherShopStockWp;
+  const refreshedSupplyShopRefresh: SupplyShopRefreshState = shouldRestock
+    ? { used: 0 }
+    : sanitizeSupplyShopRefresh(state.supplyShopRefresh);
   const refreshedWpOffers = shouldRestock
     ? generateWpMarketOffers({ shipyardBonus: hasOperationalShipyard(nextPilot) })
     : state.wpMarketOffers;
@@ -708,7 +1198,32 @@ function finalizeBattleOutcome(
   // Update Auto-Repeat batch session if active (or stopped manually during current run)
   let nextAutoRepeat = state.autoRepeatSession;
   let nextAutoRepeatToast: AutoRepeatRunToast | null = null;
-  let finalLog = extraLog;
+  let finalLog =
+    supplyRewardLogs.length > 0 ? [...extraLog, ...supplyRewardLogs] : extraLog;
+  if (!won && (repairCheck.free || repairPaid > 0)) {
+    finalLog = [
+      ...finalLog,
+      repairCheck.free
+        ? {
+            id: `log_repair_${Date.now()}_${extraTurnCounter}`,
+            round: battle.round,
+            actorName: 'SYSTEM',
+            tag: 'SYSTEM' as const,
+            templateKey: retreated
+              ? ('log.repairFreeRetreat' as const)
+              : ('log.repairFreeDefeat' as const),
+            params: {},
+          }
+        : {
+            id: `log_repair_${Date.now()}_${extraTurnCounter}`,
+            round: battle.round,
+            actorName: 'SYSTEM',
+            tag: 'SYSTEM' as const,
+            templateKey: 'log.repairFee' as const,
+            params: { fee: repairPaid },
+          },
+    ];
+  }
   if (
     state.autoRepeatSession &&
     (state.autoRepeatSession.active ||
@@ -727,23 +1242,47 @@ function finalizeBattleOutcome(
       consecutiveDefeats: nextConsecutiveDefeats,
       defeatStreakLimit: streakLimit,
       totalExp: state.autoRepeatSession.totalExp + effectiveExpGained,
-      totalCredits: state.autoRepeatSession.totalCredits + rewards.creditsGained,
+      totalCredits: state.autoRepeatSession.totalCredits + totalCreditsGained,
       totalWarPoints:
         state.autoRepeatSession.totalWarPoints + rewards.warPointsGained,
       totalDrops: [...state.autoRepeatSession.totalDrops, ...droppedItems],
     };
     if (state.autoRepeatSession.active) {
+      const boxCap = getBoxCapacity(state.adminConfig);
       const stopCheck = shouldStopAutoRepeat(
         updatedSession,
         won ? 'victory' : 'defeat',
         retreated,
         nextPilot.inventory.length,
-        BALANCE_CONFIG.maxInventorySize,
+        boxCap,
         state.autoRepeatDefeatRule,
         streakLimit
       );
-      if (stopCheck.stop) {
-        const finalReason = updatedSession.stopReason ?? stopCheck.reason;
+      const loopKind: BattleKind = updatedSession.kind ?? battleKind;
+      const loopSourceId =
+        updatedSession.sourceId !== undefined
+          ? updatedSession.sourceId
+          : battle.sourceId ?? null;
+      const nextValidation = !stopCheck.stop
+        ? validateBattleLaunch(
+            nextPilot,
+            updatedSession.sectorId,
+            loopKind,
+            loopSourceId,
+            state.adminConfig
+          )
+        : null;
+      const shouldStopNow =
+        stopCheck.stop || (nextValidation !== null && !nextValidation.allowed);
+      if (shouldStopNow) {
+        const blockedStopReason: AutoStopReason =
+          (loopKind === 'mission' || loopKind === 'event') &&
+          nextValidation?.reasonKey === 'map.reason.sourceInactive'
+            ? 'source_inactive'
+            : 'node_not_contested';
+        const finalReason: AutoStopReason | null =
+          updatedSession.stopReason ??
+          (stopCheck.stop ? stopCheck.reason : blockedStopReason);
         nextAutoRepeat = {
           ...updatedSession,
           active: false,
@@ -752,7 +1291,7 @@ function finalizeBattleOutcome(
         nextAutoRepeatToast = null;
         if (finalReason) {
           finalLog = [
-            ...extraLog,
+            ...finalLog,
             {
               id: `log_repeat_stop_${Date.now()}_${extraTurnCounter}`,
               round: battle.round,
@@ -762,6 +1301,7 @@ function finalizeBattleOutcome(
               params: {
                 reason: finalReason,
                 streak: streakLimit,
+                max: boxCap,
               },
             },
           ];
@@ -787,6 +1327,10 @@ function finalizeBattleOutcome(
   return {
     pilot: nextPilot,
     shopStock: refreshedShopStock,
+    supplyShopStock: refreshedSupplyShopStock,
+    supplyShopStockWp: refreshedSupplyShopStockWp,
+    voucherShopStockWp: refreshedVoucherShopStockWp,
+    supplyShopRefresh: refreshedSupplyShopRefresh,
     wpMarketOffers: refreshedWpOffers,
     battlesUntilRestock: shouldRestock
       ? SHOP_STOCK_CONFIG.restockEveryNBattles
@@ -812,13 +1356,24 @@ function finalizeBattleOutcome(
       summary: {
         outcome: won ? 'victory' : 'defeat',
         retreated,
+        kind: battleKind,
+        sourceId: battle.sourceId ?? null,
         deployedGearId,
         sectorId: battle.sectorId,
         rounds: battle.round,
         expGained: effectiveExpGained,
-        creditsGained: rewards.creditsGained,
+        creditsGained: totalCreditsGained,
         warPointsGained: rewards.warPointsGained,
         baseCaptureBonusWp: rewards.baseCaptureBonusWp,
+        supportExpPct: rewards.supportExpPct,
+        supportCreditPct: rewards.supportCreditPct,
+        repairFee: repairPaid,
+        repairFree: repairCheck.free,
+        retreatPenaltyExp: retreatPenalty.expPenalty,
+        retreatPenaltyCredit: retreatPenalty.creditPenalty,
+        retreatPenaltyWp: retreatPenalty.wpPenalty,
+        defeatPenaltyExp: defeatPenalty.expPenalty,
+        expBeforePenalty: levelResult.updatedGear.exp,
         leveledUp: levelResult.leveledUp,
         previousLevel: levelResult.previousLevel,
         newLevel: levelResult.newLevel,
@@ -829,6 +1384,8 @@ function finalizeBattleOutcome(
         totalEnemies: enemies.length,
         alliesSurviving: aliveAllies.length,
         droppedItems,
+        ...(supplyDrop ? { supplyDrop } : {}),
+        ...(missionSupplyDrop ? { missionSupplyDrop } : {}),
       },
     },
   };
@@ -837,6 +1394,206 @@ function finalizeBattleOutcome(
 const initialFresh = createFreshCampaignState('Vance', 'striker');
 const initialDeviceLoopPrefs = readDeviceLoopPrefs();
 const initialDeviceSpeed = readDeviceBattleSpeed();
+
+function launchBattleForSector(
+  state: GameStoreState,
+  set: (partial: Partial<GameStoreState>) => void,
+  sectorId?: string,
+  opts?: LaunchBattleOptions
+): void {
+  const targetSectorId = sectorId ?? state.selectedSectorId;
+  const activeLoopKind =
+    opts?.kind === undefined && state.autoRepeatSession?.active
+      ? state.autoRepeatSession.kind
+      : undefined;
+  const requestedKind = opts?.kind ?? activeLoopKind;
+  const requestedSourceId =
+    opts?.sourceId !== undefined
+      ? opts.sourceId
+      : activeLoopKind !== undefined
+      ? state.autoRepeatSession?.sourceId ?? null
+      : null;
+
+  let validation: ReturnType<typeof validateBattleLaunch>;
+  if (requestedKind !== undefined) {
+    validation = validateBattleLaunch(
+      state.pilot,
+      targetSectorId,
+      requestedKind,
+      requestedSourceId,
+      state.adminConfig
+    );
+  } else {
+    const battleOptions = getBattleOptions(
+      state.pilot,
+      targetSectorId,
+      state.adminConfig
+    );
+    const defaultKind = pickDefaultBattle(battleOptions);
+    const defaultOpt =
+      defaultKind !== null
+        ? battleOptions.find(
+            (opt) => opt.kind === defaultKind && opt.allowed
+          ) ?? null
+        : null;
+    if (defaultKind === null || !defaultOpt) {
+      validation = {
+        allowed: false,
+        kind: 'assault',
+        sourceId: null,
+        reasonKey:
+          battleOptions.find((opt) => !opt.allowed && opt.reasonKey)
+            ?.reasonKey ?? 'map.reason.notFrontline',
+      };
+    } else if (defaultOpt.sourceId) {
+      validation = validateBattleLaunch(
+        state.pilot,
+        targetSectorId,
+        defaultOpt.kind,
+        defaultOpt.sourceId,
+        state.adminConfig
+      );
+    } else {
+      validation = {
+        allowed: true,
+        kind: defaultOpt.kind,
+        sourceId: null,
+        sizeOverride: defaultOpt.sizeOverride,
+      };
+    }
+  }
+
+  if (!validation.allowed) {
+    const reasonKey: BattleOptionReasonKey =
+      validation.reasonKey ?? 'map.reason.notFrontline';
+    const patch: Partial<GameStoreState> = {
+      battleLaunchToast: {
+        id: `launch_toast_${Date.now()}`,
+        reasonKey,
+        sectorId: targetSectorId,
+      },
+    };
+    if (state.autoRepeatSession?.active) {
+      const stopReason: AutoStopReason =
+        state.autoRepeatSession.stopReason ??
+        ((validation.kind === 'mission' || validation.kind === 'event') &&
+        reasonKey === 'map.reason.sourceInactive'
+          ? 'source_inactive'
+          : 'node_not_contested');
+      const streakLimit = clampDefeatStreakLimit(
+        state.autoRepeatSession.defeatStreakLimit ??
+          state.autoRepeatDefeatStreakLimit
+      );
+      patch.autoRepeatSession = {
+        ...state.autoRepeatSession,
+        active: false,
+        stopReason,
+      };
+      patch.autoRepeatToast = null;
+      if (state.battle) {
+        patch.battle = {
+          ...state.battle,
+          log: [
+            ...state.battle.log,
+            {
+              id: `log_repeat_stop_${Date.now()}_${state.battle.turnCounter}`,
+              round: state.battle.round,
+              actorName: 'SYSTEM',
+              tag: 'SYSTEM' as const,
+              templateKey: 'log.autoRepeatStopped' as const,
+              params: {
+                reason: stopReason,
+                streak: streakLimit,
+              },
+            },
+          ],
+        };
+      }
+    }
+    set(patch);
+    return;
+  }
+
+  const effectiveSizeOverride =
+    validation.sizeOverride ?? state.adminConfig.battleSizeOverride;
+  const battleState = createInitialBattleState(
+    state.pilot,
+    targetSectorId,
+    Math.random,
+    effectiveSizeOverride,
+    state.adminConfig,
+    validation.kind,
+    validation.sourceId,
+    validation.rewardMult
+  );
+  soundFx.playConfirm();
+
+  if (state.adminConfig.alwaysWin) {
+    const defeatedEnemies = battleState.units.map((u) =>
+      u.side === 'enemy'
+        ? {
+            ...u,
+            hp: 0,
+            shield: 0,
+            alive: false,
+            animState: 'destroyed' as const,
+          }
+        : u
+    );
+    const outcomePatch = finalizeBattleOutcome(
+      state,
+      battleState,
+      defeatedEnemies,
+      true,
+      false
+    );
+    set({
+      ...outcomePatch,
+      selectedSectorId: targetSectorId,
+      screen: 'BATTLE',
+      battleLaunchToast: null,
+      ...(!state.autoRepeatSession?.active
+        ? { autoRepeatSession: null, autoRepeatToast: null }
+        : {}),
+    });
+    return;
+  }
+
+  const loopAutoConfirmPrestage =
+    Boolean(state.autoRepeatSession?.active) &&
+    Boolean(battleState.prestage?.active);
+  const initialBattle = loopAutoConfirmPrestage
+    ? {
+        ...battleState,
+        prestage: {
+          ...battleState.prestage!,
+          active: false,
+        },
+        log: [
+          ...battleState.log,
+          {
+            id: `log_prestage_${Date.now()}_${battleState.turnCounter}`,
+            round: battleState.round,
+            actorName: 'SYSTEM',
+            tag: 'SYSTEM' as const,
+            templateKey: 'log.prestageConfirm' as const,
+            params: {},
+          },
+        ],
+      }
+    : battleState;
+
+  set({
+    selectedSectorId: targetSectorId,
+    battle: initialBattle,
+    screen: 'BATTLE',
+    hasSaveData: true,
+    battleLaunchToast: null,
+    ...(!state.autoRepeatSession?.active
+      ? { autoRepeatSession: null, autoRepeatToast: null }
+      : {}),
+  });
+}
 
 export function isBattleActive(
   state?: Pick<GameStoreState, 'screen' | 'battle'>
@@ -851,6 +1608,10 @@ export const useGameStore = create<GameStoreState>()(
   persist(
     (set, get) => ({
       ...initialFresh,
+      supplyShopStock: initialFresh.supplyShopStock ?? [],
+      supplyShopStockWp: initialFresh.supplyShopStockWp ?? [],
+      voucherShopStockWp: initialFresh.voucherShopStockWp ?? [],
+      supplyShopRefresh: initialFresh.supplyShopRefresh ?? { used: 0 },
       battleSpeed: initialDeviceSpeed ?? initialFresh.battleSpeed,
       screen: 'TITLE',
       activeTab: 'gear',
@@ -867,6 +1628,7 @@ export const useGameStore = create<GameStoreState>()(
         initialDeviceLoopPrefs.defeatRule === 'stop_immediately',
       autoRepeatSession: null,
       autoRepeatToast: null,
+      battleLaunchToast: null,
       quickSellUndo: null,
       autoEquipUndo: null,
       hasImportBackup: hasPersistedImportBackup(),
@@ -877,6 +1639,7 @@ export const useGameStore = create<GameStoreState>()(
       },
 
       setScreen: (screen) => {
+        if (isBattleActive(get())) return;
         soundFx.playClick();
         if (screen === 'SHOP') {
           set({ screen: 'HANGAR', activeTab: 'shop' });
@@ -886,6 +1649,11 @@ export const useGameStore = create<GameStoreState>()(
       },
 
       setActiveTab: (activeTab) => {
+        const state = get();
+        if (isBattleActive(state)) return;
+        if (activeTab === 'warehouse' && state.autoRepeatSession?.active) {
+          return;
+        }
         soundFx.playClick();
         set({ screen: 'HANGAR', activeTab });
       },
@@ -896,6 +1664,7 @@ export const useGameStore = create<GameStoreState>()(
       },
 
       openWarPointShop: () => {
+        if (isBattleActive(get())) return;
         soundFx.playClick();
         set({ screen: 'HANGAR', activeTab: 'shop', shopSubTab: 'warpoints' });
       },
@@ -904,6 +1673,7 @@ export const useGameStore = create<GameStoreState>()(
         const state = get();
         soundFx.playConfirm();
         if (!state.hasSaveData) {
+          setActiveMapPack(state.adminConfig.mapPack ?? null);
           const cleanName =
             (pilotName ?? state.pilot.name).trim().slice(0, 18) || 'Vance';
           const chosenClass =
@@ -914,8 +1684,24 @@ export const useGameStore = create<GameStoreState>()(
             Math.random,
             state.adminConfig.starterSet
           );
+          const startSupplyStock = generateSupplyShopStock(
+            getMaxGearLevel(fresh.pilot),
+            state.adminConfig,
+            SUPPLY_TEMPLATES
+          );
+          const startSupplyStockWp = generateSupplyShopStockWp(
+            getMaxGearLevel(fresh.pilot),
+            state.adminConfig,
+            startSupplyStock.length,
+            SUPPLY_TEMPLATES
+          );
+          const startVoucherStockWp = rollVoucherShopStockWp(state.adminConfig);
           set({
             ...fresh,
+            supplyShopStock: startSupplyStock,
+            supplyShopStockWp: startSupplyStockWp,
+            voucherShopStockWp: startVoucherStockWp,
+            supplyShopRefresh: { used: 0 },
             language: state.language,
             muted: state.muted,
             battleSpeed: state.battleSpeed,
@@ -926,31 +1712,39 @@ export const useGameStore = create<GameStoreState>()(
             screen: 'HANGAR',
             activeTab: 'gear',
             battle: null,
+            battleLaunchToast: null,
           });
         } else {
-          set({ screen: 'HANGAR', activeTab: 'gear' });
+          set({ screen: 'HANGAR', activeTab: 'gear', battleLaunchToast: null });
         }
       },
 
       continueCampaign: () => {
         soundFx.playConfirm();
-        set({ screen: 'HANGAR', activeTab: 'gear' });
+        set({ screen: 'HANGAR', activeTab: 'gear', battleLaunchToast: null });
       },
 
       resetCampaign: () => {
         const state = get();
         soundFx.playClick();
         clearImportBackupRaw();
+        setActiveMapPack(null);
         const fresh = createFreshCampaignState('Vance', 'striker');
         const deviceLoopPrefs = readDeviceLoopPrefs();
+        const defaultAdmin = createDefaultAdminConfig();
+        setRuntimeMaxLevel(defaultAdmin.maxLevel);
         set({
           ...fresh,
+          supplyShopStock: fresh.supplyShopStock ?? [],
+          supplyShopStockWp: fresh.supplyShopStockWp ?? [],
+          voucherShopStockWp: fresh.voucherShopStockWp ?? [],
+          supplyShopRefresh: fresh.supplyShopRefresh ?? { used: 0 },
           language: state.language,
           muted: state.muted,
           battleSpeed: state.battleSpeed,
           skipAnimations: state.skipAnimations,
           battleViewMode: state.battleViewMode,
-          adminConfig: createDefaultAdminConfig(),
+          adminConfig: defaultAdmin,
           hasSaveData: false,
           battle: null,
           screen: 'TITLE',
@@ -958,6 +1752,7 @@ export const useGameStore = create<GameStoreState>()(
           shopSubTab: 'buy',
           autoRepeatSession: null,
           autoRepeatToast: null,
+          battleLaunchToast: null,
           autoRepeatDefeatRule: deviceLoopPrefs.defeatRule,
           autoRepeatDefeatStreakLimit: deviceLoopPrefs.defeatStreakLimit,
           autoRepeatStopOnDefeat:
@@ -1175,7 +1970,8 @@ export const useGameStore = create<GameStoreState>()(
         const res = learnOrUpgradeSkillOnGear(
           state.pilot,
           state.pilot.activeGearId,
-          skillId
+          skillId,
+          state.adminConfig
         );
         if (res.validation.ok) {
           soundFx.playVictory();
@@ -1189,7 +1985,8 @@ export const useGameStore = create<GameStoreState>()(
         const res = equipSkillToGearBar(
           state.pilot,
           state.pilot.activeGearId,
-          skillId
+          skillId,
+          state.adminConfig
         );
         if (res.validation.ok) {
           soundFx.playConfirm();
@@ -1201,6 +1998,33 @@ export const useGameStore = create<GameStoreState>()(
       unequipSkillFromBar: (skillId) => {
         const state = get();
         const nextPilot = unequipSkillFromGearBar(
+          state.pilot,
+          state.pilot.activeGearId,
+          skillId
+        );
+        if (nextPilot === state.pilot) return;
+        soundFx.playClick();
+        set({ pilot: nextPilot, hasSaveData: true });
+      },
+
+      equipPassiveSkill: (skillId) => {
+        const state = get();
+        const res = equipPassiveToGear(
+          state.pilot,
+          state.pilot.activeGearId,
+          skillId,
+          state.adminConfig
+        );
+        if (res.validation.ok) {
+          soundFx.playConfirm();
+          set({ pilot: res.pilot, hasSaveData: true });
+        }
+        return res.validation;
+      },
+
+      unequipPassiveSkill: (skillId) => {
+        const state = get();
+        const nextPilot = unequipPassiveFromGear(
           state.pilot,
           state.pilot.activeGearId,
           skillId
@@ -1268,9 +2092,17 @@ export const useGameStore = create<GameStoreState>()(
         const state = get();
         const id = state.pilot.activeGearId;
         const gear = state.pilot.gears[id];
+        const unlockedActive = getUnlockedActiveSlots(
+          gear.level,
+          state.adminConfig?.activeSlots
+        );
         const currentSimple =
           gear.tactics.simple ??
-          createDefaultSimpleTactics(gear.classId, gear.equippedSkillBar);
+          createDefaultSimpleTactics(
+            gear.classId,
+            gear.equippedSkillBar,
+            unlockedActive
+          );
         const nextSimple: SimpleTacticsConfig = {
           ...currentSimple,
           ...patch,
@@ -1279,7 +2111,8 @@ export const useGameStore = create<GameStoreState>()(
           gear.classId,
           nextSimple,
           gear.equippedSkillBar,
-          gear.tactics.safety
+          gear.tactics.safety,
+          unlockedActive
         );
         soundFx.playClick();
         get().setActiveGearTactics(generated);
@@ -1289,16 +2122,22 @@ export const useGameStore = create<GameStoreState>()(
         const state = get();
         const id = state.pilot.activeGearId;
         const gear = state.pilot.gears[id];
+        const unlockedActive = getUnlockedActiveSlots(
+          gear.level,
+          state.adminConfig?.activeSlots
+        );
         const presetSimple = createSimplePresetConfig(
           presetId,
           gear.classId,
-          gear.equippedSkillBar
+          gear.equippedSkillBar,
+          unlockedActive
         );
         const generated = generateTacticsFromSimple(
           gear.classId,
           presetSimple,
           gear.equippedSkillBar,
-          gear.tactics.safety
+          gear.tactics.safety,
+          unlockedActive
         );
         soundFx.playConfirm();
         get().setActiveGearTactics(generated);
@@ -1308,14 +2147,23 @@ export const useGameStore = create<GameStoreState>()(
         const state = get();
         const id = state.pilot.activeGearId;
         const gear = state.pilot.gears[id];
+        const unlockedActive = getUnlockedActiveSlots(
+          gear.level,
+          state.adminConfig?.activeSlots
+        );
         const baseSimple =
           gear.tactics.simple ??
-          createDefaultSimpleTactics(gear.classId, gear.equippedSkillBar);
+          createDefaultSimpleTactics(
+            gear.classId,
+            gear.equippedSkillBar,
+            unlockedActive
+          );
         const generated = generateTacticsFromSimple(
           gear.classId,
           baseSimple,
           gear.equippedSkillBar,
-          gear.tactics.safety
+          gear.tactics.safety,
+          unlockedActive
         );
         soundFx.playConfirm();
         get().setActiveGearTactics(generated);
@@ -1325,6 +2173,10 @@ export const useGameStore = create<GameStoreState>()(
         const state = get();
         const id = state.pilot.activeGearId;
         const gear = state.pilot.gears[id];
+        const unlockedActive = getUnlockedActiveSlots(
+          gear.level,
+          state.adminConfig?.activeSlots
+        );
         soundFx.playConfirm();
         const preset = createPresetTactics(
           gear.classId,
@@ -1336,7 +2188,11 @@ export const useGameStore = create<GameStoreState>()(
           mode: 'custom',
           simple:
             gear.tactics.simple ??
-            createDefaultSimpleTactics(gear.classId, gear.equippedSkillBar),
+            createDefaultSimpleTactics(
+              gear.classId,
+              gear.equippedSkillBar,
+              unlockedActive
+            ),
         });
       },
 
@@ -1460,7 +2316,7 @@ export const useGameStore = create<GameStoreState>()(
         });
       },
 
-      startAutoRepeat: (limit, sectorId) => {
+      startAutoRepeat: (limit, sectorId, opts) => {
         const state = get();
         const chosenLimit = limit ?? state.autoRepeatLimit;
         const chosenSector =
@@ -1469,7 +2325,32 @@ export const useGameStore = create<GameStoreState>()(
           state.autoRepeatDefeatStreakLimit
         );
 
-        if (state.pilot.inventory.length >= BALANCE_CONFIG.maxInventorySize) {
+        const ongoingBattle =
+          state.battle && !state.battle.summary ? state.battle : null;
+        const autoBattleOptions =
+          opts?.kind === undefined && !ongoingBattle
+            ? getBattleOptions(state.pilot, chosenSector, state.adminConfig)
+            : null;
+        const pickedDefaultKind = autoBattleOptions
+          ? pickDefaultBattle(autoBattleOptions)
+          : null;
+        const pickedDefaultOpt =
+          autoBattleOptions && pickedDefaultKind
+            ? autoBattleOptions.find(
+                (opt) => opt.kind === pickedDefaultKind && opt.allowed
+              ) ?? null
+            : null;
+        const resolvedKind: BattleKind | undefined =
+          opts?.kind ?? ongoingBattle?.kind ?? pickedDefaultKind ?? undefined;
+        const resolvedSourceId =
+          opts?.sourceId !== undefined
+            ? opts.sourceId
+            : ongoingBattle
+            ? ongoingBattle.sourceId ?? null
+            : pickedDefaultOpt?.sourceId ?? null;
+
+        const boxCap = getBoxCapacity(state.adminConfig);
+        if (state.pilot.inventory.length >= boxCap) {
           set({
             autoRepeatLimit: chosenLimit,
             autoRepeatToast: null,
@@ -1477,6 +2358,8 @@ export const useGameStore = create<GameStoreState>()(
               active: false,
               limit: chosenLimit,
               sectorId: chosenSector,
+              kind: resolvedKind,
+              sourceId: resolvedSourceId,
               completedRuns: 0,
               wins: 0,
               consecutiveDefeats: 0,
@@ -1491,6 +2374,64 @@ export const useGameStore = create<GameStoreState>()(
           return;
         }
 
+        const isNextBattleIdle = !state.battle || Boolean(state.battle.summary);
+        if (isNextBattleIdle) {
+          const checkKind: BattleKind = resolvedKind ?? 'assault';
+          const validation =
+            resolvedKind !== undefined
+              ? validateBattleLaunch(
+                  state.pilot,
+                  chosenSector,
+                  checkKind,
+                  resolvedSourceId,
+                  state.adminConfig
+                )
+              : null;
+          if (!validation || !validation.allowed) {
+            const optsList = getBattleOptions(
+              state.pilot,
+              chosenSector,
+              state.adminConfig
+            );
+            const reasonKey: BattleOptionReasonKey =
+              validation?.reasonKey ??
+              optsList.find((opt) => !opt.allowed && opt.reasonKey)
+                ?.reasonKey ??
+              'map.reason.notFrontline';
+            const stopReason: AutoStopReason =
+              (checkKind === 'mission' || checkKind === 'event') &&
+              reasonKey === 'map.reason.sourceInactive'
+                ? 'source_inactive'
+                : 'node_not_contested';
+            set({
+              autoRepeatLimit: chosenLimit,
+              autoRepeatToast: null,
+              battleLaunchToast: {
+                id: `launch_toast_${Date.now()}`,
+                reasonKey,
+                sectorId: chosenSector,
+              },
+              autoRepeatSession: {
+                active: false,
+                limit: chosenLimit,
+                sectorId: chosenSector,
+                kind: resolvedKind,
+                sourceId: resolvedSourceId,
+                completedRuns: 0,
+                wins: 0,
+                consecutiveDefeats: 0,
+                defeatStreakLimit: streakLimit,
+                totalExp: 0,
+                totalCredits: 0,
+                totalWarPoints: 0,
+                totalDrops: [],
+                stopReason,
+              },
+            });
+            return;
+          }
+        }
+
         soundFx.playConfirm();
         set({
           autoRepeatLimit: chosenLimit,
@@ -1500,6 +2441,8 @@ export const useGameStore = create<GameStoreState>()(
             active: true,
             limit: chosenLimit,
             sectorId: chosenSector,
+            kind: resolvedKind,
+            sourceId: resolvedSourceId,
             completedRuns: 0,
             wins: 0,
             consecutiveDefeats: 0,
@@ -1514,7 +2457,12 @@ export const useGameStore = create<GameStoreState>()(
 
         // If not currently in an ongoing battle, start immediately
         if (!state.battle || state.battle.summary) {
-          get().startBattle(chosenSector);
+          get().startBattle(chosenSector, {
+            kind: resolvedKind,
+            sourceId: resolvedSourceId,
+          });
+        } else if (state.battle.prestage?.active) {
+          get().confirmPrestage();
         }
       },
 
@@ -1562,9 +2510,11 @@ export const useGameStore = create<GameStoreState>()(
 
       clearAutoRepeatToast: () => set({ autoRepeatToast: null }),
 
+      clearBattleLaunchToast: () => set({ battleLaunchToast: null }),
+
       selectSector: (sectorId) => {
         const state = get();
-        if (!state.pilot.unlockedSectorIds.includes(sectorId)) return;
+        if (!isVisible(state.pilot, sectorId)) return;
         soundFx.playClick();
         set({ selectedSectorId: sectorId, hasSaveData: true });
       },
@@ -1581,7 +2531,27 @@ export const useGameStore = create<GameStoreState>()(
 
       advanceMonth: () => {
         const state = get();
-        const summary = advanceCampaignMonth(state.pilot);
+        const npcSupplyCfg = sanitizeNpcSupplyConfig(
+          state.adminConfig.npcSupply
+        );
+        const rawSummary = advanceCampaignMonth(
+          state.pilot,
+          npcSupplyCfg.sector.regenPerMonth
+        );
+        const pilotAfterPirates = ensureIdle(
+          spawnOnMonth(
+            rawSummary.pilot,
+            state.adminConfig.pirates,
+            Math.random
+          ),
+          state.adminConfig.pirates,
+          Math.random,
+          state.adminConfig
+        );
+        const summary: MonthAdvanceSummary = {
+          ...rawSummary,
+          pilot: pilotAfterPirates,
+        };
         soundFx.playConfirm();
         const activeGear = summary.pilot.gears[summary.pilot.activeGearId];
         const nextShopStock = SHOP_STOCK_CONFIG.restockOnMonthAdvance
@@ -1590,6 +2560,28 @@ export const useGameStore = create<GameStoreState>()(
               buildShopOptionsFromState(summary.pilot, state.adminConfig)
             )
           : state.shopStock;
+        const nextSupplyShopStock = SHOP_STOCK_CONFIG.restockOnMonthAdvance
+          ? generateSupplyShopStock(
+              getMaxGearLevel(summary.pilot),
+              state.adminConfig,
+              SUPPLY_TEMPLATES
+            )
+          : state.supplyShopStock;
+        const nextSupplyShopStockWp = SHOP_STOCK_CONFIG.restockOnMonthAdvance
+          ? generateSupplyShopStockWp(
+              getMaxGearLevel(summary.pilot),
+              state.adminConfig,
+              nextSupplyShopStock.length,
+              SUPPLY_TEMPLATES
+            )
+          : state.supplyShopStockWp;
+        const nextVoucherShopStockWp = SHOP_STOCK_CONFIG.restockOnMonthAdvance
+          ? rollVoucherShopStockWp(state.adminConfig)
+          : state.voucherShopStockWp;
+        const nextSupplyShopRefresh: SupplyShopRefreshState =
+          SHOP_STOCK_CONFIG.restockOnMonthAdvance
+            ? { used: 0 }
+            : sanitizeSupplyShopRefresh(state.supplyShopRefresh);
         const nextWpOffers = SHOP_STOCK_CONFIG.restockOnMonthAdvance
           ? generateWpMarketOffers({
               shipyardBonus: hasOperationalShipyard(summary.pilot),
@@ -1598,6 +2590,10 @@ export const useGameStore = create<GameStoreState>()(
         set({
           pilot: summary.pilot,
           shopStock: nextShopStock,
+          supplyShopStock: nextSupplyShopStock,
+          supplyShopStockWp: nextSupplyShopStockWp,
+          voucherShopStockWp: nextVoucherShopStockWp,
+          supplyShopRefresh: nextSupplyShopRefresh,
           wpMarketOffers: nextWpOffers,
           battlesUntilRestock: SHOP_STOCK_CONFIG.restockEveryNBattles,
           hasSaveData: true,
@@ -1762,7 +2758,14 @@ export const useGameStore = create<GameStoreState>()(
         }
         const idSet = new Set(instanceIds);
         const soldItems: ItemInstance[] = [];
-        const remaining: ItemInstance[] = [];
+        const soldFromWarehouseIds: string[] = [];
+        const remainingInventory: ItemInstance[] = [];
+        const currentWarehouse = Array.isArray(state.pilot.warehouse)
+          ? state.pilot.warehouse
+          : [];
+        const warehouseLocked =
+          isBattleActive(state) || Boolean(state.autoRepeatSession?.active);
+        const remainingWarehouse: ItemInstance[] = [];
         let creditsEarned = 0;
 
         for (const it of state.pilot.inventory) {
@@ -1775,7 +2778,23 @@ export const useGameStore = create<GameStoreState>()(
             soldItems.push(it);
             creditsEarned += getSellPrice(it);
           } else {
-            remaining.push(it);
+            remainingInventory.push(it);
+          }
+        }
+
+        for (const it of currentWarehouse) {
+          if (
+            !warehouseLocked &&
+            idSet.has(it.instanceId) &&
+            !it.locked &&
+            !it.favorited &&
+            getItemEquippedByGear(state.pilot.gears, it.instanceId) === null
+          ) {
+            soldItems.push(it);
+            soldFromWarehouseIds.push(it.instanceId);
+            creditsEarned += getSellPrice(it);
+          } else {
+            remainingWarehouse.push(it);
           }
         }
 
@@ -1788,16 +2807,181 @@ export const useGameStore = create<GameStoreState>()(
           pilot: {
             ...state.pilot,
             credits: state.pilot.credits + creditsEarned,
-            inventory: remaining,
+            inventory: remainingInventory,
+            warehouse:
+              soldFromWarehouseIds.length > 0
+                ? remainingWarehouse
+                : currentWarehouse,
           },
           quickSellUndo: {
             soldItems,
             totalCredits: creditsEarned,
             soldAt: Date.now(),
+            ...(soldFromWarehouseIds.length > 0
+              ? { soldFromWarehouseIds }
+              : {}),
           },
           hasSaveData: true,
         });
         return { soldCount: soldItems.length, creditsEarned };
+      },
+
+      moveToWarehouse: (ids) => {
+        const state = get();
+        if (isBattleActive(state) || Boolean(state.autoRepeatSession?.active)) {
+          return {
+            moved: 0,
+            skippedEquipped: 0,
+            skippedProtected: 0,
+            skippedFull: 0,
+            reason: 'locked',
+          };
+        }
+        const {
+          pilot,
+          moved,
+          skippedEquipped,
+          skippedProtected,
+          skippedFull,
+        } = moveToWarehouseEngine(
+          state.pilot,
+          ids,
+          state.adminConfig.warehouseCapacity
+        );
+        if (pilot !== state.pilot) {
+          set({ pilot, hasSaveData: true });
+        }
+        return { moved, skippedEquipped, skippedProtected, skippedFull };
+      },
+
+      setSupplyLoadout: (gearId, ids) => {
+        const state = get();
+        if (isBattleActive(state) || Boolean(state.autoRepeatSession?.active)) {
+          return { ok: false, rejected: [], reason: 'locked' };
+        }
+        const gear = state.pilot.gears[gearId];
+        if (!gear) {
+          return { ok: false, rejected: [] };
+        }
+        const { gear: nextGear, rejected } = setSupplyLoadoutEngine(
+          gear,
+          ids,
+          state.adminConfig
+        );
+        if (rejected.some((r) => r.reason === 'family_duplicate')) {
+          return { ok: false, rejected };
+        }
+        set({
+          pilot: {
+            ...state.pilot,
+            gears: {
+              ...state.pilot.gears,
+              [gearId]: nextGear,
+            },
+          },
+          hasSaveData: true,
+        });
+        return { ok: true, rejected };
+      },
+
+      setExtenderModule: (gearId, index, instanceId) => {
+        const state = get();
+        if (isBattleActive(state) || Boolean(state.autoRepeatSession?.active)) {
+          return {
+            ok: false,
+            reason: 'locked',
+            reasonKey: 'extender.reason.locked',
+          };
+        }
+        if (instanceId === null) {
+          const cleared = clearModuleEngine(state.pilot, gearId, index);
+          if (!cleared.ok) {
+            return {
+              ok: false,
+              reason: 'socket_locked',
+              reasonKey: 'extender.reason.socket_locked',
+            };
+          }
+          set({ pilot: cleared.pilot, hasSaveData: true });
+          return { ok: true };
+        }
+        const equipped = setModuleEngine(
+          state.pilot,
+          gearId,
+          index,
+          instanceId,
+          state.adminConfig
+        );
+        if (!equipped.ok) {
+          return {
+            ok: false,
+            reason: equipped.reason ?? 'socket_locked',
+            reasonKey: equipped.reasonKey,
+            ...(equipped.conflictSocket !== undefined
+              ? {
+                  conflictSocket: equipped.conflictSocket,
+                  reasonParams: equipped.reasonParams,
+                }
+              : {}),
+          };
+        }
+        set({ pilot: equipped.pilot, hasSaveData: true });
+        return { ok: true };
+      },
+
+      moveToBox: (ids) => {
+        const state = get();
+        if (isBattleActive(state) || Boolean(state.autoRepeatSession?.active)) {
+          return {
+            moved: 0,
+            skippedEquipped: 0,
+            skippedProtected: 0,
+            skippedFull: 0,
+            reason: 'locked',
+          };
+        }
+        const {
+          pilot,
+          moved,
+          skippedEquipped,
+          skippedProtected,
+          skippedFull,
+        } = moveToBoxEngine(
+          state.pilot,
+          ids,
+          getBoxCapacity(state.adminConfig)
+        );
+        if (pilot !== state.pilot) {
+          set({ pilot, hasSaveData: true });
+        }
+        return { moved, skippedEquipped, skippedProtected, skippedFull };
+      },
+
+      moveAllUnusedToWarehouse: () => {
+        const state = get();
+        if (isBattleActive(state) || Boolean(state.autoRepeatSession?.active)) {
+          return {
+            moved: 0,
+            skippedEquipped: 0,
+            skippedProtected: 0,
+            skippedFull: 0,
+            reason: 'locked',
+          };
+        }
+        const {
+          pilot,
+          moved,
+          skippedEquipped,
+          skippedProtected,
+          skippedFull,
+        } = moveAllUnusedToWarehouseEngine(
+          state.pilot,
+          state.adminConfig.warehouseCapacity
+        );
+        if (pilot !== state.pilot) {
+          set({ pilot, hasSaveData: true });
+        }
+        return { moved, skippedEquipped, skippedProtected, skippedFull };
       },
 
       undoQuickSell: () => {
@@ -1806,23 +2990,48 @@ export const useGameStore = create<GameStoreState>()(
         if (!undo || undo.soldItems.length === 0) {
           return { ok: false, restoredCount: 0 };
         }
-        const existingIds = new Set(
+        const currentWarehouse = Array.isArray(state.pilot.warehouse)
+          ? state.pilot.warehouse
+          : [];
+        const existingBoxIds = new Set(
           state.pilot.inventory.map((i) => i.instanceId)
         );
-        const toRestore = undo.soldItems.filter(
-          (i) => !existingIds.has(i.instanceId)
+        const existingWarehouseIds = new Set(
+          currentWarehouse.map((i) => i.instanceId)
         );
+        const warehouseOriginSet = new Set(undo.soldFromWarehouseIds ?? []);
+
+        const toRestoreBox: ItemInstance[] = [];
+        const toRestoreWarehouse: ItemInstance[] = [];
+        for (const it of undo.soldItems) {
+          if (
+            existingBoxIds.has(it.instanceId) ||
+            existingWarehouseIds.has(it.instanceId)
+          ) {
+            continue;
+          }
+          if (warehouseOriginSet.has(it.instanceId)) {
+            toRestoreWarehouse.push(it);
+          } else {
+            toRestoreBox.push(it);
+          }
+        }
+
         soundFx.playClick();
         set({
           pilot: {
             ...state.pilot,
             credits: Math.max(0, state.pilot.credits - undo.totalCredits),
-            inventory: [...toRestore, ...state.pilot.inventory],
+            inventory: [...toRestoreBox, ...state.pilot.inventory],
+            warehouse: [...toRestoreWarehouse, ...currentWarehouse],
           },
           quickSellUndo: null,
           hasSaveData: true,
         });
-        return { ok: true, restoredCount: toRestore.length };
+        return {
+          ok: true,
+          restoredCount: toRestoreBox.length + toRestoreWarehouse.length,
+        };
       },
 
       clearQuickSellUndo: () => set({ quickSellUndo: null }),
@@ -1918,6 +3127,9 @@ export const useGameStore = create<GameStoreState>()(
         if (idx === -1) return { ok: false };
         const listing = state.shopStock[idx];
         if (listing.soldOut) return { ok: false };
+        if (state.pilot.inventory.length >= getBoxCapacity(state.adminConfig)) {
+          return { ok: false };
+        }
         if (state.pilot.credits < listing.price) return { ok: false };
 
         // Mark listing as SOLD OUT instead of removing so shop never appears empty/0
@@ -1942,6 +3154,364 @@ export const useGameStore = create<GameStoreState>()(
           hasSaveData: true,
         });
         return { ok: true };
+      },
+
+      buySupply: (templateId, qty) => {
+        const state = get();
+        if (isBattleActive(state) || state.autoRepeatSession?.active) {
+          return { ok: false, bought: 0, reason: 'locked' };
+        }
+        const safeQty = Number.isFinite(qty) ? Math.floor(qty) : 0;
+        if (safeQty <= 0) {
+          return { ok: false, bought: 0, reason: 'invalid_qty' };
+        }
+
+        const idx = state.supplyShopStock.findIndex(
+          (it) => it.templateId === templateId
+        );
+        if (idx === -1) {
+          return { ok: false, bought: 0, reason: 'not_in_stock' };
+        }
+        const listing = state.supplyShopStock[idx];
+        if (listing.remaining <= 0) {
+          return { ok: false, bought: 0, reason: 'sold_out' };
+        }
+
+        const tpl = getSupplyTemplateById(templateId);
+        if (!tpl) {
+          return { ok: false, bought: 0, reason: 'unknown_template' };
+        }
+
+        const owned = getSupplyStockCount(state.pilot.consumables, tpl.id);
+        const room = Math.max(0, SUPPLY_STACK_CAP - owned);
+        if (room <= 0) {
+          return { ok: false, bought: 0, reason: 'stack_full' };
+        }
+
+        const bought = Math.min(safeQty, listing.remaining, room);
+        const unitPrice = computeSupplyPrice(tpl, state.adminConfig);
+        const totalCost = unitPrice * bought;
+        if (state.pilot.credits < totalCost) {
+          return { ok: false, bought: 0, reason: 'insufficient_credits' };
+        }
+
+        const nextSupplyStock = state.supplyShopStock.map((it, i) =>
+          i === idx
+            ? { ...it, remaining: Math.max(0, it.remaining - bought) }
+            : it
+        );
+        const nextConsumables = addSupplyToConsumables(
+          state.pilot.consumables ?? [],
+          tpl.id,
+          bought
+        );
+
+        soundFx.playConfirm();
+        set({
+          pilot: {
+            ...state.pilot,
+            credits: state.pilot.credits - totalCost,
+            consumables: nextConsumables,
+          },
+          supplyShopStock: nextSupplyStock,
+          hasSaveData: true,
+        });
+        return { ok: true, bought };
+      },
+
+      buySupplyWp: (slotId, qty) => {
+        const state = get();
+        if (isBattleActive(state) || state.autoRepeatSession?.active) {
+          return { ok: false, bought: 0, reason: 'locked' };
+        }
+        const safeQty = Number.isFinite(qty) ? Math.floor(qty) : 0;
+        if (safeQty <= 0) {
+          return { ok: false, bought: 0, reason: 'invalid_qty' };
+        }
+
+        const idx = state.supplyShopStockWp.findIndex(
+          (it) => it.slotId === slotId
+        );
+        if (idx === -1) {
+          return { ok: false, bought: 0, reason: 'not_in_stock' };
+        }
+        const listing = state.supplyShopStockWp[idx];
+        if (listing.remaining <= 0) {
+          return { ok: false, bought: 0, reason: 'sold_out' };
+        }
+
+        const tpl = getSupplyTemplateById(listing.templateId);
+        if (!tpl) {
+          return { ok: false, bought: 0, reason: 'unknown_template' };
+        }
+
+        const owned = getSupplyStockCount(state.pilot.consumables, tpl.id);
+        const room = Math.max(0, SUPPLY_STACK_CAP - owned);
+        if (room <= 0) {
+          return { ok: false, bought: 0, reason: 'stack_full' };
+        }
+
+        const bought = Math.min(safeQty, listing.remaining, room);
+        const unitPrice = getSupplyWpPrice(tpl, state.adminConfig);
+        const totalCost = unitPrice * bought;
+        if (state.pilot.warPoints < totalCost) {
+          return { ok: false, bought: 0, reason: 'insufficient_wp' };
+        }
+
+        const nextWpStock = state.supplyShopStockWp.map((it, i) =>
+          i === idx
+            ? { ...it, remaining: Math.max(0, it.remaining - bought) }
+            : it
+        );
+        const nextConsumables = addSupplyToConsumables(
+          state.pilot.consumables ?? [],
+          tpl.id,
+          bought
+        );
+
+        soundFx.playConfirm();
+        set({
+          pilot: {
+            ...state.pilot,
+            warPoints: state.pilot.warPoints - totalCost,
+            consumables: nextConsumables,
+          },
+          supplyShopStockWp: nextWpStock,
+          hasSaveData: true,
+        });
+        return { ok: true, bought };
+      },
+
+      buyVoucher: (id, qty) => {
+        const state = get();
+        if (isBattleActive(state) || state.autoRepeatSession?.active) {
+          return { ok: false, bought: 0, reason: 'locked' };
+        }
+        const safeQty = Number.isFinite(qty) ? Math.floor(qty) : 0;
+        if (safeQty <= 0) {
+          return { ok: false, bought: 0, reason: 'invalid_qty' };
+        }
+
+        const idx = state.voucherShopStockWp.findIndex(
+          (it) => it.voucherId === id
+        );
+        if (idx === -1) {
+          return { ok: false, bought: 0, reason: 'not_in_stock' };
+        }
+        const listing = state.voucherShopStockWp[idx];
+        if (listing.remaining <= 0) {
+          return { ok: false, bought: 0, reason: 'sold_out' };
+        }
+
+        const def = getVoucherById(id, state.adminConfig);
+        if (!def) {
+          return { ok: false, bought: 0, reason: 'unknown_voucher' };
+        }
+
+        const bought = Math.min(safeQty, listing.remaining);
+        const unitPrice = getVoucherPriceWp(def, state.adminConfig);
+        const totalCost = unitPrice * bought;
+        if ((state.pilot.warPoints ?? 0) < totalCost) {
+          return { ok: false, bought: 0, reason: 'insufficient_wp' };
+        }
+
+        const nextVoucherStock = state.voucherShopStockWp.map((it, i) =>
+          i === idx
+            ? { ...it, remaining: Math.max(0, it.remaining - bought) }
+            : it
+        );
+        const prevOwned = state.pilot.vouchers ?? {};
+        const nextOwned = {
+          ...prevOwned,
+          [id]: Math.max(0, Math.floor(prevOwned[id] ?? 0)) + bought,
+        };
+
+        soundFx.playConfirm();
+        set({
+          pilot: {
+            ...state.pilot,
+            warPoints: (state.pilot.warPoints ?? 0) - totalCost,
+            vouchers: nextOwned,
+          },
+          voucherShopStockWp: nextVoucherStock,
+          hasSaveData: true,
+        });
+        return { ok: true, bought };
+      },
+
+      redeemVouchers: (selection) => {
+        const state = get();
+        const battle = state.battle;
+        const summary = battle?.summary;
+        if (!battle || !summary) {
+          return {
+            ok: false,
+            reason: 'no_summary',
+            creditUsed: {},
+            expUsed: {},
+            creditRefund: 0,
+            expRefund: 0,
+          };
+        }
+        if (summary.voucherRedeemed) {
+          return {
+            ok: false,
+            reason: 'already_redeemed',
+            creditUsed: summary.voucherCreditUsed ?? {},
+            expUsed: summary.voucherExpUsed ?? {},
+            creditRefund: summary.voucherCreditRefund ?? 0,
+            expRefund: summary.voucherExpRefund ?? 0,
+          };
+        }
+        if (summary.outcome !== 'defeat' && !summary.retreated) {
+          return {
+            ok: false,
+            reason: 'not_chargeable',
+            creditUsed: {},
+            expUsed: {},
+            creditRefund: 0,
+            expRefund: 0,
+          };
+        }
+
+        const { creditCharged, expCharged } = getBattleSummaryCharges(summary);
+        const owned = state.pilot.vouchers ?? {};
+
+        const clampSel = (rawSel?: Record<string, number>) => {
+          const clamped: Record<string, number> = {};
+          if (!rawSel) return clamped;
+          for (const [id, rawQty] of Object.entries(rawSel)) {
+            const avail = Math.max(0, Math.floor(Number(owned[id]) || 0));
+            const req = Math.max(0, Math.floor(Number(rawQty) || 0));
+            const qty = Math.min(avail, req);
+            if (qty > 0) clamped[id] = qty;
+          }
+          return clamped;
+        };
+
+        const creditRes = applyVoucherRefund(
+          clampSel(selection?.credit),
+          'credit',
+          creditCharged,
+          state.adminConfig
+        );
+        const expRes = applyVoucherRefund(
+          clampSel(selection?.exp),
+          'exp',
+          expCharged,
+          state.adminConfig
+        );
+
+        const nextVouchers: Record<string, number> = {};
+        for (const [id, rawQty] of Object.entries(owned)) {
+          const cur = Math.max(0, Math.floor(Number(rawQty) || 0));
+          const usedQty =
+            (creditRes.used[id] ?? 0) + (expRes.used[id] ?? 0);
+          const left = Math.max(0, cur - usedQty);
+          if (left > 0) {
+            nextVouchers[id] = left;
+          }
+        }
+
+        const deployedGear = state.pilot.gears[summary.deployedGearId];
+        const maxAllowedExp =
+          summary.expBeforePenalty !== undefined
+            ? summary.expBeforePenalty
+            : (deployedGear?.exp ?? 0) + expCharged;
+        const nextGearExp = deployedGear
+          ? Math.min(maxAllowedExp, deployedGear.exp + expRes.refund)
+          : 0;
+
+        soundFx.playConfirm();
+        set({
+          pilot: {
+            ...state.pilot,
+            credits: state.pilot.credits + creditRes.refund,
+            vouchers: nextVouchers,
+            gears: deployedGear
+              ? {
+                  ...state.pilot.gears,
+                  [summary.deployedGearId]: {
+                    ...deployedGear,
+                    exp: nextGearExp,
+                  },
+                }
+              : state.pilot.gears,
+          },
+          battle: {
+            ...battle,
+            summary: {
+              ...summary,
+              voucherRedeemed: true,
+              voucherCreditUsed: creditRes.used,
+              voucherExpUsed: expRes.used,
+              voucherCreditRefund: creditRes.refund,
+              voucherExpRefund: expRes.refund,
+            },
+          },
+          hasSaveData: true,
+        });
+
+        return {
+          ok: true,
+          creditUsed: creditRes.used,
+          expUsed: expRes.used,
+          creditRefund: creditRes.refund,
+          expRefund: expRes.refund,
+        };
+      },
+
+      refreshSupplyShop: () => {
+        const state = get();
+        if (isBattleActive(state) || state.autoRepeatSession?.active) {
+          return { ok: false, reason: 'locked' };
+        }
+        const used = sanitizeSupplyShopRefresh(state.supplyShopRefresh).used;
+        const maxRefreshes = sanitizeSupplyShopMaxRefreshes(
+          state.adminConfig?.supplyShopMaxRefreshes
+        );
+        if (used >= maxRefreshes) {
+          return {
+            ok: false,
+            reason: 'limit',
+            battlesLeft: Math.max(0, state.battlesUntilRestock),
+          };
+        }
+        const baseCost = sanitizeSupplyShopRefreshBaseCost(
+          state.adminConfig?.supplyShopRefreshBaseCost
+        );
+        const cost = used * baseCost;
+        if (state.pilot.credits < cost) {
+          return { ok: false, reason: 'credits', cost };
+        }
+
+        const maxLevel = getMaxGearLevel(state.pilot);
+        const nextCreditStock = generateSupplyShopStock(
+          maxLevel,
+          state.adminConfig,
+          SUPPLY_TEMPLATES
+        );
+        const nextWpStock = generateSupplyShopStockWp(
+          maxLevel,
+          state.adminConfig,
+          nextCreditStock.length,
+          SUPPLY_TEMPLATES
+        );
+        const nextVoucherStockWp = rollVoucherShopStockWp(state.adminConfig);
+
+        soundFx.playClick();
+        set({
+          pilot: {
+            ...state.pilot,
+            credits: state.pilot.credits - cost,
+          },
+          supplyShopStock: nextCreditStock,
+          supplyShopStockWp: nextWpStock,
+          voucherShopStockWp: nextVoucherStockWp,
+          supplyShopRefresh: { used: used + 1 },
+          hasSaveData: true,
+        });
+        return { ok: true, cost };
       },
 
       refreshShopStock: () => {
@@ -2136,6 +3706,50 @@ export const useGameStore = create<GameStoreState>()(
           return { ok: true, kind: entry.kind };
         }
 
+        if (entry.kind === 'supply_crate') {
+          const rewardsCfg = sanitizeSupplyRewardsConfig(
+            state.adminConfig.supplyRewards
+          );
+          const maxGearLevel = getPilotMaxGearLevel(state.pilot);
+          const rolledList = rollSupplyCrateContents(
+            maxGearLevel,
+            {
+              ...rewardsCfg.crate,
+              minTier: rewardsCfg.minTier,
+              maxTier: rewardsCfg.maxTier,
+            },
+            Math.random
+          );
+          let workingConsumables = nextConsumables;
+          const openedSupplies: Array<{
+            templateId: string;
+            qty: number;
+            lost?: number;
+          }> = [];
+          for (const item of rolledList) {
+            const addRes = addSupplyWithOverflow(
+              workingConsumables,
+              item.templateId,
+              item.qty
+            );
+            workingConsumables = addRes.consumables;
+            openedSupplies.push({
+              templateId: item.templateId,
+              qty: addRes.added,
+              ...(addRes.lost > 0 ? { lost: addRes.lost } : {}),
+            });
+          }
+          soundFx.playVictory();
+          set({
+            pilot: {
+              ...state.pilot,
+              consumables: workingConsumables,
+            },
+            hasSaveData: true,
+          });
+          return { ok: true, kind: entry.kind, openedSupplies };
+        }
+
         return { ok: false };
       },
 
@@ -2167,6 +3781,60 @@ export const useGameStore = create<GameStoreState>()(
           hasSaveData: true,
         });
         return { ok: true, creditsEarned: sellValue };
+      },
+
+      sellSupply: (templateId, qty) => {
+        const state = get();
+        if (isBattleActive(state) || state.autoRepeatSession?.active) {
+          return { ok: false, sold: 0, creditsEarned: 0 };
+        }
+        const safeQty = Number.isFinite(qty) ? Math.floor(qty) : 0;
+        if (safeQty <= 0) {
+          return { ok: false, sold: 0, creditsEarned: 0 };
+        }
+
+        const tpl = getSupplyTemplateById(templateId);
+        if (!tpl) {
+          return { ok: false, sold: 0, creditsEarned: 0 };
+        }
+
+        const owned = getSupplyStockCount(state.pilot.consumables, tpl.id);
+        if (owned <= 0) {
+          return { ok: false, sold: 0, creditsEarned: 0 };
+        }
+
+        const sold = Math.min(safeQty, owned);
+        const unitCredit = Math.round(
+          computeSupplyPrice(tpl, state.adminConfig) * SHOP_CONFIG.sellPriceRatio
+        );
+        const creditsEarned = unitCredit * sold;
+
+        let remainingToRemove = sold;
+        const nextConsumables = (state.pilot.consumables ?? [])
+          .map((c) => {
+            if (
+              remainingToRemove > 0 &&
+              c.kind === 'battle_supply' &&
+              c.templateId === tpl.id
+            ) {
+              const take = Math.min(c.quantity, remainingToRemove);
+              remainingToRemove -= take;
+              return { ...c, quantity: c.quantity - take };
+            }
+            return c;
+          })
+          .filter((c) => c.quantity > 0);
+
+        soundFx.playClick();
+        set({
+          pilot: {
+            ...state.pilot,
+            credits: state.pilot.credits + creditsEarned,
+            consumables: nextConsumables,
+          },
+          hasSaveData: true,
+        });
+        return { ok: true, sold, creditsEarned };
       },
 
       enchantEquippedSlot: (slot) => {
@@ -2216,62 +3884,36 @@ export const useGameStore = create<GameStoreState>()(
         return result;
       },
 
-      startBattle: (sectorId) => {
+      startBattle: (sectorId, opts) => {
         const state = get();
-        const requestedSector = sectorId ?? state.selectedSectorId;
-        const targetSectorId = state.pilot.unlockedSectorIds.includes(
-          requestedSector
-        )
-          ? requestedSector
-          : state.pilot.unlockedSectorIds[0] ?? SECTORS_CATALOG[0].id;
+        if (isBattleActive(state)) return;
+        launchBattleForSector(state, set, sectorId, opts);
+      },
 
-        const battleState = createInitialBattleState(
-          state.pilot,
-          targetSectorId,
-          Math.random,
-          state.adminConfig.battleSizeOverride,
-          state.adminConfig
-        );
-        soundFx.playConfirm();
+      reloadBattle: (sectorId, opts) => {
+        launchBattleForSector(get(), set, sectorId, opts);
+      },
 
-        if (state.adminConfig.alwaysWin) {
-          const defeatedEnemies = battleState.units.map((u) =>
-            u.side === 'enemy'
-              ? {
-                  ...u,
-                  hp: 0,
-                  shield: 0,
-                  alive: false,
-                  animState: 'destroyed' as const,
-                }
-              : u
-          );
-          const outcomePatch = finalizeBattleOutcome(
-            state,
-            battleState,
-            defeatedEnemies,
-            true,
-            false
-          );
-          set({
-            ...outcomePatch,
-            selectedSectorId: targetSectorId,
-            screen: 'BATTLE',
-            ...(!state.autoRepeatSession?.active
-              ? { autoRepeatSession: null, autoRepeatToast: null }
-              : {}),
-          });
-          return;
-        }
-
+      confirmPrestage: () => {
+        const { battle } = get();
+        if (!battle || !battle.prestage?.active) return;
+        const confirmLog: CombatLogEntry = {
+          id: `log_prestage_${Date.now()}_${battle.turnCounter}`,
+          round: battle.round,
+          actorName: 'SYSTEM',
+          tag: 'SYSTEM',
+          templateKey: 'log.prestageConfirm',
+          params: {},
+        };
         set({
-          selectedSectorId: targetSectorId,
-          battle: battleState,
-          screen: 'BATTLE',
-          hasSaveData: true,
-          ...(!state.autoRepeatSession?.active
-            ? { autoRepeatSession: null, autoRepeatToast: null }
-            : {}),
+          battle: {
+            ...battle,
+            prestage: {
+              ...battle.prestage,
+              active: false,
+            },
+            log: [...battle.log, confirmLog],
+          },
         });
       },
 
@@ -2326,10 +3968,100 @@ export const useGameStore = create<GameStoreState>()(
         });
       },
 
-      performPlayerAction: (action, skillId) => {
+      useBattleSupply: (templateId) => {
         const state = get();
         const { battle } = state;
-        if (!battle || battle.summary || battle.isResolving) return;
+        if (!battle || battle.summary || battle.isResolving || battle.prestage?.active) {
+          return;
+        }
+
+        const activeUnitId = battle.turnOrder[battle.activeTurnIndex];
+        const activeUnit = battle.units.find((u) => u.id === activeUnitId);
+        if (!activeUnit || !activeUnit.isPlayer || !activeUnit.alive) return;
+
+        const activeGear = state.pilot.gears[battle.deployedGearId];
+        const maxSlots = sanitizeSupplyLoadoutSlots(
+          state.adminConfig?.supplyLoadoutSlots
+        );
+        const cleanLoadout = sanitizeSupplyLoadout(
+          activeGear?.supplyLoadout,
+          maxSlots
+        );
+        if (!cleanLoadout.includes(templateId)) return;
+
+        const template = getSupplyTemplateById(templateId);
+        if (!template) return;
+
+        const stock = getSupplyStockCount(state.pilot.consumables, template.id);
+        const res = applyBattleSupplyUse({
+          units: battle.units,
+          supplyByUnit: battle.supplyByUnit,
+          unitId: activeUnit.id,
+          template,
+          stock,
+          isOwnTurn: true,
+          cfg: state.adminConfig,
+          kind: battle.kind,
+        });
+        if (!res.ok) return;
+
+        let decremented = false;
+        const nextConsumables = (state.pilot.consumables ?? [])
+          .map((c) => {
+            if (
+              !decremented &&
+              c.kind === 'battle_supply' &&
+              c.templateId === template.id
+            ) {
+              decremented = true;
+              return { ...c, quantity: c.quantity - 1 };
+            }
+            return c;
+          })
+          .filter((c) => c.quantity > 0);
+
+        const skipVisualFx = state.skipAnimations;
+        const muteSound = state.skipAnimations || state.battleSpeed >= 10;
+        const uidSuffix = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+        const feedback = buildSupplyUseFeedback({
+          units: battle.units,
+          round: battle.round,
+          actor: activeUnit,
+          template,
+          result: res,
+          uidSuffix,
+        });
+        playCue(feedback.cue, muteSound);
+
+        const supplyLog = enrichLogEntries([feedback.logEntry], activeUnit);
+
+        set({
+          battle: {
+            ...battle,
+            units: res.units,
+            supplyByUnit: res.supplyByUnit,
+            log: [...battle.log, ...supplyLog],
+            popups: skipVisualFx
+              ? []
+              : [...battle.popups, ...feedback.popups].slice(-18),
+            fxEvents: skipVisualFx
+              ? []
+              : [...battle.fxEvents, feedback.fxEvent].slice(-12),
+          },
+          pilot: {
+            ...state.pilot,
+            consumables: nextConsumables,
+          },
+          hasSaveData: true,
+        });
+      },
+
+      performPlayerAction: (action, skillId, transferCount) => {
+        const state = get();
+        const { battle } = state;
+        if (!battle || battle.summary || battle.isResolving || battle.prestage?.active) {
+          return;
+        }
 
         const activeUnitId = battle.turnOrder[battle.activeTurnIndex];
         const activeUnit = battle.units.find((u) => u.id === activeUnitId);
@@ -2339,12 +4071,30 @@ export const useGameStore = create<GameStoreState>()(
         const muteSound = state.skipAnimations || state.battleSpeed >= 10;
 
         // Route single_ally skills to selectedAllyTargetId; offensive actions to selectedTargetId
-        const skillDef = skillId ? getSkillById(skillId) : undefined;
+        const skillDef = skillId ? getSkillById(skillId, state.adminConfig) : undefined;
+        let clampedTransferCount = transferCount;
+        if (action === 'skill' && skillDef?.effectKind === 'sp_transfer') {
+          const fluxLv =
+            activeUnit.skillLevels[skillDef.id] ?? activeUnit.skillLevel ?? 1;
+          const maxAffordable = getMaxAffordableFluxCount(
+            battle.units,
+            activeUnit.id,
+            fluxLv,
+            state.adminConfig.fluxTransfer,
+            getEffectiveSkillMaxLevel(state.adminConfig)
+          );
+          clampedTransferCount =
+            transferCount === undefined
+              ? maxAffordable
+              : Math.max(0, Math.min(maxAffordable, Math.floor(transferCount)));
+        }
         const resolvedTargetId =
           action === 'skill' && skillDef?.targetType === 'single_ally'
             ? battle.selectedAllyTargetId ?? activeUnit.id
             : battle.selectedTargetId;
 
+        const turnStep2Used = battle.turnStep2Used ?? 0;
+        const turnLockedSkillIds = battle.turnLockedSkillIds ?? [];
         const resolution = resolveUnitAction(
           battle.units,
           activeUnit.id,
@@ -2353,7 +4103,12 @@ export const useGameStore = create<GameStoreState>()(
           battle.round,
           state.adminConfig,
           Math.random,
-          skillId
+          skillId,
+          clampedTransferCount,
+          {
+            skipTurnStartTicks: turnStep2Used > 0,
+            turnLockedSkillIds,
+          }
         );
         playCue(resolution.soundCue, muteSound);
 
@@ -2376,7 +4131,7 @@ export const useGameStore = create<GameStoreState>()(
           ...stampTurnEvents(resolution.events, nextTurnCounter),
         ].slice(-5000);
         const enrichedLogs = enrichLogEntries(resolution.logEntries, activeUnit);
-        const nextLog = [...battle.log, ...enrichedLogs];
+        let nextLog = [...battle.log, ...enrichedLogs];
         const nextPopups = skipVisualFx
           ? []
           : [...battle.popups, ...resolution.popups].slice(-18);
@@ -2411,38 +4166,28 @@ export const useGameStore = create<GameStoreState>()(
           return;
         }
 
-        // Reconcile upcoming units in current round by live Speed DESC
-        const reconciledOrder = reconcileRemainingTurnOrder(
-          battle.turnOrder,
-          battle.activeTurnIndex,
-          resolution.updatedUnits
+        const actorAfter = resolution.updatedUnits.find(
+          (u) => u.id === activeUnit.id
         );
-        const { nextIndex, wrappedRound } = findNextAliveTurnIndex(
-          reconciledOrder,
-          resolution.updatedUnits,
-          battle.activeTurnIndex
-        );
-
-        let nextTurnOrder = reconciledOrder;
-        let finalTurnIndex = nextIndex;
-        const nextRound = wrappedRound ? battle.round + 1 : battle.round;
-        let nextSnapshots = appendRoundSnapshot(
-          battle.roundSnapshots,
-          battle.round,
-          resolution.updatedUnits
-        );
-        if (wrappedRound) {
-          nextTurnOrder = sortTurnOrder(resolution.updatedUnits);
-          const firstAliveIdx = nextTurnOrder.findIndex((id) =>
-            resolution.updatedUnits.some((u) => u.id === id && u.alive)
+        const didCastSkill =
+          action === 'skill' &&
+          Boolean(skillId) &&
+          resolution.events.some(
+            (ev) =>
+              ev.type === 'skill_cast' &&
+              ev.actorId === activeUnit.id &&
+              ev.skillId === skillId
           );
-          finalTurnIndex = Math.max(0, firstAliveIdx);
-          nextSnapshots = appendRoundSnapshot(
-            nextSnapshots,
-            nextRound,
-            resolution.updatedUnits
-          );
-        }
+        const phaseOutcome = evaluateTurnPhaseAfterAction({
+          skill: skillDef,
+          didCastSkill,
+          actorAlive: Boolean(actorAfter?.alive),
+          aliveEnemiesCount: aliveEnemies.length,
+          aliveAlliesCount: aliveAllies.length,
+          turnStep2Used,
+          turnLockedSkillIds,
+          cfg: state.adminConfig.turnPhase,
+        });
 
         const playerNext = resolution.updatedUnits.find((u) => u.isPlayer);
         const validFrontEnemies = playerNext
@@ -2455,10 +4200,85 @@ export const useGameStore = create<GameStoreState>()(
           (a) => a.id === battle.selectedAllyTargetId
         );
 
+        if (phaseOutcome.keepTurn) {
+          set({
+            battle: {
+              ...battle,
+              units: resolution.updatedUnits,
+              log: nextLog,
+              events: nextEvents,
+              popups: nextPopups,
+              fxEvents: nextFx,
+              explodedUnitIds: nextExploded,
+              selectedTargetId: currentTargetStillAlive
+                ? battle.selectedTargetId
+                : validFrontEnemies[0]?.id ?? aliveEnemies[0]?.id ?? null,
+              selectedAllyTargetId: currentAllyStillAlive
+                ? battle.selectedAllyTargetId
+                : aliveAllies[0]?.id ?? null,
+              lastPlayerTargetId: targetedEnemy,
+              turnStep2Used: phaseOutcome.nextTurnStep2Used,
+              turnLockedSkillIds: phaseOutcome.nextTurnLockedSkillIds,
+              autoStopNotice: null,
+              isResolving: false,
+            },
+          });
+          return;
+        }
+
+        // Reconcile upcoming units in current round by live Speed DESC
+        const reconciledOrder = reconcileRemainingTurnOrder(
+          battle.turnOrder,
+          battle.activeTurnIndex,
+          resolution.updatedUnits
+        );
+        const { nextIndex, wrappedRound } = findNextAliveTurnIndex(
+          reconciledOrder,
+          resolution.updatedUnits,
+          battle.activeTurnIndex
+        );
+
+        let finalUnits = resolution.updatedUnits;
+        let nextTurnOrder = reconciledOrder;
+        let finalTurnIndex = nextIndex;
+        const nextRound = wrappedRound ? battle.round + 1 : battle.round;
+        let nextSnapshots = appendRoundSnapshot(
+          battle.roundSnapshots,
+          battle.round,
+          resolution.updatedUnits
+        );
+        if (wrappedRound) {
+          finalUnits = clearRevealedFlags(resolution.updatedUnits);
+          nextTurnOrder = sortTurnOrder(finalUnits);
+          const firstAliveIdx = nextTurnOrder.findIndex((id) =>
+            finalUnits.some((u) => u.id === id && u.alive)
+          );
+          finalTurnIndex = Math.max(0, firstAliveIdx);
+          nextSnapshots = appendRoundSnapshot(
+            nextSnapshots,
+            nextRound,
+            finalUnits
+          );
+          const enrageLogs = buildEnrageActivationLogs(
+            nextRound,
+            get().adminConfig,
+            nextLog
+          );
+          if (enrageLogs.length > 0) {
+            nextLog = [...nextLog, ...enrageLogs];
+          }
+        }
+
+        const nextSupplyByUnit = tickBattleSupplyForUnit(
+          battle.supplyByUnit,
+          activeUnit.id
+        );
+
         set({
           battle: {
             ...battle,
-            units: resolution.updatedUnits,
+            units: finalUnits,
+            supplyByUnit: nextSupplyByUnit,
             turnCounter: nextTurnCounter,
             log: nextLog,
             events: nextEvents,
@@ -2476,6 +4296,8 @@ export const useGameStore = create<GameStoreState>()(
               ? battle.selectedAllyTargetId
               : aliveAllies[0]?.id ?? null,
             lastPlayerTargetId: targetedEnemy,
+            turnStep2Used: 0,
+            turnLockedSkillIds: [],
             autoStopNotice: null,
             isResolving: false,
           },
@@ -2483,21 +4305,107 @@ export const useGameStore = create<GameStoreState>()(
       },
 
       performAutoPlayerTurn: () => {
-        const state = get();
-        const { battle } = state;
-        if (!battle || battle.summary || battle.isResolving || !state.autoBattleEnabled) {
+        let state = get();
+        let { battle } = state;
+        if (
+          !battle ||
+          battle.summary ||
+          battle.isResolving ||
+          battle.prestage?.active ||
+          !state.autoBattleEnabled
+        ) {
           return;
         }
 
         const activeUnitId = battle.turnOrder[battle.activeTurnIndex];
-        const activeUnit = battle.units.find((u) => u.id === activeUnitId);
+        let activeUnit = battle.units.find((u) => u.id === activeUnitId);
         if (!activeUnit || !activeUnit.isPlayer || !activeUnit.alive) return;
 
-        const deployedGear = state.pilot.gears[battle.deployedGearId];
-        const tactics = deployedGear.tactics;
+        let deployedGear = state.pilot.gears[battle.deployedGearId];
+        let tactics = deployedGear.tactics;
+
+        // 0. Auto supplies (when enabled in Simple tactics, runs at start of player's auto turn)
+        const autoSuppliesCfg = sanitizeAutoSuppliesConfig(
+          tactics.simple?.autoSupplies
+        );
+        if (autoSuppliesCfg.enabled) {
+          const usesPerTurn = sanitizeSupplyUsesPerTurn(
+            state.adminConfig?.supplyUsesPerTurn
+          );
+          for (let i = 0; i < usesPerTurn; i++) {
+            const curState = get();
+            const curBattle = curState.battle;
+            if (
+              !curBattle ||
+              curBattle.summary ||
+              curBattle.isResolving ||
+              curBattle.prestage?.active ||
+              !curState.autoBattleEnabled
+            ) {
+              return;
+            }
+            const curUnit = curBattle.units.find((u) => u.id === activeUnitId);
+            if (!curUnit || !curUnit.isPlayer || !curUnit.alive) return;
+            const curGear = curState.pilot.gears[curBattle.deployedGearId];
+            const maxSlots = sanitizeSupplyLoadoutSlots(
+              curState.adminConfig?.supplyLoadoutSlots
+            );
+            const loadoutIds = sanitizeSupplyLoadout(
+              curGear?.supplyLoadout,
+              maxSlots
+            );
+            const loadoutTemplates = loadoutIds
+              .map((id) => getSupplyTemplateById(id))
+              .filter((t): t is NonNullable<typeof t> => Boolean(t));
+            if (loadoutTemplates.length === 0) break;
+            const stockByTemplate: Record<string, number> = {};
+            for (const tpl of loadoutTemplates) {
+              stockByTemplate[tpl.id] = getSupplyStockCount(
+                curState.pilot.consumables,
+                tpl.id
+              );
+            }
+            const picks = pickAutoSupplies({
+              unit: curUnit,
+              loadoutTemplates,
+              stockByTemplate,
+              unitState: curBattle.supplyByUnit?.[curUnit.id],
+              cfg: autoSuppliesCfg,
+              adminCfg: curState.adminConfig,
+              kind: curBattle.kind,
+              units: curBattle.units,
+            });
+            if (picks.length === 0) break;
+            curState.useBattleSupply(picks[0]);
+          }
+
+          state = get();
+          battle = state.battle;
+          if (
+            !battle ||
+            battle.summary ||
+            battle.isResolving ||
+            battle.prestage?.active ||
+            !state.autoBattleEnabled
+          ) {
+            return;
+          }
+          const refreshedUnit = battle.units.find((u) => u.id === activeUnitId);
+          if (!refreshedUnit || !refreshedUnit.isPlayer || !refreshedUnit.alive) {
+            return;
+          }
+          activeUnit = refreshedUnit;
+          deployedGear = state.pilot.gears[battle.deployedGearId];
+          tactics = deployedGear.tactics;
+        }
 
         // 1. Evaluate Safety Stops before executing Auto turn
-        const safetyEval = evaluateAutoSafety(battle, activeUnit, tactics.safety);
+        const safetyEval = evaluateAutoSafety(
+          battle,
+          activeUnit,
+          tactics.safety,
+          state.adminConfig
+        );
         if (safetyEval.shouldRetreat) {
           set((prev) => ({
             autoBattleEnabled: false,
@@ -2551,29 +4459,144 @@ export const useGameStore = create<GameStoreState>()(
           return;
         }
 
-        // 2. Evaluate pure Tactics engine (top-to-bottom priority)
-        const choice = chooseAction(battle, activeUnit, tactics, Math.random);
-        const autoRuleNumber =
-          choice.matchedRuleIndex !== null ? choice.matchedRuleIndex + 1 : 0;
-
+        // 2. Evaluate pure Tactics engine with multi-step support (step 2 buffs + step 3 main action)
         const skipVisualFx = state.skipAnimations;
         const muteSound = state.skipAnimations || state.battleSpeed >= 10;
-        const resolution = resolveUnitAction(
-          battle.units,
-          activeUnit.id,
-          choice.action,
-          choice.targetId,
-          battle.round,
-          state.adminConfig,
-          Math.random,
-          choice.skillId
-        );
+        const resolution = resolveMultiStepTurn({
+          units: battle.units,
+          actorId: activeUnit.id,
+          round: battle.round,
+          adminConfig: state.adminConfig,
+          rng: Math.random,
+          initialTurnStep2Used: battle.turnStep2Used ?? 0,
+          initialTurnLockedSkillIds: battle.turnLockedSkillIds ?? [],
+          chooseNextDecision: (
+            curUnits,
+            curActor,
+            lockedSkillIds,
+            _stepIdx,
+            step2UsedSoFar
+          ) => {
+            if (
+              pickLidarCast(
+                curUnits,
+                curActor,
+                {
+                  role: 'player',
+                  lidarAuto: tactics.simple?.lidarAuto,
+                  adminConfig: state.adminConfig,
+                  step2UsedSoFar,
+                  turnLockedSkillIds: lockedSkillIds,
+                },
+                Math.random
+              )
+            ) {
+              return {
+                action: 'skill',
+                targetId: null,
+                skillId: LIDAR_SKILL_ID,
+                matchedRuleIndex: null,
+              };
+            }
+            const fluxAutoCfg = sanitizeFluxAutoConfig(tactics.simple?.fluxAuto);
+            const autoFluxCount = pickFluxAutoCount(
+              curUnits,
+              curActor,
+              {
+                fluxAuto: fluxAutoCfg,
+                adminConfig: state.adminConfig,
+                step2UsedSoFar,
+                turnLockedSkillIds: lockedSkillIds,
+              },
+              Math.random
+            );
+            if (autoFluxCount > 0) {
+              return {
+                action: 'skill',
+                targetId: null,
+                skillId: FLUX_SKILL_ID,
+                transferCount: autoFluxCount,
+                matchedRuleIndex: null,
+              };
+            }
+            let choice = chooseAction(
+              {
+                ...battle,
+                units: curUnits,
+                turnLockedSkillIds: lockedSkillIds,
+              },
+              curActor,
+              tactics,
+              Math.random,
+              state.adminConfig
+            );
+            let autoTransferCount: number | undefined;
+            const chosenSkillDef =
+              choice.action === 'skill' && choice.skillId
+                ? getSkillById(choice.skillId, state.adminConfig)
+                : undefined;
+            if (chosenSkillDef?.effectKind === 'sp_transfer') {
+              const fluxCfg = sanitizeFluxTransferConfig(
+                state.adminConfig.fluxTransfer
+              );
+              const pressure = computeFluxBattlePressure(curUnits, curActor.side);
+              const count = fluxAutoCfg.enabled
+                ? pickFluxCount(
+                    curUnits,
+                    curActor.id,
+                    {
+                      ...fluxCfg,
+                      spEconomy: state.adminConfig.spEconomy,
+                      skillMaxLevel: getEffectiveSkillMaxLevel(state.adminConfig),
+                    },
+                    pressure,
+                    Math.random
+                  )
+                : 0;
+              if (count > 0) {
+                autoTransferCount = count;
+              } else {
+                const validEnemies = getValidEnemyTargets(
+                  curUnits,
+                  curActor,
+                  'attack'
+                );
+                const fallbackEnemy = [...validEnemies].sort(
+                  (a, b) => a.hp - b.hp
+                )[0];
+                choice = fallbackEnemy
+                  ? {
+                      action: 'attack',
+                      targetId: fallbackEnemy.id,
+                      matchedRuleIndex: null,
+                    }
+                  : {
+                      action: 'defend',
+                      targetId: null,
+                      matchedRuleIndex: null,
+                    };
+              }
+            }
+            return {
+              action: choice.action,
+              targetId: choice.targetId,
+              skillId: choice.skillId,
+              transferCount: autoTransferCount,
+              matchedRuleIndex: choice.matchedRuleIndex,
+            };
+          },
+        });
         playCue(resolution.soundCue, muteSound);
 
+        const autoRuleNumber =
+          resolution.lastMatchedRuleIndex !== null
+            ? resolution.lastMatchedRuleIndex + 1
+            : 0;
+        const lastTargetId = resolution.lastDecision?.targetId ?? null;
         const targetedEnemy =
-          choice.targetId &&
-          battle.units.some((u) => u.id === choice.targetId && u.side === 'enemy')
-            ? choice.targetId
+          lastTargetId &&
+          battle.units.some((u) => u.id === lastTargetId && u.side === 'enemy')
+            ? lastTargetId
             : battle.lastPlayerTargetId;
 
         const aliveEnemies = resolution.updatedUnits.filter(
@@ -2593,14 +4616,14 @@ export const useGameStore = create<GameStoreState>()(
           activeUnit,
           autoRuleNumber
         );
-        const nextLog = [...battle.log, ...enrichedLogs];
+        let nextLog = [...battle.log, ...enrichedLogs];
         const nextPopups = skipVisualFx
           ? []
           : [...battle.popups, ...resolution.popups].slice(-18);
         const nextFx = skipVisualFx
           ? []
-          : resolution.fxEvent
-          ? [...battle.fxEvents, resolution.fxEvent].slice(-12)
+          : resolution.fxEvents.length > 0
+          ? [...battle.fxEvents, ...resolution.fxEvents].slice(-12)
           : battle.fxEvents;
         const nextExploded = skipVisualFx
           ? []
@@ -2639,6 +4662,7 @@ export const useGameStore = create<GameStoreState>()(
           battle.activeTurnIndex
         );
 
+        let finalUnits = resolution.updatedUnits;
         let nextTurnOrder = reconciledOrder;
         let finalTurnIndex = nextIndex;
         const nextRound = wrappedRound ? battle.round + 1 : battle.round;
@@ -2648,16 +4672,25 @@ export const useGameStore = create<GameStoreState>()(
           resolution.updatedUnits
         );
         if (wrappedRound) {
-          nextTurnOrder = sortTurnOrder(resolution.updatedUnits);
+          finalUnits = clearRevealedFlags(resolution.updatedUnits);
+          nextTurnOrder = sortTurnOrder(finalUnits);
           const firstAliveIdx = nextTurnOrder.findIndex((id) =>
-            resolution.updatedUnits.some((u) => u.id === id && u.alive)
+            finalUnits.some((u) => u.id === id && u.alive)
           );
           finalTurnIndex = Math.max(0, firstAliveIdx);
           nextSnapshots = appendRoundSnapshot(
             nextSnapshots,
             nextRound,
-            resolution.updatedUnits
+            finalUnits
           );
+          const enrageLogs = buildEnrageActivationLogs(
+            nextRound,
+            get().adminConfig,
+            nextLog
+          );
+          if (enrageLogs.length > 0) {
+            nextLog = [...nextLog, ...enrageLogs];
+          }
         }
 
         const currentTargetStillAlive = aliveEnemies.some(
@@ -2667,10 +4700,16 @@ export const useGameStore = create<GameStoreState>()(
           (a) => a.id === battle.selectedAllyTargetId
         );
 
+        const nextSupplyByUnit = tickBattleSupplyForUnit(
+          battle.supplyByUnit,
+          activeUnit.id
+        );
+
         set({
           battle: {
             ...battle,
-            units: resolution.updatedUnits,
+            units: finalUnits,
+            supplyByUnit: nextSupplyByUnit,
             turnCounter: nextTurnCounter,
             log: nextLog,
             events: nextEvents,
@@ -2688,6 +4727,8 @@ export const useGameStore = create<GameStoreState>()(
               ? battle.selectedAllyTargetId
               : aliveAllies[0]?.id ?? null,
             lastPlayerTargetId: targetedEnemy,
+            turnStep2Used: 0,
+            turnLockedSkillIds: [],
             autoStopNotice: null,
             isResolving: false,
           },
@@ -2697,7 +4738,7 @@ export const useGameStore = create<GameStoreState>()(
       performAiTurn: () => {
         const state = get();
         const { battle } = state;
-        if (!battle || battle.summary) return;
+        if (!battle || battle.summary || battle.prestage?.active) return;
 
         const activeUnitId = battle.turnOrder[battle.activeTurnIndex];
         const activeUnit = battle.units.find((u) => u.id === activeUnitId);
@@ -2708,23 +4749,28 @@ export const useGameStore = create<GameStoreState>()(
             battle.units,
             battle.activeTurnIndex
           );
+          let nextUnits = battle.units;
           let nextTurnOrder = battle.turnOrder;
           let finalTurnIndex = nextIndex;
           if (wrappedRound) {
-            nextTurnOrder = sortTurnOrder(battle.units);
+            nextUnits = clearRevealedFlags(battle.units);
+            nextTurnOrder = sortTurnOrder(nextUnits);
             finalTurnIndex = Math.max(
               0,
               nextTurnOrder.findIndex((id) =>
-                battle.units.some((u) => u.id === id && u.alive)
+                nextUnits.some((u) => u.id === id && u.alive)
               )
             );
           }
           set({
             battle: {
               ...battle,
+              units: nextUnits,
               turnOrder: nextTurnOrder,
               activeTurnIndex: finalTurnIndex,
               round: wrappedRound ? battle.round + 1 : battle.round,
+              turnStep2Used: 0,
+              turnLockedSkillIds: [],
             },
           });
           return;
@@ -2738,24 +4784,62 @@ export const useGameStore = create<GameStoreState>()(
 
         const skipVisualFx = state.skipAnimations;
         const muteSound = state.skipAnimations || state.battleSpeed >= 10;
-        const decision = playerIsCharging
-          ? {
-              action: 'attack' as ActionType,
-              targetId: battle.selectedTargetId,
-              skillId: undefined,
-            }
-          : chooseAiDecision(activeUnit, battle.units);
 
-        const resolution = resolveUnitAction(
-          battle.units,
-          activeUnit.id,
-          decision.action,
-          decision.targetId,
-          battle.round,
-          state.adminConfig,
-          Math.random,
-          decision.skillId
-        );
+        let workingBattle = battle;
+        let workingActor = activeUnit;
+        let npcSupplyEvents: BattleEvent[] = [];
+        const npcCfg = sanitizeNpcSupplyConfig(state.adminConfig?.npcSupply);
+        if (
+          !playerIsCharging &&
+          !activeUnit.isPlayer &&
+          !(activeUnit.isStructure && !activeUnit.isBoss) &&
+          workingBattle.npcSupply &&
+          npcCfg.enabled
+        ) {
+          const supplyStep = runNpcSupplyStep({
+            battle: workingBattle,
+            unitId: activeUnit.id,
+            npcCfg,
+            adminConfig: state.adminConfig,
+            templates: SUPPLY_TEMPLATES,
+            rng: Math.random,
+          });
+          workingBattle = supplyStep.battle;
+          npcSupplyEvents = supplyStep.events;
+          workingActor =
+            workingBattle.units.find((u) => u.id === activeUnit.id) ??
+            activeUnit;
+        }
+
+        const resolution = resolveMultiStepTurn({
+          units: workingBattle.units,
+          actorId: workingActor.id,
+          round: workingBattle.round,
+          adminConfig: state.adminConfig,
+          rng: Math.random,
+          initialTurnStep2Used: workingBattle.turnStep2Used ?? 0,
+          initialTurnLockedSkillIds: workingBattle.turnLockedSkillIds ?? [],
+          chooseNextDecision: (
+            curUnits,
+            curActor,
+            lockedSkillIds,
+            _stepIdx,
+            step2UsedSoFar
+          ) =>
+            playerIsCharging
+              ? {
+                  action: 'attack',
+                  targetId: workingBattle.selectedTargetId,
+                }
+              : chooseAiDecision(
+                  curActor,
+                  curUnits,
+                  Math.random,
+                  state.adminConfig,
+                  lockedSkillIds,
+                  step2UsedSoFar
+                ),
+        });
         playCue(resolution.soundCue, muteSound);
 
         const aliveEnemies = resolution.updatedUnits.filter(
@@ -2765,33 +4849,37 @@ export const useGameStore = create<GameStoreState>()(
           (u) => u.side === 'ally' && u.alive
         );
 
-        const nextTurnCounter = battle.turnCounter + 1;
+        const nextTurnCounter = workingBattle.turnCounter + 1;
         const nextEvents = [
-          ...battle.events,
+          ...workingBattle.events,
+          ...stampTurnEvents(npcSupplyEvents, nextTurnCounter),
           ...stampTurnEvents(resolution.events, nextTurnCounter),
         ].slice(-5000);
-        const enrichedLogs = enrichLogEntries(resolution.logEntries, activeUnit);
-        const nextLog = [...battle.log, ...enrichedLogs];
+        const enrichedLogs = enrichLogEntries(
+          resolution.logEntries,
+          workingActor
+        );
+        let nextLog = [...workingBattle.log, ...enrichedLogs];
         const nextPopups = skipVisualFx
           ? []
-          : [...battle.popups, ...resolution.popups].slice(-18);
+          : [...workingBattle.popups, ...resolution.popups].slice(-18);
         const nextFx = skipVisualFx
           ? []
-          : resolution.fxEvent
-          ? [...battle.fxEvents, resolution.fxEvent].slice(-12)
-          : battle.fxEvents;
+          : resolution.fxEvents.length > 0
+          ? [...workingBattle.fxEvents, ...resolution.fxEvents].slice(-12)
+          : workingBattle.fxEvents;
         const nextExploded = skipVisualFx
           ? []
           : resolution.destroyedUnitIds.length > 0
-          ? [...battle.explodedUnitIds, ...resolution.destroyedUnitIds].slice(-8)
-          : battle.explodedUnitIds;
+          ? [...workingBattle.explodedUnitIds, ...resolution.destroyedUnitIds].slice(-8)
+          : workingBattle.explodedUnitIds;
 
         if (aliveEnemies.length === 0 || aliveAllies.length === 0) {
           const won = aliveEnemies.length === 0;
           set(
             finalizeBattleOutcome(
               state,
-              battle,
+              workingBattle,
               resolution.updatedUnits,
               won,
               false,
@@ -2808,43 +4896,55 @@ export const useGameStore = create<GameStoreState>()(
 
         // Reconcile upcoming units in current round by live Speed DESC
         const reconciledOrder = reconcileRemainingTurnOrder(
-          battle.turnOrder,
-          battle.activeTurnIndex,
+          workingBattle.turnOrder,
+          workingBattle.activeTurnIndex,
           resolution.updatedUnits
         );
         const { nextIndex, wrappedRound } = findNextAliveTurnIndex(
           reconciledOrder,
           resolution.updatedUnits,
-          battle.activeTurnIndex
+          workingBattle.activeTurnIndex
         );
 
+        let finalUnits = resolution.updatedUnits;
         let nextTurnOrder = reconciledOrder;
         let finalTurnIndex = nextIndex;
-        const nextRound = wrappedRound ? battle.round + 1 : battle.round;
+        const nextRound = wrappedRound
+          ? workingBattle.round + 1
+          : workingBattle.round;
         let nextSnapshots = appendRoundSnapshot(
-          battle.roundSnapshots,
-          battle.round,
+          workingBattle.roundSnapshots,
+          workingBattle.round,
           resolution.updatedUnits
         );
         if (wrappedRound) {
-          nextTurnOrder = sortTurnOrder(resolution.updatedUnits);
+          finalUnits = clearRevealedFlags(resolution.updatedUnits);
+          nextTurnOrder = sortTurnOrder(finalUnits);
           const firstAliveIdx = nextTurnOrder.findIndex((id) =>
-            resolution.updatedUnits.some((u) => u.id === id && u.alive)
+            finalUnits.some((u) => u.id === id && u.alive)
           );
           finalTurnIndex = Math.max(0, firstAliveIdx);
           nextSnapshots = appendRoundSnapshot(
             nextSnapshots,
             nextRound,
-            resolution.updatedUnits
+            finalUnits
           );
+          const enrageLogs = buildEnrageActivationLogs(
+            nextRound,
+            get().adminConfig,
+            nextLog
+          );
+          if (enrageLogs.length > 0) {
+            nextLog = [...nextLog, ...enrageLogs];
+          }
         }
 
         // Occasional AI wingman radio callout (~28% chance when animations are enabled)
-        let nextWingmanChat = battle.wingmanChat ?? null;
+        let nextWingmanChat = workingBattle.wingmanChat ?? null;
         if (
           !skipVisualFx &&
-          activeUnit.side === 'ally' &&
-          !activeUnit.isPlayer &&
+          workingActor.side === 'ally' &&
+          !workingActor.isPlayer &&
           Math.random() < 0.28
         ) {
           const textKey =
@@ -2853,27 +4953,29 @@ export const useGameStore = create<GameStoreState>()(
             ];
           nextWingmanChat = {
             id: `chat_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-            unitId: activeUnit.id,
-            unitName: activeUnit.name,
+            unitId: workingActor.id,
+            unitName: workingActor.name,
             textKey,
           };
         }
 
-        const playerNext = resolution.updatedUnits.find((u) => u.isPlayer);
+        const playerNext = finalUnits.find((u) => u.isPlayer);
         const validFrontEnemies = playerNext
-          ? getValidEnemyTargets(resolution.updatedUnits, playerNext, 'attack')
+          ? getValidEnemyTargets(finalUnits, playerNext, 'attack')
           : aliveEnemies;
         const currentTargetStillAlive = aliveEnemies.some(
-          (e) => e.id === battle.selectedTargetId
+          (e) => e.id === workingBattle.selectedTargetId
         );
         const currentAllyStillAlive = aliveAllies.some(
-          (a) => a.id === battle.selectedAllyTargetId
+          (a) => a.id === workingBattle.selectedAllyTargetId
         );
 
         set({
           battle: {
-            ...battle,
-            units: resolution.updatedUnits,
+            ...workingBattle,
+            units: finalUnits,
+            supplyByUnit: workingBattle.supplyByUnit,
+            npcSupply: workingBattle.npcSupply,
             turnCounter: nextTurnCounter,
             log: nextLog,
             events: nextEvents,
@@ -2886,11 +4988,13 @@ export const useGameStore = create<GameStoreState>()(
             activeTurnIndex: finalTurnIndex,
             round: nextRound,
             selectedTargetId: currentTargetStillAlive
-              ? battle.selectedTargetId
+              ? workingBattle.selectedTargetId
               : validFrontEnemies[0]?.id ?? aliveEnemies[0]?.id ?? null,
             selectedAllyTargetId: currentAllyStillAlive
-              ? battle.selectedAllyTargetId
+              ? workingBattle.selectedAllyTargetId
               : aliveAllies[0]?.id ?? null,
+            turnStep2Used: 0,
+            turnLockedSkillIds: [],
           },
         });
       },
@@ -3066,7 +5170,7 @@ export const useGameStore = create<GameStoreState>()(
         const state = get();
         const clamped = Math.max(
           1,
-          Math.min(BALANCE_CONFIG.maxLevel, Math.floor(level) || 1)
+          Math.min(getMaxLevel(), Math.floor(level) || 1)
         );
         const id = gearId ?? state.pilot.activeGearId;
         const gear = state.pilot.gears[id];
@@ -3223,6 +5327,7 @@ export const useGameStore = create<GameStoreState>()(
       },
 
       adminGenerateItems: (slot, tier, rarity, quantity, options) => {
+        if (slot === 'module') return 0;
         const count = Math.max(1, Math.min(200, Math.floor(quantity) || 1));
         const generated: ItemInstance[] = [];
         const now = Date.now();
@@ -3287,7 +5392,13 @@ export const useGameStore = create<GameStoreState>()(
       adminFillInventory: (count) => {
         const state = get();
         const safeCount = Math.max(1, Math.min(250, Math.floor(count) || 100));
-        const rarities: ItemRarity[] = ['common', 'rare', 'epic', 'legendary'];
+        const rarities: ItemRarity[] = [
+          'common',
+          'uncommon',
+          'rare',
+          'epic',
+          'legendary',
+        ];
         const activeGear = state.pilot.gears[state.pilot.activeGearId];
         const generated: ItemInstance[] = [];
         const now = Date.now();
@@ -3302,7 +5413,7 @@ export const useGameStore = create<GameStoreState>()(
               rarity,
               requiredLevel: Math.max(
                 1,
-                Math.min(BALANCE_CONFIG.maxLevel, activeGear.level + (i % 5) - 2)
+                Math.min(getMaxLevel(), activeGear.level + (i % 5) - 2)
               ),
               isNew: i < 12,
               obtainedAt: now + i,
@@ -3322,11 +5433,28 @@ export const useGameStore = create<GameStoreState>()(
       adminRestockShopNow: () => {
         const state = get();
         const activeGear = state.pilot.gears[state.pilot.activeGearId];
+        const maxLevel = getMaxGearLevel(state.pilot);
+        const nextSupplyStock = generateSupplyShopStock(
+          maxLevel,
+          state.adminConfig,
+          SUPPLY_TEMPLATES
+        );
+        const nextSupplyStockWp = generateSupplyShopStockWp(
+          maxLevel,
+          state.adminConfig,
+          nextSupplyStock.length,
+          SUPPLY_TEMPLATES
+        );
+        const nextVoucherStockWp = rollVoucherShopStockWp(state.adminConfig);
         set({
           shopStock: generateCategorizedShopStock(
             activeGear.level,
             buildShopOptionsFromState(state.pilot, state.adminConfig)
           ),
+          supplyShopStock: nextSupplyStock,
+          supplyShopStockWp: nextSupplyStockWp,
+          voucherShopStockWp: nextVoucherStockWp,
+          supplyShopRefresh: { used: 0 },
           wpMarketOffers: generateWpMarketOffers({
             shipyardBonus: hasOperationalShipyard(state.pilot),
           }),
@@ -3362,9 +5490,10 @@ export const useGameStore = create<GameStoreState>()(
         const id = gearId ?? state.pilot.activeGearId;
         const gear = state.pilot.gears[id];
         if (!gear) return;
-        const allowed = getSkillsForClass(id);
+        const allowed = getSkillsForClass(id, state.adminConfig);
         const nextLevels: Record<string, number> = { ...gear.skillLevels };
-        const targetLv = maxLevel ? BALANCE_CONFIG.skillMaxLevel : 1;
+        const effectiveCap = getEffectiveSkillMaxLevel(state.adminConfig);
+        const targetLv = maxLevel ? effectiveCap : 1;
         for (const sk of allowed) {
           nextLevels[sk.id] = Math.max(nextLevels[sk.id] ?? 0, targetLv);
         }
@@ -3372,6 +5501,22 @@ export const useGameStore = create<GameStoreState>()(
         for (const sk of allowed) {
           if (sk.category !== 'passive' && !activeBar.includes(sk.id) && activeBar.length < 6) {
             activeBar.push(sk.id);
+          }
+        }
+        const passiveSlotCap = getUnlockedPassiveSlots(
+          gear.level,
+          state.adminConfig.passiveSlots
+        );
+        const nextPassives = Array.isArray(gear.equippedPassives)
+          ? [...gear.equippedPassives]
+          : [];
+        for (const sk of allowed) {
+          if (
+            sk.category === 'passive' &&
+            !nextPassives.includes(sk.id) &&
+            nextPassives.length < passiveSlotCap
+          ) {
+            nextPassives.push(sk.id);
           }
         }
         set({
@@ -3383,6 +5528,7 @@ export const useGameStore = create<GameStoreState>()(
                 ...gear,
                 skillLevels: nextLevels,
                 equippedSkillBar: activeBar,
+                equippedPassives: nextPassives,
               },
             },
           },
@@ -3481,10 +5627,13 @@ export const useGameStore = create<GameStoreState>()(
         const state = get();
         const existing = state.pilot.baseStates[sectorId];
         if (!existing) return;
+        const mapNodes = getMapNodes();
         const hostileSource =
-          SECTORS_CATALOG.find(
+          mapNodes.find(
             (s) => state.pilot.baseStates[s.id]?.faction === 'hostile'
-          )?.id ?? SECTORS_CATALOG[SECTORS_CATALOG.length - 1].id;
+          )?.id ??
+          mapNodes[mapNodes.length - 1]?.id ??
+          getDefaultSelectedNodeId();
         set({
           pilot: {
             ...state.pilot,
@@ -3500,6 +5649,59 @@ export const useGameStore = create<GameStoreState>()(
             },
           },
           hasSaveData: true,
+        });
+      },
+
+      adminSpawnPirateIncident: () => {
+        const state = get();
+        const cfg = sanitizePiratesConfig(state.adminConfig.pirates);
+        if (!cfg.enabled) return false;
+        const month = Math.max(1, Math.floor(state.pilot.campaignMonth || 1));
+        const active = sanitizePirateIncidents(
+          state.pilot.pirateIncidents,
+          month,
+          cfg
+        );
+        if (active.length >= cfg.maxActive) return false;
+        const spawned = rollIncident(
+          { ...state.pilot, pirateIncidents: active },
+          cfg
+        );
+        if (!spawned) return false;
+        set({
+          pilot: {
+            ...state.pilot,
+            pirateIncidents: [...active, spawned],
+          },
+          hasSaveData: true,
+        });
+        return true;
+      },
+
+      adminClearPirateIncidents: () => {
+        set((state) => ({
+          pilot: {
+            ...state.pilot,
+            pirateIncidents: [],
+          },
+          hasSaveData: true,
+        }));
+      },
+
+      adminRemovePirateIncident: (incidentId) => {
+        set((state) => ({
+          pilot: clearPirateIncidentById(state.pilot, incidentId),
+          hasSaveData: true,
+        }));
+      },
+
+      adminRefillAllSectorSupply: () => {
+        set((state) => {
+          const { sectorSupply: _dropped, ...pilotRest } = state.pilot;
+          return {
+            pilot: pilotRest,
+            hasSaveData: true,
+          };
         });
       },
 
@@ -3535,7 +5737,7 @@ export const useGameStore = create<GameStoreState>()(
         set((state) => ({
           pilot: {
             ...state.pilot,
-            unlockedSectorIds: SECTORS_CATALOG.map((s) => s.id),
+            unlockedSectorIds: getMapNodes().map((s) => s.id),
           },
           hasSaveData: true,
         }));
@@ -3559,6 +5761,252 @@ export const useGameStore = create<GameStoreState>()(
         return filledCount;
       },
 
+      applyMapPack: (pack) => {
+        const state = get();
+        if (isBattleActive(state)) {
+          return {
+            ok: false,
+            reason: 'in_battle',
+            nodes: getMapNodes().length,
+            lanes: MAP_LANES.length,
+          };
+        }
+        if (state.autoRepeatSession?.active) {
+          return {
+            ok: false,
+            reason: 'auto_repeat_active',
+            nodes: getMapNodes().length,
+            lanes: MAP_LANES.length,
+          };
+        }
+
+        let validated: MapPackDefinition | null = null;
+        if (pack !== null) {
+          validated = validateMapPack(pack);
+          if (!validated) {
+            return {
+              ok: false,
+              reason: 'invalid_pack',
+              nodes: getMapNodes().length,
+              lanes: MAP_LANES.length,
+            };
+          }
+        }
+
+        const nextActiveMap = setActiveMapPack(validated);
+        const nextBaseStates = createInitialBaseStates();
+        const nextUnlocked = visibleNodeIds({
+          baseStates: nextBaseStates,
+          unlockedSectorIds: [],
+        });
+
+        soundFx.playConfirm();
+        set({
+          pilot: {
+            ...state.pilot,
+            baseStates: nextBaseStates,
+            unlockedSectorIds: nextUnlocked,
+            capturedSectorIds: [],
+            activeBonusMission: null,
+            hiredWingman: null,
+            pirateIncidents: [],
+            sectorSupply: undefined,
+            campaignMonth: 1,
+            worldClock: resetWorldClock(),
+          },
+          selectedSectorId: nextActiveMap.defaultSelectedNodeId,
+          adminConfig: {
+            ...state.adminConfig,
+            mapPack: validated,
+          },
+          hasSaveData: true,
+        });
+
+        return {
+          ok: true,
+          nodes: nextActiveMap.nodes.length,
+          lanes: nextActiveMap.lanes.length,
+        };
+      },
+
+      applyWorldAndResetProgress: (pack) => {
+        const state = get();
+        if (isBattleActive(state)) {
+          return {
+            ok: false,
+            reason: 'in_battle',
+            nodes: getMapNodes().length,
+            lanes: MAP_LANES.length,
+          };
+        }
+        if (state.autoRepeatSession?.active) {
+          return {
+            ok: false,
+            reason: 'auto_repeat_active',
+            nodes: getMapNodes().length,
+            lanes: MAP_LANES.length,
+          };
+        }
+
+        let validated: MapPackDefinition | null = null;
+        if (pack !== null) {
+          validated = validateMapPack(pack);
+          if (!validated) {
+            return {
+              ok: false,
+              reason: 'invalid_pack',
+              nodes: getMapNodes().length,
+              lanes: MAP_LANES.length,
+            };
+          }
+        }
+
+        const nextActiveMap = setActiveMapPack(validated);
+        const pilotName = state.pilot.name?.trim() || 'Vance';
+        const starterClassId = state.pilot.activeGearId ?? 'striker';
+        const fresh = createFreshCampaignState(
+          pilotName,
+          starterClassId,
+          Math.random,
+          state.adminConfig?.starterSet
+        );
+        const nextAdminConfig: AdminConfig = {
+          ...state.adminConfig,
+          mapPack: validated,
+        };
+        setRuntimeMaxLevel(nextAdminConfig.maxLevel);
+
+        soundFx.playConfirm();
+        set({
+          pilot: fresh.pilot,
+          shopStock: fresh.shopStock,
+          supplyShopStock: fresh.supplyShopStock ?? [],
+          supplyShopStockWp: fresh.supplyShopStockWp ?? [],
+          voucherShopStockWp: fresh.voucherShopStockWp ?? [],
+          supplyShopRefresh: fresh.supplyShopRefresh ?? { used: 0 },
+          wpMarketOffers: fresh.wpMarketOffers,
+          battlesUntilRestock: fresh.battlesUntilRestock,
+          inventoryFilterState: fresh.inventoryFilterState,
+          quickSellConfig: fresh.quickSellConfig,
+          selectedSectorId: nextActiveMap.defaultSelectedNodeId,
+          adminConfig: nextAdminConfig,
+          language: state.language,
+          muted: state.muted,
+          battleSpeed: state.battleSpeed,
+          skipAnimations: state.skipAnimations,
+          battleViewMode: state.battleViewMode,
+          autoRepeatDefeatRule: state.autoRepeatDefeatRule,
+          autoRepeatDefeatStreakLimit: state.autoRepeatDefeatStreakLimit,
+          autoRepeatStopOnDefeat: state.autoRepeatStopOnDefeat,
+          hasSaveData: true,
+          battle: null,
+          screen: state.screen === 'TITLE' ? 'HANGAR' : state.screen,
+          activeTab: 'map',
+          shopSubTab: 'buy',
+          autoRepeatSession: null,
+          autoRepeatToast: null,
+          battleLaunchToast: null,
+          quickSellUndo: null,
+          autoEquipUndo: null,
+        });
+
+        return {
+          ok: true,
+          nodes: nextActiveMap.nodes.length,
+          lanes: nextActiveMap.lanes.length,
+        };
+      },
+
+      adminGiveSupply: (target, qty) => {
+        const safeQty = Math.max(
+          1,
+          Math.min(SUPPLY_STACK_CAP, Math.round(Number.isFinite(qty) ? qty : 1))
+        );
+        const state = get();
+        if (target === 'supply_crate') {
+          const res = addSupplyCrateToConsumables(
+            state.pilot.consumables ?? [],
+            safeQty
+          );
+          soundFx.playConfirm();
+          set({
+            pilot: {
+              ...state.pilot,
+              consumables: res.consumables,
+            },
+            hasSaveData: true,
+          });
+          return {
+            ok: true,
+            kind: 'supply_crate',
+            added: res.added,
+            lost: res.lost,
+          };
+        }
+
+        let resolvedTemplateId: string | null = null;
+        if (target === 'random_supply') {
+          const cfg = sanitizeSupplyRewardsConfig(
+            state.adminConfig.supplyRewards
+          );
+          const maxGearLevel = getPilotMaxGearLevel(state.pilot);
+          const rolled =
+            rollSupplyReward(
+              maxGearLevel,
+              {
+                minTier: cfg.minTier,
+                maxTier: cfg.maxTier,
+                qtyMin: safeQty,
+                qtyMax: safeQty,
+              },
+              Math.random
+            ) ??
+            rollSupplyReward(
+              maxGearLevel,
+              {
+                minTier: 1,
+                maxTier: 5,
+                qtyMin: safeQty,
+                qtyMax: safeQty,
+              },
+              Math.random
+            );
+          resolvedTemplateId = rolled?.templateId ?? null;
+        } else if (getSupplyTemplateById(target)) {
+          resolvedTemplateId = target;
+        }
+
+        if (!resolvedTemplateId) {
+          return {
+            ok: false,
+            kind: 'battle_supply',
+            added: 0,
+            lost: 0,
+          };
+        }
+
+        const res = addSupplyWithOverflow(
+          state.pilot.consumables ?? [],
+          resolvedTemplateId,
+          safeQty
+        );
+        soundFx.playConfirm();
+        set({
+          pilot: {
+            ...state.pilot,
+            consumables: res.consumables,
+          },
+          hasSaveData: true,
+        });
+        return {
+          ok: true,
+          kind: 'battle_supply',
+          templateId: resolvedTemplateId,
+          added: res.added,
+          lost: res.lost,
+        };
+      },
+
       adminUpdateConfig: (patch) => {
         set((state) => {
           const nextFormation = patch.formation
@@ -3576,13 +6024,177 @@ export const useGameStore = create<GameStoreState>()(
               : sanitizeStatusDisplayDefaults(
                   state.adminConfig.statusDisplayDefaults
                 );
+          const nextPirates =
+            patch.pirates !== undefined
+              ? sanitizePiratesConfig(patch.pirates)
+              : sanitizePiratesConfig(state.adminConfig.pirates);
+          const nextSpEconomy =
+            patch.spEconomy !== undefined
+              ? sanitizeSpEconomyConfig(patch.spEconomy)
+              : sanitizeSpEconomyConfig(state.adminConfig.spEconomy);
+          const nextFluxTransfer =
+            patch.fluxTransfer !== undefined
+              ? sanitizeFluxTransferConfig(patch.fluxTransfer)
+              : sanitizeFluxTransferConfig(state.adminConfig.fluxTransfer);
+          const nextSupplyEconomy =
+            patch.supplyEconomy !== undefined
+              ? sanitizeSupplyEconomyConfig(patch.supplyEconomy)
+              : sanitizeSupplyEconomyConfig(state.adminConfig.supplyEconomy);
+          const nextEnemyLevel =
+            patch.enemyLevel !== undefined
+              ? sanitizeEnemyLevelConfig(patch.enemyLevel)
+              : sanitizeEnemyLevelConfig(state.adminConfig.enemyLevel);
+          const nextTurnPhase =
+            patch.turnPhase !== undefined
+              ? sanitizeTurnPhaseConfig(patch.turnPhase)
+              : sanitizeTurnPhaseConfig(state.adminConfig.turnPhase);
+          const nextPrestage =
+            patch.prestage !== undefined
+              ? sanitizePrestageConfig(patch.prestage)
+              : sanitizePrestageConfig(state.adminConfig.prestage);
+          const nextStealth =
+            patch.stealth !== undefined
+              ? sanitizeStealthConfig(patch.stealth)
+              : sanitizeStealthConfig(state.adminConfig.stealth);
+          const nextMaxLevel =
+            patch.maxLevel !== undefined
+              ? sanitizeMaxLevel(patch.maxLevel)
+              : sanitizeMaxLevel(state.adminConfig.maxLevel);
+          setRuntimeMaxLevel(nextMaxLevel);
           const nextAdminConfig: AdminConfig = {
             ...state.adminConfig,
             ...patch,
+            ...sanitizeSupplyShopExtraConfig({
+              supplyShopMaxRefreshes:
+                patch.supplyShopMaxRefreshes ??
+                state.adminConfig.supplyShopMaxRefreshes,
+              supplyShopRefreshBaseCost:
+                patch.supplyShopRefreshBaseCost ??
+                state.adminConfig.supplyShopRefreshBaseCost,
+              supplyWpPriceDivisor:
+                patch.supplyWpPriceDivisor ??
+                state.adminConfig.supplyWpPriceDivisor,
+              supplyWpMinTier:
+                patch.supplyWpMinTier ?? state.adminConfig.supplyWpMinTier,
+              supplyWpDupWeight:
+                patch.supplyWpDupWeight ?? state.adminConfig.supplyWpDupWeight,
+              supplyWpMaxCopies:
+                patch.supplyWpMaxCopies ?? state.adminConfig.supplyWpMaxCopies,
+            }),
+            maxLevel: nextMaxLevel,
+            skillMaxLevel: sanitizeSkillMaxLevel(
+              patch.skillMaxLevel !== undefined
+                ? patch.skillMaxLevel
+                : state.adminConfig.skillMaxLevel
+            ),
+            passiveScaleAfter5: sanitizePassiveScaleAfter5(
+              patch.passiveScaleAfter5 !== undefined
+                ? patch.passiveScaleAfter5
+                : state.adminConfig.passiveScaleAfter5
+            ),
+            restorePctCap: sanitizeRestorePctCap(
+              patch.restorePctCap !== undefined
+                ? patch.restorePctCap
+                : state.adminConfig.restorePctCap
+            ),
+            passiveSlots: sanitizePassiveSlotsConfig(
+              patch.passiveSlots !== undefined
+                ? patch.passiveSlots
+                : state.adminConfig.passiveSlots
+            ),
+            activeSlots: sanitizeActiveSlotsConfig(
+              patch.activeSlots !== undefined
+                ? patch.activeSlots
+                : state.adminConfig.activeSlots
+            ),
+            skillMods: sanitizeSkillMods(
+              patch.skillMods !== undefined
+                ? patch.skillMods
+                : state.adminConfig.skillMods,
+              Array.isArray(patch.iconCatalogMods)
+                ? patch.iconCatalogMods
+                : state.adminConfig.iconCatalogMods
+            ),
             formation: nextFormation,
             autoEquip: nextAutoEquip,
             starterSet: nextStarterSet,
             statusDisplayDefaults: nextStatusDefaults,
+            cardPopupStaggerMs: sanitizeCardPopupStaggerMs(
+              patch.cardPopupStaggerMs !== undefined
+                ? patch.cardPopupStaggerMs
+                : state.adminConfig.cardPopupStaggerMs
+            ),
+            cardPopupFlightMs: sanitizeCardPopupFlightMs(
+              patch.cardPopupFlightMs !== undefined
+                ? patch.cardPopupFlightMs
+                : state.adminConfig.cardPopupFlightMs
+            ),
+            cardPopupMaxConcurrent: sanitizeCardPopupMaxConcurrent(
+              patch.cardPopupMaxConcurrent !== undefined
+                ? patch.cardPopupMaxConcurrent
+                : state.adminConfig.cardPopupMaxConcurrent
+            ),
+            cardPopupZoneWidthPct: sanitizeCardPopupZoneWidthPct(
+              patch.cardPopupZoneWidthPct !== undefined
+                ? patch.cardPopupZoneWidthPct
+                : state.adminConfig.cardPopupZoneWidthPct
+            ),
+            cardPopupZoneHeightPct: sanitizeCardPopupZoneHeightPct(
+              patch.cardPopupZoneHeightPct !== undefined
+                ? patch.cardPopupZoneHeightPct
+                : state.adminConfig.cardPopupZoneHeightPct
+            ),
+            cardPopupStartScalePct: sanitizeCardPopupStartScalePct(
+              patch.cardPopupStartScalePct !== undefined
+                ? patch.cardPopupStartScalePct
+                : state.adminConfig.cardPopupStartScalePct
+            ),
+            cardPopupEndScalePct: sanitizeCardPopupEndScalePct(
+              patch.cardPopupEndScalePct !== undefined
+                ? patch.cardPopupEndScalePct
+                : state.adminConfig.cardPopupEndScalePct
+            ),
+            radarPopupStartScalePct: sanitizeRadarPopupStartScalePct(
+              patch.radarPopupStartScalePct !== undefined
+                ? patch.radarPopupStartScalePct
+                : state.adminConfig.radarPopupStartScalePct
+            ),
+            radarPopupSmallScalePct: sanitizeRadarPopupSmallScalePct(
+              patch.radarPopupSmallScalePct !== undefined
+                ? patch.radarPopupSmallScalePct
+                : state.adminConfig.radarPopupSmallScalePct
+            ),
+            radarPopupLargeScalePct: sanitizeRadarPopupLargeScalePct(
+              patch.radarPopupLargeScalePct !== undefined
+                ? patch.radarPopupLargeScalePct
+                : state.adminConfig.radarPopupLargeScalePct
+            ),
+            radarPopupBigMaxUnits: sanitizeRadarPopupBigMaxUnits(
+              patch.radarPopupBigMaxUnits !== undefined
+                ? patch.radarPopupBigMaxUnits
+                : state.adminConfig.radarPopupBigMaxUnits
+            ),
+            pirates: nextPirates,
+            spEconomy: nextSpEconomy,
+            fluxTransfer: nextFluxTransfer,
+            supplyEconomy: nextSupplyEconomy,
+            supplyScanCount: sanitizeSupplyScanCount(
+              patch.supplyScanCount !== undefined
+                ? patch.supplyScanCount
+                : state.adminConfig.supplyScanCount
+            ),
+            enemyLevel: nextEnemyLevel,
+            moduleDrop:
+              patch.moduleDrop !== undefined
+                ? sanitizeModuleDropConfig(patch.moduleDrop)
+                : sanitizeModuleDropConfig(state.adminConfig.moduleDrop),
+            turnPhase: nextTurnPhase,
+            prestage: nextPrestage,
+            stealth: nextStealth,
+            supplyRewards:
+              patch.supplyRewards !== undefined
+                ? sanitizeSupplyRewardsConfig(patch.supplyRewards)
+                : sanitizeSupplyRewardsConfig(state.adminConfig.supplyRewards),
           };
           let updatedPilot =
             patch.formation &&
@@ -3596,6 +6208,16 @@ export const useGameStore = create<GameStoreState>()(
                   ),
                 }
               : state.pilot;
+          if (patch.pirates !== undefined) {
+            updatedPilot = {
+              ...updatedPilot,
+              pirateIncidents: sanitizePirateIncidents(
+                updatedPilot.pirateIncidents,
+                updatedPilot.campaignMonth,
+                nextPirates
+              ),
+            };
+          }
           if (
             patch.starterSet &&
             nextStarterSet.enabled &&
@@ -3621,6 +6243,10 @@ export const useGameStore = create<GameStoreState>()(
           state: {
             pilot: state.pilot,
             shopStock: state.shopStock,
+            supplyShopStock: state.supplyShopStock,
+            supplyShopStockWp: state.supplyShopStockWp,
+            voucherShopStockWp: state.voucherShopStockWp,
+            supplyShopRefresh: state.supplyShopRefresh,
             wpMarketOffers: state.wpMarketOffers,
             battlesUntilRestock: state.battlesUntilRestock,
             inventoryFilterState: state.inventoryFilterState,
@@ -3651,6 +6277,7 @@ export const useGameStore = create<GameStoreState>()(
           const payloadState =
             (parsed as { state?: unknown }).state ?? parsed;
           const migrated = migrateSaveData(payloadState, version);
+          setRuntimeMaxLevel(migrated.adminConfig.maxLevel);
           set({
             ...migrated,
             battle: null,
@@ -3700,6 +6327,7 @@ export const useGameStore = create<GameStoreState>()(
         }
 
         const migrated = migrateSaveData(rawState, saveVersion);
+        setRuntimeMaxLevel(migrated.adminConfig.maxLevel);
         const rawObj = rawState as Record<string, unknown>;
         const importedAutoRepeatStopOnDefeat =
           typeof rawObj.autoRepeatStopOnDefeat === 'boolean'
@@ -3725,6 +6353,7 @@ export const useGameStore = create<GameStoreState>()(
           autoBattleEnabled: false,
           autoRepeatSession: null,
           autoRepeatToast: null,
+          battleLaunchToast: null,
           quickSellUndo: null,
           autoEquipUndo: null,
           tacticsModalOpen: false,
@@ -3767,6 +6396,7 @@ export const useGameStore = create<GameStoreState>()(
           }
 
           const restored = migrateSaveData(backupPayload, backupVersion);
+          setRuntimeMaxLevel(restored.adminConfig.maxLevel);
           const rawObj = backupPayload as Record<string, unknown>;
           const restoredAutoRepeatStopOnDefeat =
             typeof rawObj.autoRepeatStopOnDefeat === 'boolean'
@@ -3785,6 +6415,7 @@ export const useGameStore = create<GameStoreState>()(
             autoBattleEnabled: false,
             autoRepeatSession: null,
             autoRepeatToast: null,
+            battleLaunchToast: null,
             quickSellUndo: null,
             autoEquipUndo: null,
             tacticsModalOpen: false,
@@ -3809,6 +6440,10 @@ export const useGameStore = create<GameStoreState>()(
       partialize: (state) => ({
         pilot: state.pilot,
         shopStock: state.shopStock,
+        supplyShopStock: state.supplyShopStock,
+        supplyShopStockWp: state.supplyShopStockWp,
+        voucherShopStockWp: state.voucherShopStockWp,
+        supplyShopRefresh: state.supplyShopRefresh,
         wpMarketOffers: state.wpMarketOffers,
         battlesUntilRestock: state.battlesUntilRestock,
         inventoryFilterState: state.inventoryFilterState,
@@ -3848,29 +6483,78 @@ export const useGameStore = create<GameStoreState>()(
           if (state.language !== 'en' && state.language !== 'vi') {
             state.language = 'vi';
           }
-          if (
-            typeof state.selectedSectorId !== 'string' ||
-            !SECTORS_CATALOG.some((s) => s.id === state.selectedSectorId)
-          ) {
-            state.selectedSectorId = SECTORS_CATALOG[0].id;
-          }
           if (!state.adminConfig || typeof state.adminConfig !== 'object') {
+            setActiveMapPack(null);
             state.adminConfig = createDefaultAdminConfig();
           } else {
             const rawAdmin = state.adminConfig as unknown as Record<
               string,
               unknown
             >;
+            const sanitizedMapPack = sanitizeMapPack(rawAdmin.mapPack);
+            setActiveMapPack(sanitizedMapPack);
             const sanitizedFormation = sanitizeFormationConfig(rawAdmin);
             state.adminConfig = {
               ...createDefaultAdminConfig(),
               ...state.adminConfig,
+              mapPack: sanitizedMapPack,
+              maxLevel: sanitizeMaxLevel(rawAdmin.maxLevel),
               formation: sanitizedFormation,
               autoEquip: sanitizeAutoEquipConfig(rawAdmin.autoEquip),
               starterSet: sanitizeStarterSetConfig(rawAdmin.starterSet),
               statusDisplayDefaults: sanitizeStatusDisplayDefaults(
                 rawAdmin.statusDisplayDefaults
               ),
+              cardPopupStaggerMs: sanitizeCardPopupStaggerMs(
+                rawAdmin.cardPopupStaggerMs
+              ),
+              cardPopupFlightMs: sanitizeCardPopupFlightMs(
+                rawAdmin.cardPopupFlightMs
+              ),
+              cardPopupMaxConcurrent: sanitizeCardPopupMaxConcurrent(
+                rawAdmin.cardPopupMaxConcurrent
+              ),
+              cardPopupZoneWidthPct: sanitizeCardPopupZoneWidthPct(
+                rawAdmin.cardPopupZoneWidthPct
+              ),
+              cardPopupZoneHeightPct: sanitizeCardPopupZoneHeightPct(
+                rawAdmin.cardPopupZoneHeightPct
+              ),
+              cardPopupStartScalePct: sanitizeCardPopupStartScalePct(
+                rawAdmin.cardPopupStartScalePct
+              ),
+              cardPopupEndScalePct: sanitizeCardPopupEndScalePct(
+                rawAdmin.cardPopupEndScalePct
+              ),
+              radarPopupStartScalePct: sanitizeRadarPopupStartScalePct(
+                rawAdmin.radarPopupStartScalePct
+              ),
+              radarPopupSmallScalePct: sanitizeRadarPopupSmallScalePct(
+                rawAdmin.radarPopupSmallScalePct
+              ),
+              radarPopupLargeScalePct: sanitizeRadarPopupLargeScalePct(
+                rawAdmin.radarPopupLargeScalePct
+              ),
+              radarPopupBigMaxUnits: sanitizeRadarPopupBigMaxUnits(
+                rawAdmin.radarPopupBigMaxUnits
+              ),
+              ...sanitizeSupplyShopConfig(rawAdmin as Partial<AdminConfig>),
+              ...sanitizeSupplyShopExtraConfig(rawAdmin as Partial<AdminConfig>),
+              spEconomy: sanitizeSpEconomyConfig(rawAdmin.spEconomy),
+              fluxTransfer: sanitizeFluxTransferConfig(rawAdmin.fluxTransfer),
+              supplyEconomy: sanitizeSupplyEconomyConfig(rawAdmin.supplyEconomy),
+              supplyScanCount: sanitizeSupplyScanCount(rawAdmin.supplyScanCount),
+              enemyLevel: sanitizeEnemyLevelConfig(rawAdmin.enemyLevel),
+              moduleDrop: sanitizeModuleDropConfig(rawAdmin.moduleDrop),
+              pirates: sanitizePiratesConfig(rawAdmin.pirates),
+              stealth: sanitizeStealthConfig(rawAdmin.stealth),
+              skillMaxLevel: sanitizeSkillMaxLevel(rawAdmin.skillMaxLevel),
+              passiveScaleAfter5: sanitizePassiveScaleAfter5(
+                rawAdmin.passiveScaleAfter5
+              ),
+              restorePctCap: sanitizeRestorePctCap(rawAdmin.restorePctCap),
+              passiveSlots: sanitizePassiveSlotsConfig(rawAdmin.passiveSlots),
+              activeSlots: sanitizeActiveSlotsConfig(rawAdmin.activeSlots),
               rewardMultiplier:
                 typeof state.adminConfig.rewardMultiplier === 'number' &&
                 Number.isFinite(state.adminConfig.rewardMultiplier) &&
@@ -3886,6 +6570,13 @@ export const useGameStore = create<GameStoreState>()(
             delete cleaned.formationFrontCapacity;
             delete cleaned.formationBackCapacity;
             delete cleaned.backRowDamageReduction;
+          }
+          setRuntimeMaxLevel(state.adminConfig.maxLevel);
+          if (
+            typeof state.selectedSectorId !== 'string' ||
+            !getMapNodeById(state.selectedSectorId)
+          ) {
+            state.selectedSectorId = getDefaultSelectedNodeId();
           }
           if (state.pilot && typeof state.pilot === 'object') {
             if (
@@ -3908,6 +6599,17 @@ export const useGameStore = create<GameStoreState>()(
                 state.adminConfig.formation
               );
             }
+            state.pilot.pirateIncidents = sanitizePirateIncidents(
+              state.pilot.pirateIncidents,
+              state.pilot.campaignMonth ?? 1,
+              state.adminConfig.pirates
+            );
+            state.pilot = ensureIdle(
+              state.pilot,
+              state.adminConfig.pirates,
+              Math.random,
+              state.adminConfig
+            );
           }
           // Guarantee shop stock and WP market offers are NEVER empty on reload!
           const activeGear = state.pilot?.gears?.[state.pilot?.activeGearId];
@@ -3922,6 +6624,39 @@ export const useGameStore = create<GameStoreState>()(
               buildShopOptionsFromState(state.pilot, state.adminConfig)
             );
           }
+          if (!Array.isArray(state.supplyShopStock)) {
+            state.supplyShopStock = generateSupplyShopStock(
+              getMaxGearLevel(state.pilot),
+              state.adminConfig,
+              SUPPLY_TEMPLATES
+            );
+          } else {
+            state.supplyShopStock = sanitizeSupplyShopStock(state.supplyShopStock);
+          }
+          const sanitizedWpStock = Array.isArray(state.supplyShopStockWp)
+            ? sanitizeSupplyShopStockWp(state.supplyShopStockWp)
+            : [];
+          if (sanitizedWpStock.length > 0) {
+            state.supplyShopStockWp = sanitizedWpStock;
+          } else {
+            state.supplyShopStockWp = generateSupplyShopStockWp(
+              getMaxGearLevel(state.pilot),
+              state.adminConfig,
+              state.supplyShopStock.length,
+              SUPPLY_TEMPLATES
+            );
+          }
+          const sanitizedVoucherStock = Array.isArray(state.voucherShopStockWp)
+            ? sanitizeVoucherShopStockWp(state.voucherShopStockWp, state.adminConfig.vouchers)
+            : [];
+          if (sanitizedVoucherStock.length > 0) {
+            state.voucherShopStockWp = sanitizedVoucherStock;
+          } else {
+            state.voucherShopStockWp = rollVoucherShopStockWp(state.adminConfig.vouchers);
+          }
+          state.supplyShopRefresh = sanitizeSupplyShopRefresh(
+            state.supplyShopRefresh
+          );
           if (
             !Array.isArray(state.wpMarketOffers) ||
             state.wpMarketOffers.length === 0
@@ -3973,9 +6708,20 @@ export const useGameStore = create<GameStoreState>()(
           state.autoRepeatStopOnDefeat =
             resolvedLoopPrefs.defeatRule === 'stop_immediately';
           state.autoRepeatToast = null;
+          state.battleLaunchToast = null;
           soundFx.setMuted(state.muted);
         }
       },
     }
   )
+);
+
+useGameStore.subscribe((state, prevState) => {
+  if (state.adminConfig?.maxLevel !== prevState.adminConfig?.maxLevel) {
+    setRuntimeMaxLevel(state.adminConfig?.maxLevel);
+  }
+});
+
+registerPirateBattleSourceProvider(
+  () => useGameStore.getState().adminConfig?.pirates
 );

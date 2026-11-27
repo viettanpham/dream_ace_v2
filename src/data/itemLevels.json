@@ -1,0 +1,15 @@
+{
+  "kinds": {
+    "equipment": { "init": 1, "step": 5, "enabled": false },
+    "radar": { "init": 5, "step": 10, "enabled": true },
+    "module": { "init": 10, "step": 10, "enabled": true }
+  },
+  "shopAboveLevel": 20,
+  "shopTierAhead": 1,
+  "dropWindow": 5,
+  "dropDifficultyBonus": {
+    "Standard": 0,
+    "Hard": 3,
+    "Elite": 5
+  }
+}

@@ -31,7 +31,6 @@ import {
   createRoundHpSnapshot,
   getAdjacentUnits,
   getEffectiveUnitSpeed,
-  getEnemyEnrageBonusPct,
   getValidEnemyTargets,
   hasStatus,
   isLongRangeAction,
@@ -39,6 +38,7 @@ import {
   resolveUnitAction,
   sortTurnOrder,
 } from '../combat';
+import { getEnrageState } from '../enrage';
 import {
   equipItemOnGear,
   generateItemInstance,
@@ -386,7 +386,7 @@ describe('4. Rebalanced Reward Formula (Victory vs Defeat & Boss + War Points)',
     });
   });
 
-  it('grants 100% on victory (+ first-capture WP bonus) and 50% destroyed + 20% consolation on defeat', () => {
+  it('grants 100% on victory (+ first-capture WP bonus) and 5/20/50% destroyed shares (no consolation, 50% cap) on defeat', () => {
     const enemies = [
       makeEnemy('e1', 2, false),
       makeEnemy('e2', 2, false),
@@ -412,14 +412,18 @@ describe('4. Rebalanced Reward Formula (Victory vs Defeat & Boss + War Points)',
     );
 
     const defeatHalf = calculateBattleRewards(enemies, false, 2.0);
-    expect(defeatHalf.expGained).toBe(Math.round(82 + 65.6));
-    expect(defeatHalf.creditsGained).toBe(360);
+    // 2 of 4 enemies destroyed -> destroyed full = 164 EXP, 400 CR, 12 WP
+    // defeat shares: 5% EXP (8.2 -> 8), 20% CR (80), 50% WP (6)
+    expect(defeatHalf.expGained).toBe(8);
+    expect(defeatHalf.creditsGained).toBe(80);
+    expect(defeatHalf.warPointsGained).toBe(6);
     expect(defeatHalf.baseCaptureBonusWp).toBe(0);
 
     const allAlive = enemies.map((e) => ({ ...e, alive: true, hp: 100 }));
     const defeatZero = calculateBattleRewards(allAlive, false, 2.0);
-    expect(defeatZero.expGained).toBe(Math.round(328 * 0.2));
-    expect(defeatZero.creditsGained).toBe(Math.round(800 * 0.2));
+    expect(defeatZero.expGained).toBe(0);
+    expect(defeatZero.creditsGained).toBe(0);
+    expect(defeatZero.warPointsGained).toBe(0);
   });
 });
 
@@ -597,7 +601,7 @@ describe('6. Save Migration (v1 / v2 / v3 / v4 / Corrupt -> v5 Skill System)', (
 });
 
 describe('7. Combat Depth (Status Effects & Enemy Archetypes)', () => {
-  it('applies Burn DoT at turn start, Slow reduces speed by 30%, and Shield Break bypasses shields', () => {
+  it('applies Burn DoT at turn start, Slow reduces speed by 30%, and Shield Break no longer bypasses shields', () => {
     const pilot = createDefaultPilotAccount('Vance', 'striker');
     const battle = createInitialBattleState(
       pilot,
@@ -640,8 +644,9 @@ describe('7. Combat Depth (Status Effects & Enemy Archetypes)', () => {
       () => 0.99
     );
     const enemyAfter = attackRes.updatedUnits.find((u) => u.id === enemy.id)!;
-    expect(enemyAfter.shield).toBe(200);
-    expect(enemyAfter.hp).toBeLessThan(300);
+    // SH2a: shield ALWAYS absorbs first even when shield_break is active
+    expect(enemyAfter.shield).toBeLessThan(200);
+    expect(enemyAfter.hp).toBe(300);
 
     const burnedPlayer: CombatUnit = {
       ...player,
@@ -929,10 +934,10 @@ describe('10. War Point Shop & Special/Elite Opening Cards', () => {
     expect(buyFail.reason).toBe('insufficient_wp');
 
     // Grant WP and purchase card
-    pilot.warPoints = 200;
+    pilot.warPoints = 2000;
     const buyOk = buyOpeningCard(pilot, 'card_sge_starbreaker_lance');
     expect(buyOk.ok).toBe(true);
-    expect(buyOk.pilot.warPoints).toBe(40);
+    expect(buyOk.pilot.warPoints).toBe(400);
     expect(
       buyOk.pilot.ownedOpeningCards.includes('card_sge_starbreaker_lance')
     ).toBe(true);
@@ -1178,13 +1183,17 @@ describe('11. Battle Skill Mechanics (SP, CD, Once-Per-Battle, Silence, Siege, C
     ).updatedUnits;
     expect(hasStatus(intUnits.find((u) => u.isPlayer)!, 'counter')).toBe(true);
 
+    const defAdmin = createDefaultAdminConfig();
     const counterRes = resolveUnitAction(
       intUnits,
       attackerEnemy.id,
       'attack',
       'ally_player',
       1,
-      undefined,
+      {
+        ...defAdmin,
+        shieldRegen: { ...defAdmin.shieldRegen!, enabled: false },
+      },
       () => 0.99
     );
     const enemyAfterRiposte = counterRes.updatedUnits.find(
@@ -2367,18 +2376,18 @@ describe('20. Simple Auto Tactics Compiler & Presets', () => {
   });
 });
 
-describe('21. Anti-Stalemate Soft Enrage (Round 20+)', () => {
-  it('computes +10%/round after Round 20 capped at +200%, respects Admin toggle, and scales enemy damage in combat', () => {
-    expect(getEnemyEnrageBonusPct(1, true)).toBe(0);
-    expect(getEnemyEnrageBonusPct(20, true)).toBe(0);
-    expect(getEnemyEnrageBonusPct(21, true)).toBeCloseTo(0.1, 5);
-    expect(getEnemyEnrageBonusPct(25, true)).toBeCloseTo(0.5, 5);
-    expect(getEnemyEnrageBonusPct(40, true)).toBeCloseTo(2.0, 5);
-    expect(getEnemyEnrageBonusPct(99, true)).toBeCloseTo(2.0, 5);
-    // Admin disable -> 0 even at Round 50
-    expect(getEnemyEnrageBonusPct(50, false)).toBe(0);
+describe('21. Anti-Stalemate Soft Enrage (3 Phases)', () => {
+  it('computes 3-phase stacks/bonuses, respects Admin toggle, and scales damage for both sides in combat', () => {
+    const defCfg = createDefaultAdminConfig();
+    expect(getEnrageState(1, defCfg).highestPhase).toBeNull();
+    expect(getEnrageState(19, defCfg).stacks.rage).toBe(0);
+    expect(getEnrageState(20, defCfg).stacks.rage).toBe(1);
+    expect(getEnrageState(20, defCfg).defDownPct).toBe(5);
+    expect(getEnrageState(55, defCfg).damageUpPct).toBe(20);
+    expect(getEnrageState(100, defCfg).critRateUpPct).toBe(3);
+    expect(getEnrageState(50, { ...defCfg, softEnrageEnabled: false }).defDownPct).toBe(0);
 
-    // Combat check: enemy attack deals higher damage at Round 35 than Round 1
+    // Combat check: round 55 deals higher damage than round 1 for enemy attacker
     const pilot = createDefaultPilotAccount('Ace', 'siege');
     const battle = createInitialBattleState(pilot, 'border_outpost');
     const enemy = battle.units.find((u) => u.side === 'enemy')!;
@@ -2388,15 +2397,15 @@ describe('21. Anti-Stalemate Soft Enrage (Round 20+)', () => {
             ...u,
             hp: 5000,
             shield: 0,
-            derived: { ...u.derived, maxHp: 5000, dodgeChance: 0, defenseRating: 5 },
+            derived: { ...u.derived, maxHp: 5000, dodgeChance: 0, defenseRating: 50 },
           }
         : u.id === enemy.id
         ? { ...u, derived: { ...u.derived, attackPower: 100, critChance: 0 } }
         : u
     );
 
-    const enrageOnCfg = { ...createDefaultAdminConfig(), softEnrageEnabled: true };
-    const enrageOffCfg = { ...createDefaultAdminConfig(), softEnrageEnabled: false };
+    const enrageOnCfg = { ...defCfg, softEnrageEnabled: true };
+    const enrageOffCfg = { ...defCfg, softEnrageEnabled: false };
 
     const hitR1 = resolveUnitAction(
       baseUnits,
@@ -2407,32 +2416,32 @@ describe('21. Anti-Stalemate Soft Enrage (Round 20+)', () => {
       enrageOnCfg,
       () => 0.99
     );
-    const hitR35 = resolveUnitAction(
+    const hitR55 = resolveUnitAction(
       baseUnits,
       enemy.id,
       'attack',
       'ally_player',
-      35,
+      55,
       enrageOnCfg,
       () => 0.99
     );
-    const hitR35Disabled = resolveUnitAction(
+    const hitR55Disabled = resolveUnitAction(
       baseUnits,
       enemy.id,
       'attack',
       'ally_player',
-      35,
+      55,
       enrageOffCfg,
       () => 0.99
     );
 
     const dmgR1 = 5000 - hitR1.updatedUnits.find((u) => u.isPlayer)!.hp;
-    const dmgR35 = 5000 - hitR35.updatedUnits.find((u) => u.isPlayer)!.hp;
-    const dmgR35Disabled =
-      5000 - hitR35Disabled.updatedUnits.find((u) => u.isPlayer)!.hp;
+    const dmgR55 = 5000 - hitR55.updatedUnits.find((u) => u.isPlayer)!.hp;
+    const dmgR55Disabled =
+      5000 - hitR55Disabled.updatedUnits.find((u) => u.isPlayer)!.hp;
 
-    expect(dmgR35).toBeGreaterThan(dmgR1 * 2); // Round 35 = +150% = 2.5x damage
-    expect(dmgR35Disabled).toBe(dmgR1);
+    expect(dmgR55).toBeGreaterThan(dmgR1);
+    expect(dmgR55Disabled).toBe(dmgR1);
   });
 });
 

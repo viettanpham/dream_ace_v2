@@ -1,0 +1,181 @@
+{
+  "schemaVersion": 1,
+  "templates": [
+    {
+      "id": "sup_hp_t1",
+      "family": "hp_kit",
+      "tier": 1,
+      "unlockLevel": 1,
+      "iconId": "SS01",
+      "effects": [{ "kind": "heal_hp", "value": 300 }],
+      "cooldownTurns": 2,
+      "perBattleLimit": 5,
+      "registryTag": "sys"
+    },
+    {
+      "id": "sup_hp_t2",
+      "family": "hp_kit",
+      "tier": 2,
+      "unlockLevel": 10,
+      "iconId": "SS01",
+      "effects": [{ "kind": "heal_hp", "value": 500 }],
+      "cooldownTurns": 2,
+      "perBattleLimit": 5,
+      "registryTag": "sys"
+    },
+    {
+      "id": "sup_hp_t3",
+      "family": "hp_kit",
+      "tier": 3,
+      "unlockLevel": 20,
+      "iconId": "SS01",
+      "effects": [{ "kind": "heal_hp", "value": 800 }],
+      "cooldownTurns": 2,
+      "perBattleLimit": 5,
+      "registryTag": "sys"
+    },
+    {
+      "id": "sup_hp_t4",
+      "family": "hp_kit",
+      "tier": 4,
+      "unlockLevel": 35,
+      "iconId": "SS01",
+      "effects": [{ "kind": "heal_hp", "value": 1200 }],
+      "cooldownTurns": 2,
+      "perBattleLimit": 5,
+      "registryTag": "sys"
+    },
+    {
+      "id": "sup_hp_t5",
+      "family": "hp_kit",
+      "tier": 5,
+      "unlockLevel": 40,
+      "iconId": "SS01",
+      "effects": [{ "kind": "heal_hp", "value": 1800 }],
+      "cooldownTurns": 2,
+      "perBattleLimit": 5,
+      "registryTag": "sys"
+    },
+    {
+      "id": "sup_shield_t1",
+      "family": "shield_kit",
+      "tier": 1,
+      "unlockLevel": 1,
+      "iconId": "BS05",
+      "effects": [{ "kind": "restore_shield", "value": 500 }],
+      "cooldownTurns": 2,
+      "perBattleLimit": 5,
+      "registryTag": "sys"
+    },
+    {
+      "id": "sup_shield_t2",
+      "family": "shield_kit",
+      "tier": 2,
+      "unlockLevel": 10,
+      "iconId": "BS05",
+      "effects": [{ "kind": "restore_shield", "value": 800 }],
+      "cooldownTurns": 2,
+      "perBattleLimit": 5,
+      "registryTag": "sys"
+    },
+    {
+      "id": "sup_shield_t3",
+      "family": "shield_kit",
+      "tier": 3,
+      "unlockLevel": 20,
+      "iconId": "BS05",
+      "effects": [{ "kind": "restore_shield", "value": 1200 }],
+      "cooldownTurns": 2,
+      "perBattleLimit": 5,
+      "registryTag": "sys"
+    },
+    {
+      "id": "sup_shield_t4",
+      "family": "shield_kit",
+      "tier": 4,
+      "unlockLevel": 35,
+      "iconId": "BS05",
+      "effects": [{ "kind": "restore_shield", "value": 1700 }],
+      "cooldownTurns": 2,
+      "perBattleLimit": 5,
+      "registryTag": "sys"
+    },
+    {
+      "id": "sup_shield_t5",
+      "family": "shield_kit",
+      "tier": 5,
+      "unlockLevel": 40,
+      "iconId": "BS05",
+      "effects": [{ "kind": "restore_shield", "value": 2500 }],
+      "cooldownTurns": 2,
+      "perBattleLimit": 5,
+      "registryTag": "sys"
+    },
+    {
+      "id": "sup_sp_t1",
+      "family": "sp_kit",
+      "tier": 1,
+      "unlockLevel": 1,
+      "iconId": "SS02",
+      "effects": [{ "kind": "restore_sp", "value": 100 }],
+      "cooldownTurns": 3,
+      "perBattleLimit": 5,
+      "registryTag": "sys"
+    },
+    {
+      "id": "sup_sp_t2",
+      "family": "sp_kit",
+      "tier": 2,
+      "unlockLevel": 10,
+      "iconId": "SS02",
+      "effects": [{ "kind": "restore_sp", "value": 200 }],
+      "cooldownTurns": 3,
+      "perBattleLimit": 5,
+      "registryTag": "sys"
+    },
+    {
+      "id": "sup_sp_t3",
+      "family": "sp_kit",
+      "tier": 3,
+      "unlockLevel": 20,
+      "iconId": "SS02",
+      "effects": [{ "kind": "restore_sp", "value": 350 }],
+      "cooldownTurns": 3,
+      "perBattleLimit": 5,
+      "registryTag": "sys"
+    },
+    {
+      "id": "sup_sp_t4",
+      "family": "sp_kit",
+      "tier": 4,
+      "unlockLevel": 35,
+      "iconId": "SS02",
+      "effects": [{ "kind": "restore_sp", "value": 550 }],
+      "cooldownTurns": 3,
+      "perBattleLimit": 5,
+      "registryTag": "sys"
+    },
+    {
+      "id": "sup_sp_t5",
+      "family": "sp_kit",
+      "tier": 5,
+      "unlockLevel": 40,
+      "iconId": "SS02",
+      "effects": [{ "kind": "restore_sp", "value": 800 }],
+      "cooldownTurns": 3,
+      "perBattleLimit": 5,
+      "registryTag": "sys"
+    },
+    {
+      "id": "sup_scan_t1",
+      "family": "utility",
+      "tier": 1,
+      "unlockLevel": 5,
+      "iconId": "CC10",
+      "effects": [{ "kind": "reveal_stealth_front", "value": 1 }],
+      "cooldownTurns": 4,
+      "perBattleLimit": 2,
+      "registryTag": "sys"
+    }
+  ]
+}

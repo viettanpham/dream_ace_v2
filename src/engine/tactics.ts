@@ -1,7 +1,8 @@
-import { BALANCE_CONFIG } from '../data/balance';
+import { ACTIVE_SLOTS_HARD_MAX, BALANCE_CONFIG } from '../data/balance';
 import { getSkillById } from '../data/skills';
 import type {
   ActionType,
+  AdminConfig,
   AutoRepeatDefeatRule,
   AutoRepeatSession,
   AutoSafetyConfig,
@@ -29,6 +30,7 @@ import {
   clampDefeatStreakLimit,
   DEFAULT_DEFEAT_STREAK_LIMIT,
 } from '../utils/battleDisplay';
+
 import {
   DEBUFF_TYPES,
   getEffectiveUnitSpeed,
@@ -36,7 +38,21 @@ import {
   hasStatus,
   isUnitStealthed,
 } from './combat';
+import {
+  DEFAULT_LIDAR_AUTO_CONFIG,
+  sanitizeLidarAutoConfig,
+} from './lidarAuto';
+import {
+  DEFAULT_AUTO_SUPPLIES_CONFIG,
+  sanitizeAutoSuppliesConfig,
+} from './supplyAi';
+import {
+  DEFAULT_FLUX_AUTO_CONFIG,
+  sanitizeFluxAutoConfig,
+} from './fluxAuto';
 import { canUnitUseSkill, isSkillAllowedForClass } from './skills';
+
+export const MAX_PRIORITY_SKILLS = ACTIVE_SLOTS_HARD_MAX;
 
 export const TACTICS_CONDITION_KINDS: TacticsConditionKind[] = [
   'always',
@@ -92,6 +108,20 @@ export const TACTICS_BUFF_OPTIONS: StatusEffectType[] = [
 const VALID_CONDITIONS = new Set<TacticsConditionKind>(TACTICS_CONDITION_KINDS);
 const VALID_SELECTORS = new Set<TacticsTargetSelector>(TACTICS_TARGET_SELECTORS);
 const VALID_BUFFS = new Set<StatusEffectType>(TACTICS_BUFF_OPTIONS);
+
+const isHealSpecSkill = (s: SkillDefinition): boolean =>
+  s.effectKind === 'spec' &&
+  Boolean(s.effects?.some((e) => e.kind === 'heal_hp_pct'));
+
+const isShieldSpecSkill = (s: SkillDefinition): boolean =>
+  s.effectKind === 'spec' &&
+  Boolean(s.effects?.some((e) => e.kind === 'restore_shield_pct'));
+
+const isHealLikeSkill = (s: SkillDefinition): boolean =>
+  s.effectKind === 'heal_single' ||
+  s.effectKind === 'heal_field_hot' ||
+  s.effectKind === 'full_recovery_elite' ||
+  isHealSpecSkill(s);
 
 export function createDefaultAutoSafety(): AutoSafetyConfig {
   return {
@@ -318,8 +348,12 @@ export function createPresetTactics(
     );
 
   const firstHeal = barSkills.find(
-    (s) => s.effectKind === 'heal_single' || s.effectKind === 'heal_field_hot'
+    (s) =>
+      s.effectKind === 'heal_single' ||
+      s.effectKind === 'heal_field_hot' ||
+      isHealSpecSkill(s)
   );
+  const firstShield = barSkills.find((s) => isShieldSpecSkill(s));
   const firstOffense = barSkills.find(
     (s) =>
       s.targetType === 'single_enemy' ||
@@ -351,9 +385,29 @@ export function createPresetTactics(
       rules.push(
         makeRule(
           createRuleId('bal'),
-          { kind: 'any_ally_hp_below', value: 50 },
+          {
+            kind: 'any_ally_hp_below',
+            value:
+              firstHeal.targetType === 'all_allies' && isHealSpecSkill(firstHeal)
+                ? 70
+                : 50,
+          },
           { type: 'skill', skillId: firstHeal.id },
           firstHeal.targetType === 'single_ally' ? 'lowest_hp_ally' : 'all_allies'
+        )
+      );
+    }
+    if (firstShield && firstShield.id !== firstHeal?.id) {
+      rules.push(
+        makeRule(
+          createRuleId('bal'),
+          { kind: 'always' },
+          { type: 'skill', skillId: firstShield.id },
+          firstShield.targetType === 'single_ally'
+            ? 'lowest_hp_ally'
+            : firstShield.targetType === 'self'
+            ? 'self'
+            : 'all_allies'
         )
       );
     }
@@ -656,8 +710,13 @@ export function mapSimpleTargetToSelector(
 export function createSimplePresetConfig(
   presetId: SimpleTacticsPresetId,
   classId: MechClassId,
-  equippedSkillBar: string[] = []
+  equippedSkillBar: string[] = [],
+  maxPrioritySlots: number = MAX_PRIORITY_SKILLS
 ): SimpleTacticsConfig {
+  const priorityLimit = Math.max(
+    1,
+    Math.min(MAX_PRIORITY_SKILLS, Math.floor(maxPrioritySlots || MAX_PRIORITY_SKILLS))
+  );
   const allowedBar = equippedSkillBar.filter((id) => {
     const sk = getSkillById(id);
     return Boolean(
@@ -674,8 +733,12 @@ export function createSimplePresetConfig(
 
   const defaultPriority = (nonEliteBar.length > 0 ? nonEliteBar : allowedBar).slice(
     0,
-    3
+    priorityLimit
   );
+
+  const defaultLidarAuto = { ...DEFAULT_LIDAR_AUTO_CONFIG };
+  const defaultFluxAuto = { ...DEFAULT_FLUX_AUTO_CONFIG };
+  const defaultAutoSupplies = { ...DEFAULT_AUTO_SUPPLIES_CONFIG };
 
   switch (presetId) {
     case 'aggressive':
@@ -687,6 +750,9 @@ export function createSimplePresetConfig(
         lowHpAction: 'nothing',
         elitePolicy: 'immediate',
         prioritySkillIds: defaultPriority,
+        lidarAuto: defaultLidarAuto,
+        fluxAuto: defaultFluxAuto,
+        autoSupplies: defaultAutoSupplies,
       };
     case 'defensive':
       return {
@@ -696,7 +762,10 @@ export function createSimplePresetConfig(
         lowHpThresholdPct: 45,
         lowHpAction: classId === 'support' ? 'heal' : 'defend',
         elitePolicy: 'boss_only',
-        prioritySkillIds: defaultPriority,
+        prioritySkillIds: defaultPriority.slice(0, 2),
+        lidarAuto: defaultLidarAuto,
+        fluxAuto: defaultFluxAuto,
+        autoSupplies: defaultAutoSupplies,
       };
     case 'support_team':
       return {
@@ -707,6 +776,9 @@ export function createSimplePresetConfig(
         lowHpAction: classId === 'support' ? 'heal' : 'defend',
         elitePolicy: 'boss_only',
         prioritySkillIds: defaultPriority,
+        lidarAuto: defaultLidarAuto,
+        fluxAuto: defaultFluxAuto,
+        autoSupplies: defaultAutoSupplies,
       };
     case 'save_sp':
       return {
@@ -717,6 +789,9 @@ export function createSimplePresetConfig(
         lowHpAction: 'defend',
         elitePolicy: 'boss_only',
         prioritySkillIds: defaultPriority.slice(0, 2),
+        lidarAuto: defaultLidarAuto,
+        fluxAuto: defaultFluxAuto,
+        autoSupplies: defaultAutoSupplies,
       };
     case 'balanced':
     default:
@@ -733,13 +808,17 @@ export function createSimplePresetConfig(
         lowHpAction: classId === 'support' ? 'heal' : 'defend',
         elitePolicy: 'boss_only',
         prioritySkillIds: defaultPriority,
+        lidarAuto: defaultLidarAuto,
+        fluxAuto: defaultFluxAuto,
+        autoSupplies: defaultAutoSupplies,
       };
   }
 }
 
 export function createDefaultSimpleTactics(
   classId: MechClassId,
-  equippedSkillBar: string[] = []
+  equippedSkillBar: string[] = [],
+  maxPrioritySlots: number = MAX_PRIORITY_SKILLS
 ): SimpleTacticsConfig {
   const defaultPreset: SimpleTacticsPresetId =
     classId === 'support'
@@ -747,15 +826,29 @@ export function createDefaultSimpleTactics(
       : classId === 'siege'
       ? 'defensive'
       : 'balanced';
-  return createSimplePresetConfig(defaultPreset, classId, equippedSkillBar);
+  return createSimplePresetConfig(
+    defaultPreset,
+    classId,
+    equippedSkillBar,
+    maxPrioritySlots
+  );
 }
 
 export function sanitizeSimpleTacticsConfig(
   classId: MechClassId,
   raw: unknown,
-  equippedSkillBar?: string[]
+  equippedSkillBar?: string[],
+  maxPrioritySlots: number = MAX_PRIORITY_SKILLS
 ): SimpleTacticsConfig {
-  const fallback = createDefaultSimpleTactics(classId, equippedSkillBar ?? []);
+  const priorityLimit = Math.max(
+    1,
+    Math.min(MAX_PRIORITY_SKILLS, Math.floor(maxPrioritySlots || MAX_PRIORITY_SKILLS))
+  );
+  const fallback = createDefaultSimpleTactics(
+    classId,
+    equippedSkillBar ?? [],
+    priorityLimit
+  );
   if (!raw || typeof raw !== 'object') return fallback;
   const obj = raw as Partial<SimpleTacticsConfig>;
 
@@ -802,9 +895,13 @@ export function sanitizeSimpleTacticsConfig(
       ) {
         prioritySkillIds.push(sid);
       }
-      if (prioritySkillIds.length >= 3) break;
+      if (prioritySkillIds.length >= priorityLimit) break;
     }
   }
+
+  const lidarAuto = sanitizeLidarAutoConfig(obj.lidarAuto);
+  const fluxAuto = sanitizeFluxAutoConfig(obj.fluxAuto);
+  const autoSupplies = sanitizeAutoSuppliesConfig(obj.autoSupplies);
 
   return {
     presetId,
@@ -814,6 +911,9 @@ export function sanitizeSimpleTacticsConfig(
     lowHpAction,
     elitePolicy,
     prioritySkillIds,
+    lidarAuto,
+    fluxAuto,
+    autoSupplies,
   };
 }
 
@@ -869,9 +969,15 @@ export function generateTacticsFromSimple(
   classId: MechClassId,
   rawSimple: SimpleTacticsConfig,
   equippedSkillBar: string[],
-  baseSafety?: AutoSafetyConfig
+  baseSafety?: AutoSafetyConfig,
+  maxPrioritySlots: number = MAX_PRIORITY_SKILLS
 ): GearTacticsProfile {
-  const simple = sanitizeSimpleTacticsConfig(classId, rawSimple, equippedSkillBar);
+  const simple = sanitizeSimpleTacticsConfig(
+    classId,
+    rawSimple,
+    equippedSkillBar,
+    maxPrioritySlots
+  );
   const enemySelector = mapSimpleTargetToSelector(simple.preferredTarget);
   const rules: TacticsRule[] = [];
   const addedSkillIds = new Set<string>();
@@ -904,11 +1010,7 @@ export function generateTacticsFromSimple(
     );
   } else if (simple.lowHpAction === 'heal') {
     const selfHealSkill = allowedBarSkills.find(
-      (s) =>
-        s.effectKind === 'heal_single' ||
-        s.effectKind === 'heal_field_hot' ||
-        s.effectKind === 'full_recovery_elite' ||
-        s.effectKind === 'invincible_ally'
+      (s) => isHealLikeSkill(s) || s.effectKind === 'invincible_ally'
     );
     if (selfHealSkill) {
       rules.push(
@@ -930,10 +1032,28 @@ export function generateTacticsFromSimple(
     );
   }
 
-  // 2. Support-team emergency heal / cleanse if Support preset is active
+  // 2. Support-team emergency heal / shield / cleanse if Support preset is active
   if (simple.presetId === 'support_team') {
+    const aoeSpecHeal = allowedBarSkills.find(
+      (s) => s.targetType === 'all_allies' && isHealSpecSkill(s)
+    );
+    if (aoeSpecHeal) {
+      rules.push(
+        makeRule(
+          createRuleId('sim_supheal_aoe'),
+          { kind: 'any_ally_hp_below', value: 70 },
+          { type: 'skill', skillId: aoeSpecHeal.id },
+          'all_allies'
+        )
+      );
+      addedSkillIds.add(aoeSpecHeal.id);
+    }
     const allyHeal = allowedBarSkills.find(
-      (s) => s.effectKind === 'heal_single' || s.effectKind === 'heal_field_hot'
+      (s) =>
+        !addedSkillIds.has(s.id) &&
+        (s.effectKind === 'heal_single' ||
+          s.effectKind === 'heal_field_hot' ||
+          isHealSpecSkill(s))
     );
     if (allyHeal) {
       rules.push(
@@ -945,6 +1065,26 @@ export function generateTacticsFromSimple(
         )
       );
       addedSkillIds.add(allyHeal.id);
+    }
+    const shieldRestore = allowedBarSkills.find(
+      (s) => !addedSkillIds.has(s.id) && isShieldSpecSkill(s)
+    );
+    if (shieldRestore) {
+      rules.push(
+        makeRule(
+          createRuleId('sim_supshd'),
+          simple.skillUsage === 'save_sp_50'
+            ? { kind: 'my_sp_pct_gte', value: 50 }
+            : { kind: 'always' },
+          { type: 'skill', skillId: shieldRestore.id },
+          shieldRestore.targetType === 'all_allies'
+            ? 'all_allies'
+            : shieldRestore.targetType === 'self'
+            ? 'self'
+            : 'lowest_hp_ally'
+        )
+      );
+      addedSkillIds.add(shieldRestore.id);
     }
     const purify = allowedBarSkills.find((s) => s.effectKind === 'purify_team');
     if (purify) {
@@ -1007,18 +1147,25 @@ export function generateTacticsFromSimple(
     if (addedSkillIds.has(sk.id)) continue;
 
     let cond: TacticsCondition;
-    if (
-      sk.effectKind === 'heal_single' ||
-      sk.effectKind === 'heal_field_hot' ||
-      sk.effectKind === 'full_recovery_elite'
-    ) {
+    if (isHealLikeSkill(sk)) {
       const thresh =
-        simple.skillUsage === 'needed_only'
+        sk.targetType === 'all_allies' && isHealSpecSkill(sk)
+          ? simple.skillUsage === 'needed_only'
+            ? 55
+            : simple.skillUsage === 'save_sp_50'
+            ? 60
+            : 70
+          : simple.skillUsage === 'needed_only'
           ? 45
           : simple.skillUsage === 'save_sp_50'
           ? 55
           : 70;
       cond = { kind: 'any_ally_hp_below', value: thresh };
+    } else if (isShieldSpecSkill(sk)) {
+      cond =
+        simple.skillUsage === 'save_sp_50'
+          ? { kind: 'my_sp_pct_gte', value: 50 }
+          : { kind: 'always' };
     } else if (sk.effectKind === 'purify_team') {
       cond = { kind: 'any_ally_has_debuff' };
     } else if (sk.effectKind === 'scan_reveal') {
@@ -1080,7 +1227,8 @@ export interface AutoSafetyEvaluation {
 export function evaluateAutoSafety(
   state: BattleState,
   actor: CombatUnit,
-  safety: AutoSafetyConfig
+  safety: AutoSafetyConfig,
+  adminConfig?: Pick<AdminConfig, 'spEconomy'> | null
 ): AutoSafetyEvaluation {
   const hpPct =
     actor.derived.maxHp > 0 ? (actor.hp / actor.derived.maxHp) * 100 : 0;
@@ -1115,7 +1263,7 @@ export function evaluateAutoSafety(
   if (safety.stopOnEliteReady) {
     const eliteReady = actor.equippedSkillIds.some((sid) => {
       const sk = getSkillById(sid);
-      return sk?.category === 'elite' && canUnitUseSkill(actor, sid).canUse;
+      return sk?.category === 'elite' && canUnitUseSkill(actor, sid, adminConfig).canUse;
     });
     if (eliteReady) {
       return {
@@ -1143,7 +1291,7 @@ export function shouldStopAutoRepeat(
   outcome: 'victory' | 'defeat',
   retreated: boolean,
   inventoryCount: number,
-  maxInventorySize: number = BALANCE_CONFIG.maxInventorySize,
+  maxInventorySize: number = 100,
   defeatRule: AutoRepeatDefeatRule | boolean = 'stop_immediately',
   defeatStreakLimit: number = DEFAULT_DEFEAT_STREAK_LIMIT
 ): { stop: boolean; reason: AutoStopReason | null } {
@@ -1285,6 +1433,23 @@ function resolveRuleTarget(
       if (rule.targetSelector === 'self') {
         return { targetUnit: actor, targetId: actor.id, valid: true };
       }
+      if (isShieldSpecSkill(skillDef) && !isHealSpecSkill(skillDef)) {
+        const shieldTarget = [...allies]
+          .filter(
+            (a) =>
+              a.derived.maxShield > 0 &&
+              !hasStatus(a, 'shield_break') &&
+              (a.shield < a.derived.maxShield || hasStatus(a, 'shield_cracked'))
+          )
+          .sort(
+            (a, b) =>
+              a.shield / a.derived.maxShield - b.shield / b.derived.maxShield ||
+              a.id.localeCompare(b.id)
+          )[0];
+        return shieldTarget
+          ? { targetUnit: shieldTarget, targetId: shieldTarget.id, valid: true }
+          : { targetUnit: null, targetId: null, valid: false };
+      }
       const lowestAlly = [...allies].sort(
         (a, b) =>
           a.hp / Math.max(1, a.derived.maxHp) -
@@ -1326,7 +1491,8 @@ function evaluateCondition(
   actor: CombatUnit,
   rule: TacticsRule,
   resolvedTarget: CombatUnit | null,
-  rng: () => number
+  rng: () => number,
+  adminConfig?: Pick<AdminConfig, 'spEconomy' | 'skillMods'> | null
 ): boolean {
   const { condition } = rule;
   const allies = state.units.filter((u) => u.side === actor.side && u.alive);
@@ -1358,9 +1524,21 @@ function evaluateCondition(
 
     case 'any_ally_hp_below': {
       const threshold = condition.value ?? 45;
-      return allies.some(
+      const belowAllies = allies.filter(
         (a) => a.derived.maxHp > 0 && (a.hp / a.derived.maxHp) * 100 < threshold
       );
+      const skillDef =
+        rule.action.type === 'skill' && rule.action.skillId
+          ? getSkillById(rule.action.skillId, adminConfig)
+          : undefined;
+      if (
+        skillDef &&
+        skillDef.targetType === 'all_allies' &&
+        isHealSpecSkill(skillDef)
+      ) {
+        return belowAllies.length >= 2;
+      }
+      return belowAllies.length >= 1;
     }
 
     case 'any_ally_has_debuff':
@@ -1411,9 +1589,14 @@ function evaluateCondition(
         condition.skillId ??
         (rule.action.type === 'skill' ? rule.action.skillId : undefined);
       if (!checkSkillId) return false;
-      const sk = getSkillById(checkSkillId);
+      const sk = getSkillById(checkSkillId, adminConfig);
       if (!sk || !isSkillAllowedForClass(sk, actor.classId)) return false;
-      return canUnitUseSkill(actor, checkSkillId).canUse;
+      return canUnitUseSkill(
+        actor,
+        checkSkillId,
+        adminConfig,
+        state.turnLockedSkillIds
+      ).canUse;
     }
 
     default:
@@ -1439,7 +1622,8 @@ export function chooseAction(
   state: BattleState,
   actor: CombatUnit,
   tactics: GearTacticsProfile,
-  rng: () => number = Math.random
+  rng: () => number = Math.random,
+  adminConfig?: Pick<AdminConfig, 'spEconomy' | 'fluxTransfer' | 'skillMods'> | null
 ): TacticsChoiceResult {
   const rules = (tactics?.rules ?? []).slice(0, BALANCE_CONFIG.maxTacticsRules);
 
@@ -1451,12 +1635,15 @@ export function chooseAction(
     if (rule.action.type === 'skill') {
       const sid = rule.action.skillId;
       if (!sid) continue;
-      skillDef = getSkillById(sid);
+      skillDef = getSkillById(sid, adminConfig);
       // Engine-enforced class lock & active-bar/SP/CD/Silence validation
       if (!skillDef || !isSkillAllowedForClass(skillDef, actor.classId)) {
         continue;
       }
-      if (!canUnitUseSkill(actor, sid).canUse) {
+      if (
+        !canUnitUseSkill(actor, sid, adminConfig, state.turnLockedSkillIds)
+          .canUse
+      ) {
         continue;
       }
     }
@@ -1469,7 +1656,8 @@ export function chooseAction(
       actor,
       rule,
       targetRes.targetUnit,
-      rng
+      rng,
+      adminConfig
     );
     if (!condMet) continue;
 

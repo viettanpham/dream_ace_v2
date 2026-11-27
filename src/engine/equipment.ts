@@ -12,7 +12,21 @@ import {
   SHOP_CONFIG,
 } from '../data/items';
 import { getSectorById } from '../data/maps';
+import { getModuleTemplateById } from '../data/modules';
+import { getUnlockedExtenderCount } from './extenders';
+import {
+  DEFAULT_ITEM_LEVELS_CONFIG,
+  getDropSlotPools,
+  getEffectiveTemplateRequiredLevel,
+  getItemLevelKind,
+  getShopEligibleTemplatesForSlot,
+  getTierRequiredLevel,
+  sanitizeItemLevelsConfig,
+} from './itemLevels';
+import { computeItemPrice, computeModulePrice, countNonZeroTraits } from './itemPrice';
+import { pickEligibleModuleTemplate, sanitizeModuleDropConfig } from './moduleDrop';
 import type {
+  AdminConfig,
   CombatUnit,
   EnchantAttemptResult,
   EquipmentSlot,
@@ -21,10 +35,13 @@ import type {
   GearUnit,
   ItemAffix,
   ItemInstance,
+  ItemLevelsConfig,
   ItemRarity,
   ItemSpecialTraits,
   ItemTemplate,
   MechClassId,
+  ModuleDropConfig,
+  PaperDollSlot,
   PilotAccount,
   StatBlock,
   StatKey,
@@ -53,17 +70,18 @@ export interface GenerateItemOptions {
   rollQuality?: number; // optional fixed 1..100% quality roll
   statScale?: number; // optional stat multiplier (e.g. lower stats for Starter items)
   statPowerLevel?: number; // optional level used for stat scaling independent of requiredLevel
-  priceOverride?: number; // optional explicit price (bypasses min 60 CR floor)
+  priceOverride?: number; // optional explicit price (bypasses computeItemPrice & minPrice)
   isStarter?: boolean;
   registryTag?: string;
   isNew?: boolean;
   obtainedAt?: number;
+  itemLevels?: ItemLevelsConfig;
 }
 
 /**
  * Generates a randomized ItemInstance from a distinct ItemTemplate.
  * - Base stat rolls scale by tier, required level, and rarity multiplier.
- * - Bonus affixes count = 0 (common), 1 (rare), 2 (epic), 3 (legendary).
+ * - Bonus affixes count = 0 (common), 0 (uncommon), 1 (rare), 2 (epic), 3 (legendary).
  * - Computes rollQuality (0..100%) and affix-based suffixId.
  */
 export function generateItemInstance(
@@ -75,7 +93,8 @@ export function generateItemInstance(
     : undefined;
 
   if (!template) {
-    let pool = ITEM_TEMPLATES;
+    const nonModulePool = ITEM_TEMPLATES.filter((t) => t.slot !== 'module');
+    let pool = nonModulePool;
     if (options.slot) {
       pool = pool.filter((t) => t.slot === options.slot);
     }
@@ -93,8 +112,61 @@ export function generateItemInstance(
       );
       if (classMatch.length > 0) pool = classMatch;
     }
-    if (pool.length === 0) pool = ITEM_TEMPLATES;
+    if (pool.length === 0) pool = nonModulePool;
     template = pool[Math.floor(rng() * pool.length)];
+  }
+
+  const levelCfg = options.itemLevels
+    ? sanitizeItemLevelsConfig(options.itemLevels)
+    : DEFAULT_ITEM_LEVELS_CONFIG;
+  const itemKind = getItemLevelKind(template.slot);
+  const kindRule = levelCfg.kinds[itemKind];
+
+  if (template.slot === 'module') {
+    const modTpl = getModuleTemplateById(template.id);
+    const isStatModule = modTpl
+      ? modTpl.family === 'stat'
+      : template.primaryRange[1] > 0;
+    const rolledBaseStats: Partial<StatBlock> = isStatModule
+      ? { [template.primaryStat]: template.primaryRange[0] }
+      : {};
+    const price = modTpl
+      ? computeModulePrice(modTpl)
+      : Math.max(1, Math.round(template.basePrice));
+    const moduleRequiredLevel = Math.max(
+      1,
+      options.requiredLevel ??
+        (kindRule.enabled
+          ? getTierRequiredLevel(itemKind, template.tier, levelCfg)
+          : template.requiredLevel)
+    );
+
+    itemUidSeq += 1;
+    return {
+      instanceId: `itm_${Date.now().toString(36)}_${itemUidSeq}_${Math.floor(
+        rng() * 1e6
+      ).toString(36)}`,
+      templateId: template.id,
+      slot: 'module',
+      tier: template.tier,
+      requiredLevel: moduleRequiredLevel,
+      classRestriction: null,
+      rarity: 'common',
+      rolledBaseStats,
+      affixes: [],
+      suffixId: null,
+      rollQuality: 100,
+      price,
+      enchantLevel: 0,
+      specialTraits: template.specialTraits
+        ? { ...template.specialTraits }
+        : undefined,
+      registryTag:
+        options.registryTag ?? template.registryTag ?? BUILTIN_ITEM_REGISTRY_TAG,
+      ...(options.isStarter ? { isStarter: true } : {}),
+      isNew: options.isNew ?? false,
+      obtainedAt: options.obtainedAt ?? Date.now(),
+    };
   }
 
   const tier = Math.max(1, Math.min(4, options.tier ?? template.tier));
@@ -107,7 +179,9 @@ export function generateItemInstance(
   const requiredLevel = Math.max(
     1,
     options.requiredLevel ??
-      Math.max(template.requiredLevel, (tier - 1) * 3 + 1)
+      (kindRule.enabled
+        ? getTierRequiredLevel(itemKind, tier, levelCfg)
+        : Math.max(template.requiredLevel, (tier - 1) * 3 + 1))
   );
   const scalingLevel = Math.max(1, options.statPowerLevel ?? requiredLevel);
   const levelFactor =
@@ -191,23 +265,18 @@ export function generateItemInstance(
     suffixId = bestAffix.suffixId;
   }
 
-  const tierPriceMult =
-    (BALANCE_CONFIG.tierPriceScale[tier - 1] ?? 1) /
-    (BALANCE_CONFIG.tierPriceScale[template.tier - 1] ?? 1);
-  const rarityPriceMult = BALANCE_CONFIG.rarityPriceMultiplier[rarity];
-  const qualityPriceMult = 0.88 + (rollQuality / 100) * 0.28;
+  const traitCount = countNonZeroTraits(template.specialTraits);
   const price =
     options.priceOverride !== undefined
       ? Math.max(1, Math.round(options.priceOverride))
-      : Math.max(
-          60,
-          Math.round(
-            template.basePrice *
-              tierPriceMult *
-              rarityPriceMult *
-              qualityPriceMult
-          )
-        );
+      : computeItemPrice({
+          slot: template.slot,
+          tier,
+          rarity,
+          rollQuality,
+          affixCount: affixes.length,
+          traitCount,
+        });
 
   itemUidSeq += 1;
   return {
@@ -246,45 +315,108 @@ export function generateItemInstance(
 export function generateShopStock(
   referenceLevel: number,
   count: number = BALANCE_CONFIG.shopStockSize,
-  rng: () => number = Math.random
+  rng: () => number = Math.random,
+  itemLevels?: ItemLevelsConfig,
+  moduleDrop?: ModuleDropConfig
 ): ItemInstance[] {
-  const maxTier =
-    referenceLevel >= 9 ? 4 : referenceLevel >= 6 ? 3 : referenceLevel >= 3 ? 2 : 1;
+  const levelCfg = itemLevels
+    ? sanitizeItemLevelsConfig(itemLevels)
+    : DEFAULT_ITEM_LEVELS_CONFIG;
+  const nonModuleTemplates = ITEM_TEMPLATES.filter((t) => t.slot !== 'module');
+
+  const eligibleBySlot = new Map<PaperDollSlot, ItemTemplate[]>();
+  let maxEligibleTier = 1;
+  for (const slot of EQUIPMENT_SLOTS) {
+    const eligible = getShopEligibleTemplatesForSlot(
+      nonModuleTemplates,
+      slot,
+      referenceLevel,
+      levelCfg
+    );
+    eligibleBySlot.set(slot, eligible);
+    for (const tpl of eligible) {
+      if (tpl.tier > maxEligibleTier) maxEligibleTier = tpl.tier;
+    }
+  }
+  const weightTier = Math.max(1, Math.min(4, maxEligibleTier));
 
   const shopRarityWeights: Record<ItemRarity, number> =
-    maxTier >= 4
-      ? { common: 25, rare: 40, epic: 26, legendary: 9 }
-      : maxTier === 3
-      ? { common: 38, rare: 40, epic: 18, legendary: 4 }
-      : maxTier === 2
-      ? { common: 50, rare: 36, epic: 12, legendary: 2 }
-      : { common: 62, rare: 30, epic: 7, legendary: 1 };
+    weightTier >= 4
+      ? { common: 16, uncommon: 9, rare: 40, epic: 26, legendary: 9 }
+      : weightTier === 3
+      ? { common: 25, uncommon: 13, rare: 40, epic: 18, legendary: 4 }
+      : weightTier === 2
+      ? { common: 32, uncommon: 18, rare: 36, epic: 12, legendary: 2 }
+      : { common: 40, uncommon: 22, rare: 30, epic: 7, legendary: 1 };
 
   const stock: ItemInstance[] = [];
   for (let i = 0; i < count; i++) {
     // Ensure every slot appears at least twice in a 12-item stock
     const slot = EQUIPMENT_SLOTS[i % EQUIPMENT_SLOTS.length];
-    const eligibleTemplates = ITEM_TEMPLATES.filter(
-      (t) => t.slot === slot && t.tier <= maxTier
-    );
+    const eligibleTemplates = eligibleBySlot.get(slot) ?? [];
+    const slotTemplates = nonModuleTemplates.filter((t) => t.slot === slot);
+    let fallbackPool = slotTemplates;
+    if (eligibleTemplates.length === 0 && slotTemplates.length > 0) {
+      const minReq = Math.min(
+        ...slotTemplates.map((t) => getEffectiveTemplateRequiredLevel(t, levelCfg))
+      );
+      fallbackPool = slotTemplates.filter(
+        (t) => getEffectiveTemplateRequiredLevel(t, levelCfg) === minReq
+      );
+    }
+    const pool = eligibleTemplates.length > 0 ? eligibleTemplates : fallbackPool;
     const pickedTpl =
-      eligibleTemplates[Math.floor(rng() * eligibleTemplates.length)] ??
-      ITEM_TEMPLATES.find((t) => t.slot === slot) ??
-      ITEM_TEMPLATES[0];
+      pool[Math.floor(rng() * pool.length)] ?? nonModuleTemplates[0];
 
     const rarity = pickWeightedRarity(shopRarityWeights, rng);
-    const tier = Math.min(maxTier, Math.max(1, pickedTpl.tier));
     stock.push(
       generateItemInstance(
         {
           templateId: pickedTpl.id,
-          tier,
+          tier: pickedTpl.tier,
+          statPowerLevel: getEffectiveTemplateRequiredLevel(pickedTpl, levelCfg),
           rarity,
+          itemLevels: levelCfg,
         },
         rng
       )
     );
   }
+
+  const moduleCfg = sanitizeModuleDropConfig(moduleDrop);
+  if (moduleCfg.shopCount > 0) {
+    const moduleTemplates = ITEM_TEMPLATES.filter((t) => t.slot === 'module');
+    const eligibleModules = getShopEligibleTemplatesForSlot(
+      moduleTemplates,
+      'module',
+      referenceLevel,
+      levelCfg
+    );
+    const usedIds = new Set<string>();
+    for (let i = 0; i < moduleCfg.shopCount; i++) {
+      const remaining = eligibleModules.filter((t) => !usedIds.has(t.id));
+      if (remaining.length === 0) break;
+      const modTpl = pickEligibleModuleTemplate(
+        remaining,
+        moduleCfg.effectWeights,
+        rng
+      );
+      if (!modTpl) break;
+      usedIds.add(modTpl.id);
+      stock.push(
+        generateItemInstance(
+          {
+            templateId: modTpl.id,
+            tier: modTpl.tier,
+            statPowerLevel: getEffectiveTemplateRequiredLevel(modTpl, levelCfg),
+            itemLevels: levelCfg,
+          },
+          rng
+        )
+      );
+    }
+  }
+
   return stock;
 }
 
@@ -323,16 +455,11 @@ export function getEffectiveItemStats(
 export function getGearEquippedInstances(
   gear: GearUnit,
   inventory: ItemInstance[]
-): Record<EquipmentSlot, ItemInstance | null> {
+): Record<PaperDollSlot, ItemInstance | null> {
   const byId = new Map(inventory.map((it) => [it.instanceId, it]));
-  const result: Record<EquipmentSlot, ItemInstance | null> = {
-    main_weapon: null,
-    sub_weapon: null,
-    armor: null,
-    engine: null,
-    cpu: null,
-    accessory: null,
-  };
+  const result = {
+    ...EMPTY_EQUIPPED_SLOT_IDS,
+  } as Record<PaperDollSlot, ItemInstance | null>;
   for (const slot of EQUIPMENT_SLOTS) {
     const id = gear.equipped[slot];
     result[slot] = id ? byId.get(id) ?? null : null;
@@ -340,12 +467,26 @@ export function getGearEquippedInstances(
   return result;
 }
 
+function findModuleTemplateForSocket(
+  instanceId: string,
+  inventory: readonly ItemInstance[],
+  warehouse: readonly ItemInstance[] = []
+): ReturnType<typeof getModuleTemplateById> {
+  const inst =
+    inventory.find((it) => it.instanceId === instanceId) ??
+    warehouse.find((it) => it.instanceId === instanceId);
+  if (!inst || inst.slot !== 'module') return undefined;
+  return getModuleTemplateById(inst.templateId);
+}
+
 /**
- * Sums all effective flat stat bonuses across all 6 equipped slots of a GearUnit.
+ * Sums all effective flat stat bonuses across all equipped slots and unlocked stat extender modules of a GearUnit.
  */
 export function sumGearEquipmentStats(
   gear: GearUnit,
-  inventory: ItemInstance[]
+  inventory: ItemInstance[],
+  admin?: Pick<AdminConfig, 'extenderLevelsPerSocket'> | null,
+  warehouse: readonly ItemInstance[] = []
 ): StatBlock {
   const total: StatBlock = { ...EMPTY_STAT_BLOCK };
   const equippedMap = getGearEquippedInstances(gear, inventory);
@@ -358,16 +499,33 @@ export function sumGearEquipmentStats(
       total[key] += stats[key];
     }
   }
+
+  const unlockedCount = getUnlockedExtenderCount(gear, admin);
+  const extenders = gear.extenders ?? [];
+  const limit = Math.min(unlockedCount, extenders.length);
+  for (let i = 0; i < limit; i++) {
+    const modInstanceId = extenders[i];
+    if (!modInstanceId) continue;
+    const tpl = findModuleTemplateForSocket(modInstanceId, inventory, warehouse);
+    if (!tpl || tpl.family !== 'stat') continue;
+    const statKey = tpl.effectKey as StatKey;
+    if (statKey in total) {
+      total[statKey] += tpl.value;
+    }
+  }
+
   return total;
 }
 
 /**
- * Sums special mechanical traits (crit %, armor pierce %, splash %, SP regen, evasion mod)
- * across all equipped items on a GearUnit.
+ * Sums special mechanical traits (crit %, armor pierce %, splash %, SP regen, evasion mod, accuracy %, detectStealth)
+ * across all equipped items and unlocked trait extender modules on a GearUnit.
  */
 export function sumGearSpecialTraits(
   gear: GearUnit,
-  inventory: ItemInstance[]
+  inventory: ItemInstance[],
+  admin?: Pick<AdminConfig, 'extenderLevelsPerSocket'> | null,
+  warehouse: readonly ItemInstance[] = []
 ): ItemSpecialTraits {
   const equippedMap = getGearEquippedInstances(gear, inventory);
   let critBonusPct = 0;
@@ -376,6 +534,8 @@ export function sumGearSpecialTraits(
   let spRegenPerTurn = 0;
   let evasionMod = 0;
   let longRange = false;
+  let accuracyPct = 0;
+  let detectStealth = false;
 
   for (const slot of EQUIPMENT_SLOTS) {
     const inst = equippedMap[slot];
@@ -387,6 +547,22 @@ export function sumGearSpecialTraits(
     spRegenPerTurn += tr.spRegenPerTurn ?? 0;
     evasionMod += tr.evasionMod ?? 0;
     if (tr.longRange) longRange = true;
+    accuracyPct += tr.accuracyPct ?? 0;
+    if (tr.detectStealth) detectStealth = true;
+  }
+
+  const unlockedCount = getUnlockedExtenderCount(gear, admin);
+  const extenders = gear.extenders ?? [];
+  const limit = Math.min(unlockedCount, extenders.length);
+  for (let i = 0; i < limit; i++) {
+    const modInstanceId = extenders[i];
+    if (!modInstanceId) continue;
+    const tpl = findModuleTemplateForSocket(modInstanceId, inventory, warehouse);
+    if (!tpl || tpl.family !== 'trait') continue;
+    if (tpl.effectKey === 'critBonusPct') critBonusPct += tpl.value;
+    else if (tpl.effectKey === 'armorPiercePct') armorPiercePct += tpl.value;
+    else if (tpl.effectKey === 'spRegenPerTurn') spRegenPerTurn += tpl.value;
+    else if (tpl.effectKey === 'accuracyPct') accuracyPct += tpl.value;
   }
 
   return {
@@ -396,12 +572,14 @@ export function sumGearSpecialTraits(
     spRegenPerTurn,
     evasionMod,
     longRange,
+    accuracyPct,
+    detectStealth,
   };
 }
 
 /**
- * Checks across all 4 Gears whether an ItemInstance is currently equipped,
- * and returns the Gear's MechClassId (or null if unequipped).
+ * Checks across all Gears whether an ItemInstance is currently equipped
+ * (in paper-doll slots or extender sockets), returning its MechClassId or null.
  */
 export function getItemEquippedByGear(
   gears: Record<MechClassId, GearUnit>,
@@ -414,6 +592,9 @@ export function getItemEquippedByGear(
       if (gear.equipped[slot] === instanceId) {
         return cls.id;
       }
+    }
+    if (gear.extenders?.some((id) => id === instanceId)) {
+      return cls.id;
     }
   }
   return null;
@@ -444,6 +625,7 @@ export function validateEquipOnGear(
 
   return {
     canEquip:
+      instance.slot !== 'module' &&
       missingLevel === null &&
       requiredClass === null &&
       equippedOnOtherGear === null,
@@ -476,7 +658,7 @@ export function equipItemOnGear(
   }
 
   const validation = validateEquipOnGear(instance, gear, pilot.gears);
-  if (!validation.canEquip) {
+  if (!validation.canEquip || instance.slot === 'module') {
     return { pilot, validation };
   }
 
@@ -506,7 +688,7 @@ export function equipItemOnGear(
 export function unequipSlotOnGear(
   pilot: PilotAccount,
   gearId: MechClassId,
-  slot: EquipmentSlot
+  slot: PaperDollSlot
 ): PilotAccount {
   const gear = pilot.gears[gearId];
   if (!gear || !gear.equipped[slot]) return pilot;
@@ -536,8 +718,25 @@ export function unequipInstanceFromAnyGear(
   if (!owner) return pilot;
   const gear = pilot.gears[owner];
   const slot = EQUIPMENT_SLOTS.find((s) => gear.equipped[s] === instanceId);
-  if (!slot) return pilot;
-  return unequipSlotOnGear(pilot, owner, slot);
+  if (slot) {
+    return unequipSlotOnGear(pilot, owner, slot);
+  }
+  const socketIdx = gear.extenders?.findIndex((id) => id === instanceId) ?? -1;
+  if (socketIdx >= 0) {
+    const nextExtenders = [...(gear.extenders ?? [])];
+    nextExtenders[socketIdx] = null;
+    return {
+      ...pilot,
+      gears: {
+        ...pilot.gears,
+        [owner]: {
+          ...gear,
+          extenders: nextExtenders,
+        },
+      },
+    };
+  }
+  return pilot;
 }
 
 /**
@@ -554,11 +753,26 @@ export function getEnchantMetadata(instance: ItemInstance): {
   currentLevel: number;
   nextLevel: number;
   isMax: boolean;
+  enchantable: boolean;
   cost: number;
   successRate: number;
   currentStats: StatBlock;
   nextStats: StatBlock;
 } {
+  if (instance.slot === 'module') {
+    const baseStats = getEffectiveItemStats(instance, 0);
+    return {
+      currentLevel: 0,
+      nextLevel: 0,
+      isMax: true,
+      enchantable: false,
+      cost: 0,
+      successRate: 0,
+      currentStats: baseStats,
+      nextStats: baseStats,
+    };
+  }
+
   const currentLevel = Math.max(
     0,
     Math.min(ENCHANT_CONFIG.maxLevel, instance.enchantLevel)
@@ -582,6 +796,7 @@ export function getEnchantMetadata(instance: ItemInstance): {
     currentLevel,
     nextLevel,
     isMax,
+    enchantable: !isMax,
     cost,
     successRate,
     currentStats: getEffectiveItemStats(instance, currentLevel),
@@ -602,6 +817,24 @@ export function resolveEnchantAttempt(
   updatedInstance: ItemInstance;
   remainingCredits: number;
 } {
+  if (instance.slot === 'module') {
+    return {
+      result: {
+        attempted: false,
+        success: false,
+        code: 'not_enchantable',
+        instanceId: instance.instanceId,
+        templateId: instance.templateId,
+        previousLevel: 0,
+        newLevel: 0,
+        creditsSpent: 0,
+        successRate: 0,
+      },
+      updatedInstance: instance,
+      remainingCredits: pilotCredits,
+    };
+  }
+
   const meta = getEnchantMetadata(instance);
   const effectiveSuccessRate = meta.isMax
     ? 0
@@ -690,14 +923,21 @@ export function pickWeightedRarity(
   weights: Record<ItemRarity, number>,
   rng: () => number = Math.random
 ): ItemRarity {
-  const total =
-    weights.common + weights.rare + weights.epic + weights.legendary;
+  const wCommon = Math.max(0, weights.common || 0);
+  const wUncommon = Math.max(0, weights.uncommon || 0);
+  const wRare = Math.max(0, weights.rare || 0);
+  const wEpic = Math.max(0, weights.epic || 0);
+  const wLegendary = Math.max(0, weights.legendary || 0);
+  const total = wCommon + wUncommon + wRare + wEpic + wLegendary;
+  if (total <= 0) return 'common';
   let roll = rng() * total;
-  if (roll < weights.common) return 'common';
-  roll -= weights.common;
-  if (roll < weights.rare) return 'rare';
-  roll -= weights.rare;
-  if (roll < weights.epic) return 'epic';
+  if (roll < wCommon) return 'common';
+  roll -= wCommon;
+  if (roll < wUncommon) return 'uncommon';
+  roll -= wUncommon;
+  if (roll < wRare) return 'rare';
+  roll -= wRare;
+  if (roll < wEpic) return 'epic';
   return 'legendary';
 }
 
@@ -709,23 +949,36 @@ export function rollBattleItemDrops(
   sectorId: string,
   gearLevel: number,
   won: boolean,
-  rng: () => number = Math.random
+  rng: () => number = Math.random,
+  itemLevels?: ItemLevelsConfig,
+  moduleDrop?: ModuleDropConfig
 ): ItemInstance[] {
   const sector = getSectorById(sectorId);
   const cfg = DROP_CONFIG[sector.difficulty];
+  const levelCfg = itemLevels
+    ? sanitizeItemLevelsConfig(itemLevels)
+    : DEFAULT_ITEM_LEVELS_CONFIG;
   const destroyedEnemies = enemies.filter((e) => !e.alive);
   if (destroyedEnemies.length === 0) return [];
 
   const drops: ItemInstance[] = [];
-  const maxTier = Math.min(
-    4,
-    Math.max(cfg.maxTier, gearLevel >= 9 ? 4 : gearLevel >= 6 ? 3 : gearLevel >= 3 ? 2 : 1)
+  const nonModuleTemplates = ITEM_TEMPLATES.filter((t) => t.slot !== 'module');
+  const slotPools = getDropSlotPools(
+    nonModuleTemplates,
+    EQUIPMENT_SLOTS,
+    gearLevel,
+    sector.difficulty,
+    levelCfg
   );
 
-  const pickTemplateForDrop = (): ItemTemplate => {
-    const pool = ITEM_TEMPLATES.filter((t) => t.tier <= maxTier);
-    const source = pool.length > 0 ? pool : ITEM_TEMPLATES;
-    return source[Math.floor(rng() * source.length)];
+  const pickTemplateForDrop = (): ItemTemplate | null => {
+    if (slotPools.length > 0) {
+      const slotPool = slotPools[Math.floor(rng() * slotPools.length)];
+      return (
+        slotPool.templates[Math.floor(rng() * slotPool.templates.length)] ?? null
+      );
+    }
+    return null;
   };
 
   for (const enemy of destroyedEnemies) {
@@ -737,20 +990,22 @@ export function rollBattleItemDrops(
       : cfg.perEnemyDropChance * 0.45;
     if (rng() > effectiveChance) continue;
 
+    const tpl = pickTemplateForDrop();
+    if (!tpl) continue;
     const rarity = enemy.isBoss
       ? pickWeightedRarity(
-          { common: 0, rare: 20, epic: 55, legendary: 25 },
+          { common: 0, uncommon: 0, rare: 20, epic: 55, legendary: 25 },
           rng
         )
       : pickWeightedRarity(cfg.rarityWeights, rng);
-    const tpl = pickTemplateForDrop();
     drops.push(
       generateItemInstance(
         {
           templateId: tpl.id,
-          tier: Math.min(maxTier, tpl.tier),
+          tier: tpl.tier,
           rarity,
           isNew: true,
+          itemLevels: levelCfg,
         },
         rng
       )
@@ -766,19 +1021,66 @@ export function rollBattleItemDrops(
         ? 0.75
         : 0.55;
     if (rng() < pityChance) {
-      const rarity = pickWeightedRarity(cfg.rarityWeights, rng);
       const tpl = pickTemplateForDrop();
-      drops.push(
-        generateItemInstance(
-          {
-            templateId: tpl.id,
-            tier: Math.min(maxTier, tpl.tier),
-            rarity,
-            isNew: true,
-          },
-          rng
-        )
-      );
+      if (tpl) {
+        const rarity = pickWeightedRarity(cfg.rarityWeights, rng);
+        drops.push(
+          generateItemInstance(
+            {
+              templateId: tpl.id,
+              tier: tpl.tier,
+              rarity,
+              isNew: true,
+              itemLevels: levelCfg,
+            },
+            rng
+          )
+        );
+      }
+    }
+  }
+
+  // EXT2b: Roll at most 1 module per battle AFTER normal drops + pity so normal drop RNG is unchanged
+  const moduleCfg = sanitizeModuleDropConfig(moduleDrop);
+  if (moduleCfg.factor > 0) {
+    const moduleTemplates = ITEM_TEMPLATES.filter((t) => t.slot === 'module');
+    const modulePools = getDropSlotPools(
+      moduleTemplates,
+      ['module'],
+      gearLevel,
+      sector.difficulty,
+      levelCfg
+    );
+    const eligibleModules = modulePools[0]?.templates ?? [];
+    if (eligibleModules.length > 0) {
+      for (const enemy of destroyedEnemies) {
+        const effectiveChance = enemy.isBoss
+          ? 1.0
+          : won
+          ? cfg.perEnemyDropChance
+          : cfg.perEnemyDropChance * 0.45;
+        if (rng() < effectiveChance * moduleCfg.factor) {
+          const modTpl = pickEligibleModuleTemplate(
+            eligibleModules,
+            moduleCfg.effectWeights,
+            rng
+          );
+          if (modTpl) {
+            drops.push(
+              generateItemInstance(
+                {
+                  templateId: modTpl.id,
+                  tier: modTpl.tier,
+                  isNew: true,
+                  itemLevels: levelCfg,
+                },
+                rng
+              )
+            );
+          }
+          break;
+        }
+      }
     }
   }
 
@@ -792,7 +1094,7 @@ export function simulateGearEquipChange(
   gear: GearUnit,
   change:
     | { type: 'equip'; instance: ItemInstance }
-    | { type: 'unequip'; slot: EquipmentSlot }
+    | { type: 'unequip'; slot: PaperDollSlot }
 ): GearUnit {
   const nextEquipped: EquippedSlotIds = {
     ...EMPTY_EQUIPPED_SLOT_IDS,
@@ -800,7 +1102,7 @@ export function simulateGearEquipChange(
   };
   if (change.type === 'unequip') {
     nextEquipped[change.slot] = null;
-  } else {
+  } else if (change.instance.slot !== 'module') {
     nextEquipped[change.instance.slot] = change.instance.instanceId;
   }
   return {

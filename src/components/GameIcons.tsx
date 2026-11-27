@@ -1,11 +1,13 @@
 import {
   BatteryCharging,
+  Cpu,
   Crosshair,
   Flame,
   Gift,
   HeartHandshake,
   Layers,
   Package,
+  Radar,
   RotateCcw,
   Shield,
   Sparkles,
@@ -45,6 +47,10 @@ export function SlotIcon({ slot, className = 'w-4 h-4' }: SlotIconProps) {
       return <Zap className={className} aria-hidden="true" />;
     case 'accessory':
       return <BatteryCharging className={className} aria-hidden="true" />;
+    case 'radar':
+      return <Radar className={className} aria-hidden="true" />;
+    case 'module':
+      return <Cpu className={className} aria-hidden="true" />;
     default:
       return <Layers className={className} aria-hidden="true" />;
   }
@@ -100,12 +106,16 @@ export function ConsumableIcon({
   switch (kind) {
     case 'equipment_crate':
       return <Gift className={className} aria-hidden="true" />;
+    case 'supply_crate':
+      return <Gift className={`${className} text-amber-300`} aria-hidden="true" />;
     case 'enchant_stone':
       return <Sparkles className={className} aria-hidden="true" />;
     case 'respec_token':
       return <RotateCcw className={className} aria-hidden="true" />;
     case 'exp_boost':
       return <Zap className={className} aria-hidden="true" />;
+    case 'battle_supply':
+      return <Sparkles className={className} aria-hidden="true" />;
   }
 }
 
@@ -123,5 +133,9 @@ export function getSlotAccentClass(slot: EquipmentSlot): string {
       return 'text-purple-400';
     case 'accessory':
       return 'text-cyan-400';
+    case 'radar':
+      return 'text-teal-400';
+    case 'module':
+      return 'text-indigo-400';
   }
 }

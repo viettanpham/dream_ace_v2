@@ -1,0 +1,5 @@
+# TASK SUP-PICK1 Report
+- Hoàn thành: ITEM 1 (`SupplyLoadoutBar.tsx` ẩn hẳn template cùng `family` với các slot khác trừ slot đang mở để vẫn đổi tier được, hiện `'Không còn vật tư khác loại'` qua `supply.emptyOtherFamily` khi rỗng); ITEM 2 (`SupplyRejectReason` thêm `'family_duplicate'`, `setSupplyLoadout` ở engine và store từ chối thêm/đổi trùng family với slot khác và không đổi loadout, không trim `sanitizeSupplyLoadout` khi load save cũ có 3 HP, không bump save version).
+- File thay đổi: `src/engine/supplies.ts`, `src/store/useGameStore.ts`, `src/components/SupplyLoadoutBar.tsx`, `src/i18n/vi.ts`, `src/i18n/en.ts`, `src/components/__tests__/supplyLoadoutBarCsUi.test.tsx`, `src/components/__tests__/supplyPickFamilySupPick1.test.tsx`, `docs/CODEMAP.md`, `docs/tasks/SUP-PICK1.{md,progress.md,report.md}`.
+- Test: `npx tsc --noEmit` PASS; `compile_applet` PASS; `supplyPickFamilySupPick1.test.tsx` (3/3 PASS), `supplyLoadoutBarCsUi.test.tsx` (4/4 PASS), `supplyScanStA3.test.ts` (5/5 PASS); `suppliesCs1.test.ts` pass test 5 (`setSupplyLoadout`) nhưng FAIL sẵn ở test 1–2 do `sup_scan_t1` / `utility` của task `ST-A3` trước đó.
+- Lưu ý: CHƯA chạy trình duyệt thật.

@@ -8,11 +8,24 @@ import {
   TrendingUp,
   X,
 } from 'lucide-react';
+import { getCatalogRow } from '../data/iconCatalog';
 import { buildTurnQueue } from '../engine/combat';
+import {
+  ENRAGE_PHASE_ORDER,
+  formatEnragePhaseSummaryPart,
+  formatEnrageTooltip,
+  getEnragePhaseDisplayName,
+  getEnragePhaseNextStackRound,
+  getEnrageState,
+  sanitizeEnrageConfig,
+  type EnrageState,
+} from '../engine/enrage';
 import { getClassName, getTeamTagLabel, useI18n } from '../i18n';
+import { useGameStore } from '../store/useGameStore';
 import type {
   BattleSpeed,
   BattleState,
+  EnragePhaseKey,
   MechClassId,
   TeamColorRole,
   TurnQueueEntry,
@@ -28,6 +41,7 @@ import {
   TURN_QUEUE_UPCOMING_MAX,
 } from '../utils/battleDisplay';
 import { BottomSheet } from './BottomSheet';
+import { LevelBadge } from './LevelBadge';
 
 export type TurnQueueVariant = 'default' | 'phone' | 'sidebar';
 
@@ -35,7 +49,8 @@ interface TurnQueueBarProps {
   battle: BattleState;
   battleSpeed: BattleSpeed;
   skipAnimations: boolean;
-  enrageBonusPct: number;
+  enrageState?: EnrageState;
+  enrageBonusPct?: number;
   variant?: TurnQueueVariant;
   targetName?: string | null;
   onSelectUnit?: (unitId: string) => void;
@@ -43,6 +58,8 @@ interface TurnQueueBarProps {
   maxUpcoming?: number;
   /** When true in sidebar variant, allows card to absorb freed height in Line log mode */
   fillHeight?: boolean;
+  /** When true in sidebar variant (card mode + ActionStage ON), replaces the 36px acting row */
+  hideActingRow?: boolean;
 }
 
 function getTeamCssVar(role: TeamColorRole): string {
@@ -72,81 +89,18 @@ function getClassGlyph(classId: MechClassId): string {
   }
 }
 
-function getTeamHexColor(role: TeamColorRole): string {
-  switch (role) {
-    case 'me':
-      return '#22c55e';
-    case 'ally':
-      return '#38bdf8';
-    case 'boss':
-      return '#f97316';
-    case 'enemy':
-    default:
-      return '#ef4444';
-  }
-}
-
-function TeamShapeIcon({ role }: { role: TeamColorRole }) {
-  const color = getTeamHexColor(role);
-  return (
-    <svg
-      width="12"
-      height="12"
-      viewBox="0 0 12 12"
-      className="shrink-0"
-      aria-hidden="true"
-      data-team-shape={role}
-    >
-      {role === 'me' && (
-        <polygon
-          points="6,1 10.5,3.5 10.5,8.5 6,11 1.5,8.5 1.5,3.5"
-          fill={color}
-          fillOpacity="0.28"
-          stroke={color}
-          strokeWidth="1.4"
-        />
-      )}
-      {role === 'ally' && (
-        <circle
-          cx="6"
-          cy="6"
-          r="4.4"
-          fill={color}
-          fillOpacity="0.26"
-          stroke={color}
-          strokeWidth="1.4"
-        />
-      )}
-      {role === 'enemy' && (
-        <polygon
-          points="6,1 11,6 6,11 1,6"
-          fill={color}
-          fillOpacity="0.28"
-          stroke={color}
-          strokeWidth="1.4"
-        />
-      )}
-      {role === 'boss' && (
-        <polygon
-          points="3.5,1 8.5,1 11,3.5 11,8.5 8.5,11 3.5,11 1,8.5 1,3.5"
-          fill={color}
-          fillOpacity="0.32"
-          stroke={color}
-          strokeWidth="1.4"
-        />
-      )}
-    </svg>
-  );
-}
-
 function ConveyorChip({
   entry,
+  refLevel,
+  isLeader,
   isActive,
   compactPhone,
   animateShift,
   onInspect,
 }: {
   entry: TurnQueueEntry;
+  refLevel: number;
+  isLeader: boolean;
   isActive: boolean;
   compactPhone: boolean;
   animateShift: boolean;
@@ -197,28 +151,28 @@ function ConveyorChip({
           ▼
         </span>
 
-        <div className="flex items-center justify-between gap-1 text-[10px] font-bold tracking-wider uppercase">
-          <span
-            className="px-1 rounded-sm leading-tight truncate"
-            style={{
-              backgroundColor: 'rgba(15, 23, 42, 0.88)',
-              color: teamColor,
-              border: `1px solid ${teamColor}`,
-            }}
-          >
-            {compactPhone ? getClassGlyph(entry.classId) : teamTag}
-          </span>
+        <div className="flex items-center justify-end gap-1 text-[10px] font-bold tracking-wider uppercase">
           <span className="text-amber-200 truncate">{t('queue.actingNow')}</span>
         </div>
 
         <div className="mt-0.5 flex items-center justify-between gap-1">
-          <span
-            data-testid="turn-queue-chip-name"
-            data-full-name={entry.name}
-            className="text-[13px] font-bold text-white whitespace-nowrap"
-          >
-            {formatShortUnitName(entry.name, 10)}
-          </span>
+          <div className="flex items-center gap-1 min-w-0 flex-1">
+            {!compactPhone && (
+              <LevelBadge
+                level={entry.level}
+                refLevel={refLevel}
+                side={entry.side}
+                isLeader={isLeader}
+              />
+            )}
+            <span
+              data-testid="turn-queue-chip-name"
+              data-full-name={entry.name}
+              className="text-[13px] font-bold text-white whitespace-nowrap truncate min-w-0"
+            >
+              {formatShortUnitName(entry.name, 10)}
+            </span>
+          </div>
           <span
             className={`font-mono-nums text-[12px] font-bold shrink-0 inline-flex items-center gap-0.5 ${speedColor}`}
           >
@@ -276,16 +230,16 @@ function ConveyorChip({
         </div>
       ) : (
         <div className="flex items-center justify-between gap-1 text-[12px] leading-tight">
-          <span
-            className="text-[12px] font-bold shrink-0"
-            style={{ color: teamColor }}
-          >
-            {teamTag}
-          </span>
+          <LevelBadge
+            level={entry.level}
+            refLevel={refLevel}
+            side={entry.side}
+            isLeader={isLeader}
+          />
           <span
             data-testid="turn-queue-chip-name"
             data-full-name={entry.name}
-            className="text-slate-200 font-medium whitespace-nowrap flex-1"
+            className="text-slate-200 font-medium whitespace-nowrap truncate min-w-0 flex-1"
           >
             {formatShortUnitName(entry.name, 10)}
           </span>
@@ -317,14 +271,17 @@ export function TurnQueueBar({
   battle,
   battleSpeed,
   skipAnimations,
-  enrageBonusPct,
+  enrageState,
+  enrageBonusPct: _legacyEnrageBonusPct,
   variant = 'default',
   targetName = null,
   onSelectUnit,
   maxUpcoming = 4,
   fillHeight = false,
+  hideActingRow = false,
 }: TurnQueueBarProps) {
   const { lang, t } = useI18n();
+  const adminConfig = useGameStore((s) => s.adminConfig);
   const trackRef = useRef<HTMLDivElement | null>(null);
   const popoverAnchorRef = useRef<HTMLDivElement | null>(null);
   const [trackWidth, setTrackWidth] = useState<number>(() =>
@@ -334,6 +291,7 @@ export function TurnQueueBar({
     typeof window !== 'undefined' ? window.innerWidth < 640 : false
   );
   const [overflowOpen, setOverflowOpen] = useState(false);
+  const [enrageDetailOpen, setEnrageDetailOpen] = useState(false);
   const [inspectedEntry, setInspectedEntry] = useState<TurnQueueEntry | null>(
     null
   );
@@ -452,6 +410,20 @@ export function TurnQueueBar({
   );
   const currentRoundChips = queue.current;
   const nextRoundChips = queue.next;
+  const playerUnit = battle.units.find((u) => u.isPlayer);
+  const refLevel = playerUnit?.level ?? 1;
+  const playerUnitId = playerUnit?.id ?? null;
+  const isEntryLeader = (entry: TurnQueueEntry) =>
+    playerUnitId ? entry.unitId === playerUnitId : entry.teamRole === 'me';
+  const targetUnit =
+    targetName && upcomingData.actingEntry
+      ? battle.units.find(
+          (u) =>
+            u.name === targetName &&
+            u.side !== upcomingData.actingEntry!.side &&
+            u.alive
+        ) ?? battle.units.find((u) => u.name === targetName)
+      : undefined;
 
   const handleChipClick = (entry: TurnQueueEntry) => {
     if (onSelectUnit) {
@@ -531,8 +503,164 @@ export function TurnQueueBar({
     };
   }, [currentRoundChips, nextRoundChips, trackWidth, isPhone]);
 
-  const enragePct = Math.round(enrageBonusPct * 100);
-  const enrageMult = (1 + enrageBonusPct).toFixed(1);
+  const resolvedEnrage =
+    enrageState ?? getEnrageState(battle.round, adminConfig);
+  const latestPhase: EnragePhaseKey | null =
+    resolvedEnrage.latestPhase ?? resolvedEnrage.highestPhase;
+  const latestPhaseLabel = latestPhase
+    ? getEnragePhaseDisplayName(latestPhase, lang)
+    : null;
+  const totalEnrageStacks =
+    resolvedEnrage.totalStacks ??
+    resolvedEnrage.stacks.rage +
+      resolvedEnrage.stacks.frenzy +
+      resolvedEnrage.stacks.berserker;
+  const enrageTooltip = latestPhaseLabel
+    ? formatEnrageTooltip(resolvedEnrage, lang)
+    : undefined;
+  const sanitizedEnrageCfg = useMemo(
+    () => sanitizeEnrageConfig(adminConfig.enrage),
+    [adminConfig.enrage]
+  );
+
+  const fmtEnrageNum = (n: number) => String(Number(n.toFixed(2)));
+  const renderEnrageGlyph = (
+    iconId: string,
+    fallbackSymbol: string,
+    fallbackColor: string
+  ) => {
+    const row = getCatalogRow(iconId, adminConfig.iconCatalogMods);
+    return (
+      <span
+        data-enrage-icon={iconId}
+        className="material-symbols-outlined leading-none select-none shrink-0"
+        style={{ fontSize: '14px', color: row?.color ?? fallbackColor }}
+        aria-hidden="true"
+      >
+        {row?.symbol ?? fallbackSymbol}
+      </span>
+    );
+  };
+
+  const renderEnrageChip = () => {
+    if (!latestPhaseLabel || totalEnrageStacks <= 0) return null;
+    return (
+      <button
+        type="button"
+        data-testid="turn-queue-enrage-badge"
+        title={enrageTooltip}
+        aria-label={enrageTooltip}
+        aria-expanded={enrageDetailOpen}
+        onClick={() => setEnrageDetailOpen((prev) => !prev)}
+        className="inline-flex flex-wrap items-center gap-x-1 gap-y-0.5 max-w-full px-1.5 py-0.5 rounded bg-red-950/75 border border-red-500/60 hover:border-orange-400/80 text-[11px] font-mono-nums font-bold text-orange-200 leading-tight cursor-pointer transition-colors"
+      >
+        <span className="inline-flex items-center gap-0.5 shrink-0 text-orange-300">
+          <Flame className="w-3.5 h-3.5 text-orange-400 shrink-0" aria-hidden="true" />
+          <span className="hidden min-[380px]:inline">{latestPhaseLabel}</span>
+          <span>x{totalEnrageStacks}</span>
+        </span>
+        {resolvedEnrage.stacks.rage > 0 && (
+          <span
+            data-testid="enrage-chip-rage"
+            className="inline-flex items-center gap-0.5 shrink-0 text-sky-200"
+          >
+            <span aria-hidden="true" className="text-slate-400">·</span>
+            {renderEnrageGlyph('BS05', 'security', '#378ADD')}
+            <span>-{fmtEnrageNum(resolvedEnrage.defDownPct)}%</span>
+          </span>
+        )}
+        {resolvedEnrage.stacks.frenzy > 0 && (
+          <span
+            data-testid="enrage-chip-frenzy"
+            className="inline-flex items-center gap-0.5 shrink-0 text-emerald-200"
+          >
+            <span aria-hidden="true" className="text-slate-400">·</span>
+            {renderEnrageGlyph('BF02', 'swords', '#1D9E75')}
+            <span>+{fmtEnrageNum(resolvedEnrage.damageUpPct)}%</span>
+          </span>
+        )}
+        {resolvedEnrage.stacks.berserker > 0 && (
+          <>
+            <span
+              data-testid="enrage-chip-berserker-crit-rate"
+              className="inline-flex items-center gap-0.5 shrink-0 text-amber-200"
+            >
+              <span aria-hidden="true" className="text-slate-400">·</span>
+              {renderEnrageGlyph('SS04', 'flare', '#EF9F27')}
+              <span>+{fmtEnrageNum(resolvedEnrage.critRateUpPct)}%</span>
+            </span>
+            <span
+              data-testid="enrage-chip-berserker-crit-dmg"
+              className="inline-flex items-center gap-0.5 shrink-0 text-rose-200"
+            >
+              <span aria-hidden="true" className="text-slate-400">·</span>
+              {renderEnrageGlyph('SS05', 'explosion', '#E24B4A')}
+              <span>+{fmtEnrageNum(resolvedEnrage.critDamageUpPct)}%</span>
+            </span>
+          </>
+        )}
+      </button>
+    );
+  };
+
+  const renderEnrageDetailSheet = () => (
+    <BottomSheet
+      open={enrageDetailOpen && Boolean(latestPhaseLabel)}
+      onClose={() => setEnrageDetailOpen(false)}
+      testId="turn-queue-enrage-detail"
+      title={
+        <span className="inline-flex items-center gap-1.5 text-orange-300">
+          <Flame className="w-4 h-4 text-orange-400" aria-hidden="true" />
+          <span>{t('enrage.detailTitle')}</span>
+        </span>
+      }
+      subtitle={
+        latestPhaseLabel
+          ? `${t('battle.round', { round: queue.round })} · ${latestPhaseLabel} x${totalEnrageStacks}`
+          : undefined
+      }
+    >
+      <div className="space-y-2">
+        {ENRAGE_PHASE_ORDER.map((phase) => {
+          const phaseCfg = sanitizedEnrageCfg[phase];
+          const stacks = resolvedEnrage.stacks[phase];
+          const nextRound = getEnragePhaseNextStackRound(
+            resolvedEnrage.round,
+            phaseCfg
+          );
+          const summaryText = formatEnragePhaseSummaryPart(
+            phase,
+            resolvedEnrage,
+            lang,
+            true
+          );
+          return (
+            <div
+              key={phase}
+              data-testid={`enrage-detail-phase-${phase}`}
+              className={`rounded-lg border px-3 py-2 space-y-1 text-[12px] ${
+                stacks > 0
+                  ? 'border-orange-500/45 bg-red-950/25 text-slate-100'
+                  : 'border-slate-800/80 bg-[#0A101B] text-slate-400 opacity-80'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-semibold">{summaryText}</span>
+                <span className="font-mono-nums text-[11px] px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 text-amber-300 shrink-0">
+                  {stacks}/{phaseCfg.maxStacks}
+                </span>
+              </div>
+              <div className="text-[11px] font-mono-nums text-sky-300/90">
+                {nextRound !== null
+                  ? t('enrage.nextStackAt', { round: nextRound })
+                  : t('enrage.maxReached')}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </BottomSheet>
+  );
 
   const renderFullQueuePopover = () => (
     <div
@@ -575,12 +703,12 @@ export function TurnQueueBar({
                 style={{ borderLeftWidth: '3px', borderLeftColor: color }}
               >
                 <div className="min-w-0 flex items-center gap-1.5">
-                  <span
-                    className="text-[12px] font-bold shrink-0"
-                    style={{ color }}
-                  >
-                    {getTeamTagLabel(lang, entry.teamRole)}
-                  </span>
+                  <LevelBadge
+                    level={entry.level}
+                    refLevel={refLevel}
+                    side={entry.side}
+                    isLeader={isEntryLeader(entry)}
+                  />
                   <span className="text-[13px] font-semibold text-slate-100 truncate">
                     {entry.name}
                   </span>
@@ -611,12 +739,12 @@ export function TurnQueueBar({
                 style={{ borderLeftWidth: '3px', borderLeftColor: color }}
               >
                 <div className="min-w-0 flex items-center gap-1.5">
-                  <span
-                    className="text-[12px] font-bold shrink-0"
-                    style={{ color }}
-                  >
-                    {getTeamTagLabel(lang, entry.teamRole)}
-                  </span>
+                  <LevelBadge
+                    level={entry.level}
+                    refLevel={refLevel}
+                    side={entry.side}
+                    isLeader={isEntryLeader(entry)}
+                  />
                   <span className="text-[13px] text-slate-200 truncate">
                     {entry.name}
                   </span>
@@ -649,39 +777,31 @@ export function TurnQueueBar({
     return (
       <div
         data-testid="turn-queue-phone-strip"
-        className="h-11 max-h-[44px] shrink-0 w-full max-w-full min-w-0 border-b border-slate-800/80 bg-[#0A0F18]/95 px-1.5 flex items-center gap-1.5 overflow-hidden"
+        className={`shrink-0 w-full max-w-full min-w-0 border-b border-slate-800/80 bg-[#0A0F18]/95 px-1.5 flex items-center gap-1.5 ${
+          latestPhaseLabel
+            ? 'min-h-[44px] flex-wrap py-1'
+            : 'h-11 max-h-[44px] overflow-hidden'
+        }`}
       >
         {/* Compact Round Badge */}
         <span
           data-testid="turn-queue-round-chip"
-          title={
-            enragePct > 0
-              ? t('queue.enrageChipTooltip', { pct: enragePct })
-              : t('battle.round', { round: queue.round })
-          }
+          title={enrageTooltip ?? t('battle.round', { round: queue.round })}
           className={`shrink-0 inline-flex items-center gap-1 px-1.5 h-8 rounded font-mono-nums text-[12px] font-bold whitespace-nowrap ${
-            enragePct > 0
+            latestPhaseLabel
               ? 'bg-red-950/75 border border-red-500/65 text-slate-100'
               : 'bg-slate-900 border border-slate-700 text-slate-200'
           }`}
         >
           <span>R{queue.round}</span>
-          {enragePct > 0 && (
-            <span
-              data-testid="turn-queue-enrage-badge"
-              className="inline-flex items-center gap-0.5 text-orange-300"
-            >
-              <Flame className="w-3 h-3 text-orange-400" />
-              <span>x{enrageMult}</span>
-            </span>
-          )}
         </span>
+        {renderEnrageChip()}
 
         {/* Inner Horizontally Scrollable Track (strictly self-contained, never clips start/end chips or scrolls page) */}
         <div
           data-testid="turn-queue-phone-track"
           style={{ touchAction: 'pan-x' }}
-          className="flex-1 min-w-0 flex items-center justify-start gap-1.5 overflow-x-auto overflow-y-hidden px-1 scroll-px-1 battle-strip-scroll overscroll-x-contain"
+          className="flex-1 min-w-[120px] flex items-center justify-start gap-1.5 overflow-x-auto overflow-y-hidden px-1 scroll-px-1 battle-strip-scroll overscroll-x-contain"
           aria-label={t('queue.fullQueueTitle')}
         >
           {actingEntry && (
@@ -702,7 +822,12 @@ export function TurnQueueBar({
                 borderColor: 'var(--turn-active)',
               }}
             >
-              <TeamShapeIcon role={actingEntry.teamRole} />
+              <LevelBadge
+                level={actingEntry.level}
+                refLevel={refLevel}
+                side={actingEntry.side}
+                isLeader={isEntryLeader(actingEntry)}
+              />
               <span data-testid="turn-queue-acting-name">{actingLabel}</span>
             </button>
           )}
@@ -730,12 +855,18 @@ export function TurnQueueBar({
                   entry.phase === 'next_round' ? 'opacity-80' : ''
                 }`}
               >
-                <TeamShapeIcon role={entry.teamRole} />
+                <LevelBadge
+                  level={entry.level}
+                  refLevel={refLevel}
+                  side={entry.side}
+                  isLeader={isEntryLeader(entry)}
+                />
                 <span data-testid="turn-queue-chip-name">{item.shortName}</span>
               </button>
             );
           })}
         </div>
+        {renderEnrageDetailSheet()}
       </div>
     );
   }
@@ -746,7 +877,10 @@ export function TurnQueueBar({
     const allUpcoming = upcomingData.upcoming;
     const fixedRowCount = getTurnQueueSidebarRowCount(effectiveUnitsAtStart);
     const listHeightPx = getTurnQueueSidebarListHeightPx(fixedRowCount);
-    const totalHeightPx = getTurnQueueSidebarTotalHeightPx(fixedRowCount);
+    const totalHeightPx = getTurnQueueSidebarTotalHeightPx(
+      fixedRowCount,
+      hideActingRow
+    );
     const sidebarHiddenCount = Math.max(0, allUpcoming.length - fixedRowCount);
     const actingChipTitle = actingEntry
       ? `${getTeamTagLabel(lang, actingEntry.teamRole)} ${actingEntry.name}${
@@ -761,6 +895,7 @@ export function TurnQueueBar({
         data-testid="turn-queue-sidebar"
         data-queue-rows={fixedRowCount}
         data-queue-height-px={totalHeightPx}
+        data-acting-row-hidden={hideActingRow ? 'true' : 'false'}
         style={{
           height: `${totalHeightPx}px`,
           minHeight: `${totalHeightPx}px`,
@@ -770,13 +905,21 @@ export function TurnQueueBar({
       >
         <div
           data-testid="turn-queue-sidebar-header"
-          style={{
-            height: `${TURN_QUEUE_SIDEBAR_HEIGHTS.headerPx}px`,
-            minHeight: `${TURN_QUEUE_SIDEBAR_HEIGHTS.headerPx}px`,
-          }}
-          className="h-[32px] min-h-[32px] max-h-[32px] shrink-0 flex items-center justify-between gap-2"
+          style={
+            latestPhaseLabel
+              ? { minHeight: `${TURN_QUEUE_SIDEBAR_HEIGHTS.headerPx}px` }
+              : {
+                  height: `${TURN_QUEUE_SIDEBAR_HEIGHTS.headerPx}px`,
+                  minHeight: `${TURN_QUEUE_SIDEBAR_HEIGHTS.headerPx}px`,
+                }
+          }
+          className={`shrink-0 flex flex-wrap items-center justify-between gap-2 ${
+            latestPhaseLabel
+              ? 'min-h-[32px] py-0.5'
+              : 'h-[32px] min-h-[32px] max-h-[32px]'
+          }`}
         >
-          <div className="flex items-center gap-1.5 min-w-0">
+          <div className="flex flex-wrap items-center gap-1.5 min-w-0 max-w-full">
             {!battle.summary && (
               <span
                 data-testid="turn-queue-combat-icon"
@@ -789,29 +932,16 @@ export function TurnQueueBar({
             )}
             <span
               data-testid="turn-queue-round-chip"
-              title={
-                enragePct > 0
-                  ? t('queue.enrageChipTooltip', { pct: enragePct })
-                  : undefined
-              }
+              title={enrageTooltip}
               className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded font-mono-nums text-[12px] font-bold whitespace-nowrap ${
-                enragePct > 0
+                latestPhaseLabel
                   ? 'bg-red-950/70 border border-red-500/65 text-slate-100'
                   : 'bg-slate-900 border border-slate-700 text-slate-100'
               }`}
             >
               <span>{t('battle.round', { round: queue.round })}</span>
-              {enragePct > 0 && (
-                <span
-                  data-testid="turn-queue-enrage-badge"
-                  title={t('queue.enrageChipTooltip', { pct: enragePct })}
-                  className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded bg-red-500/25 text-orange-300 text-[12px] font-bold leading-none"
-                >
-                  <Flame className="w-3 h-3 text-orange-400 shrink-0" />
-                  <span>x{enrageMult}</span>
-                </span>
-              )}
             </span>
+            {renderEnrageChip()}
           </div>
 
           <span className="text-[12px] text-slate-400 font-medium whitespace-nowrap">
@@ -819,93 +949,101 @@ export function TurnQueueBar({
           </span>
         </div>
 
-        {/* Acting Unit Highlight (always 36px even when no actor or battle finished) */}
-        {actingEntry ? (
-          <button
-            type="button"
-            data-testid="turn-queue-acting-chip"
-            data-unit-id={actingEntry.unitId}
-            data-full-name={actingEntry.name}
-            data-acting="true"
-            onClick={() => handleChipClick(actingEntry)}
-            title={actingChipTitle}
-            style={{
-              borderColor: 'var(--turn-active)',
-              height: `${TURN_QUEUE_SIDEBAR_HEIGHTS.actingRowPx}px`,
-              minHeight: `${TURN_QUEUE_SIDEBAR_HEIGHTS.actingRowPx}px`,
-            }}
-            className="w-full h-[36px] min-h-[36px] max-h-[36px] shrink-0 px-2.5 rounded-lg border bg-amber-400/15 hover:bg-amber-400/20 flex items-center justify-between gap-2 text-left cursor-pointer transition-colors"
-          >
-            <div className="flex items-center gap-1.5 flex-1 min-w-0">
-              <TeamShapeIcon role={actingEntry.teamRole} />
-              <span
-                className="px-1.5 py-0.5 rounded text-[11px] font-mono-nums font-bold shrink-0"
-                style={{
-                  backgroundColor: 'rgba(15, 23, 42, 0.9)',
-                  color: getTeamCssVar(actingEntry.teamRole),
-                  border: `1px solid ${getTeamCssVar(actingEntry.teamRole)}`,
-                }}
-              >
-                {getTeamTagLabel(lang, actingEntry.teamRole)}
-              </span>
-              <div
-                data-testid="turn-queue-acting-name"
-                className="flex items-center flex-1 min-w-0 text-[13px] font-bold text-amber-100"
-              >
-                <span
-                  data-testid="turn-queue-acting-attacker"
-                  title={actingEntry.name}
-                  style={
-                    targetName && actingEntry.name.length > 7
-                      ? { minWidth: `min(${TURN_QUEUE_ACTING_NAME_MIN_PX}px, 42%)` }
-                      : undefined
-                  }
-                  className="min-w-0 truncate"
+        {/* Acting Unit Highlight (omitted when hideActingRow=true so ActionStage replaces it) */}
+        {!hideActingRow &&
+          (actingEntry ? (
+            <button
+              type="button"
+              data-testid="turn-queue-acting-chip"
+              data-unit-id={actingEntry.unitId}
+              data-full-name={actingEntry.name}
+              data-acting="true"
+              onClick={() => handleChipClick(actingEntry)}
+              title={actingChipTitle}
+              style={{
+                borderColor: 'var(--turn-active)',
+                height: `${TURN_QUEUE_SIDEBAR_HEIGHTS.actingRowPx}px`,
+                minHeight: `${TURN_QUEUE_SIDEBAR_HEIGHTS.actingRowPx}px`,
+              }}
+              className="w-full h-[36px] min-h-[36px] max-h-[36px] shrink-0 px-2.5 rounded-lg border bg-amber-400/15 hover:bg-amber-400/20 flex items-center justify-between gap-2 text-left cursor-pointer transition-colors"
+            >
+              <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                <div
+                  data-testid="turn-queue-acting-name"
+                  className="flex items-center gap-1 flex-1 min-w-0 text-[13px] font-bold text-amber-100"
                 >
-                  {actingEntry.name}
-                </span>
-                {targetName && (
-                  <>
-                    <span
-                      className="shrink-0 px-1 text-amber-200/80"
-                      aria-hidden="true"
-                    >
-                      &gt;
-                    </span>
-                    <span
-                      data-testid="turn-queue-acting-target"
-                      title={targetName}
-                      style={
-                        targetName.length > 7
-                          ? { minWidth: `min(${TURN_QUEUE_ACTING_NAME_MIN_PX}px, 42%)` }
-                          : undefined
-                      }
-                      className="min-w-0 truncate"
-                    >
-                      {targetName}
-                    </span>
-                  </>
-                )}
+                  <LevelBadge
+                    level={actingEntry.level}
+                    refLevel={refLevel}
+                    side={actingEntry.side}
+                    isLeader={isEntryLeader(actingEntry)}
+                  />
+                  <span
+                    data-testid="turn-queue-acting-attacker"
+                    title={actingEntry.name}
+                    style={
+                      targetName && actingEntry.name.length > 7
+                        ? {
+                            minWidth: `min(${TURN_QUEUE_ACTING_NAME_MIN_PX}px, 42%)`,
+                          }
+                        : undefined
+                    }
+                    className="min-w-0 truncate"
+                  >
+                    {actingEntry.name}
+                  </span>
+                  {targetName && (
+                    <>
+                      <span
+                        className="shrink-0 px-0.5 text-amber-200/80"
+                        aria-hidden="true"
+                      >
+                        &gt;
+                      </span>
+                      {targetUnit && (
+                        <LevelBadge
+                          level={targetUnit.level}
+                          refLevel={refLevel}
+                          side={targetUnit.side}
+                          isLeader={targetUnit.isPlayer}
+                        />
+                      )}
+                      <span
+                        data-testid="turn-queue-acting-target"
+                        title={targetName}
+                        style={
+                          targetName.length > 7
+                            ? {
+                                minWidth: `min(${TURN_QUEUE_ACTING_NAME_MIN_PX}px, 42%)`,
+                              }
+                            : undefined
+                        }
+                        className="min-w-0 truncate"
+                      >
+                        {targetName}
+                      </span>
+                    </>
+                  )}
+                </div>
               </div>
+              <span className="font-mono-nums text-[12px] font-bold text-amber-200 shrink-0">
+                SPD {actingEntry.effectiveSpeed}
+              </span>
+            </button>
+          ) : (
+            <div
+              data-testid="turn-queue-acting-empty"
+              style={{
+                height: `${TURN_QUEUE_SIDEBAR_HEIGHTS.actingRowPx}px`,
+                minHeight: `${TURN_QUEUE_SIDEBAR_HEIGHTS.actingRowPx}px`,
+              }}
+              className="w-full h-[36px] min-h-[36px] max-h-[36px] shrink-0 px-2.5 rounded-lg border border-slate-800/70 bg-slate-900/35 flex items-center text-[12px] text-slate-500"
+            >
+              <span className="min-w-0 truncate">
+                {battle.summary ? t('queue.battleEnded') : t('queue.noActiveActor')}
+              </span>
             </div>
-            <span className="font-mono-nums text-[12px] font-bold text-amber-200 shrink-0">
-              SPD {actingEntry.effectiveSpeed}
-            </span>
-          </button>
-        ) : (
-          <div
-            data-testid="turn-queue-acting-empty"
-            style={{
-              height: `${TURN_QUEUE_SIDEBAR_HEIGHTS.actingRowPx}px`,
-              minHeight: `${TURN_QUEUE_SIDEBAR_HEIGHTS.actingRowPx}px`,
-            }}
-            className="w-full h-[36px] min-h-[36px] max-h-[36px] shrink-0 px-2.5 rounded-lg border border-slate-800/70 bg-slate-900/35 flex items-center text-[12px] text-slate-500"
-          >
-            <span className="min-w-0 truncate">
-              {battle.summary ? t('queue.battleEnded') : t('queue.noActiveActor')}
-            </span>
-          </div>
-        )}
+          ))}
 
         {/* Upcoming List: fixed rows (up to 5) x 26px + gaps, independent of log mode, internal scroll */}
         {fixedRowCount > 0 && (
@@ -988,7 +1126,12 @@ export function TurnQueueBar({
                       >
                         {item.order}
                       </span>
-                      <TeamShapeIcon role={entry.teamRole} />
+                      <LevelBadge
+                        level={entry.level}
+                        refLevel={refLevel}
+                        side={entry.side}
+                        isLeader={isEntryLeader(entry)}
+                      />
                       <span
                         data-testid="turn-queue-chip-name"
                         title={entry.name}
@@ -1014,6 +1157,7 @@ export function TurnQueueBar({
             </div>
           </div>
         )}
+        {renderEnrageDetailSheet()}
       </div>
     );
   }
@@ -1022,12 +1166,12 @@ export function TurnQueueBar({
   return (
     <div
       data-testid="turn-queue-bar"
-      className="relative flex items-center gap-2 min-w-0 w-full"
+      className="relative flex flex-wrap items-center gap-2 min-w-0 w-full"
     >
-      {/* Left Header Badges: [Swords icon (tooltip)] [Round N (+ inline flame x1.7 when enraged)] */}
+      {/* Left Header Badges: [Swords icon (tooltip)] [Round N] [Compact Enrage Chip] */}
       <div
         data-testid="turn-queue-header"
-        className="flex items-center gap-1.5 shrink-0"
+        className="flex flex-wrap items-center gap-1.5 min-w-0 max-w-full"
       >
         {!battle.summary && (
           <span
@@ -1042,29 +1186,16 @@ export function TurnQueueBar({
 
         <span
           data-testid="turn-queue-round-chip"
-          title={
-            enragePct > 0
-              ? t('queue.enrageChipTooltip', { pct: enragePct })
-              : undefined
-          }
+          title={enrageTooltip}
           className={`inline-flex items-center gap-1.5 px-2 py-1 rounded font-mono-nums text-[12px] font-bold whitespace-nowrap ${
-            enragePct > 0
+            latestPhaseLabel
               ? 'bg-red-950/70 border border-red-500/65 text-slate-100'
               : 'bg-slate-900 border border-slate-700 text-slate-100'
           }`}
         >
           <span>{t('battle.round', { round: queue.round })}</span>
-          {enragePct > 0 && (
-            <span
-              data-testid="turn-queue-enrage-badge"
-              title={t('queue.enrageChipTooltip', { pct: enragePct })}
-              className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded bg-red-500/25 text-orange-300 text-[11px] font-bold leading-none"
-            >
-              <Flame className="w-3 h-3 text-orange-400 shrink-0" aria-hidden="true" />
-              <span>x{enrageMult}</span>
-            </span>
-          )}
         </span>
+        {renderEnrageChip()}
       </div>
 
       {/* Fixed-Width Non-Scrolling Conveyor Track (overflow-hidden, zero scrollbar, zero auto-scroll) */}
@@ -1079,6 +1210,8 @@ export function TurnQueueBar({
           <ConveyorChip
             key={`cur-${entry.unitId}`}
             entry={entry}
+            refLevel={refLevel}
+            isLeader={isEntryLeader(entry)}
             isActive={idx === 0 && !battle.summary}
             compactPhone={isPhone}
             animateShift={animateShift}
@@ -1099,6 +1232,8 @@ export function TurnQueueBar({
           <ConveyorChip
             key={`next-${entry.unitId}`}
             entry={entry}
+            refLevel={refLevel}
+            isLeader={isEntryLeader(entry)}
             isActive={false}
             compactPhone={isPhone}
             animateShift={animateShift}
@@ -1165,6 +1300,7 @@ export function TurnQueueBar({
           </div>
         )}
       </BottomSheet>
+      {renderEnrageDetailSheet()}
     </div>
   );
 }

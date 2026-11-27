@@ -5,6 +5,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
 } from 'react';
 import { HelpCircle, Radio, X } from 'lucide-react';
 import { getCatalogRow } from '../data/iconCatalog';
@@ -50,6 +51,7 @@ import {
   RADAR_STATUS_MAX_VISIBLE,
   readRadarLegendOpen,
   shouldSkipRadarFloatingLabels,
+  SP_COLOR_TOKENS,
   SPEECH_BUBBLE_DURATION_MS,
   SPEECH_BUBBLE_MAX_CHARS,
   useBattleLayoutMode,
@@ -60,6 +62,11 @@ import {
   type TargetInvalidReason,
   type TargetValidityResult,
 } from '../utils/battleDisplay';
+import {
+  getCardPopupSymbol,
+  isSpPopupText,
+  parseCardPopupDisplay,
+} from '../utils/cardPopupQueue';
 import {
   advanceRadarFloatingLabel,
   createRadarFloatingLabelQueue,
@@ -75,6 +82,10 @@ import {
   type ReducedMotionSetting,
 } from '../utils/battleVfx';
 import { useStatusDisplaySettings } from '../utils/statusDisplayPrefs';
+import {
+  computeRadarPopupScales,
+  resolveRadarPopupConfig,
+} from '../utils/radarPopup';
 import {
   BattleVfxOverlay,
   type ManualAimLineSpec,
@@ -165,7 +176,13 @@ function getMarkerShape(unit: CombatUnit): MarkerShapeKind {
   return unit.isBoss || unit.isStructure ? 'boss-fortress' : 'enemy-diamond';
 }
 
-function getPopupColorClass(tone: FloatingPopup['tone']): string {
+function getPopupColorClass(
+  tone: FloatingPopup['tone'],
+  text: string = ''
+): string {
+  if (isSpPopupText(text) && (tone === 'buff' || tone === 'heal')) {
+    return SP_COLOR_TOKENS.textClass;
+  }
   switch (tone) {
     case 'crit':
       return 'text-amber-300';
@@ -328,11 +345,11 @@ function formatSignedRowPct(val: number): string {
   return pct > 0 ? `+${pct}` : `${pct}`;
 }
 
-export function formatRadarLaneBuffText(
+export function getRadarLaneBuffParts(
   lang: Language,
   formationConfig: FormationConfig | undefined,
   row: CombatRow
-): string {
+): string[] {
   const mod = getRowModifier(formationConfig, row);
   const parts: string[] = [];
   if (Math.abs(mod.defensePct) >= 0.005) {
@@ -356,7 +373,33 @@ export function formatRadarLaneBuffText(
       })
     );
   }
-  return parts.join(' · ');
+  return parts;
+}
+
+export function formatRadarLaneBuffText(
+  lang: Language,
+  formationConfig: FormationConfig | undefined,
+  row: CombatRow
+): string {
+  return getRadarLaneBuffParts(lang, formationConfig, row).join(' · ');
+}
+
+export function formatRadarLaneHeaderText(
+  rowLabel: string,
+  buffParts: string[],
+  laneWidth: number,
+  isPhoneCollapsed: boolean
+): string {
+  if (isPhoneCollapsed || buffParts.length === 0) {
+    return rowLabel;
+  }
+  const fullHeader = `${rowLabel} · ${buffParts.join(' · ')}`;
+  const usableWidthPx = Math.max(24, laneWidth - 16);
+  const maxChars = Math.floor(usableWidthPx / 6);
+  if (fullHeader.length <= maxChars || buffParts.length <= 1) {
+    return fullHeader;
+  }
+  return `${rowLabel} · ${buffParts[0]} +${buffParts.length - 1}`;
 }
 
 export function computeLaneTokenRadius(
@@ -719,7 +762,7 @@ const RadarUnitMarker = memo(function RadarUnitMarker({
       data-visual-radius={visualRadius}
       data-ring-radius={ringOuterRadius}
       data-ring-diameter={ringDiameter}
-      data-ring-mode={ringResult.hpOnlyMode ? 'hp-only' : 'three-rings'}
+      data-ring-mode={ringResult.hpOnlyMode ? 'hp-only' : 'split-ring'}
       data-low-hp={ringResult.isLowHp ? 'true' : 'false'}
       data-acting={isActive ? 'true' : 'false'}
       data-targeted={isTargeted ? 'true' : 'false'}
@@ -834,56 +877,173 @@ const RadarUnitMarker = memo(function RadarUnitMarker({
               />
             )}
 
-          {/* 3 Concentric Ring Arcs (Shield outer blue, HP middle green/orange-red, SP inner purple) */}
+          {/* Inner Disc Base + Thin Inner SP Ring (R >= 30 only; hidden in tier 2 & hpOnlyMode) */}
+          {unit.alive && !ringResult.hpOnlyMode && (
+            <circle
+              cx="0"
+              cy="0"
+              r={ringResult.innerCircleRadius}
+              fill="#070d17"
+            />
+          )}
+          {unit.alive && ringResult.spArc && (
+            <g data-testid={`radar-ring-sp-group-${unit.id}`}>
+              <circle
+                data-testid={`radar-ring-track-sp-${unit.id}`}
+                cx="0"
+                cy="0"
+                r={ringResult.spArc.radius}
+                fill="none"
+                stroke={ringResult.spArc.trackColor}
+                strokeWidth={ringResult.spArc.strokeWidth}
+              />
+              <circle
+                data-testid={`radar-ring-sp-${unit.id}`}
+                data-ring-kind="sp"
+                data-ratio={ringResult.spArc.ratio}
+                data-stroke-width={ringResult.spArc.strokeWidth}
+                data-has-capacity={
+                  ringResult.spArc.hasCapacity ? 'true' : 'false'
+                }
+                cx="0"
+                cy="0"
+                r={ringResult.spArc.radius}
+                fill="none"
+                stroke={ringResult.spArc.color}
+                strokeWidth={ringResult.spArc.strokeWidth}
+                strokeDasharray={ringResult.spArc.strokeDasharray}
+                strokeDashoffset={ringResult.spArc.strokeDashoffset}
+                strokeLinecap="butt"
+                transform={ringResult.spArc.transform}
+              />
+            </g>
+          )}
+
+          {/* Split Ring (Left HP, Right Shield, bottom -> top) or HP-only fallback */}
           {unit.alive && (
             <g data-testid={`radar-rings-${unit.id}`}>
-              {ringResult.arcs.map((arc) => (
-                <g key={arc.kind}>
-                  {/* Subtle full-circle track */}
-                  <circle
-                    cx="0"
-                    cy="0"
-                    r={arc.radius}
-                    fill="none"
-                    stroke={arc.trackColor}
-                    strokeWidth={arc.strokeWidth}
-                  />
-                  {/* Filled arc clockwise from 12 o'clock using stroke-dasharray / stroke-dashoffset (Firefox-safe) */}
-                  <circle
-                    data-testid={`radar-ring-${arc.kind}-${unit.id}`}
-                    data-ring-kind={arc.kind}
-                    data-ratio={arc.ratio}
-                    data-stroke-width={arc.strokeWidth}
-                    data-low-hp={arc.isLowHp ? 'true' : 'false'}
-                    cx="0"
-                    cy="0"
-                    r={arc.radius}
-                    fill="none"
-                    stroke={arc.color}
-                    strokeWidth={arc.strokeWidth}
-                    strokeDasharray={arc.strokeDasharray}
-                    strokeDashoffset={arc.strokeDashoffset}
-                    strokeLinecap="butt"
-                    transform="rotate(-90)"
-                    className={
-                      arc.kind === 'hp' && arc.isLowHp && !animationsSkipped
-                        ? 'vfx-low-hp-pulse'
-                        : undefined
-                    }
-                  />
-                  {/* Tiny start tick mark at top 12 o'clock for color-blind ring order clarity */}
+              {ringResult.hpOnlyMode ? (
+                ringResult.arcs.map((arc) => (
+                  <g key={arc.kind}>
+                    <circle
+                      cx="0"
+                      cy="0"
+                      r={arc.radius}
+                      fill="none"
+                      stroke={arc.trackColor}
+                      strokeWidth={arc.strokeWidth}
+                    />
+                    <circle
+                      data-testid={`radar-ring-${arc.kind}-${unit.id}`}
+                      data-ring-kind={arc.kind}
+                      data-ratio={arc.ratio}
+                      data-stroke-width={arc.strokeWidth}
+                      data-low-hp={arc.isLowHp ? 'true' : 'false'}
+                      cx="0"
+                      cy="0"
+                      r={arc.radius}
+                      fill="none"
+                      stroke={arc.color}
+                      strokeWidth={arc.strokeWidth}
+                      strokeDasharray={arc.strokeDasharray}
+                      strokeDashoffset={arc.strokeDashoffset}
+                      strokeLinecap="butt"
+                      transform={arc.transform}
+                      className={
+                        arc.kind === 'hp' && arc.isLowHp && !animationsSkipped
+                          ? 'vfx-low-hp-pulse'
+                          : undefined
+                      }
+                    />
+                    <line
+                      data-testid={`radar-ring-tick-${arc.kind}-${unit.id}`}
+                      x1="0"
+                      y1={arc.tickY - 1.4}
+                      x2="0"
+                      y2={arc.tickY + 1.4}
+                      stroke="#f8fafc"
+                      strokeOpacity="0.85"
+                      strokeWidth="1.1"
+                    />
+                  </g>
+                ))
+              ) : (
+                <>
+                  {ringResult.arcs.map((arc) => (
+                    <g key={arc.kind}>
+                      {arc.kind === 'shield' && !ringResult.hasShield ? (
+                        <path
+                          data-testid={`radar-ring-shield-empty-track-${unit.id}`}
+                          d={`M 0 ${arc.radius} A ${arc.radius} ${arc.radius} 0 0 0 0 ${-arc.radius}`}
+                          fill="none"
+                          stroke={arc.trackColor}
+                          strokeWidth={arc.strokeWidth}
+                          strokeDasharray="3 3"
+                          strokeOpacity="0.65"
+                        />
+                      ) : (
+                        <circle
+                          data-testid={`radar-ring-track-${arc.kind}-${unit.id}`}
+                          cx="0"
+                          cy="0"
+                          r={arc.radius}
+                          fill="none"
+                          stroke={arc.trackColor}
+                          strokeWidth={arc.strokeWidth}
+                          strokeDasharray={arc.trackDasharray}
+                          strokeDashoffset="0"
+                          strokeLinecap="butt"
+                          transform={arc.transform}
+                        />
+                      )}
+                      <circle
+                        data-testid={`radar-ring-${arc.kind}-${unit.id}`}
+                        data-ring-kind={arc.kind}
+                        data-ratio={arc.ratio}
+                        data-stroke-width={arc.strokeWidth}
+                        data-low-hp={arc.isLowHp ? 'true' : 'false'}
+                        data-has-capacity={arc.hasCapacity ? 'true' : 'false'}
+                        cx="0"
+                        cy="0"
+                        r={arc.radius}
+                        fill="none"
+                        stroke={arc.color}
+                        strokeWidth={arc.strokeWidth}
+                        strokeDasharray={arc.strokeDasharray}
+                        strokeDashoffset={arc.strokeDashoffset}
+                        strokeLinecap="butt"
+                        transform={arc.transform}
+                        className={
+                          arc.kind === 'hp' && arc.isLowHp && !animationsSkipped
+                            ? 'vfx-low-hp-pulse'
+                            : undefined
+                        }
+                      />
+                    </g>
+                  ))}
+                  {/* 6px ticks at 12 and 6 o'clock marking the vertical 50/50 split */}
                   <line
-                    data-testid={`radar-ring-tick-${arc.kind}-${unit.id}`}
+                    data-testid={`radar-ring-tick-top-${unit.id}`}
                     x1="0"
-                    y1={arc.tickY - 1.4}
+                    y1={-(ringResult.ringRadius + 3)}
                     x2="0"
-                    y2={arc.tickY + 1.4}
+                    y2={-(ringResult.ringRadius - 3)}
                     stroke="#f8fafc"
-                    strokeOpacity="0.85"
-                    strokeWidth="1.1"
+                    strokeOpacity="0.9"
+                    strokeWidth="1.3"
                   />
-                </g>
-              ))}
+                  <line
+                    data-testid={`radar-ring-tick-bottom-${unit.id}`}
+                    x1="0"
+                    y1={ringResult.ringRadius - 3}
+                    x2="0"
+                    y2={ringResult.ringRadius + 3}
+                    stroke="#f8fafc"
+                    strokeOpacity="0.9"
+                    strokeWidth="1.3"
+                  />
+                </>
+              )}
             </g>
           )}
 
@@ -1193,6 +1353,38 @@ export function BattleRadarView({
   );
   const formationConfig = useGameStore((s) => s.adminConfig.formation);
   const iconMods = useGameStore((s) => s.adminConfig.iconCatalogMods);
+  const adminPopupFlightMs = useGameStore(
+    (s) => s.adminConfig.cardPopupFlightMs
+  );
+  const adminRadarStartScalePct = useGameStore(
+    (s) => s.adminConfig.radarPopupStartScalePct
+  );
+  const adminRadarSmallScalePct = useGameStore(
+    (s) => s.adminConfig.radarPopupSmallScalePct
+  );
+  const adminRadarLargeScalePct = useGameStore(
+    (s) => s.adminConfig.radarPopupLargeScalePct
+  );
+  const adminRadarBigMaxUnits = useGameStore(
+    (s) => s.adminConfig.radarPopupBigMaxUnits
+  );
+  const radarPopupCfg = useMemo(
+    () =>
+      resolveRadarPopupConfig({
+        cardPopupFlightMs: adminPopupFlightMs,
+        radarPopupStartScalePct: adminRadarStartScalePct,
+        radarPopupSmallScalePct: adminRadarSmallScalePct,
+        radarPopupLargeScalePct: adminRadarLargeScalePct,
+        radarPopupBigMaxUnits: adminRadarBigMaxUnits,
+      }),
+    [
+      adminPopupFlightMs,
+      adminRadarStartScalePct,
+      adminRadarSmallScalePct,
+      adminRadarLargeScalePct,
+      adminRadarBigMaxUnits,
+    ]
+  );
   const { settings: statusSettings } =
     useStatusDisplaySettings(adminStatusDefaults);
   const detectedMode = useBattleLayoutMode();
@@ -1677,6 +1869,15 @@ export function BattleRadarView({
     return set;
   }, [fadingDefeatIds, battle.explodedUnitIds]);
 
+  const aliveUnitsCount = useMemo(
+    () => battle.units.reduce((acc, u) => (u.alive ? acc + 1 : acc), 0),
+    [battle.units]
+  );
+  const radarPopupScales = useMemo(
+    () => computeRadarPopupScales(aliveUnitsCount, radarPopupCfg),
+    [aliveUnitsCount, radarPopupCfg]
+  );
+
   // One active floating label per alive unit, fixed 18px slot strictly ABOVE the unit ring
   const activeFloatingLabels = useMemo(() => {
     if (skipFloatingLabelsForSpeed) return [];
@@ -1684,6 +1885,7 @@ export function BattleRadarView({
       popup: FloatingPopup;
       leftPct: number;
       topPct: number;
+      dyPct: number;
     }> = [];
     for (const u of battle.units) {
       if (!u.alive) continue;
@@ -1700,7 +1902,10 @@ export function BattleRadarView({
       const topPct = Number(
         Math.max(0.5, Math.min(88, (slotTopSvgY / Math.max(1, vh)) * 100)).toFixed(2)
       );
-      items.push({ popup, leftPct, topPct });
+      const dyPct = Number(
+        (((ringOuterRadius + 12) / Math.max(1, vh)) * 100).toFixed(2)
+      );
+      items.push({ popup, leftPct, topPct, dyPct });
     }
     return items;
   }, [
@@ -1917,11 +2122,11 @@ export function BattleRadarView({
       ? t('common.middleRow')
       : t('common.backRow');
 
-  const rowBuffTexts = useMemo<Record<CombatRow, string>>(
+  const rowBuffParts = useMemo<Record<CombatRow, string[]>>(
     () => ({
-      front: formatRadarLaneBuffText(lang, formationConfig, 'front'),
-      middle: formatRadarLaneBuffText(lang, formationConfig, 'middle'),
-      back: formatRadarLaneBuffText(lang, formationConfig, 'back'),
+      front: getRadarLaneBuffParts(lang, formationConfig, 'front'),
+      middle: getRadarLaneBuffParts(lang, formationConfig, 'middle'),
+      back: getRadarLaneBuffParts(lang, formationConfig, 'back'),
     }),
     [lang, formationConfig]
   );
@@ -1985,7 +2190,7 @@ export function BattleRadarView({
           />
         ))}
 
-        {/* 3-ROW LANE BANDS — one muted 20px header line (lane name + Lộ diện only when exposed + buff) */}
+        {/* 3-ROW LANE BANDS — one muted 20px header line (lane name + buff) */}
         {lanes.map((lane) => {
           const exposure: RowExposureState =
             lane.side === 'enemy'
@@ -2013,15 +2218,17 @@ export function BattleRadarView({
             : 'rgba(51, 65, 85, 0.28)';
 
           const rowLabel = getRowLabel(lane.row);
-          const buffText = rowBuffTexts[lane.row];
-          const headerParts = isPhoneCollapsed
-            ? [rowLabel]
-            : [
-                rowLabel,
-                ...(isExposed ? [t('battle.rowExposed')] : []),
-                ...(buffText ? [buffText] : []),
-              ];
-          const headerText = headerParts.join(' · ');
+          const buffParts = rowBuffParts[lane.row];
+          const fullBuffText = buffParts.join(' · ');
+          const fullHeaderText = isPhoneCollapsed
+            ? rowLabel
+            : [rowLabel, ...(fullBuffText ? [fullBuffText] : [])].join(' · ');
+          const headerText = formatRadarLaneHeaderText(
+            rowLabel,
+            buffParts,
+            lane.w,
+            isPhoneCollapsed
+          );
 
           return (
             <g
@@ -2051,7 +2258,7 @@ export function BattleRadarView({
               >
                 <div
                   data-testid={`radar-lane-header-${lane.side}-${lane.row}`}
-                  title={headerText}
+                  title={fullHeaderText}
                   style={{ height: `${PHONE_EMPTY_LANE_HEIGHT_PX}px`, lineHeight: `${PHONE_EMPTY_LANE_HEIGHT_PX}px` }}
                   className={`w-full h-[20px] leading-[20px] px-1 flex items-center text-[10px] font-mono-nums truncate ${
                     isLandscape ? 'justify-center text-center' : 'justify-start text-left'
@@ -2273,20 +2480,51 @@ export function BattleRadarView({
                 <span>{t('radar.legendEnemyShape')}</span>
               </div>
 
-              <div className="flex items-center gap-2 pt-0.5 border-t border-slate-800/90">
+              <div
+                data-testid="radar-legend-split-ring"
+                className="flex items-center gap-2 pt-0.5 border-t border-slate-800/90"
+              >
                 <svg width="20" height="20" viewBox="0 0 20 20" className="shrink-0">
-                  <circle cx="10" cy="10" r="8.2" fill="none" stroke="#38bdf8" strokeWidth="1.6" strokeDasharray="38 52" transform="rotate(-90 10 10)" />
-                  <circle cx="10" cy="10" r="5.8" fill="none" stroke="#22c55e" strokeWidth="1.6" strokeDasharray="28 37" transform="rotate(-90 10 10)" />
-                  <circle cx="10" cy="10" r="3.4" fill="none" stroke="#c084fc" strokeWidth="1.6" strokeDasharray="16 22" transform="rotate(-90 10 10)" />
-                  <line x1="10" y1="0.8" x2="10" y2="7.5" stroke="#f8fafc" strokeWidth="0.9" />
+                  <circle cx="10" cy="10" r="4.6" fill="#070d17" />
+                  <circle
+                    data-testid="radar-legend-sp-ring"
+                    cx="10"
+                    cy="10"
+                    r="5.2"
+                    fill="none"
+                    stroke="#3a2a0c"
+                    strokeWidth="1.2"
+                  />
+                  <circle
+                    cx="10"
+                    cy="10"
+                    r="5.2"
+                    fill="none"
+                    stroke="#f59e0b"
+                    strokeWidth="1.2"
+                    strokeDasharray="24.5 32.7"
+                    transform="rotate(-90 10 10)"
+                  />
+                  <path d="M 10 17.8 A 7.8 7.8 0 0 1 10 2.2" fill="none" stroke="rgba(26,46,36,0.85)" strokeWidth="2.1" />
+                  <path d="M 10 17.8 A 7.8 7.8 0 0 1 4.8 4.2" fill="none" stroke="#22c55e" strokeWidth="2.1" />
+                  <path d="M 10 17.8 A 7.8 7.8 0 0 0 10 2.2" fill="none" stroke="rgba(20,44,72,0.85)" strokeWidth="2.1" />
+                  <path d="M 10 17.8 A 7.8 7.8 0 0 0 16.8 6.1" fill="none" stroke="#38bdf8" strokeWidth="2.1" />
+                  <line x1="10" y1="1.1" x2="10" y2="3.7" stroke="#f8fafc" strokeWidth="1" />
+                  <line x1="10" y1="16.3" x2="10" y2="18.9" stroke="#f8fafc" strokeWidth="1" />
                 </svg>
                 <span>{t('radar.legendRings')}</span>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div
+                data-testid="radar-legend-low-hp"
+                className="flex items-center gap-2"
+              >
                 <svg width="20" height="20" viewBox="0 0 20 20" className="shrink-0">
-                  <circle cx="10" cy="10" r="6.5" fill="none" stroke="rgba(249,115,22,0.28)" strokeWidth="2.2" />
-                  <circle cx="10" cy="10" r="6.5" fill="none" stroke="#f97316" strokeWidth="2.2" strokeDasharray="10 41" transform="rotate(-90 10 10)" />
+                  <path d="M 10 17.5 A 7.5 7.5 0 0 1 10 2.5" fill="none" stroke="rgba(127,29,29,0.55)" strokeWidth="2.6" />
+                  <path d="M 10 17.5 A 7.5 7.5 0 0 1 3.5 13.8" fill="none" stroke="#ef4444" strokeWidth="2.6" />
+                  <path d="M 10 17.5 A 7.5 7.5 0 0 0 10 2.5" fill="none" stroke="rgba(20,44,72,0.55)" strokeWidth="2.6" />
+                  <line x1="10" y1="1.2" x2="10" y2="4.2" stroke="#f8fafc" strokeWidth="1" />
+                  <line x1="10" y1="15.8" x2="10" y2="18.8" stroke="#f8fafc" strokeWidth="1" />
                 </svg>
                 <span>{t('radar.legendLowHp')}</span>
               </div>
@@ -2370,7 +2608,18 @@ export function BattleRadarView({
           className="pointer-events-none absolute inset-0 overflow-hidden z-30"
         >
           {activeFloatingLabels.map((item) => {
-            const isSmall = isCompactPopupTone(item.popup.tone);
+            const isSmall =
+              isCompactPopupTone(item.popup.tone) &&
+              !isSpPopupText(item.popup.text);
+            const display = parseCardPopupDisplay(item.popup, lang);
+            const iconPx = isSmall
+              ? 11
+              : item.popup.tone === 'crit'
+              ? 13
+              : 12;
+            const animClass = vfxConfig.reducedMotion
+              ? 'anim-radar-popup-reduced'
+              : 'anim-radar-popup-flight';
             return (
               <div
                 key={item.popup.id}
@@ -2378,21 +2627,72 @@ export function BattleRadarView({
                 data-unit-id={item.popup.unitId}
                 data-slot-height="18"
                 data-popup-compact={isSmall ? 'true' : 'false'}
-                style={{
-                  left: `${item.leftPct}%`,
-                  top: `${item.topPct}%`,
-                  height: '18px',
-                  lineHeight: '18px',
-                }}
-                className={`absolute -translate-x-1/2 h-[18px] leading-[18px] px-1.5 rounded bg-[#050a12]/90 inline-flex items-center justify-center font-display font-bold tracking-wide drop-shadow-[0_1px_3px_rgba(0,0,0,0.95)] whitespace-nowrap ${
+                style={
+                  {
+                    left: `${item.leftPct}%`,
+                    top: `${item.topPct}%`,
+                    height: '18px',
+                    lineHeight: '18px',
+                    transformOrigin: 'center bottom',
+                    transform: `translateX(-50%) scale(${radarPopupScales.finalScale})`,
+                    '--radar-pop-top': `${item.topPct}%`,
+                    '--radar-pop-dy': `${item.dyPct}%`,
+                    '--radar-pop-start-scale': `${radarPopupScales.startScale}`,
+                    '--radar-pop-end-scale': `${radarPopupScales.finalScale}`,
+                    animationDuration: vfxConfig.reducedMotion
+                      ? '160ms'
+                      : `${radarPopupCfg.flightMs}ms`,
+                  } as CSSProperties
+                }
+                className={`absolute h-[18px] leading-[18px] px-1.5 rounded bg-[#050a12]/90 inline-flex items-center justify-center gap-0.5 font-display font-bold tracking-wide drop-shadow-[0_1px_3px_rgba(0,0,0,0.95)] whitespace-nowrap ${animClass} ${
                   isSmall
                     ? 'text-[11px]'
                     : item.popup.tone === 'crit'
                     ? 'text-[13px]'
                     : 'text-[12px]'
-                } ${getPopupColorClass(item.popup.tone)}`}
+                } ${getPopupColorClass(item.popup.tone, item.popup.text)}`}
               >
-                {item.popup.text}
+                {display.arrow === 'up' && <span aria-hidden="true">↑</span>}
+                {display.arrow === 'down' && <span aria-hidden="true">↓</span>}
+                {display.segments.map((seg, idx) => (
+                  <span
+                    key={idx}
+                    className={`inline-flex items-center gap-0.5 ${
+                      seg.colorClass ?? ''
+                    }`}
+                  >
+                    {seg.iconKind && (
+                      <span
+                        data-testid="card-popup-icon"
+                        data-popup-icon-kind={seg.iconKind}
+                        className="material-symbols-outlined leading-none select-none shrink-0"
+                        style={{ fontSize: `${iconPx}px` }}
+                        aria-hidden="true"
+                      >
+                        {getCardPopupSymbol(seg.iconKind, iconMods)}
+                      </span>
+                    )}
+                    <span>{seg.text}</span>
+                    {seg.trailingIconKind && (
+                      <span
+                        data-testid="card-popup-icon"
+                        data-popup-icon-kind={seg.trailingIconKind}
+                        data-popup-icon-role="trailing"
+                        className={`material-symbols-outlined leading-none select-none shrink-0 ${
+                          seg.trailingColorClass ?? ''
+                        }`}
+                        style={{
+                          fontSize: `${
+                            seg.trailingSmall ? Math.max(9, iconPx - 2) : iconPx
+                          }px`,
+                        }}
+                        aria-hidden="true"
+                      >
+                        {getCardPopupSymbol(seg.trailingIconKind, iconMods)}
+                      </span>
+                    )}
+                  </span>
+                ))}
               </div>
             );
           })}

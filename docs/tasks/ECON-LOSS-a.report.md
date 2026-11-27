@@ -1,0 +1,7 @@
+# TASK ECON-LOSS-a — Báo cáo
+- **ITEM 1 (Config + toán thưởng + BattleResultDialog)**: `src/types/game.ts`, `src/data/balance.ts`, `src/engine/migration.ts`, `src/engine/combat.ts`, `src/store/useGameStore.ts`, `src/components/BattleResultDialog.tsx`, `src/i18n/{vi,en}.ts`, `src/engine/__tests__/engine.test.ts`.
+- **ITEM 2 (Admin block "Thưởng trận")**: `src/components/admin/BattleRewardsAdminBlock.tsx` gắn trong `src/components/AdminPanel.tsx` tab Chiến đấu cạnh `enrage`, bọc `<AdminSection id="battle-rewards">` mặc định đóng, đủ 8 ô (kèm mô tả 1 dòng) + 2 ví dụ sống.
+- **Công thức thắng**: `steps = max(0, supportMaxLevel + 1 - gearLevel)`; `EXP = fullVictoryExp * (1 + steps * supportExpPerLevelPct / 100)`; `Credits = fullVictoryCredits * (1 + steps * supportCreditWpPerLevelPct / 100)`; `WP = round(fullWpRaw * (1 + steps * supportCreditWpPerLevelPct / 100)) + baseCaptureBonusWp` (không nhân WP chiếm căn cứ; `gearLevel > supportMaxLevel` giữ nguyên x1).
+- **Công thức thua / rút lui**: `defeat = round(min(destroyed * pct / 100, victory * defeatMaxPctOfVictory / 100))` (bỏ an ủi & hỗ trợ quốc gia); `retreat = round(defeat * retreatRewardPct / 100)`.
+- **Tests (`--reporter=dot`)**: `battleRewardsEconLossA.test.tsx` (5/5 PASS), `BattleResultDialog.test.tsx` (4/4 PASS), `admUi1.test.tsx` (4/4 PASS), `engine.test.ts` thưởng trận (1/1 PASS), `battleKindsK1.test.tsx` i18n parity (1/1 PASS), `tsc --noEmit` / `lint_applet` 0 lỗi; `CURRENT_SAVE_VERSION = 14` giữ nguyên.
+- **Lưu ý**: Chưa kiểm tra trên trình duyệt thật (NOT checked in a real browser).

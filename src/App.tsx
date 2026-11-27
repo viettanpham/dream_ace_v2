@@ -12,10 +12,13 @@ import { TitleScreen } from './components/TitleScreen';
 import { TopHud } from './components/TopHud';
 import { attachCloudAutosaveListeners } from './store/useCloudSaveStore';
 import { ENABLE_ADMIN_CP, useGameStore } from './store/useGameStore';
+import { useI18n } from './i18n';
 import { useBattleLayoutMode } from './utils/battleDisplay';
 import { installGlobalErrorCapture } from './utils/errorLog';
+import { attachPerfDocumentListeners } from './utils/perfPrefs';
 
 function AppShell() {
+  const { t } = useI18n();
   const screen = useGameStore((s) => s.screen);
   const adminPanelOpen = useGameStore((s) => s.adminPanelOpen);
   const tacticsModalOpen = useGameStore((s) => s.tacticsModalOpen);
@@ -23,8 +26,12 @@ function AppShell() {
   const unlockAdminMode = useGameStore((s) => s.unlockAdminMode);
   const setAdminPanelOpen = useGameStore((s) => s.setAdminPanelOpen);
   const setTacticsModalOpen = useGameStore((s) => s.setTacticsModalOpen);
-  const startBattle = useGameStore((s) => s.startBattle);
+  const reloadBattle = useGameStore((s) => s.reloadBattle);
   const battleSectorId = useGameStore((s) => s.battle?.sectorId);
+  const battleLaunchToast = useGameStore((s) => s.battleLaunchToast);
+  const clearBattleLaunchToast = useGameStore(
+    (s) => s.clearBattleLaunchToast
+  );
   const layoutMode = useBattleLayoutMode();
   const isPhoneBattle = screen === 'BATTLE' && layoutMode === 'phone-portrait';
 
@@ -59,6 +66,11 @@ function AppShell() {
     return attachCloudAutosaveListeners();
   }, []);
 
+  // Performance mode + hidden/unfocused animation pause attribute sync on <html>
+  useEffect(() => {
+    return attachPerfDocumentListeners();
+  }, []);
+
   if (screen === 'TITLE') {
     return (
       <div className="h-[100dvh] w-full overflow-hidden">
@@ -90,7 +102,7 @@ function AppShell() {
       {screen === 'BATTLE' && (
         <ErrorBoundary
           variant="global"
-          onReloadBattle={() => startBattle(battleSectorId)}
+          onReloadBattle={() => reloadBattle(battleSectorId)}
         >
           <BattleScreen />
         </ErrorBoundary>
@@ -102,7 +114,7 @@ function AppShell() {
         resetKey={tacticsModalOpen}
         onClose={() => setTacticsModalOpen(false)}
         onReloadBattle={
-          screen === 'BATTLE' ? () => startBattle(battleSectorId) : undefined
+          screen === 'BATTLE' ? () => reloadBattle(battleSectorId) : undefined
         }
       >
         <AutoTacticsModal />
@@ -114,7 +126,7 @@ function AppShell() {
         resetKey={adminPanelOpen}
         onClose={() => setAdminPanelOpen(false)}
         onReloadBattle={
-          screen === 'BATTLE' ? () => startBattle(battleSectorId) : undefined
+          screen === 'BATTLE' ? () => reloadBattle(battleSectorId) : undefined
         }
       >
         <AdminPanel />
@@ -122,6 +134,25 @@ function AppShell() {
 
       <CloudConflictDialog />
       <UnlockCloudPinDialog />
+      {battleLaunchToast && (
+        <div
+          role="status"
+          data-testid="battle-launch-toast"
+          className="fixed bottom-4 right-4 z-50 max-w-sm rounded-lg border border-amber-500/60 bg-slate-900/95 px-3.5 py-2.5 text-xs text-amber-200 shadow-lg flex items-center gap-2.5"
+        >
+          <span className="min-w-0 flex-1">
+            {t(battleLaunchToast.reasonKey)}
+          </span>
+          <button
+            type="button"
+            onClick={clearBattleLaunchToast}
+            aria-label="Close"
+            className="text-slate-400 hover:text-slate-100 px-1 cursor-pointer"
+          >
+            ×
+          </button>
+        </div>
+      )}
     </div>
   );
 }

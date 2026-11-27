@@ -199,7 +199,7 @@ describe('Conveyor Turn Queue — buildTurnQueue & TurnQueueBar render', () => {
     expect(html).not.toContain('overflow-scroll');
   });
 
-  it('TurnQueueBar header renders [Swords icon w/ tooltip] -> [Round N (+ inline flame x1.7 when enraged)] -> [acting chip first] without visible "Đang chiến đấu" text or separate enrage chip', () => {
+  it('TurnQueueBar header renders [Swords icon w/ tooltip] -> [Round N (+ inline flame phase badge when enraged)] -> [acting chip first] without visible "Đang chiến đấu" text or separate enrage chip', () => {
     useGameStore.getState().setLanguage('en');
 
     const units = [
@@ -215,7 +215,6 @@ describe('Conveyor Turn Queue — buildTurnQueue & TurnQueueBar render', () => {
         battle,
         battleSpeed: 1,
         skipAnimations: false,
-        enrageBonusPct: 0.7,
       })
     );
 
@@ -239,14 +238,18 @@ describe('Conveyor Turn Queue — buildTurnQueue & TurnQueueBar render', () => {
 
     // Icon tooltip says "Đang chiến đấu" (SSR snapshot uses default store language 'vi')
     expect(html).toContain('title="Đang chiến đấu"');
-    // Inline flame badge inside Round chip shows x1.7 and has Enrage +70% tooltip
-    expect(html).toContain('x1.7');
-    expect(html).toContain('title="Cuồng nộ: địch gây +70% sát thương"');
-    // Enrage badge is nested inside turn-queue-round-chip (no separate enrage pill after closing round chip)
+    // Inline flame badge inside Round chip shows highest active phase name and 3-phase tooltip
+    expect(html).toContain('Cuồng nộ');
+    expect(html).toContain(
+      'title="Cuồng nộ: 2 tầng (thủ -10%) · Frenzy: 0 tầng (+0% sát thương) · Berserker: 0 tầng (+0% crit, +0% sát thương crit)"'
+    );
+    // Enrage chip renders right after turn-queue-round-chip with phase name, stack count, active icons, and 3-phase tooltip
     const roundChipSegment = html.slice(roundChipIdx, firstChipIdx);
     expect(roundChipSegment).toContain('Vòng 27');
     expect(roundChipSegment).toContain('data-testid="turn-queue-enrage-badge"');
-    expect(roundChipSegment).toContain('x1.7');
+    expect(roundChipSegment).toContain('Cuồng nộ');
+    expect(roundChipSegment).toContain('x2');
+    expect(roundChipSegment).toContain('-10%');
   });
 });
 

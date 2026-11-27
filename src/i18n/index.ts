@@ -1,5 +1,10 @@
 import { useCallback } from 'react';
 import { AFFIX_SUFFIX_MAP, getItemTemplate } from '../data/items';
+import { getDefaultSelectedNodeId, getMapNodeById } from '../data/maps';
+import { getSkillById } from '../data/skills';
+import { getStatusEntry } from '../data/statusEffects';
+import { formatStatusChipShortValue } from '../data/statusIconMap';
+import { getEnragePhaseDisplayName } from '../engine/enrage';
 import { useGameStore } from '../store/useGameStore';
 import type {
   ActiveStatusEffect,
@@ -9,6 +14,7 @@ import type {
   CombatLogTag,
   CombatUnit,
   EnemyArchetype,
+  EnragePhaseKey,
   EquipmentSlot,
   EquipValidationResult,
   ItemInstance,
@@ -18,6 +24,8 @@ import type {
   SectorDifficulty,
   SimpleTacticsConfig,
   SkillCategory,
+  SkillDefinition,
+  SkillModDefinition,
   SkillTargetType,
   StatKey,
   StatusEffectType,
@@ -28,6 +36,7 @@ import type {
   TeamColorRole,
 } from '../types/game';
 import { BALANCE_CONFIG } from '../data/balance';
+import { getBoxCapacity } from '../engine/migration';
 import {
   clampDefeatStreakLimit,
   DEFAULT_DEFEAT_STREAK_LIMIT,
@@ -108,11 +117,79 @@ export function getStatDesc(lang: Language, key: StatKey): string {
   return translate(lang, `stat.${key}.desc` as TranslationKey);
 }
 
-export function getSkillName(lang: Language, skillId: string): string {
+export function getSkillName(
+  lang: Language,
+  skillId: string,
+  skillMods?: readonly SkillModDefinition[] | null
+): string;
+export function getSkillName(skill: SkillDefinition, lang: Language): string;
+export function getSkillName(
+  langOrSkill: Language | SkillDefinition,
+  skillOrLang: string | Language,
+  skillMods?: readonly SkillModDefinition[] | null
+): string {
+  if (typeof langOrSkill !== 'string') {
+    const skill = langOrSkill;
+    const lang = skillOrLang as Language;
+    if (skill.registryTag === 'mod') {
+      const mod = skill as Partial<SkillModDefinition>;
+      const inline = lang === 'vi' ? mod.nameVi : mod.nameEn;
+      if (typeof inline === 'string' && inline.trim().length > 0) {
+        return inline;
+      }
+    }
+    return translate(lang, `skill.${skill.id}.name` as TranslationKey);
+  }
+  const lang = langOrSkill;
+  const skillId = skillOrLang;
+  const modSkill = getSkillById(skillId, skillMods);
+  if (modSkill && modSkill.registryTag === 'mod') {
+    const inline =
+      lang === 'vi'
+        ? (modSkill as SkillModDefinition).nameVi
+        : (modSkill as SkillModDefinition).nameEn;
+    if (typeof inline === 'string' && inline.trim().length > 0) {
+      return inline;
+    }
+  }
   return translate(lang, `skill.${skillId}.name` as TranslationKey);
 }
 
-export function getSkillDesc(lang: Language, skillId: string): string {
+export function getSkillDesc(
+  lang: Language,
+  skillId: string,
+  skillMods?: readonly SkillModDefinition[] | null
+): string;
+export function getSkillDesc(skill: SkillDefinition, lang: Language): string;
+export function getSkillDesc(
+  langOrSkill: Language | SkillDefinition,
+  skillOrLang: string | Language,
+  skillMods?: readonly SkillModDefinition[] | null
+): string {
+  if (typeof langOrSkill !== 'string') {
+    const skill = langOrSkill;
+    const lang = skillOrLang as Language;
+    if (skill.registryTag === 'mod') {
+      const mod = skill as Partial<SkillModDefinition>;
+      const inline = lang === 'vi' ? mod.descVi : mod.descEn;
+      if (typeof inline === 'string' && inline.trim().length > 0) {
+        return inline;
+      }
+    }
+    return translate(lang, `skill.${skill.id}.desc` as TranslationKey);
+  }
+  const lang = langOrSkill;
+  const skillId = skillOrLang;
+  const modSkill = getSkillById(skillId, skillMods);
+  if (modSkill && modSkill.registryTag === 'mod') {
+    const inline =
+      lang === 'vi'
+        ? (modSkill as SkillModDefinition).descVi
+        : (modSkill as SkillModDefinition).descEn;
+    if (typeof inline === 'string' && inline.trim().length > 0) {
+      return inline;
+    }
+  }
   return translate(lang, `skill.${skillId}.desc` as TranslationKey);
 }
 
@@ -141,16 +218,69 @@ export function getBattleSkillReason(
   });
 }
 
+function hasStaticTranslation(lang: Language, key: string): boolean {
+  try {
+    if (useGameStore.getState()?.adminConfig?.showRawI18nKeys) {
+      return true;
+    }
+  } catch {
+    // Store may not be initialized
+  }
+  const dict = DICTIONARIES[lang] ?? VI_TRANSLATIONS;
+  return (
+    (dict as Record<string, string | undefined>)[key] !== undefined ||
+    (EN_TRANSLATIONS as Record<string, string | undefined>)[key] !== undefined
+  );
+}
+
 export function getSectorName(lang: Language, sectorId: string): string {
-  return translate(lang, `sector.${sectorId}.name` as TranslationKey);
+  const key = `sector.${sectorId}.name` as TranslationKey;
+  if (hasStaticTranslation(lang, key)) {
+    return translate(lang, key);
+  }
+  const node = getMapNodeById(sectorId);
+  if (node) {
+    if (lang === 'en' && node.name === 'Liên Minh VSS') {
+      return 'VSS Alliance';
+    }
+    if (lang === 'vi' && node.name === 'VSS Alliance') {
+      return 'Liên Minh VSS';
+    }
+    if (lang === 'en' && node.name === 'Rãnh Void Sovereign') {
+      return 'Void Sovereign Trench';
+    }
+    if (lang === 'vi' && node.name === 'Void Sovereign Trench') {
+      return 'Rãnh Void Sovereign';
+    }
+    if (lang === 'en' && node.name.startsWith('Căn cứ ')) {
+      return `Base ${node.name.slice('Căn cứ '.length)}`;
+    }
+    if (lang === 'vi' && node.name.startsWith('Base ')) {
+      return `Căn cứ ${node.name.slice('Base '.length)}`;
+    }
+    return node.name;
+  }
+  return translate(lang, key);
 }
 
 export function getSectorRegion(lang: Language, sectorId: string): string {
-  return translate(lang, `sector.${sectorId}.region` as TranslationKey);
+  const key = `sector.${sectorId}.region` as TranslationKey;
+  if (hasStaticTranslation(lang, key)) {
+    return translate(lang, key);
+  }
+  const node = getMapNodeById(sectorId);
+  if (node?.regionCode) return node.regionCode;
+  return translate(lang, key);
 }
 
 export function getSectorDesc(lang: Language, sectorId: string): string {
-  return translate(lang, `sector.${sectorId}.desc` as TranslationKey);
+  const key = `sector.${sectorId}.desc` as TranslationKey;
+  if (hasStaticTranslation(lang, key)) {
+    return translate(lang, key);
+  }
+  const node = getMapNodeById(sectorId);
+  if (node?.description) return node.description;
+  return translate(lang, key);
 }
 
 export function getDifficultyLabel(
@@ -179,11 +309,30 @@ export function getStatusLabel(
   return translate(lang, `status.${status}` as TranslationKey);
 }
 
+/**
+ * S1a: Reads status name from statusEffects registry first when `registryId` is present,
+ * falling back to the existing `status.<type>` i18n key.
+ */
+export function getStatusDisplayName(
+  lang: Language,
+  status: StatusEffectType,
+  registryId?: string
+): string {
+  if (registryId) {
+    const entry = getStatusEntry(registryId);
+    if (entry) return lang === 'vi' ? entry.nameVi : entry.nameEn;
+  }
+  return getStatusLabel(lang, status);
+}
+
 export function getStatusDesc(
   lang: Language,
-  status: StatusEffectType
+  status: StatusEffectType,
+  turns?: number
 ): string {
-  return translate(lang, `status.${status}.desc` as TranslationKey);
+  return translate(lang, `status.${status}.desc` as TranslationKey, {
+    n: Math.max(1, turns ?? 1),
+  });
 }
 
 const STATUS_SHORT_LABELS: Record<
@@ -191,7 +340,8 @@ const STATUS_SHORT_LABELS: Record<
   { en: string; vi: string }
 > = {
   burn: { en: 'Burn', vi: 'Thiêu' },
-  shield_break: { en: 'ShdBrk', vi: 'VỡKhiên' },
+  shield_break: { en: 'ShdDown', vi: 'KhiênVỡ' },
+  shield_cracked: { en: 'Cracked', vi: 'KhiênNứt' },
   slow: { en: 'Slow', vi: 'Chậm' },
   silence: { en: 'Silence', vi: 'Câm' },
   stealth: { en: 'Stealth', vi: 'Ẩn' },
@@ -211,6 +361,7 @@ const STATUS_SHORT_LABELS: Record<
   siege_mode: { en: 'Siege', vi: 'Pháo' },
   siege_defense: { en: 'Bastion', vi: 'PháoĐài' },
   charging: { en: 'Charge', vi: 'Nạp' },
+  registry_effect: { en: 'Effect', vi: 'Hiệu ứng' },
 };
 
 export function getStatusShortLabel(
@@ -242,7 +393,7 @@ export function formatStatusEffectDetail(
   unit?: CombatUnit | null
 ): StatusEffectDetail {
   const isVi = lang === 'vi';
-  const label = getStatusLabel(lang, st.type);
+  const label = getStatusDisplayName(lang, st.type, st.registryId);
   const maxHp = unit?.derived?.maxHp ?? 0;
 
   let valueText = '';
@@ -322,8 +473,17 @@ export function formatStatusEffectDetail(
       break;
     }
     case 'shield_break': {
-      // Exact engine behavior: bypasses shields & blocks shield restore (combat.ts)
-      valueText = isVi ? 'Khóa Khiên' : 'Shields off';
+      const turns = Math.max(1, st.turnsRemaining || 1);
+      valueText = isVi
+        ? `Khởi động lại ${turns} lượt`
+        : `Restarting ${turns} turn(s)`;
+      includeTurns = false;
+      break;
+    }
+    case 'shield_cracked': {
+      const mult =
+        st.magnitude && st.magnitude >= 1 ? Number(st.magnitude.toFixed(2)) : 1.3;
+      valueText = isVi ? `x${mult} ST lên khiên` : `x${mult} shield dmg`;
       break;
     }
     case 'silence': {
@@ -374,6 +534,11 @@ export function formatStatusEffectDetail(
       includeTurns = false;
       break;
     }
+    case 'registry_effect': {
+      const shortVal = formatStatusChipShortValue(lang, st, unit);
+      valueText = shortVal === label ? '' : shortVal;
+      break;
+    }
   }
 
   const durationText = includeTurns
@@ -390,7 +555,10 @@ export function formatStatusEffectDetail(
     ? `${label} ${durationText}`
     : label;
 
-  const shortLabel = getStatusShortLabel(lang, st.type);
+  const shortLabel =
+    st.type === 'registry_effect' && st.registryId
+      ? label
+      : getStatusShortLabel(lang, st.type);
   const shortText = valueText ? `${shortLabel}: ${valueText}` : shortLabel;
 
   return {
@@ -422,10 +590,15 @@ export function getTeamTagLabel(lang: Language, role: TeamColorRole): string {
 export function getAutoStopReasonLabel(
   lang: Language,
   reason: AutoStopReason,
-  streakLimit: number = DEFAULT_DEFEAT_STREAK_LIMIT
+  streakLimit: number = DEFAULT_DEFEAT_STREAK_LIMIT,
+  boxCapacity?: number
 ): string {
+  const max =
+    typeof boxCapacity === 'number' && Number.isFinite(boxCapacity)
+      ? Math.max(1, Math.round(boxCapacity))
+      : getBoxCapacity(useGameStore.getState()?.adminConfig);
   return translate(lang, `auto.repeatReason.${reason}` as TranslationKey, {
-    max: BALANCE_CONFIG.maxInventorySize,
+    max,
     streak: clampDefeatStreakLimit(streakLimit),
   });
 }
@@ -620,6 +793,12 @@ export function formatItemTraitsList(
   if (tr.longRange) {
     list.push(translate(lang, 'trait.longRange'));
   }
+  if (tr.accuracyPct) {
+    list.push(translate(lang, 'trait.accuracy', { val: tr.accuracyPct }));
+  }
+  if (tr.detectStealth) {
+    list.push(translate(lang, 'trait.detectStealth'));
+  }
   return list;
 }
 
@@ -674,13 +853,30 @@ function formatCombatLogBody(
 
   switch (entry.templateKey) {
     case 'log.battleStart': {
-      const sectorId = String(p.sectorId ?? 'border_outpost');
+      const sectorId = String(p.sectorId ?? getDefaultSelectedNodeId());
       const diff = String(p.difficulty ?? 'Standard') as SectorDifficulty;
       return translate(lang, 'log.battleStart', {
         sector: getSectorName(lang, sectorId),
         difficulty: getDifficultyLabel(lang, diff),
       });
     }
+
+    case 'log.sectorSupply': {
+      const n = Math.max(0, Math.min(100, Math.round(Number(p.n ?? 100))));
+      return translate(lang, 'log.sectorSupply', { n });
+    }
+
+    case 'log.enragePhaseActivated': {
+      const phase = String(p.phase ?? 'rage') as EnragePhaseKey;
+      const round = Math.max(1, Math.floor(Number(p.round ?? entry.round ?? 1)));
+      return translate(lang, 'log.enragePhaseActivated', {
+        round,
+        phase: getEnragePhaseDisplayName(phase, lang),
+      });
+    }
+
+    case 'log.prestageConfirm':
+      return translate(lang, 'log.prestageConfirm');
 
     case 'log.defend': {
       const shd = Number(p.shieldRecovered ?? 0);
@@ -715,6 +911,16 @@ function formatCombatLogBody(
       });
     }
 
+    case 'log.shieldSingle': {
+      const skillId = String(p.skillId ?? 'sup_energize_target');
+      return translate(lang, 'log.shieldSingle', {
+        actor: String(p.actor ?? ''),
+        target: String(p.target ?? ''),
+        skill: getSkillName(lang, skillId),
+        amount: Number(p.amount ?? 0),
+      });
+    }
+
     case 'log.energize': {
       const skillId = String(p.skillId ?? 'sup_flux_transfer');
       return translate(lang, 'log.energize', {
@@ -724,6 +930,78 @@ function formatCombatLogBody(
         amount: Number(p.amount ?? 0),
       });
     }
+
+    case 'log.spTransfer': {
+      return translate(lang, 'log.spTransfer', {
+        actor: String(p.actor ?? ''),
+        amount: Number(p.amount ?? 0),
+        count: Number(p.count ?? 0),
+        fee: Number(p.fee ?? 0),
+      });
+    }
+
+    case 'log.useSupply': {
+      const tplId = String(p.templateId ?? '');
+      const supplyKey = `supply.${tplId}.name` as TranslationKey;
+      const resolvedSupply = translate(lang, supplyKey);
+      const supplyName =
+        resolvedSupply === supplyKey ? tplId : resolvedSupply;
+      const hp = Math.max(0, Number(p.hp ?? 0));
+      const shield = Math.max(0, Number(p.shield ?? 0));
+      const sp = Math.max(0, Number(p.sp ?? 0));
+      const parts: string[] = [];
+      if (hp > 0) parts.push(`HP +${hp}`);
+      if (shield > 0) parts.push(`SHD +${shield}`);
+      if (sp > 0) parts.push(`SP +${sp}`);
+      const gains = parts.length > 0 ? parts.join(', ') : 'HP +0';
+      return translate(lang, 'log.useSupply', {
+        actor: String(p.actor ?? ''),
+        supply: supplyName,
+        gains,
+      });
+    }
+
+    case 'log.supplyScanReveal': {
+      const names = String(p.revealedNames ?? '').trim();
+      if (!names) {
+        return translate(lang, 'log.supplyScanNone');
+      }
+      return translate(lang, 'log.supplyScanReveal', { names });
+    }
+
+    case 'log.supplyScanNone': {
+      return translate(lang, 'log.supplyScanNone');
+    }
+
+    case 'log.supplyDrop':
+    case 'log.supplyDropLost': {
+      const tplId = String(p.templateId ?? '');
+      const supplyKey = `supply.${tplId}.name` as TranslationKey;
+      const resolvedSupply = translate(lang, supplyKey);
+      const name =
+        tplId === 'supply_crate'
+          ? translate(lang, 'consumable.supply_crate.name')
+          : resolvedSupply === supplyKey
+            ? tplId
+            : resolvedSupply;
+      if (entry.templateKey === 'log.supplyDropLost') {
+        return translate(lang, 'log.supplyDropLost', {
+          name,
+          lost: Math.max(0, Number(p.lost ?? 0)),
+          cap: Math.max(1, Number(p.cap ?? 99)),
+        });
+      }
+      return translate(lang, 'log.supplyDrop', {
+        name,
+        qty: Math.max(0, Number(p.qty ?? 0)),
+      });
+    }
+
+    case 'log.emergencyResupplyAlly':
+      return translate(lang, 'log.emergencyResupplyAlly');
+
+    case 'log.emergencyResupplyEnemy':
+      return translate(lang, 'log.emergencyResupplyEnemy');
 
     case 'log.evade': {
       const actionText = formatActionParam(lang, p);
@@ -744,6 +1022,13 @@ function formatCombatLogBody(
           : shd > 0
           ? translate(lang, 'log.breakdownShield', { shield: shd })
           : translate(lang, 'log.breakdownHp', { hp });
+      const rawShieldMult = Number(p.shieldMult ?? 1);
+      const shieldMultTag =
+        Number.isFinite(rawShieldMult) && rawShieldMult > 1
+          ? translate(lang, 'log.shieldMultTag', {
+              mult: Number(rawShieldMult.toFixed(2)),
+            })
+          : '';
       const critTag = Number(p.isCrit ?? 0)
         ? translate(lang, 'log.critTag')
         : '';
@@ -756,6 +1041,7 @@ function formatCombatLogBody(
         action: actionText,
         target: String(p.target ?? ''),
         breakdown,
+        shieldMultTag,
         critTag,
         defendTag,
       });
@@ -771,12 +1057,23 @@ function formatCombatLogBody(
 
     case 'log.statusApplied': {
       const status = String(p.status ?? 'burn') as StatusEffectType;
+      const registryId = p.registryId ? String(p.registryId) : undefined;
       return translate(lang, 'log.statusApplied', {
         target: String(p.target ?? ''),
-        status: getStatusLabel(lang, status),
+        status: getStatusDisplayName(lang, status, registryId),
         turns: Number(p.turns ?? 2),
       });
     }
+
+    case 'log.shieldCrackNoShield':
+      return translate(lang, 'log.shieldCrackNoShield', {
+        target: String(p.target ?? ''),
+      });
+
+    case 'log.shieldBreakBlocked':
+      return translate(lang, 'log.shieldBreakBlocked', {
+        target: String(p.target ?? ''),
+      });
 
     case 'log.burnTick':
       return translate(lang, 'log.burnTick', {
@@ -786,6 +1083,56 @@ function formatCombatLogBody(
 
     case 'log.regenTick':
       return translate(lang, 'log.regenTick', {
+        target: String(p.target ?? ''),
+        amount: Number(p.amount ?? 0),
+      });
+
+    case 'log.registryDotTick': {
+      const registryId = p.registryId ? String(p.registryId) : undefined;
+      return translate(lang, 'log.registryDotTick', {
+        target: String(p.target ?? ''),
+        damage: Number(p.damage ?? 0),
+        resource: String(p.resource ?? 'HP'),
+        status: getStatusDisplayName(lang, 'registry_effect', registryId),
+      });
+    }
+
+    case 'log.registryHotTick': {
+      const registryId = p.registryId ? String(p.registryId) : undefined;
+      return translate(lang, 'log.registryHotTick', {
+        target: String(p.target ?? ''),
+        amount: Number(p.amount ?? 0),
+        resource: String(p.resource ?? 'HP'),
+        status: getStatusDisplayName(lang, 'registry_effect', registryId),
+      });
+    }
+
+    case 'log.controlResisted': {
+      const registryId = p.registryId ? String(p.registryId) : undefined;
+      return translate(lang, 'log.controlResisted', {
+        status: getStatusDisplayName(lang, 'registry_effect', registryId),
+      });
+    }
+
+    case 'log.shieldRegen': {
+      const reason = String(p.reason ?? 'not_hit');
+      const multPct = Number(p.multPct ?? 100);
+      const hits = Number(p.hits ?? 0);
+      const suffix =
+        reason === 'hit'
+          ? translate(lang, 'log.shieldRegenHitSuffix', { hits, multPct })
+          : reason === 'cracked'
+          ? translate(lang, 'log.shieldRegenCrackedSuffix', { multPct })
+          : '';
+      return translate(lang, 'log.shieldRegen', {
+        target: String(p.target ?? ''),
+        amount: Number(p.amount ?? 0),
+        suffix,
+      });
+    }
+
+    case 'log.hpRegen':
+      return translate(lang, 'log.hpRegen', {
         target: String(p.target ?? ''),
         amount: Number(p.amount ?? 0),
       });
@@ -805,6 +1152,19 @@ function formatCombatLogBody(
     case 'log.retreat':
       return translate(lang, 'log.retreat', {
         actor: String(p.actor ?? ''),
+      });
+
+    case 'log.repairFreeDefeat':
+      return translate(lang, 'log.repairFreeDefeat');
+
+    case 'log.repairFreeRetreat':
+      return translate(lang, 'log.repairFreeRetreat');
+
+    case 'log.repairFee':
+      return translate(lang, 'log.repairFee', {
+        fee: Number(p.fee ?? 0).toLocaleString(
+          lang === 'vi' ? 'vi-VN' : 'en-US'
+        ),
       });
 
     case 'log.buffApplied': {
@@ -842,10 +1202,26 @@ function formatCombatLogBody(
 
     case 'log.scanReveal': {
       const skillId = String(p.skillId ?? 'sup_lidar_sweep');
+      const revealedNames = String(p.revealedNames ?? '').trim();
+      if (!revealedNames) {
+        return translate(lang, 'log.scanRevealNone', {
+          actor: String(p.actor ?? ''),
+          skill: getSkillName(lang, skillId),
+        });
+      }
       return translate(lang, 'log.scanReveal', {
         actor: String(p.actor ?? ''),
         skill: getSkillName(lang, skillId),
         revealed: Number(p.revealed ?? 0),
+        revealedNames,
+      });
+    }
+
+    case 'log.scanRevealNone': {
+      const skillId = String(p.skillId ?? 'sup_lidar_sweep');
+      return translate(lang, 'log.scanRevealNone', {
+        actor: String(p.actor ?? ''),
+        skill: getSkillName(lang, skillId),
       });
     }
 
@@ -897,8 +1273,9 @@ function formatCombatLogBody(
         typeof p.streak === 'number'
           ? p.streak
           : DEFAULT_DEFEAT_STREAK_LIMIT;
+      const maxCap = typeof p.max === 'number' ? p.max : undefined;
       return translate(lang, 'log.autoRepeatStopped', {
-        reason: getAutoStopReasonLabel(lang, stopReason, streak),
+        reason: getAutoStopReasonLabel(lang, stopReason, streak, maxCap),
       });
     }
 

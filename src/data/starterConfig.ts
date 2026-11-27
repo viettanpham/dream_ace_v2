@@ -1,18 +1,18 @@
-import { BALANCE_CONFIG } from './balance';
+import { getMaxLevel } from './balance';
 import { EQUIPMENT_SLOTS, getItemTemplate, ITEM_TEMPLATES } from './items';
 import type {
-  EquipmentSlot,
   ItemTemplate,
   MechClassId,
+  PaperDollSlot,
   StarterBoostScope,
   StarterSetConfig,
   StarterSlotConfig,
 } from '../types/game';
 
-export const DEFAULT_STARTER_SLOT_CONFIGS: Record<
-  EquipmentSlot,
-  StarterSlotConfig
-> = {
+export const DEFAULT_STARTER_SLOT_CONFIGS: Omit<
+  Record<PaperDollSlot, StarterSlotConfig>,
+  'radar'
+> & { radar?: StarterSlotConfig } = {
   main_weapon: {
     templateId: 'tpl_mw_pulse_cannon',
     level: 1,
@@ -55,14 +55,16 @@ export const DEFAULT_STARTER_SET_CONFIG: StarterSetConfig = {
 export function cloneStarterSetConfig(
   cfg: StarterSetConfig = DEFAULT_STARTER_SET_CONFIG
 ): StarterSetConfig {
-  const slots = {} as Record<EquipmentSlot, StarterSlotConfig>;
+  const slots: Record<string, StarterSlotConfig> = {};
   for (const slot of EQUIPMENT_SLOTS) {
     const src = cfg.slots?.[slot] ?? DEFAULT_STARTER_SLOT_CONFIGS[slot];
-    slots[slot] = { ...src };
+    if (src) {
+      slots[slot] = { ...src };
+    }
   }
   return {
     enabled: Boolean(cfg.enabled),
-    slots,
+    slots: slots as StarterSetConfig['slots'],
     rookieBoostPct: cfg.rookieBoostPct ?? 0,
     boostScope:
       cfg.boostScope === 'fill_empty_slots'
@@ -71,11 +73,12 @@ export function cloneStarterSetConfig(
   };
 }
 
-function findFallbackTemplateForSlot(slot: EquipmentSlot): ItemTemplate {
+function findFallbackTemplateForSlot(slot: PaperDollSlot): ItemTemplate {
+  const nonModule = ITEM_TEMPLATES.filter((t) => t.slot !== 'module');
   return (
-    ITEM_TEMPLATES.find((t) => t.slot === slot && t.tier === 1) ??
-    ITEM_TEMPLATES.find((t) => t.slot === slot) ??
-    ITEM_TEMPLATES[0]
+    nonModule.find((t) => t.slot === slot && t.tier === 1) ??
+    nonModule.find((t) => t.slot === slot) ??
+    nonModule[0]
   );
 }
 
@@ -85,7 +88,7 @@ function findFallbackTemplateForSlot(slot: EquipmentSlot): ItemTemplate {
  * picks the closest matching tier template compatible with `classId`.
  */
 export function resolveStarterTemplateForGear(
-  slot: EquipmentSlot,
+  slot: PaperDollSlot,
   configuredTemplateId: string,
   classId: MechClassId
 ): ItemTemplate {
@@ -102,6 +105,7 @@ export function resolveStarterTemplateForGear(
   const desiredTier = configured?.tier ?? 1;
   const compatible = ITEM_TEMPLATES.filter(
     (t) =>
+      t.slot !== 'module' &&
       t.slot === slot &&
       (t.classRestriction === null || t.classRestriction === classId)
   );
@@ -124,34 +128,36 @@ export function sanitizeStarterSetConfig(raw: unknown): StarterSetConfig {
       ? (obj.slots as Record<string, unknown>)
       : {};
 
-  const slots = {} as Record<EquipmentSlot, StarterSlotConfig>;
+  const slots: Record<string, StarterSlotConfig> = {};
   for (const slot of EQUIPMENT_SLOTS) {
     const defSlot = DEFAULT_STARTER_SLOT_CONFIGS[slot];
     const entry = rawSlots[slot];
     if (entry && typeof entry === 'object') {
       const s = entry as Record<string, unknown>;
+      const fallbackTemplateId =
+        defSlot?.templateId ?? findFallbackTemplateForSlot(slot).id;
       const rawTplId =
-        typeof s.templateId === 'string' ? s.templateId : defSlot.templateId;
+        typeof s.templateId === 'string' ? s.templateId : fallbackTemplateId;
       const tpl = getItemTemplate(rawTplId);
       const validTplId =
-        tpl && tpl.slot === slot ? tpl.id : defSlot.templateId;
+        tpl && tpl.slot === slot ? tpl.id : fallbackTemplateId;
       const level = Math.max(
         1,
         Math.min(
-          BALANCE_CONFIG.maxLevel,
-          Math.floor(Number(s.level) || defSlot.level)
+          getMaxLevel(),
+          Math.floor(Number(s.level) || defSlot?.level || 1)
         )
       );
       const quality = Math.max(
         1,
-        Math.min(100, Math.round(Number(s.quality) || defSlot.quality))
+        Math.min(100, Math.round(Number(s.quality) || defSlot?.quality || 20))
       );
       slots[slot] = {
         templateId: validTplId,
         level,
         quality,
       };
-    } else {
+    } else if (defSlot) {
       slots[slot] = { ...defSlot };
     }
   }
@@ -169,7 +175,7 @@ export function sanitizeStarterSetConfig(raw: unknown): StarterSetConfig {
 
   return {
     enabled: typeof obj.enabled === 'boolean' ? obj.enabled : def.enabled,
-    slots,
+    slots: slots as StarterSetConfig['slots'],
     rookieBoostPct,
     boostScope,
   };

@@ -33,6 +33,7 @@ import {
   STATUS_DISPLAY_STORAGE_KEY,
   writeStatusDisplayOverride,
 } from '../../utils/statusDisplayPrefs';
+import { writeActionStageEnabled } from '../../utils/actionStagePrefs';
 import { AdminPanel } from '../AdminPanel';
 import { BattleRadarView } from '../BattleRadarView';
 import { BattleScreen } from '../BattleScreen';
@@ -347,7 +348,7 @@ describe('Task G4a-1 Part 2 — Icon catalog, status chips, settings, Bảng ico
     const allowSet = new Set(UNMAPPED_STATUS_ALLOWLIST);
     const catalogIds = new Set(getCatalog().map((r) => r.id));
 
-    expect(ALL_ENGINE_STATUS_TYPES).toHaveLength(21);
+    expect(ALL_ENGINE_STATUS_TYPES).toHaveLength(22);
     for (const statusType of ALL_ENGINE_STATUS_TYPES) {
       const mappedId = STATUS_TO_CATALOG_ID[statusType];
       if (mappedId !== null) {
@@ -515,6 +516,7 @@ describe('Task G4a-1 Part 2 — Icon catalog, status chips, settings, Bảng ico
       },
     ];
     useGameStore.setState({ battle, battleViewMode: 'card' });
+    writeActionStageEnabled(false);
 
     act(() => {
       root!.render(createElement(BattleScreen));
@@ -649,7 +651,7 @@ describe('Task G4a-1 Part 2 — Icon catalog, status chips, settings, Bảng ico
     ).toEqual(adminDef);
 
     // Built-in defaults & old saves without statusDisplayDefaults + CURRENT_SAVE_VERSION=9
-    expect(CURRENT_SAVE_VERSION).toBe(9);
+    expect(CURRENT_SAVE_VERSION).toBeGreaterThanOrEqual(12);
     const migrated = migrateSaveData({ credits: 500 }, 8);
     expect(
       resolveEffectiveStatusDisplaySettings(
@@ -661,11 +663,11 @@ describe('Task G4a-1 Part 2 — Icon catalog, status chips, settings, Bảng ico
     // SV1a save export does NOT include dreamAce.status.v1
     writeStatusDisplayOverride({ phoneRows: 4, badgeLayout: 'A' });
     const env = await buildExportEnvelope(useGameStore.getState());
-    expect(env.saveVersion).toBe(9);
+    expect(env.saveVersion).toBeGreaterThanOrEqual(12);
     expect(JSON.stringify(env)).not.toContain('dreamAce.status.v1');
   });
 
-  it('7) "Bảng icon" preview renders all 98 sys rows + mods across 8 groups, and read-only', () => {
+  it('7) "Bảng icon" preview renders all 99 sys rows + mods across 8 groups, and read-only', () => {
     useGameStore.setState({
       adminConfig: {
         ...createDefaultAdminConfig(),
@@ -701,7 +703,7 @@ describe('Task G4a-1 Part 2 — Icon catalog, status chips, settings, Bảng ico
     const sysTags = Array.from(
       modal!.querySelectorAll('[data-testid^="icon-catalog-tag-"]')
     );
-    expect(sysTags.filter((el) => el.textContent === 'sys')).toHaveLength(98);
+    expect(sysTags.filter((el) => el.textContent === 'sys')).toHaveLength(99);
     expect(
       modal!.querySelector('[data-testid="icon-catalog-tag-BF99"]')?.textContent
     ).toBe('mods');

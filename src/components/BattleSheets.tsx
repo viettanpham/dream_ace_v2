@@ -14,6 +14,7 @@ type TranslateFn = (
 
 export interface PhoneUnitDetailSheetProps {
   unit: CombatUnit | null;
+  refLevel?: number;
   selectedTargetId: string | null;
   selectedAllyTargetId: string | null;
   hasSingleAllySkill: boolean;
@@ -26,6 +27,7 @@ export interface PhoneUnitDetailSheetProps {
 
 export function PhoneUnitDetailSheet({
   unit,
+  refLevel,
   selectedTargetId,
   selectedAllyTargetId,
   hasSingleAllySkill,
@@ -38,6 +40,7 @@ export function PhoneUnitDetailSheet({
   return (
     <UnitDetailSheet
       unit={unit}
+      refLevel={refLevel}
       onClose={onClose}
       isTargeted={Boolean(
         unit &&

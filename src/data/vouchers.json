@@ -1,0 +1,22 @@
+[
+  { "id": "v_credit_1000", "kind": "credit", "value": 1000, "system": true },
+  { "id": "v_credit_2000", "kind": "credit", "value": 2000, "system": true },
+  { "id": "v_credit_5000", "kind": "credit", "value": 5000, "system": true },
+  { "id": "v_credit_10000", "kind": "credit", "value": 10000, "system": true },
+  { "id": "v_credit_15000", "kind": "credit", "value": 15000, "system": true },
+  { "id": "v_credit_20000", "kind": "credit", "value": 20000, "system": true },
+  { "id": "v_credit_30000", "kind": "credit", "value": 30000, "system": true },
+  { "id": "v_credit_50000", "kind": "credit", "value": 50000, "system": true },
+  { "id": "v_credit_75000", "kind": "credit", "value": 75000, "system": true },
+  { "id": "v_credit_100000", "kind": "credit", "value": 100000, "system": true },
+  { "id": "v_exp_500", "kind": "exp", "value": 500, "system": true },
+  { "id": "v_exp_1000", "kind": "exp", "value": 1000, "system": true },
+  { "id": "v_exp_2000", "kind": "exp", "value": 2000, "system": true },
+  { "id": "v_exp_5000", "kind": "exp", "value": 5000, "system": true },
+  { "id": "v_exp_10000", "kind": "exp", "value": 10000, "system": true },
+  { "id": "v_exp_15000", "kind": "exp", "value": 15000, "system": true },
+  { "id": "v_exp_20000", "kind": "exp", "value": 20000, "system": true },
+  { "id": "v_exp_30000", "kind": "exp", "value": 30000, "system": true },
+  { "id": "v_exp_50000", "kind": "exp", "value": 50000, "system": true },
+  { "id": "v_exp_100000", "kind": "exp", "value": 100000, "system": true }
+]

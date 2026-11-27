@@ -1,4 +1,10 @@
-import { BALANCE_CONFIG, COMBAT_FORMULAS } from '../data/balance';
+import {
+  BALANCE_CONFIG,
+  COMBAT_FORMULAS,
+  getEffectiveSkillMaxLevel,
+  getMaxLevel,
+  sanitizeSpEconomyConfig,
+} from '../data/balance';
 import {
   EMPTY_STAT_BLOCK,
   MECH_CLASSES,
@@ -6,9 +12,15 @@ import {
   STAT_KEYS,
 } from '../data/classes';
 import { EMPTY_EQUIPPED_SLOT_IDS } from '../data/items';
-import { createInitialBaseStates, SECTORS_CATALOG } from '../data/maps';
+import {
+  createInitialBaseStates,
+  getDefaultSelectedNodeId,
+  getFirstAlliedNodeId,
+  getMapNodes,
+} from '../data/maps';
 import { CLASS_STARTER_SKILLS } from '../data/skills';
 import type {
+  AdminConfig,
   DerivedStats,
   GearUnit,
   ItemInstance,
@@ -16,9 +28,11 @@ import type {
   MechClassId,
   PilotAccount,
   StatBlock,
+  WorldClockState,
 } from '../types/game';
 import { sumGearEquipmentStats, sumGearSpecialTraits } from './equipment';
 import { createDefaultSquadFormation } from './formation';
+import { neighbours } from './frontline';
 import { type GearPassiveBonuses, getGearPassiveBonuses } from './skills';
 import { createDefaultTacticsForClass } from './tactics';
 
@@ -27,7 +41,7 @@ import { createDefaultTacticsForClass } from './tactics';
  * Formula: Math.round(60 * level^1.4)
  */
 export function getExpForNextLevel(level: number): number {
-  const lvl = Math.max(1, level);
+  const lvl = Number.isFinite(level) ? Math.max(1, Math.floor(level)) : 1;
   return Math.round(
     BALANCE_CONFIG.expBase * Math.pow(lvl, BALANCE_CONFIG.expExponent)
   );
@@ -63,6 +77,9 @@ export function calculateEffectiveStats(
     if (key === 'evasion' && specialTraits?.evasionMod) {
       total = Math.max(1, total + specialTraits.evasionMod);
     }
+    if (key === 'attack' && passives?.attackPct) {
+      total = Math.round(total * (1 + passives.attackPct));
+    }
     if (key === 'defense' && passives?.defPct) {
       total = Math.round(total * (1 + passives.defPct));
     }
@@ -83,22 +100,23 @@ export function calculateDerivedStats(
   level: number,
   stats: StatBlock,
   specialTraits?: ItemSpecialTraits,
-  passives?: GearPassiveBonuses
+  passives?: GearPassiveBonuses,
+  admin?: Pick<AdminConfig, 'spEconomy'> | null
 ): DerivedStats {
   const cls = MECH_CLASSES[classId];
   const lvl = Math.max(1, level);
 
-  const maxHp = Math.round(
+  const rawMaxHp =
     cls.baseHp +
-      stats.defense * COMBAT_FORMULAS.hpPerDefense +
-      (lvl - 1) * COMBAT_FORMULAS.hpPerLevel
-  );
+    stats.defense * COMBAT_FORMULAS.hpPerDefense +
+    (lvl - 1) * COMBAT_FORMULAS.hpPerLevel;
+  const maxHp = Math.round(rawMaxHp * (1 + (passives?.maxHpPct ?? 0)));
 
-  const maxShield = Math.round(
+  const rawMaxShield =
     cls.baseShield +
-      stats.shield * COMBAT_FORMULAS.shieldPerShieldStat +
-      (lvl - 1) * COMBAT_FORMULAS.shieldPerLevel
-  );
+    stats.shield * COMBAT_FORMULAS.shieldPerShieldStat +
+    (lvl - 1) * COMBAT_FORMULAS.shieldPerLevel;
+  const maxShield = Math.round(rawMaxShield * (1 + (passives?.maxShieldPct ?? 0)));
 
   const maxSp = Math.round(
     cls.baseSp +
@@ -110,23 +128,38 @@ export function calculateDerivedStats(
     cls.baseSpeed +
     stats.fuel * COMBAT_FORMULAS.speedFuelWeight +
     stats.evasion * COMBAT_FORMULAS.speedEvasionWeight;
-  const speed = Math.round(rawSpeed * (1 + (passives?.speedPct ?? 0)));
-
-  const dodgeChance = Math.min(
-    COMBAT_FORMULAS.maxDodgeChance,
-    Math.max(0, Math.round(stats.evasion * COMBAT_FORMULAS.dodgePerEvasion))
+  const speed = Math.round(
+    rawSpeed * (1 + (passives?.speedPct ?? 0)) + (passives?.speedFlat ?? 0)
   );
 
+  const baseDodge = Math.round(stats.evasion * COMBAT_FORMULAS.dodgePerEvasion);
+  const dodgeChance = Math.min(
+    COMBAT_FORMULAS.maxDodgeChance,
+    Math.max(0, Number((baseDodge + (passives?.dodgeFlat ?? 0)).toFixed(2)))
+  );
+
+  const baseCrit = Math.round(
+    COMBAT_FORMULAS.baseCritChance +
+      stats.evasion * COMBAT_FORMULAS.critPerEvasion +
+      (specialTraits?.critBonusPct ?? 0)
+  );
   const critChance = Math.min(
     COMBAT_FORMULAS.maxCritChance,
-    Math.round(
-      COMBAT_FORMULAS.baseCritChance +
-        stats.evasion * COMBAT_FORMULAS.critPerEvasion +
-        (specialTraits?.critBonusPct ?? 0)
-    )
+    Math.max(0, Number((baseCrit + (passives?.critFlat ?? 0)).toFixed(2)))
   );
 
   const skillPower = Math.round(stats.attack * 0.7 + stats.spirit * 0.85);
+
+  const spEco = sanitizeSpEconomyConfig(admin?.spEconomy);
+  const spiritRegen = Math.round(
+    Math.max(0, stats.spirit) *
+      spEco.regenPerSpirit *
+      (spEco.classFactor[classId] ?? 1)
+  );
+  const passiveSpRegen =
+    passives?.spRegenPerTurn && passives.spRegenPerTurn > 0
+      ? passives.spRegenPerTurn
+      : passives?.spRegenFlat ?? 0;
 
   return {
     maxHp,
@@ -138,11 +171,34 @@ export function calculateDerivedStats(
     dodgeChance,
     critChance,
     skillPower,
-    armorPiercePct: Math.min(50, specialTraits?.armorPiercePct ?? 0),
+    armorPiercePct: Math.min(
+      50,
+      Math.max(
+        0,
+        Number(
+          (
+            (specialTraits?.armorPiercePct ?? 0) +
+            (passives?.armorPierceFlat ?? 0)
+          ).toFixed(2)
+        )
+      )
+    ),
+    accuracyPct: Math.min(
+      BALANCE_CONFIG.maxAccuracyPct,
+      Math.max(0, specialTraits?.accuracyPct ?? 0)
+    ),
     splashPct: Math.min(40, specialTraits?.splashPct ?? 0),
-    spRegenPerTurn:
-      (specialTraits?.spRegenPerTurn ?? 0) + (passives?.spRegenPerTurn ?? 0),
+    spRegenPerTurn: Math.round(
+      spiritRegen + (specialTraits?.spRegenPerTurn ?? 0) + passiveSpRegen
+    ),
     passiveSkillDmgPct: passives?.skillDmgPct ?? 0,
+    critDamagePct: passives?.critDamagePct ?? 0,
+    healPowerPct: passives?.healPowerPct ?? 0,
+    shieldPowerPct: passives?.shieldPowerPct ?? 0,
+    shieldRegenPctAdd: passives?.shieldRegenPctAdd ?? 0,
+    hpRegenPctAdd: passives?.hpRegenPctAdd ?? 0,
+    executeDmgPct: passives?.executeDmgPct ?? 0,
+    lastStandDefPct: passives?.lastStandDefPct ?? 0,
   };
 }
 
@@ -151,11 +207,21 @@ export function calculateDerivedStats(
  */
 export function calculateGearPowerRating(
   gear: GearUnit,
-  inventory: ItemInstance[]
+  inventory: ItemInstance[],
+  admin?: Pick<
+    AdminConfig,
+    | 'extenderLevelsPerSocket'
+    | 'spEconomy'
+    | 'skillMaxLevel'
+    | 'passiveScaleAfter5'
+    | 'restorePctCap'
+    | 'passiveSlots'
+  > | null,
+  warehouse: readonly ItemInstance[] = []
 ): number {
-  const equipBonuses = sumGearEquipmentStats(gear, inventory);
-  const traits = sumGearSpecialTraits(gear, inventory);
-  const passives = getGearPassiveBonuses(gear);
+  const equipBonuses = sumGearEquipmentStats(gear, inventory, admin, warehouse);
+  const traits = sumGearSpecialTraits(gear, inventory, admin, warehouse);
+  const passives = getGearPassiveBonuses(gear, admin);
   const stats = calculateEffectiveStats(
     gear.classId,
     gear.level,
@@ -170,10 +236,12 @@ export function calculateGearPowerRating(
     gear.level,
     stats,
     traits,
-    passives
+    passives,
+    admin
   );
+  const maxSkillLv = getEffectiveSkillMaxLevel(admin);
   const totalSkillLevels = Object.values(gear.skillLevels).reduce(
-    (sum, lv) => sum + Math.max(0, lv),
+    (sum, lv) => sum + Math.min(maxSkillLv, Math.max(0, lv)),
     0
   );
 
@@ -221,9 +289,22 @@ export function createDefaultGearUnit(
     equipped: { ...EMPTY_EQUIPPED_SLOT_IDS },
     skillLevels,
     equippedSkillBar: [...starterSkills],
+    equippedPassives: [],
+    supplyLoadout: [],
+    extenders: [null, null, null, null, null],
     tactics: createDefaultTacticsForClass(classId),
     battlesWon: 0,
     battlesFought: 0,
+  };
+}
+
+export function createDefaultWorldClock(): WorldClockState {
+  return {
+    worldDay: 0,
+    lastTickAt: null,
+    speedMode: 'normal',
+    secondsPerDay: 180,
+    paused: false,
   };
 }
 
@@ -237,20 +318,30 @@ export function createDefaultPilotAccount(
     gears[cls.id] = createDefaultGearUnit(cls.id, cls.id === starterClassId);
   }
 
+  const alliedIds = getMapNodes()
+    .filter((n) => n.initialFaction === 'allied')
+    .map((n) => n.id);
+  const firstAlliedId = alliedIds[0] ?? getFirstAlliedNodeId();
+  const initialUnlocked = Array.from(
+    new Set([
+      getDefaultSelectedNodeId(),
+      firstAlliedId,
+      ...neighbours(firstAlliedId),
+    ])
+  );
+
   return {
     name,
     credits: BALANCE_CONFIG.startingCredits,
     warPoints: BALANCE_CONFIG.startingWarPoints,
     ownedOpeningCards: [],
     inventory: starterItems,
+    warehouse: [],
+    worldClock: createDefaultWorldClock(),
     gears,
     activeGearId: starterClassId,
-    unlockedSectorIds: [
-      SECTORS_CATALOG[0].id,
-      'aegis_relay',
-      'veridian_colony',
-    ],
-    capturedSectorIds: ['aegis_relay'],
+    unlockedSectorIds: initialUnlocked,
+    capturedSectorIds: alliedIds.length > 0 ? alliedIds : [firstAlliedId],
     campaignMonth: 1,
     baseStates: createInitialBaseStates(),
     hiredWingman: null,
@@ -258,6 +349,7 @@ export function createDefaultPilotAccount(
     activeBonusMission: null,
     squadFormation: createDefaultSquadFormation(name, starterClassId),
     formationCustomized: false,
+    pirateIncidents: [],
   };
 }
 
@@ -283,7 +375,8 @@ export function applyExpToGear(
   let unspentPoints = gear.unspentPoints;
   let statPointsGained = 0;
 
-  while (level < BALANCE_CONFIG.maxLevel) {
+  const maxLevel = getMaxLevel();
+  while (level < maxLevel) {
     const needed = getExpForNextLevel(level);
     if (exp >= needed) {
       exp -= needed;
@@ -295,7 +388,7 @@ export function applyExpToGear(
     }
   }
 
-  if (level >= BALANCE_CONFIG.maxLevel) {
+  if (level >= maxLevel) {
     exp = 0;
   }
 
@@ -368,7 +461,7 @@ export function estimateBattlesToNextLevel(
   gear: GearUnit,
   expPerVictory: number
 ): number {
-  if (gear.level >= BALANCE_CONFIG.maxLevel) return 0;
+  if (gear.level >= getMaxLevel()) return 0;
   const remaining = Math.max(0, getExpForNextLevel(gear.level) - gear.exp);
   if (remaining === 0) return 0;
   return Math.max(1, Math.ceil(remaining / Math.max(1, expPerVictory)));

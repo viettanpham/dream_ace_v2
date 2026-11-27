@@ -1,0 +1,6 @@
+# TASK CS1 — Progress Checklist
+
+- [x] STEP A — Save prompt verbatim to `docs/tasks/CS1.md`, create progress checklist, inspect CODEMAP and target files
+- [x] ITEM 1 — Create `src/data/consumables.json` (12 supply templates) & `src/data/consumables.ts` (`validateSupplyTemplate`), update `itemPricing.json`/`itemPricing.ts` (`consumableBase`), add `computeSupplyPrice(template)` in `src/engine/itemPrice.ts`, add supply names to `vi.ts`/`en.ts`
+- [x] ITEM 2 — Extend `src/types/game.ts` (`ConsumableKind`, `ConsumableItem.templateId`, `GearUnit.supplyLoadout`, `AdminConfig` supply settings, supply types), bump `CURRENT_SAVE_VERSION` (`10 -> 11`) + migration/sanitizers (merge stacks cap 99, loadout cleanup), implement `src/engine/supplies.ts`, `src/engine/supplyEffects.ts`, reason strings (`vi.ts`/`en.ts`), and store `setSupplyLoadout` wrapper
+- [x] TESTS & CHECKS & REPORT — Write CS1 tests (loader/validator, 12 prices, stack cap 99, migration v10->v11, loadout, all `canUseSupply` reasons, `applySupplyEffects`, export/import, i18n parity), run `npx vitest run`, `lint_applet`, production build, sample 20 seeded battles at Lv1/10/20 CR rewards, update `docs/CODEMAP.md`, write & print `docs/tasks/CS1.report.md`

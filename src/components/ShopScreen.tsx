@@ -15,9 +15,9 @@ import {
   Sparkles,
   Unlock,
 } from 'lucide-react';
-import { BALANCE_CONFIG } from '../data/balance';
 import { MECH_CLASS_LIST, STAT_KEYS } from '../data/classes';
-import { EQUIPMENT_SLOTS, RARITY_META, SHOP_CONFIG } from '../data/items';
+import { ITEM_SLOTS, RARITY_META, SHOP_CONFIG } from '../data/items';
+import { getBoxCapacity } from '../engine/migration';
 import { SHOP_STOCK_CONFIG } from '../data/shopConfig';
 import { getSkillById, OPENING_CARDS_LIST } from '../data/skills';
 import {
@@ -61,6 +61,7 @@ import {
   SlotIcon,
 } from './GameIcons';
 import { SkillIcon } from './SkillIcon';
+import { SupplyShopPanel } from './SupplyShopPanel';
 
 type ClassFilter = 'all' | 'usable' | 'universal' | MechClassId;
 
@@ -105,6 +106,7 @@ function getWpOfferText(
 export function ShopScreen() {
   const { lang, t } = useI18n();
   const pilot = useGameStore((s) => s.pilot);
+  const adminBoxCapacity = useGameStore((s) => s.adminConfig.boxCapacity);
   const shopStock = useGameStore((s) => s.shopStock);
   const wpMarketOffers = useGameStore((s) => s.wpMarketOffers);
   const battlesUntilRestock = useGameStore((s) => s.battlesUntilRestock);
@@ -139,8 +141,8 @@ export function ShopScreen() {
   );
 
   const shipyardActive = useMemo(() => hasOperationalShipyard(pilot), [pilot]);
-  const isInventoryFull =
-    pilot.inventory.length >= BALANCE_CONFIG.maxInventorySize;
+  const boxCap = getBoxCapacity({ boxCapacity: adminBoxCapacity });
+  const isInventoryFull = pilot.inventory.length >= boxCap;
 
   const availableShopCount = useMemo(
     () => shopStock.filter((item) => !item.soldOut).length,
@@ -149,7 +151,7 @@ export function ShopScreen() {
 
   const slotStockCounts = useMemo(() => {
     const counts = {} as Record<EquipmentSlot, { avail: number; total: number }>;
-    for (const slot of EQUIPMENT_SLOTS) {
+    for (const slot of ITEM_SLOTS) {
       counts[slot] = { avail: 0, total: 0 };
     }
     for (const item of shopStock) {
@@ -200,7 +202,7 @@ export function ShopScreen() {
 
   const sellSlotCounts = useMemo(() => {
     const counts = {} as Record<EquipmentSlot, number>;
-    for (const slot of EQUIPMENT_SLOTS) {
+    for (const slot of ITEM_SLOTS) {
       counts[slot] = 0;
     }
     for (const inst of pilot.inventory) {
@@ -387,11 +389,11 @@ export function ShopScreen() {
                     {isInventoryFull
                       ? t('shop.cargoFullTag', {
                           count: pilot.inventory.length,
-                          max: BALANCE_CONFIG.maxInventorySize,
+                          max: boxCap,
                         })
                       : t('shop.cargoCount', {
                           count: pilot.inventory.length,
-                          max: BALANCE_CONFIG.maxInventorySize,
+                          max: boxCap,
                         })}
                   </span>
                 </span>
@@ -415,7 +417,7 @@ export function ShopScreen() {
               </button>
             )}
 
-            <div className="w-full md:w-auto grid grid-cols-3 md:flex items-center gap-1 p-1 rounded-lg bg-slate-900 border border-slate-800">
+            <div className="w-full md:w-auto grid grid-cols-4 md:flex items-center gap-1 p-1 rounded-lg bg-slate-900 border border-slate-800">
               <button
                 type="button"
                 data-testid="shop-tab-buy"
@@ -472,6 +474,18 @@ export function ShopScreen() {
                   {t('shop.tabWpShort', { count: availableWpOffersCount })}
                 </span>
               </button>
+
+              <button
+                type="button"
+                data-testid="shop-tab-supply"
+                onClick={() => { setShopSubTab('supply'); setNoticeText(null); }}
+                className={`min-h-[44px] md:min-h-0 md:h-9 px-1.5 md:px-3 inline-flex items-center justify-center gap-1 rounded text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap ${
+                  shopSubTab === 'supply' ? 'bg-emerald-500 text-slate-950' : 'text-emerald-300 hover:text-emerald-100'
+                }`}
+              >
+                <Package className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">{t('shop.tabSupply')}</span>
+              </button>
             </div>
           </div>
         </div>
@@ -514,7 +528,7 @@ export function ShopScreen() {
               <span>
                 {t('shop.cargoFullHint', {
                   count: pilot.inventory.length,
-                  max: BALANCE_CONFIG.maxInventorySize,
+                  max: boxCap,
                 })}
               </span>
             </div>
@@ -529,7 +543,7 @@ export function ShopScreen() {
         )}
 
         {/* Filters for Buy / Sell (Wrapped chips with shared SlotIcon & ClassIcon) */}
-        {shopSubTab !== 'warpoints' && (
+        {(shopSubTab === 'buy' || shopSubTab === 'sell') && (
           <div className="rounded-lg border border-slate-800/90 bg-[#0D131D]/95 p-3 sm:p-4 space-y-2.5">
             <div
               data-testid="shop-slot-tabs"
@@ -555,7 +569,7 @@ export function ShopScreen() {
                 </span>
               </button>
 
-              {EQUIPMENT_SLOTS.map((slot) => {
+              {ITEM_SLOTS.map((slot) => {
                 const counts = slotStockCounts[slot];
                 return (
                   <button
@@ -672,6 +686,10 @@ export function ShopScreen() {
               </div>
             )}
           </div>
+        )}
+
+        {shopSubTab === 'supply' && (
+          <SupplyShopPanel onNotice={(msg) => { setNoticeAction('none'); setNoticeText(msg); }} />
         )}
 
         {/* WAR POINT SHOP: ROTATING RANDOM OFFERS + OPENING CARDS */}
@@ -1211,7 +1229,9 @@ export function ShopScreen() {
                             >
                               {getItemInstanceName(lang, item)}
                             </span>
-                            {!validation.canEquip && !isSoldOut && (
+                            {!validation.canEquip &&
+                              formatEquipValidationReason(lang, validation) &&
+                              !isSoldOut && (
                               <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                             )}
                           </div>
@@ -1273,7 +1293,10 @@ export function ShopScreen() {
                     const canAfford = pilot.credits >= item.price;
                     const canBuy = !isSoldOut && canAfford && !isInventoryFull;
                     const itemStats = getEffectiveItemStats(item);
-                    const currentInSlot = equippedOnActive[item.slot];
+                    const currentInSlot =
+                      item.slot !== 'module'
+                        ? equippedOnActive[item.slot]
+                        : null;
                     const curSlotStats = currentInSlot
                       ? getEffectiveItemStats(currentInSlot)
                       : null;
@@ -1655,7 +1678,8 @@ export function ShopScreen() {
               const canAfford = pilot.credits >= item.price;
               const canBuy = !isSoldOut && canAfford && !isInventoryFull;
               const itemStats = getEffectiveItemStats(item);
-              const currentInSlot = equippedOnActive[item.slot];
+              const currentInSlot =
+                item.slot !== 'module' ? equippedOnActive[item.slot] : null;
               const curSlotStats = currentInSlot
                 ? getEffectiveItemStats(currentInSlot)
                 : null;
@@ -1738,7 +1762,7 @@ export function ShopScreen() {
                       <span>
                         {t('shop.cargoFullTag', {
                           count: pilot.inventory.length,
-                          max: BALANCE_CONFIG.maxInventorySize,
+                          max: boxCap,
                         })}
                       </span>
                     </div>

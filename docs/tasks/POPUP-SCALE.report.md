@@ -1,0 +1,9 @@
+# Báo cáo TASK POPUP-SCALE
+- Đã xong: STEP A, ITEM 1 (`cardPopupStartScalePct` mặc định 100 [50–200], `cardPopupEndScalePct` mặc định 125 [50–250], `resolveCardPopupConfig`, `migration.ts`, `useGameStore.ts`, `BattleUnitCard.tsx`, `src/index.css`), ITEM 2 (`estimatePopupBoxSize` + zone clamp `max(start, end)`, 2 ô Admin CP + dòng ví dụ live `15px -> 19px` / `12px`), `docs/CODEMAP.md` (`CURRENT_SAVE_VERSION = 14` giữ nguyên).
+- File thay đổi: `src/types/game.ts`, `src/utils/cardPopupQueue.ts`, `src/engine/migration.ts`, `src/store/useGameStore.ts`, `src/components/BattleUnitCard.tsx`, `src/components/AdminPanel.tsx`, `src/index.css`, `src/i18n/{vi,en}.ts`, `src/components/__tests__/popupScale.test.tsx`, `docs/CODEMAP.md`.
+- Keyframe `src/index.css` trước -> sau:
+  - `@keyframes card-popup-flight` 0%: `transform: translate3d(calc(-50% + var(--card-pop-dx, 0px)), calc(-50% + var(--card-pop-dy, 0px)), 0);` -> `... scale(var(--card-pop-start-scale, 1));`
+  - `@keyframes card-popup-flight` 100%: `transform: translate3d(calc(-50% + var(--card-pop-ex, 0px)), calc(-50% + var(--card-pop-ey, 0px)), 0);` -> `... scale(var(--card-pop-end-scale, 1.25));`
+  - `@keyframes card-popup-reduced` (0%/15%-75%/100%): `transform: translate3d(-50%, -50%, 0);` -> `... scale(var(--card-pop-end-scale, 1.25));` (+ `transform-origin: center` ở `.anim-card-popup-flight` & `.anim-card-popup-reduced`; `card-popup-pop-fade` giữ scale tương đối trên container đang ở `--card-pop-end-scale`).
+- Kết quả test & checks: `popupScale.test.tsx` (4/4), `cardPopStatusPop1.test.tsx`, `popIcon.test.tsx`, `popIcon2.test.ts`, `skillModsA2a.test.ts` (**5 files, 24/24 PASS**); `cardPopupZoneIconsPop2.test.tsx` 3/4 (1 lỗi cũ từ POP-ICON2 ở line 199); `lint_applet` (`tsc --noEmit`) **0 lỗi (PASS)**; parity `vi.ts`/`en.ts` diff `[] []`.
+- Trình duyệt thực tế: **NOT checked in a real browser (overlap of larger popups)**.

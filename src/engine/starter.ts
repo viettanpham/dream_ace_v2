@@ -1,4 +1,4 @@
-import { BALANCE_CONFIG } from '../data/balance';
+import { getMaxLevel } from '../data/balance';
 import { MECH_CLASS_LIST } from '../data/classes';
 import { BUILTIN_ITEM_REGISTRY_TAG, EQUIPMENT_SLOTS } from '../data/items';
 import {
@@ -7,10 +7,10 @@ import {
   sanitizeStarterSetConfig,
 } from '../data/starterConfig';
 import type {
-  EquipmentSlot,
   GearUnit,
   ItemInstance,
   MechClassId,
+  PaperDollSlot,
   PilotAccount,
   StarterSetConfig,
   StarterSlotConfig,
@@ -34,7 +34,7 @@ export function computeStarterEffectiveParams(
   const mult = 1 + Math.max(0, Math.min(300, rookieBoostPct)) / 100;
   const boostedLevel = Math.max(
     1,
-    Math.min(BALANCE_CONFIG.maxLevel, Math.round(slotCfg.level * mult))
+    Math.min(getMaxLevel(), Math.round(slotCfg.level * mult))
   );
   const boostedQuality = Math.max(
     1,
@@ -58,12 +58,16 @@ export function computeStarterEffectiveParams(
 export function generateStarterItemForSlot(
   classId: MechClassId,
   gearLevel: number,
-  slot: EquipmentSlot,
+  slot: PaperDollSlot,
   starterConfig: StarterSetConfig = DEFAULT_STARTER_SET_CONFIG,
   rng: () => number = Math.random
 ): ItemInstance {
   const cleanCfg = sanitizeStarterSetConfig(starterConfig);
-  const slotCfg = cleanCfg.slots[slot];
+  const slotCfg = cleanCfg.slots[slot] ?? {
+    templateId: '',
+    level: 1,
+    quality: 20,
+  };
   const template = resolveStarterTemplateForGear(
     slot,
     slotCfg.templateId,
@@ -118,6 +122,7 @@ export function grantStarterSetToGear(
 
   for (const slot of EQUIPMENT_SLOTS) {
     if (nextEquipped[slot] !== null) continue;
+    if (!cleanCfg.slots[slot]) continue;
     const starterItem = generateStarterItemForSlot(
       gear.classId,
       gear.level,

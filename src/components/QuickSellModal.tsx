@@ -8,14 +8,15 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
+import { sanitizeMaxLevel } from '../data/balance';
 import { getSellPrice } from '../engine/equipment';
 import { calculateItemPowerScore } from '../engine/inventory';
 import {
   buildQuickSellPreset,
-  evaluateQuickSellCandidates,
+  evaluateQuickSellCandidatesWithSources,
 } from '../engine/quickSell';
 import { getItemInstanceName, getRarityLabel, useI18n } from '../i18n';
-import { useGameStore } from '../store/useGameStore';
+import { isBattleActive, useGameStore } from '../store/useGameStore';
 import type { ItemRarity, QuickSellPresetId } from '../types/game';
 import { SlotIcon } from './GameIcons';
 
@@ -25,7 +26,13 @@ interface QuickSellModalProps {
   onSold?: (count: number, credits: number, skippedCount: number) => void;
 }
 
-const RARITY_OPTIONS: ItemRarity[] = ['common', 'rare', 'epic', 'legendary'];
+const RARITY_OPTIONS: ItemRarity[] = [
+  'common',
+  'uncommon',
+  'rare',
+  'epic',
+  'legendary',
+];
 
 function rarityTextClass(rarity: ItemRarity): string {
   switch (rarity) {
@@ -35,6 +42,8 @@ function rarityTextClass(rarity: ItemRarity): string {
       return 'text-purple-300';
     case 'rare':
       return 'text-sky-300';
+    case 'uncommon':
+      return 'text-emerald-300';
     default:
       return 'text-slate-200';
   }
@@ -44,16 +53,31 @@ export function QuickSellModal({ open, onClose, onSold }: QuickSellModalProps) {
   const { lang, t } = useI18n();
   const pilot = useGameStore((s) => s.pilot);
   const config = useGameStore((s) => s.quickSellConfig);
+  const maxLevel = useGameStore((s) => sanitizeMaxLevel(s.adminConfig?.maxLevel));
   const setQuickSellConfig = useGameStore((s) => s.setQuickSellConfig);
   const executeQuickSell = useGameStore((s) => s.executeQuickSell);
+  const screen = useGameStore((s) => s.screen);
+  const battle = useGameStore((s) => s.battle);
+  const autoRepeatActive = useGameStore((s) =>
+    Boolean(s.autoRepeatSession?.active)
+  );
 
+  const [includeBox, setIncludeBox] = useState(true);
+  const [includeWarehouse, setIncludeWarehouse] = useState(false);
   const [uncheckedIds, setUncheckedIds] = useState<Set<string>>(new Set());
   const [confirmStep, setConfirmStep] = useState(false);
 
   const activeGear = pilot.gears[pilot.activeGearId];
+  const warehouseItems = Array.isArray(pilot.warehouse) ? pilot.warehouse : [];
+  const hasWarehouseItems = warehouseItems.length > 0;
+  const effectiveWarehouse = includeWarehouse && hasWarehouseItems;
+  const warehouseSellBlocked =
+    effectiveWarehouse && (isBattleActive({ screen, battle }) || autoRepeatActive);
 
   useEffect(() => {
     if (open) {
+      setIncludeBox(true);
+      setIncludeWarehouse(false);
       setUncheckedIds(new Set());
       setConfirmStep(false);
     }
@@ -61,13 +85,23 @@ export function QuickSellModal({ open, onClose, onSold }: QuickSellModalProps) {
 
   const evaluation = useMemo(
     () =>
-      evaluateQuickSellCandidates(
+      evaluateQuickSellCandidatesWithSources(
         pilot.inventory,
+        warehouseItems,
+        { box: includeBox, warehouse: effectiveWarehouse },
         config,
         activeGear,
         pilot.gears
       ),
-    [pilot.inventory, config, activeGear, pilot.gears]
+    [
+      pilot.inventory,
+      warehouseItems,
+      includeBox,
+      effectiveWarehouse,
+      config,
+      activeGear,
+      pilot.gears,
+    ]
   );
 
   const selectedItems = useMemo(
@@ -102,6 +136,7 @@ export function QuickSellModal({ open, onClose, onSold }: QuickSellModalProps) {
   };
 
   const handleConfirmSell = () => {
+    if (warehouseSellBlocked) return;
     const ids = selectedItems.map((it) => it.instanceId);
     const res = executeQuickSell(ids);
     const skippedCount =
@@ -112,6 +147,8 @@ export function QuickSellModal({ open, onClose, onSold }: QuickSellModalProps) {
       onClose();
     }
   };
+
+  const noSourceChecked = !includeBox && !effectiveWarehouse;
 
   return (
     <div
@@ -142,6 +179,63 @@ export function QuickSellModal({ open, onClose, onSold }: QuickSellModalProps) {
 
         {/* Scrollable Body */}
         <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
+          {/* Source Scope Checkboxes */}
+          <div
+            data-testid="quicksell-sources"
+            className="flex flex-wrap items-center justify-between gap-2.5 p-2.5 rounded-lg border border-slate-800 bg-[#080D16]"
+          >
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+              {t('qs.sourcesLabel')}
+            </span>
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="inline-flex items-center gap-2 cursor-pointer select-none text-xs text-slate-200">
+                <input
+                  type="checkbox"
+                  data-testid="quicksell-source-box"
+                  checked={includeBox}
+                  onChange={(e) => {
+                    setIncludeBox(e.target.checked);
+                    setConfirmStep(false);
+                  }}
+                  className="w-4 h-4 accent-amber-400"
+                />
+                <span>{t('qs.sourceBox', { count: pilot.inventory.length })}</span>
+              </label>
+
+              {hasWarehouseItems && (
+                <label
+                  data-testid="quicksell-source-warehouse-label"
+                  className="inline-flex items-center gap-2 cursor-pointer select-none text-xs text-slate-200"
+                >
+                  <input
+                    type="checkbox"
+                    data-testid="quicksell-source-warehouse"
+                    checked={includeWarehouse}
+                    onChange={(e) => {
+                      setIncludeWarehouse(e.target.checked);
+                      setConfirmStep(false);
+                    }}
+                    className="w-4 h-4 accent-amber-400"
+                  />
+                  <span>
+                    {t('qs.sourceWarehouse', { count: warehouseItems.length })}
+                  </span>
+                </label>
+              )}
+            </div>
+          </div>
+
+          {warehouseSellBlocked && (
+            <div
+              data-testid="quicksell-warehouse-blocked-reason"
+              role="alert"
+              className="flex items-center gap-2 px-3 py-2 rounded-lg border border-rose-500/40 bg-rose-950/30 text-xs text-rose-200"
+            >
+              <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+              <span>{t('qs.warehouseBlockedReason')}</span>
+            </div>
+          )}
+
           {/* Presets */}
           <div className="space-y-1.5">
             <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
@@ -226,7 +320,7 @@ export function QuickSellModal({ open, onClose, onSold }: QuickSellModalProps) {
               <input
                 type="number"
                 min={1}
-                max={50}
+                max={maxLevel}
                 placeholder={t('qs.anyOption')}
                 value={config.maxRequiredLevel ?? ''}
                 onChange={(e) =>
@@ -373,23 +467,31 @@ export function QuickSellModal({ open, onClose, onSold }: QuickSellModalProps) {
               </span>
             </div>
 
-            {!evaluation.hasAnyFilterEnabled ? (
+            {noSourceChecked ? (
+              <div
+                data-testid="quicksell-no-source-hint"
+                className="p-4 rounded-lg border border-dashed border-slate-700 text-center text-xs text-slate-400"
+              >
+                {t('qs.noSourceHint')}
+              </div>
+            ) : !evaluation.hasAnyFilterEnabled ? (
               <div className="p-4 rounded-lg border border-dashed border-slate-700 text-center text-xs text-slate-400">
                 {t('qs.noFilterHint')}
               </div>
-            ) : evaluation.matchingItems.length === 0 ? (
+            ) : evaluation.matchingEntries.length === 0 ? (
               <div className="p-4 rounded-lg border border-dashed border-slate-700 text-center text-xs text-slate-400">
                 {t('qs.noMatchHint')}
               </div>
             ) : (
               <div className="max-h-56 overflow-y-auto rounded-lg border border-slate-800 divide-y divide-slate-800/80 bg-[#080D16]">
-                {evaluation.matchingItems.map((it) => {
+                {evaluation.matchingEntries.map(({ item: it, source }) => {
                   const checked = !uncheckedIds.has(it.instanceId);
                   const sellVal = getSellPrice(it);
                   const pwr = calculateItemPowerScore(it);
                   return (
                     <label
                       key={it.instanceId}
+                      data-testid={`quicksell-preview-row-${it.instanceId}`}
                       className="flex items-center gap-2.5 px-3 py-2 hover:bg-slate-900/70 cursor-pointer"
                     >
                       <input
@@ -403,12 +505,26 @@ export function QuickSellModal({ open, onClose, onSold }: QuickSellModalProps) {
                         className="w-3.5 h-3.5 text-slate-400 shrink-0"
                       />
                       <div className="min-w-0 flex-1">
-                        <div
-                          className={`text-xs font-semibold truncate ${rarityTextClass(
-                            it.rarity
-                          )}`}
-                        >
-                          {getItemInstanceName(lang, it, true)}
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span
+                            className={`text-xs font-semibold truncate ${rarityTextClass(
+                              it.rarity
+                            )}`}
+                          >
+                            {getItemInstanceName(lang, it, true)}
+                          </span>
+                          <span
+                            data-testid={`quicksell-row-source-${it.instanceId}`}
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-semibold shrink-0 border ${
+                              source === 'warehouse'
+                                ? 'bg-amber-500/15 border-amber-500/40 text-amber-300'
+                                : 'bg-sky-500/15 border-sky-500/40 text-sky-300'
+                            }`}
+                          >
+                            {source === 'warehouse'
+                              ? t('qs.sourceTagWarehouse')
+                              : t('qs.sourceTagBox')}
+                          </span>
                         </div>
                         <div className="text-[11px] text-slate-400 font-mono-nums flex items-center gap-2">
                           <span>T{it.tier}</span>
@@ -455,8 +571,9 @@ export function QuickSellModal({ open, onClose, onSold }: QuickSellModalProps) {
                 <button
                   type="button"
                   data-testid="quicksell-confirm-execute"
+                  disabled={selectedItems.length === 0 || warehouseSellBlocked}
                   onClick={handleConfirmSell}
-                  className="min-h-[42px] px-4 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer"
+                  className="min-h-[42px] px-4 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer disabled:cursor-not-allowed"
                 >
                   <Check className="w-4 h-4" />
                   <span>{t('qs.confirmExecute')}</span>
@@ -475,7 +592,7 @@ export function QuickSellModal({ open, onClose, onSold }: QuickSellModalProps) {
               <button
                 type="button"
                 data-testid="quicksell-open-confirm"
-                disabled={selectedItems.length === 0}
+                disabled={selectedItems.length === 0 || warehouseSellBlocked}
                 onClick={() => setConfirmStep(true)}
                 className="min-h-[42px] px-4 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer disabled:cursor-not-allowed"
               >

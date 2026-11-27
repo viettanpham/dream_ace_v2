@@ -46,6 +46,10 @@ describe('ST1 Starter Equipment Set Engine & Store', () => {
 
     for (const slot of EQUIPMENT_SLOTS) {
       const instId = gear.equipped[slot];
+      if (slot === 'radar') {
+        expect(instId).toBeNull();
+        continue;
+      }
       expect(instId).not.toBeNull();
       const item = fresh.pilot.inventory.find((i) => i.instanceId === instId);
       expect(item).toBeDefined();
@@ -63,6 +67,10 @@ describe('ST1 Starter Equipment Set Engine & Store', () => {
     const storePilot = useGameStore.getState().pilot;
     for (const slot of EQUIPMENT_SLOTS) {
       const instId = storePilot.gears.siege.equipped[slot];
+      if (slot === 'radar') {
+        expect(instId).toBeNull();
+        continue;
+      }
       expect(instId).not.toBeNull();
       const item = storePilot.inventory.find((i) => i.instanceId === instId);
       expect(item?.isStarter).toBe(true);
@@ -84,6 +92,10 @@ describe('ST1 Starter Equipment Set Engine & Store', () => {
     expect(supportGear.owned).toBe(true);
     for (const slot of EQUIPMENT_SLOTS) {
       const instId = supportGear.equipped[slot];
+      if (slot === 'radar') {
+        expect(instId).toBeNull();
+        continue;
+      }
       expect(instId).not.toBeNull();
       const item = afterBuy.inventory.find((i) => i.instanceId === instId);
       expect(item).toBeDefined();
@@ -100,6 +112,10 @@ describe('ST1 Starter Equipment Set Engine & Store', () => {
       expect(g.owned).toBe(true);
       for (const slot of EQUIPMENT_SLOTS) {
         const instId = g.equipped[slot];
+        if (slot === 'radar') {
+          expect(instId).toBeNull();
+          continue;
+        }
         expect(instId).not.toBeNull();
         const item = afterUnlockAll.inventory.find((i) => i.instanceId === instId);
         expect(item?.isStarter).toBe(true);
@@ -130,16 +146,20 @@ describe('ST1 Starter Equipment Set Engine & Store', () => {
 
     const migrated = migrateSaveData(
       legacyState,
-      CURRENT_SAVE_VERSION - 1,
+      8,
       createDeterministicRng()
     );
     const migratedGear = migrated.pilot.gears.striker;
 
     // Existing main_weapon is preserved verbatim
     expect(migratedGear.equipped.main_weapon).toBe(customWeapon.instanceId);
-    // Remaining 5 empty slots were filled with Starter items
+    // Remaining 5 starter-configured empty slots were filled with Starter items; radar stays null
     for (const slot of EQUIPMENT_SLOTS) {
       const id = migratedGear.equipped[slot];
+      if (slot === 'radar') {
+        expect(id).toBeNull();
+        continue;
+      }
       expect(id).not.toBeNull();
       const item = migrated.pilot.inventory.find((i) => i.instanceId === id);
       expect(item).toBeDefined();

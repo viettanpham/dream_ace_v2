@@ -2,7 +2,7 @@ import { getSkillById } from '../data/skills';
 import { canUnitUseSkill } from '../engine/skills';
 import { getBattleSkillReason, getSkillDesc, getSkillName } from '../i18n';
 import type { TranslationKey } from '../i18n/en';
-import type { CombatUnit, Language } from '../types/game';
+import type { AdminConfig, CombatUnit, Language } from '../types/game';
 import { SP_COLOR_TOKENS } from '../utils/battleDisplay';
 import { BottomSheet } from './BottomSheet';
 import { SkillIcon } from './SkillIcon';
@@ -17,6 +17,8 @@ export interface PhoneSkillsSheetProps {
   playerUnit: CombatUnit | null | undefined;
   playerSkillIds: string[];
   canPlayerManualAct: boolean;
+  adminConfig?: Pick<AdminConfig, 'spEconomy' | 'fluxTransfer' | 'skillMods'> | null;
+  turnLockedSkillIds?: readonly string[];
   lang: Language;
   t: TranslateFn;
   onClose: () => void;
@@ -28,6 +30,8 @@ export function PhoneSkillsSheet({
   playerUnit,
   playerSkillIds,
   canPlayerManualAct,
+  adminConfig,
+  turnLockedSkillIds,
   lang,
   t,
   onClose,
@@ -51,9 +55,14 @@ export function PhoneSkillsSheet({
       ) : (
         <div className="space-y-2">
           {playerSkillIds.slice(0, 6).map((skillId) => {
-            const skill = getSkillById(skillId);
+            const skill = getSkillById(skillId, adminConfig);
             if (!skill || !playerUnit) return null;
-            const usability = canUnitUseSkill(playerUnit, skill.id);
+            const usability = canUnitUseSkill(
+              playerUnit,
+              skill.id,
+              adminConfig,
+              turnLockedSkillIds
+            );
             const clickable = canPlayerManualAct && usability.canUse;
             const isToggleOn = Boolean(usability.isToggleActive);
             const isUsedOnce =
@@ -90,10 +99,10 @@ export function PhoneSkillsSheet({
                   </span>
                   <div className="min-w-0">
                     <div className="text-[15px] font-bold leading-tight truncate">
-                      {getSkillName(lang, skill.id)}
+                      {getSkillName(skill, lang)}
                     </div>
                     <div className="text-[12px] text-slate-300 mt-0.5 leading-snug">
-                      {getSkillDesc(lang, skill.id)}
+                      {getSkillDesc(skill, lang)}
                     </div>
                     {!usability.canUse && reasonText && (
                       <div className="text-[12px] text-red-400 font-semibold mt-0.5">

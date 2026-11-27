@@ -200,7 +200,7 @@ function runSeededBattleAtSpeed(speed: BattleSpeed) {
     useGameStore.getState().startCampaign('SeededPilot', 'striker');
     useGameStore.getState().setLanguage('en');
     useGameStore.getState().setBattleSpeed(speed);
-    useGameStore.getState().startBattle('debris_belt');
+    useGameStore.getState().startBattle('border_outpost');
 
     let guard = 0;
     while (guard < 400) {
@@ -283,14 +283,14 @@ describe('TASK LP2 — Loop defeat rule + extra speeds + high speed safety', () 
   });
 
   it('1) Renders 3 defeat-rule radio options, clamps N to 1-99, and persists per device outside save', () => {
-    expect(CURRENT_SAVE_VERSION).toBe(9);
+    expect(CURRENT_SAVE_VERSION).toBe(12);
     expect(clampDefeatStreakLimit(0)).toBe(1);
     expect(clampDefeatStreakLimit(-7)).toBe(1);
     expect(clampDefeatStreakLimit(100)).toBe(99);
     expect(clampDefeatStreakLimit('42')).toBe(42);
     expect(clampDefeatStreakLimit('not-a-number')).toBe(3);
 
-    useGameStore.getState().startBattle('debris_belt');
+    useGameStore.getState().startBattle('border_outpost');
     act(() => {
       root.render(createElement(BattleScreen));
     });
@@ -357,7 +357,7 @@ describe('TASK LP2 — Loop defeat rule + extra speeds + high speed safety', () 
     root = createRoot(container);
     useGameStore.getState().resetCampaign();
     useGameStore.getState().startCampaign('Vance', 'striker');
-    useGameStore.getState().startBattle('debris_belt');
+    useGameStore.getState().startBattle('border_outpost');
     act(() => {
       root.render(createElement(BattleScreen));
     });
@@ -379,7 +379,20 @@ describe('TASK LP2 — Loop defeat rule + extra speeds + high speed safety', () 
   });
 
   it('2) Option 2 stops exactly after custom N defeats in a row (resets on win) and logs rule reason', () => {
-    useGameStore.getState().startBattle('debris_belt');
+    useGameStore.setState((s) => ({
+      pilot: {
+        ...s.pilot,
+        baseStates: {
+          ...s.pilot.baseStates,
+          border_outpost: {
+            ...s.pilot.baseStates.border_outpost,
+            faction: 'allied',
+            underAttack: false,
+          },
+        },
+      },
+    }));
+    useGameStore.getState().startBattle('border_outpost');
     useGameStore.getState().setAutoRepeatDefeatRule('stop_after_n');
     useGameStore.getState().setAutoRepeatDefeatStreakLimit(2);
 
@@ -387,7 +400,7 @@ describe('TASK LP2 — Loop defeat rule + extra speeds + high speed safety', () 
       root.render(createElement(BattleScreen));
     });
     act(() => {
-      useGameStore.getState().startAutoRepeat('infinite', 'debris_belt');
+      useGameStore.getState().startAutoRepeat('infinite', 'border_outpost');
     });
 
     // Defeat #1 -> streak 1, continues
@@ -427,7 +440,7 @@ describe('TASK LP2 — Loop defeat rule + extra speeds + high speed safety', () 
   });
 
   it('3) Option 3 (never_stop) never stops on repeated defeats while still respecting completion limit', () => {
-    useGameStore.getState().startBattle('debris_belt');
+    useGameStore.getState().startBattle('border_outpost');
     useGameStore.getState().setAutoRepeatDefeatRule('never_stop');
     useGameStore.getState().setAutoRepeatDefeatStreakLimit(1);
 
@@ -435,7 +448,7 @@ describe('TASK LP2 — Loop defeat rule + extra speeds + high speed safety', () 
       root.render(createElement(BattleScreen));
     });
     act(() => {
-      useGameStore.getState().startAutoRepeat(5, 'debris_belt');
+      useGameStore.getState().startAutoRepeat(5, 'border_outpost');
     });
 
     // 4 consecutive defeats do NOT stop the loop
@@ -508,7 +521,7 @@ describe('TASK LP2 — Loop defeat rule + extra speeds + high speed safety', () 
     }
 
     setViewport(1280, 800);
-    useGameStore.getState().startBattle('debris_belt');
+    useGameStore.getState().startBattle('border_outpost');
     act(() => {
       root.render(createElement(BattleScreen));
     });

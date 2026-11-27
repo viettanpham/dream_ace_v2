@@ -1,0 +1,18 @@
+TASK U2b — Shared Notice banner with visible countdown (GEAR tab) + Admin CP duration. Model: Hydrogen. If this prompt looks cut off, STOP and tell me the last words you can see.
+
+STEP A (resume): save this prompt verbatim to docs/tasks/U2b.md, checklist docs/tasks/U2b.progress.md, tick items, final report docs/tasks/U2b.report.md and print it. On retry continue from the first unticked item.
+
+TOKEN SAVING: read docs/CODEMAP.md first; grep by symbol. Open ONLY src/components/GearView.tsx in ranges: the quick sell undo timer (grep undoSecondsLeft, ~203-223), setInventoryNotice call sites (~529-630, ~1737, ~1774), the three banners (~1715-1810: quicksell-undo-toast, autoequip-undo-toast, inventoryNotice); AdminConfig in src/types/game.ts (~1223-1300); src/engine/migration.ts admin sanitizer + createDefaultAdminConfig; src/components/AdminPanel.tsx balance block near enrageStepPct (~1450). Related tests while working; full vitest + production build ONCE at the end. Do not enable Firebase. CURRENT_SAVE_VERSION unchanged (optional AdminConfig field, sanitizer default).
+
+SCOPE: GEAR tab banners only (GearView); the WarehouseView toast and other screens are NOT touched here. Desktop and phone. New strings vi.ts AND en.ts.
+
+ITEM 1 — Notice component + setting. New src/components/Notice.tsx: props { tone 'info'|'success'|'warning', text, action?: {label, onClick, testId}, durationSec, onClose, testId }; shows the text, the optional action button, a visible countdown "9s" next to the X (aria-live off, no per-second announcements) and a thin progress line; pauses while hovered, focused or touched and resumes on leave; X closes at once; durationSec 0 = no auto close and no countdown; fully controlled timer (pure helper useNoticeCountdown with fake-timer tests). adminConfig.noticeDurationSec (optional number, default 10, clamp 0-120, sanitizer fills it); Admin CP balance block gets a field "Thời gian tự đóng banner (giây, 0 = không tự đóng)" (en twin).
+ITEM 2 — Use it in GearView. Replace the three banners by ONE slot above the item grid (fixed 44px high when something is shown, nothing reserved when empty, no layout jump of the grid beyond that one row): quick sell undo ("Đã bán nhanh N linh kiện" + [Hoàn tác]), auto equip undo ("Đã tự động trang bị (N ô thay đổi)" + [Hoàn tác]) and the plain inventoryNotice. Only ONE banner at a time: a new one replaces the current one (the replaced undo simply disappears, its data stays in the store as today). The undo action works only while its banner is visible: when the countdown ends or X is pressed call the existing clearQuickSellUndo / clearAutoEquipUndo. Remove the old hard-coded 5000 ms quick sell timer (the store itself has no time limit) and the old "kept until next auto-equip" rule. Keep every existing data-testid (quicksell-undo-toast, autoequip-undo-toast, autoequip-undo-btn, qs undo button) on the new banner. Tone colours as today (amber for quick sell, sky for auto equip, emerald for info).
+
+HARD LIMITS: no horizontal overflow at 360px; nothing at x<8; no store or save change; undo results identical to today.
+
+TESTS: countdown ticks and closes at the configured duration (fake timers); hover/touch pauses and resumes; X closes; 0 = never closes and shows no countdown; second banner replaces the first; undo works before expiry and the button is gone after expiry; admin value 0..120 clamped by the sanitizer; Admin CP field changes the duration; testids preserved; vi/en parity.
+
+CHECKS: npx vitest run (full, once), tsc --noEmit / lint_applet, production build.
+
+REPORT: items done + files changed; GearView.tsx lines before/after; tests old (415) -> new; NOT checked in a real browser (banner height on phone, hover/touch pause).

@@ -1,106 +1,50 @@
-import type {
-  EquipmentSlot,
-  EquippedSlotIds,
-  ItemRarity,
-  ItemTemplate,
-  StatKey,
-} from '../types/game';
+import type { EquipmentSlot, EquippedSlotIds, ItemRarity, ItemTemplate, PaperDollSlot, StatKey } from '../types/game';
+import { DEFAULT_ITEM_LEVELS_CONFIG, getItemLevelKind, getTierRequiredLevel } from '../engine/itemLevels';
 import { BALANCE_CONFIG } from './balance';
+import rawItemsData from './items.json';
+import { MODULE_ITEM_TEMPLATES } from './modules';
 
-export const EQUIPMENT_SLOTS: EquipmentSlot[] = [
-  'main_weapon',
-  'sub_weapon',
-  'armor',
-  'engine',
-  'cpu',
-  'accessory',
-];
+export const EQUIPMENT_SLOTS: PaperDollSlot[] = ['main_weapon', 'sub_weapon', 'armor', 'engine', 'cpu', 'accessory', 'radar'];
+export const ITEM_SLOTS: EquipmentSlot[] = [...EQUIPMENT_SLOTS, 'module'];
 
 export interface EquipmentSlotMeta {
-  slot: EquipmentSlot;
+  slot: PaperDollSlot;
   label: string;
   shortLabel: string;
   classLocked: boolean;
 }
 
-export const EQUIPMENT_SLOT_META: Record<EquipmentSlot, EquipmentSlotMeta> = {
-  main_weapon: {
-    slot: 'main_weapon',
-    label: 'Main Weapon',
-    shortLabel: 'MAIN',
-    classLocked: false,
-  },
-  sub_weapon: {
-    slot: 'sub_weapon',
-    label: 'Sub Weapon',
-    shortLabel: 'SUB',
-    classLocked: false,
-  },
-  armor: {
-    slot: 'armor',
-    label: 'Hull Plating',
-    shortLabel: 'HULL',
-    classLocked: true,
-  },
-  engine: {
-    slot: 'engine',
-    label: 'Thrusters',
-    shortLabel: 'THRUST',
-    classLocked: true,
-  },
-  cpu: {
-    slot: 'cpu',
-    label: 'Targeting CPU',
-    shortLabel: 'CPU',
-    classLocked: false,
-  },
-  accessory: {
-    slot: 'accessory',
-    label: 'Reactor',
-    shortLabel: 'REACTOR',
-    classLocked: false,
-  },
+export const EQUIPMENT_SLOT_META: Record<PaperDollSlot, EquipmentSlotMeta> = {
+  main_weapon: { slot: 'main_weapon', label: 'Main Weapon', shortLabel: 'MAIN', classLocked: false },
+  sub_weapon: { slot: 'sub_weapon', label: 'Sub Weapon', shortLabel: 'SUB', classLocked: false },
+  armor: { slot: 'armor', label: 'Hull Plating', shortLabel: 'HULL', classLocked: true },
+  engine: { slot: 'engine', label: 'Thrusters', shortLabel: 'THRUST', classLocked: true },
+  cpu: { slot: 'cpu', label: 'Targeting CPU', shortLabel: 'CPU', classLocked: false },
+  accessory: { slot: 'accessory', label: 'Reactor', shortLabel: 'REACTOR', classLocked: false },
+  radar: { slot: 'radar', label: 'Radar', shortLabel: 'RADAR', classLocked: false },
 };
 
 export const EMPTY_EQUIPPED_SLOT_IDS: EquippedSlotIds = {
-  main_weapon: null,
-  sub_weapon: null,
-  armor: null,
-  engine: null,
-  cpu: null,
-  accessory: null,
+  main_weapon: null, sub_weapon: null, armor: null, engine: null, cpu: null, accessory: null, radar: null,
 };
 
-export const RARITY_LIST: ItemRarity[] = ['common', 'rare', 'epic', 'legendary'];
+export const RARITY_LIST: ItemRarity[] = [
+  'common',
+  'uncommon',
+  'rare',
+  'epic',
+  'legendary',
+];
 
 export const RARITY_META: Record<
   ItemRarity,
   { label: string; textClass: string; borderClass: string; bgTintClass: string }
 > = {
-  common: {
-    label: 'Common',
-    textClass: 'text-slate-200',
-    borderClass: 'border-slate-700',
-    bgTintClass: 'bg-slate-800/30',
-  },
-  rare: {
-    label: 'Rare',
-    textClass: 'text-sky-400',
-    borderClass: 'border-sky-500/60',
-    bgTintClass: 'bg-sky-500/10',
-  },
-  epic: {
-    label: 'Epic',
-    textClass: 'text-purple-400',
-    borderClass: 'border-purple-500/60',
-    bgTintClass: 'bg-purple-500/10',
-  },
-  legendary: {
-    label: 'Legendary',
-    textClass: 'text-amber-400',
-    borderClass: 'border-amber-400/80',
-    bgTintClass: 'bg-amber-500/15',
-  },
+  common: { label: 'Common', textClass: 'text-slate-200', borderClass: 'border-slate-700', bgTintClass: 'bg-slate-800/30' },
+  uncommon: { label: 'Uncommon', textClass: 'text-emerald-400', borderClass: 'border-emerald-500/60', bgTintClass: 'bg-emerald-500/10' },
+  rare: { label: 'Rare', textClass: 'text-sky-400', borderClass: 'border-sky-500/60', bgTintClass: 'bg-sky-500/10' },
+  epic: { label: 'Epic', textClass: 'text-purple-400', borderClass: 'border-purple-500/60', bgTintClass: 'bg-purple-500/10' },
+  legendary: { label: 'Legendary', textClass: 'text-amber-400', borderClass: 'border-amber-400/80', bgTintClass: 'bg-amber-500/15' },
 };
 
 export interface AffixSuffixMeta {
@@ -164,672 +108,118 @@ export const DROP_CONFIG = BALANCE_CONFIG.dropConfig;
 
 export const BUILTIN_ITEM_REGISTRY_TAG = 'sys' as const;
 
-/**
- * Distinct, identity-driven Item Templates (>= 5 templates per slot).
- * Each template defines distinct stat profile, combat traits, and roll ranges.
- */
-const RAW_ITEM_TEMPLATES: ItemTemplate[] = [
-  // ================= MAIN WEAPONS (5 templates, universal) =================
-  {
-    id: 'tpl_mw_pulse_cannon',
-    nameEn: 'Pulse Cannon',
-    nameVi: 'Pháo Xung Trọng Kích',
-    descEn: 'Heavy kinetic-pulse cannon with high raw firepower at the cost of slight handling drag.',
-    descVi: 'Pháo xung hạng nặng có hỏa lực ATK rất cao nhưng giảm nhẹ độ linh hoạt né tránh.',
-    slot: 'main_weapon',
-    tier: 1,
-    requiredLevel: 1,
-    classRestriction: null,
-    basePrice: 180,
-    primaryStat: 'attack',
-    primaryRange: [10, 15],
-    affixPool: ['attack', 'defense', 'shield', 'spirit'],
-    specialTraits: { evasionMod: -2 },
-  },
-  {
-    id: 'tpl_mw_rail_lance',
-    nameEn: 'Rail Lance',
-    nameVi: 'Thương Điện Từ Rail',
-    descEn: 'Precision electromagnetic lance tuned for lethal critical strikes.',
-    descVi: 'Pháo điện từ chính xác cao chuyên tạo đòn chí mạng chết người.',
-    slot: 'main_weapon',
-    tier: 2,
-    requiredLevel: 3,
-    classRestriction: null,
-    basePrice: 320,
-    primaryStat: 'attack',
-    primaryRange: [12, 18],
-    secondaryStat: 'evasion',
-    secondaryRange: [3, 6],
-    affixPool: ['attack', 'evasion', 'fuel', 'spirit'],
-    specialTraits: { critBonusPct: 8, longRange: true },
-  },
-  {
-    id: 'tpl_mw_scatter_gun',
-    nameEn: 'Scatter Gun',
-    nameVi: 'Pháo Đạn Chùm Xuyên Giáp',
-    descEn: 'Close-range flak shredder whose tungsten flechettes pierce heavy enemy plating.',
-    descVi: 'Pháo đạn chùm cận chiến phóng mảnh vonfram xuyên thẳng giáp địch.',
-    slot: 'main_weapon',
-    tier: 2,
-    requiredLevel: 4,
-    classRestriction: null,
-    basePrice: 340,
-    primaryStat: 'attack',
-    primaryRange: [11, 17],
-    secondaryStat: 'defense',
-    secondaryRange: [3, 6],
-    affixPool: ['attack', 'defense', 'fuel', 'evasion'],
-    specialTraits: { armorPiercePct: 18 },
-  },
-  {
-    id: 'tpl_mw_plasma_repeater',
-    nameEn: 'Plasma Repeater',
-    nameVi: 'Súng Plasma Liên Thanh',
-    descEn: 'Rapid-cycling plasma emitter feeding excess charge into the Gear SP capacitor.',
-    descVi: 'Pháo plasma tốc độ bắn cao tự nạp lại năng lượng SP mỗi lượt.',
-    slot: 'main_weapon',
-    tier: 3,
-    requiredLevel: 6,
-    classRestriction: null,
-    basePrice: 460,
-    primaryStat: 'attack',
-    primaryRange: [13, 19],
-    secondaryStat: 'spirit',
-    secondaryRange: [5, 9],
-    affixPool: ['attack', 'spirit', 'fuel', 'shield'],
-    specialTraits: { spRegenPerTurn: 3 },
-  },
-  {
-    id: 'tpl_mw_nova_beam',
-    nameEn: 'Nova Beam Cannon',
-    nameVi: 'Đại Bác Tia Nova',
-    descEn: 'Flagship-grade particle beam spilling thermal splash onto adjacent targets.',
-    descVi: 'Đại bác hạt cấp kỳ hạm gây sát thương lan nhiệt sang phi cơ địch lân cận.',
-    slot: 'main_weapon',
-    tier: 4,
-    requiredLevel: 9,
-    classRestriction: null,
-    basePrice: 680,
-    primaryStat: 'attack',
-    primaryRange: [16, 23],
-    secondaryStat: 'spirit',
-    secondaryRange: [5, 10],
-    affixPool: ['attack', 'spirit', 'evasion', 'shield'],
-    specialTraits: { splashPct: 22, critBonusPct: 5, longRange: true },
-  },
+const VALID_SLOT_SET = new Set<string>(ITEM_SLOTS);
+const VALID_STAT_SET = new Set<string>(['attack', 'defense', 'fuel', 'spirit', 'shield', 'evasion']);
+const VALID_CLASS_SET = new Set<string>(['striker', 'interceptor', 'siege', 'support']);
+const NUMERIC_TRAIT_KEYS = ['critBonusPct', 'armorPiercePct', 'splashPct', 'spRegenPerTurn', 'evasionMod', 'accuracyPct'] as const;
 
-  // ================= SUB WEAPONS (5 templates, universal) =================
-  {
-    id: 'tpl_sw_missile_pod',
-    nameEn: 'Missile Pod',
-    nameVi: 'Khoang Tên Lửa Lan',
-    descEn: 'Under-wing micro-missile bay delivering splash damage and steady SP flow.',
-    descVi: 'Khoang tên lửa dưới cánh gây sát thương lan và hồi thêm SP mỗi lượt.',
-    slot: 'sub_weapon',
-    tier: 1,
-    requiredLevel: 1,
-    classRestriction: null,
-    basePrice: 170,
-    primaryStat: 'attack',
-    primaryRange: [6, 10],
-    secondaryStat: 'spirit',
-    secondaryRange: [3, 6],
-    affixPool: ['attack', 'spirit', 'fuel', 'shield'],
-    specialTraits: { splashPct: 18, spRegenPerTurn: 2 },
-  },
-  {
-    id: 'tpl_sw_flak_turret',
-    nameEn: 'Flak Turret',
-    nameVi: 'Tháp Pháo Phòng Không',
-    descEn: 'Automated point-defense autocannon cracking armored drones.',
-    descVi: 'Tháp pháo tự động phá giáp drone và gia cố độ bền thân tàu.',
-    slot: 'sub_weapon',
-    tier: 2,
-    requiredLevel: 3,
-    classRestriction: null,
-    basePrice: 280,
-    primaryStat: 'attack',
-    primaryRange: [7, 11],
-    secondaryStat: 'defense',
-    secondaryRange: [5, 9],
-    affixPool: ['attack', 'defense', 'shield', 'evasion'],
-    specialTraits: { armorPiercePct: 12 },
-  },
-  {
-    id: 'tpl_sw_aegis_drone',
-    nameEn: 'Aegis Escort Pod',
-    nameVi: 'Vệ Tinh Hộ Tống Aegis',
-    descEn: 'Autonomous orbital shield drone amplifying barrier capacity and SP recovery.',
-    descVi: 'Drone hộ tống bay quanh phi cơ tăng mạnh Khiên và hồi SP mỗi lượt.',
-    slot: 'sub_weapon',
-    tier: 2,
-    requiredLevel: 4,
-    classRestriction: null,
-    basePrice: 310,
-    primaryStat: 'shield',
-    primaryRange: [9, 14],
-    secondaryStat: 'spirit',
-    secondaryRange: [4, 7],
-    affixPool: ['shield', 'spirit', 'defense', 'fuel'],
-    specialTraits: { spRegenPerTurn: 3 },
-  },
-  {
-    id: 'tpl_sw_phantom_seekers',
-    nameEn: 'Phantom Seekers',
-    nameVi: 'Tên Lửa Truy Đuổi Phantom',
-    descEn: 'Agile heat-seeking darts built to finish evasive fighters with bonus crit.',
-    descVi: 'Tên lửa tầm nhiệt linh hoạt tăng mạnh né tránh và tỉ lệ chí mạng.',
-    slot: 'sub_weapon',
-    tier: 3,
-    requiredLevel: 6,
-    classRestriction: null,
-    basePrice: 430,
-    primaryStat: 'evasion',
-    primaryRange: [7, 12],
-    secondaryStat: 'attack',
-    secondaryRange: [7, 11],
-    affixPool: ['evasion', 'attack', 'fuel', 'spirit'],
-    specialTraits: { critBonusPct: 7, longRange: true },
-  },
-  {
-    id: 'tpl_sw_ion_torpedo',
-    nameEn: 'Ion Torpedo Bay',
-    nameVi: 'Khoang Ngư Lôi Ion',
-    descEn: 'Heavy ion warheads tearing through hull plating and splashing nearby craft.',
-    descVi: 'Ngư lôi ion hạng nặng xuyên giáp sâu và gây nổ lan diện rộng.',
-    slot: 'sub_weapon',
-    tier: 4,
-    requiredLevel: 9,
-    classRestriction: null,
-    basePrice: 610,
-    primaryStat: 'attack',
-    primaryRange: [10, 16],
-    secondaryStat: 'shield',
-    secondaryRange: [6, 10],
-    affixPool: ['attack', 'shield', 'spirit', 'defense'],
-    specialTraits: { armorPiercePct: 15, splashPct: 15, longRange: true },
-  },
+const isNonEmptyStr = (v: unknown): v is string => typeof v === 'string' && v.trim().length > 0;
+const isValidRange = (v: unknown): v is [number, number] =>
+  Array.isArray(v) && v.length === 2 &&
+  typeof v[0] === 'number' && typeof v[1] === 'number' &&
+  Number.isFinite(v[0]) && Number.isFinite(v[1]) && v[0] <= v[1];
 
-  // ================= HULL PLATING / ARMOR (8 templates, class-locked: 2 per class) =================
-  {
-    id: 'tpl_ar_striker_vanguard',
-    nameEn: 'Vanguard Bomber Hull',
-    nameVi: 'Giáp Oanh Tạc Vanguard',
-    descEn: 'Balanced composite fuselage reinforcing Striker ordnance wings.',
-    descVi: 'Lớp giáp tổng hợp cân bằng tăng phòng thủ và hỏa lực cho Striker.',
-    slot: 'armor',
-    tier: 1,
-    requiredLevel: 1,
-    classRestriction: 'striker',
-    basePrice: 190,
-    primaryStat: 'defense',
-    primaryRange: [8, 13],
-    secondaryStat: 'attack',
-    secondaryRange: [4, 7],
-    affixPool: ['defense', 'attack', 'shield', 'fuel'],
-  },
-  {
-    id: 'tpl_ar_striker_valkyrie',
-    nameEn: 'Valkyrie Assault Shell',
-    nameVi: 'Vỏ Thiết Giáp Valkyrie',
-    descEn: 'Heavy reactive bomber plating with reinforced shield emitters for Striker.',
-    descVi: 'Vỏ phản ứng hạng nặng bảo vệ khoang bom Striker dưới hỏa lực dày.',
-    slot: 'armor',
-    tier: 3,
-    requiredLevel: 5,
-    classRestriction: 'striker',
-    basePrice: 440,
-    primaryStat: 'defense',
-    primaryRange: [12, 18],
-    secondaryStat: 'shield',
-    secondaryRange: [7, 11],
-    affixPool: ['defense', 'shield', 'attack', 'spirit'],
-    specialTraits: { armorPiercePct: 6 },
-  },
-  {
-    id: 'tpl_ar_interceptor_carbon',
-    nameEn: 'Carbon Dart Skin',
-    nameVi: 'Vỏ Carbon Mũi Tên',
-    descEn: 'Ultra-light radar-absorbent carbon frame tailored for Interceptor agility.',
-    descVi: 'Vỏ carbon siêu nhẹ tối ưu tốc độ ngoặt và né đòn cho Interceptor.',
-    slot: 'armor',
-    tier: 1,
-    requiredLevel: 1,
-    classRestriction: 'interceptor',
-    basePrice: 190,
-    primaryStat: 'evasion',
-    primaryRange: [9, 14],
-    secondaryStat: 'fuel',
-    secondaryRange: [5, 8],
-    affixPool: ['evasion', 'fuel', 'attack', 'shield'],
-    specialTraits: { critBonusPct: 4 },
-  },
-  {
-    id: 'tpl_ar_interceptor_wraith',
-    nameEn: 'Wraith Stealth Frame',
-    nameVi: 'Giáp Tàng Hình Wraith',
-    descEn: 'Phase-coated aerodynamic hull pushing Interceptor evasion and crit to the limit.',
-    descVi: 'Khung vỏ khí động học tàng hình đẩy độ né tránh và chí mạng của Interceptor lên tối đa.',
-    slot: 'armor',
-    tier: 3,
-    requiredLevel: 5,
-    classRestriction: 'interceptor',
-    basePrice: 450,
-    primaryStat: 'evasion',
-    primaryRange: [13, 19],
-    secondaryStat: 'attack',
-    secondaryRange: [6, 10],
-    affixPool: ['evasion', 'attack', 'fuel', 'spirit'],
-    specialTraits: { critBonusPct: 8 },
-  },
-  {
-    id: 'tpl_ar_siege_bastion',
-    nameEn: 'Bastion Titanium Hull',
-    nameVi: 'Giáp Pháo Hạm Bastion',
-    descEn: 'Multi-layer titanium bulkheads absorbing massive bombardment on Siege gunships.',
-    descVi: 'Giáp titanium nhiều lớp giúp pháo hạm Siege chống chịu hỏa lực tập trung.',
-    slot: 'armor',
-    tier: 1,
-    requiredLevel: 1,
-    classRestriction: 'siege',
-    basePrice: 200,
-    primaryStat: 'defense',
-    primaryRange: [11, 16],
-    secondaryStat: 'shield',
-    secondaryRange: [6, 10],
-    affixPool: ['defense', 'shield', 'attack', 'spirit'],
-    specialTraits: { evasionMod: -2 },
-  },
-  {
-    id: 'tpl_ar_siege_titan',
-    nameEn: 'Titan Dreadnought Plate',
-    nameVi: 'Thiết Giáp Kỳ Hạm Titan',
-    descEn: 'Ceramic-titanium dreadnought hull built to outlast elite starfighter waves.',
-    descVi: 'Giáp gốm-titanium siêu dày biến Siege thành pháo đài bất khả xâm phạm.',
-    slot: 'armor',
-    tier: 3,
-    requiredLevel: 5,
-    classRestriction: 'siege',
-    basePrice: 470,
-    primaryStat: 'defense',
-    primaryRange: [15, 22],
-    secondaryStat: 'shield',
-    secondaryRange: [10, 15],
-    affixPool: ['defense', 'shield', 'attack', 'spirit'],
-    specialTraits: { evasionMod: -3 },
-  },
-  {
-    id: 'tpl_ar_support_conduit',
-    nameEn: 'Conduit Relay Hull',
-    nameVi: 'Vỏ Siêu Dẫn Conduit',
-    descEn: 'Superconducting chassis channeling barrier power across Support repair pods.',
-    descVi: 'Khung vỏ siêu dẫn tăng cường Khiên và Tinh thần cho tàu Support.',
-    slot: 'armor',
-    tier: 1,
-    requiredLevel: 1,
-    classRestriction: 'support',
-    basePrice: 190,
-    primaryStat: 'shield',
-    primaryRange: [9, 14],
-    secondaryStat: 'spirit',
-    secondaryRange: [6, 10],
-    affixPool: ['shield', 'spirit', 'defense', 'fuel'],
-    specialTraits: { spRegenPerTurn: 2 },
-  },
-  {
-    id: 'tpl_ar_support_seraph',
-    nameEn: 'Seraph Harmonic Shell',
-    nameVi: 'Vỏ Cộng Hưởng Seraph',
-    descEn: 'Crystalline emitter hull amplifying fleet-wide shield and repair output.',
-    descVi: 'Lớp vỏ tinh thể cộng hưởng khuếch đại năng lượng sửa chữa và hồi SP cho Support.',
-    slot: 'armor',
-    tier: 3,
-    requiredLevel: 5,
-    classRestriction: 'support',
-    basePrice: 450,
-    primaryStat: 'spirit',
-    primaryRange: [12, 18],
-    secondaryStat: 'shield',
-    secondaryRange: [10, 15],
-    affixPool: ['spirit', 'shield', 'defense', 'evasion'],
-    specialTraits: { spRegenPerTurn: 4 },
-  },
+function isValidSpecialTraits(v: unknown): v is ItemTemplate['specialTraits'] {
+  if (v === undefined) return true;
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return false;
+  const obj = v as Record<string, unknown>;
+  for (const k of NUMERIC_TRAIT_KEYS) {
+    if (obj[k] !== undefined && (typeof obj[k] !== 'number' || !Number.isFinite(obj[k]))) return false;
+  }
+  return (
+    (obj.longRange === undefined || typeof obj.longRange === 'boolean') &&
+    (obj.detectStealth === undefined || typeof obj.detectStealth === 'boolean')
+  );
+}
 
-  // ================= THRUSTERS / ENGINE (8 templates, class-locked: 2 per class) =================
-  {
-    id: 'tpl_en_striker_ion',
-    nameEn: 'Twin Ion Thrusters',
-    nameVi: 'Động Cơ Ion Kép VX',
-    descEn: 'Dependable twin ion nozzles balancing speed and ordnance lift for Striker.',
-    descVi: 'Cặp ống xả ion ổn định cho oanh tạc cơ Striker.',
-    slot: 'engine',
-    tier: 1,
-    requiredLevel: 1,
-    classRestriction: 'striker',
-    basePrice: 185,
-    primaryStat: 'fuel',
-    primaryRange: [8, 13],
-    secondaryStat: 'attack',
-    secondaryRange: [4, 7],
-    affixPool: ['fuel', 'attack', 'evasion', 'defense'],
-  },
-  {
-    id: 'tpl_en_striker_afterburner',
-    nameEn: 'Overdrive Afterburner',
-    nameVi: 'Động Cơ Đốt Sau Overdrive',
-    descEn: 'High-thrust Striker drive routing excess plasma into main weapons.',
-    descVi: 'Động cơ đốt sau công suất lớn tăng mạnh tốc độ lượt và hỏa lực Striker.',
-    slot: 'engine',
-    tier: 3,
-    requiredLevel: 6,
-    classRestriction: 'striker',
-    basePrice: 460,
-    primaryStat: 'fuel',
-    primaryRange: [12, 18],
-    secondaryStat: 'attack',
-    secondaryRange: [7, 12],
-    affixPool: ['fuel', 'attack', 'evasion', 'spirit'],
-    specialTraits: { critBonusPct: 5 },
-  },
-  {
-    id: 'tpl_en_interceptor_vector',
-    nameEn: 'Vector Jet Drive',
-    nameVi: 'Động Cơ Phản Lực Vector',
-    descEn: 'Multi-axis vector thrusters securing first-strike initiative for Interceptor.',
-    descVi: 'Vòi đẩy đa hướng giúp Interceptor chiếm quyền ra đòn trước.',
-    slot: 'engine',
-    tier: 1,
-    requiredLevel: 1,
-    classRestriction: 'interceptor',
-    basePrice: 190,
-    primaryStat: 'fuel',
-    primaryRange: [10, 15],
-    secondaryStat: 'evasion',
-    secondaryRange: [6, 10],
-    affixPool: ['fuel', 'evasion', 'attack', 'spirit'],
-  },
-  {
-    id: 'tpl_en_interceptor_slipstream',
-    nameEn: 'Slipstream Warp Core',
-    nameVi: 'Động Cơ Xung Tốc Slipstream',
-    descEn: 'Zero-lag experimental drive pushing Interceptor velocity beyond radar lock.',
-    descVi: 'Động cơ thử nghiệm không độ trễ đạt tốc độ và né tránh cực đại.',
-    slot: 'engine',
-    tier: 3,
-    requiredLevel: 6,
-    classRestriction: 'interceptor',
-    basePrice: 470,
-    primaryStat: 'fuel',
-    primaryRange: [15, 22],
-    secondaryStat: 'evasion',
-    secondaryRange: [9, 14],
-    affixPool: ['fuel', 'evasion', 'attack', 'shield'],
-    specialTraits: { critBonusPct: 6 },
-  },
-  {
-    id: 'tpl_en_siege_hydraulic',
-    nameEn: 'Heavy Torque Drive',
-    nameVi: 'Cụm Đẩy Hạng Nặng HX',
-    descEn: 'Stabilized recoil thrusters keeping Siege gunships steady during railgun salvos.',
-    descVi: 'Hệ đẩy mô-men lớn ổn định thân tàu và tăng giáp cho Siege.',
-    slot: 'engine',
-    tier: 1,
-    requiredLevel: 1,
-    classRestriction: 'siege',
-    basePrice: 185,
-    primaryStat: 'fuel',
-    primaryRange: [6, 10],
-    secondaryStat: 'defense',
-    secondaryRange: [6, 10],
-    affixPool: ['fuel', 'defense', 'shield', 'attack'],
-  },
-  {
-    id: 'tpl_en_siege_colossus',
-    nameEn: 'Colossus Plasma Drive',
-    nameVi: 'Động Cơ Plasma Colossus',
-    descEn: 'Twin capital-grade plasma drives feeding both spinal cannons and shields.',
-    descVi: 'Cặp động cơ plasma cỡ lớn gia tăng cả Khiên, Phòng thủ và Lực đẩy cho Siege.',
-    slot: 'engine',
-    tier: 3,
-    requiredLevel: 6,
-    classRestriction: 'siege',
-    basePrice: 480,
-    primaryStat: 'defense',
-    primaryRange: [11, 16],
-    secondaryStat: 'fuel',
-    secondaryRange: [9, 14],
-    affixPool: ['defense', 'fuel', 'shield', 'attack'],
-    specialTraits: { armorPiercePct: 8 },
-  },
-  {
-    id: 'tpl_en_support_harmonic',
-    nameEn: 'Harmonic Stabilizer',
-    nameVi: 'Động Cơ Điều Hòa AX',
-    descEn: 'Low-vibration propulsion keeping Support repair emitters locked on squadmates.',
-    descVi: 'Hệ đẩy êm mượt giúp Support nạp SP ổn định và giữ tốc độ đội hình.',
-    slot: 'engine',
-    tier: 1,
-    requiredLevel: 1,
-    classRestriction: 'support',
-    basePrice: 185,
-    primaryStat: 'fuel',
-    primaryRange: [7, 11],
-    secondaryStat: 'spirit',
-    secondaryRange: [6, 10],
-    affixPool: ['fuel', 'spirit', 'shield', 'evasion'],
-    specialTraits: { spRegenPerTurn: 2 },
-  },
-  {
-    id: 'tpl_en_support_aether',
-    nameEn: 'Aether Pulse Drive',
-    nameVi: 'Động Cơ Xung Aether',
-    descEn: 'Resonant propulsion harvesting thrust eddies directly into SP reserves.',
-    descVi: 'Cụm đẩy cộng hưởng hồi SP dồi dào và nâng mạnh tốc độ cho Support.',
-    slot: 'engine',
-    tier: 3,
-    requiredLevel: 6,
-    classRestriction: 'support',
-    basePrice: 460,
-    primaryStat: 'spirit',
-    primaryRange: [11, 16],
-    secondaryStat: 'fuel',
-    secondaryRange: [10, 15],
-    affixPool: ['spirit', 'fuel', 'shield', 'evasion'],
-    specialTraits: { spRegenPerTurn: 4 },
-  },
+export function validateItemTemplates(raw: unknown): ItemTemplate[] {
+  const rows = Array.isArray(raw)
+    ? raw
+    : raw && typeof raw === 'object' && Array.isArray((raw as { templates?: unknown }).templates)
+      ? (raw as { templates: unknown[] }).templates
+      : null;
+  if (!rows) {
+    console.warn('[items] Invalid item templates payload; expected { schemaVersion, templates: [] }.');
+    return [];
+  }
 
-  // ================= TARGETING CPU (5 templates, universal) =================
-  {
-    id: 'tpl_cpu_tactical',
-    nameEn: 'Tactical Fire-Control CPU',
-    nameVi: 'CPU Điều Khiển Hỏa Lực',
-    descEn: 'Standard ballistic computer synchronizing wing cannons for crisp damage.',
-    descVi: 'Máy tính ngắm bắn tiêu chuẩn tăng độ chính xác và sát thương.',
-    slot: 'cpu',
-    tier: 1,
-    requiredLevel: 1,
-    classRestriction: null,
-    basePrice: 175,
-    primaryStat: 'attack',
-    primaryRange: [6, 10],
-    secondaryStat: 'evasion',
-    secondaryRange: [4, 7],
-    affixPool: ['attack', 'evasion', 'fuel', 'spirit'],
-    specialTraits: { critBonusPct: 4 },
-  },
-  {
-    id: 'tpl_cpu_reflex',
-    nameEn: 'Reflex Gyro Processor',
-    nameVi: 'CPU Con Quay Phản Xạ',
-    descEn: 'Predictive flight-path gyro boosting dodge rate and thruster response.',
-    descVi: 'Bộ xử lý quỹ đạo bay tăng vượt trội né tránh và tốc độ lượt.',
-    slot: 'cpu',
-    tier: 2,
-    requiredLevel: 3,
-    classRestriction: null,
-    basePrice: 290,
-    primaryStat: 'evasion',
-    primaryRange: [9, 14],
-    secondaryStat: 'fuel',
-    secondaryRange: [6, 10],
-    affixPool: ['evasion', 'fuel', 'shield', 'attack'],
-  },
-  {
-    id: 'tpl_cpu_oracle',
-    nameEn: 'Oracle Telemetry Core',
-    nameVi: 'CPU Viễn Trắc Oracle',
-    descEn: 'Wide-band combat link expanding SP pool and regenerating SP every turn.',
-    descVi: 'Liên kết viễn trắc mở rộng dung lượng Tinh thần và tự hồi SP.',
-    slot: 'cpu',
-    tier: 2,
-    requiredLevel: 4,
-    classRestriction: null,
-    basePrice: 320,
-    primaryStat: 'spirit',
-    primaryRange: [10, 15],
-    secondaryStat: 'shield',
-    secondaryRange: [5, 9],
-    affixPool: ['spirit', 'shield', 'fuel', 'defense'],
-    specialTraits: { spRegenPerTurn: 3 },
-  },
-  {
-    id: 'tpl_cpu_predator',
-    nameEn: 'Predator Lock-On AI',
-    nameVi: 'CPU Khóa Mục Tiêu Predator',
-    descEn: 'Multi-spectrum hunter AI exposing hull seams for high crit and armor pierce.',
-    descVi: 'AI săn mồi phát hiện khe hở giáp, tăng mạnh chí mạng và xuyên giáp.',
-    slot: 'cpu',
-    tier: 3,
-    requiredLevel: 6,
-    classRestriction: null,
-    basePrice: 450,
-    primaryStat: 'attack',
-    primaryRange: [9, 14],
-    secondaryStat: 'evasion',
-    secondaryRange: [7, 11],
-    affixPool: ['attack', 'evasion', 'spirit', 'fuel'],
-    specialTraits: { critBonusPct: 10, armorPiercePct: 10 },
-  },
-  {
-    id: 'tpl_cpu_sovereign',
-    nameEn: 'Sovereign Fleet Core',
-    nameVi: 'CPU Kỳ Hạm Sovereign',
-    descEn: 'Quantum command AI optimizing offense, barrier modulation, and SP cycling.',
-    descVi: 'Lõi chỉ huy lượng tử tối ưu toàn diện tấn công, khiên và hồi SP.',
-    slot: 'cpu',
-    tier: 4,
-    requiredLevel: 9,
-    classRestriction: null,
-    basePrice: 660,
-    primaryStat: 'spirit',
-    primaryRange: [12, 18],
-    secondaryStat: 'attack',
-    secondaryRange: [10, 15],
-    affixPool: ['spirit', 'attack', 'shield', 'evasion', 'defense'],
-    specialTraits: { critBonusPct: 8, spRegenPerTurn: 4 },
-  },
+  const seenIds = new Set<string>();
+  const droppedIds: string[] = [];
+  const valid: ItemTemplate[] = [];
 
-  // ================= REACTOR / ACCESSORY (5 templates, universal) =================
-  {
-    id: 'tpl_ac_capacitor',
-    nameEn: 'Auxiliary Shield Reactor',
-    nameVi: 'Lò Phản Ứng Khiên Phụ',
-    descEn: 'Compact energy cell expanding rechargeable barrier reserves.',
-    descVi: 'Khối lò phản ứng nhỏ gọn nâng dung lượng Khiên năng lượng.',
-    slot: 'accessory',
-    tier: 1,
-    requiredLevel: 1,
-    classRestriction: null,
-    basePrice: 170,
-    primaryStat: 'shield',
-    primaryRange: [9, 14],
-    secondaryStat: 'defense',
-    secondaryRange: [3, 6],
-    affixPool: ['shield', 'defense', 'spirit', 'fuel'],
-  },
-  {
-    id: 'tpl_ac_overclock',
-    nameEn: 'Overclock Plasma Coil',
-    nameVi: 'Lò Phản Ứng Ép Xung',
-    descEn: 'High-output coil accelerating SP generation and weapon punch.',
-    descVi: 'Cuộn phản ứng công suất cao tăng hỏa lực và hồi SP mỗi lượt.',
-    slot: 'accessory',
-    tier: 2,
-    requiredLevel: 3,
-    classRestriction: null,
-    basePrice: 300,
-    primaryStat: 'spirit',
-    primaryRange: [8, 13],
-    secondaryStat: 'attack',
-    secondaryRange: [5, 9],
-    affixPool: ['spirit', 'attack', 'fuel', 'shield'],
-    specialTraits: { spRegenPerTurn: 3 },
-  },
-  {
-    id: 'tpl_ac_chaff',
-    nameEn: 'ECM Jammer Core',
-    nameVi: 'Lò Tác Chiến Điện Tử ECM',
-    descEn: 'Low-signature reactor powering chaff decoys and evasive thrusters.',
-    descVi: 'Lõi năng lượng nhiễu xạ tăng mạnh Né tránh và Tốc độ lượt.',
-    slot: 'accessory',
-    tier: 2,
-    requiredLevel: 4,
-    classRestriction: null,
-    basePrice: 310,
-    primaryStat: 'evasion',
-    primaryRange: [8, 13],
-    secondaryStat: 'fuel',
-    secondaryRange: [5, 9],
-    affixPool: ['evasion', 'fuel', 'shield', 'attack'],
-  },
-  {
-    id: 'tpl_ac_aegis_core',
-    nameEn: 'Fortress Fusion Core',
-    nameVi: 'Lò Nhiệt Hạch Pháo Đài',
-    descEn: 'Dense fusion core reinforcing both hull plating and energy shields.',
-    descVi: 'Lõi nhiệt hạch mật độ cao gia cường đồng thời Giáp thân và Khiên.',
-    slot: 'accessory',
-    tier: 3,
-    requiredLevel: 6,
-    classRestriction: null,
-    basePrice: 440,
-    primaryStat: 'defense',
-    primaryRange: [10, 15],
-    secondaryStat: 'shield',
-    secondaryRange: [10, 15],
-    affixPool: ['defense', 'shield', 'spirit', 'attack'],
-  },
-  {
-    id: 'tpl_ac_singularity',
-    nameEn: 'Singularity Micro-Core',
-    nameVi: 'Lò Vi Trọng Lực Singularity',
-    descEn: 'Exotic gravity-well reactor enhancing splash discharge, crit, and speed.',
-    descVi: 'Lõi trường hấp dẫn tăng tốc độ, chí mạng và sát thương lan cho vũ khí.',
-    slot: 'accessory',
-    tier: 4,
-    requiredLevel: 9,
-    classRestriction: null,
-    basePrice: 650,
-    primaryStat: 'fuel',
-    primaryRange: [11, 17],
-    secondaryStat: 'attack',
-    secondaryRange: [9, 14],
-    affixPool: ['fuel', 'attack', 'evasion', 'shield', 'spirit'],
-    specialTraits: { critBonusPct: 6, splashPct: 14 },
-  },
+  rows.forEach((entry, idx) => {
+    const r = entry && typeof entry === 'object' && !Array.isArray(entry) ? (entry as Record<string, unknown>) : null;
+    const rowLabel = r && isNonEmptyStr(r.id) ? r.id : `#${idx}`;
+    const hasSecondary = r ? r.secondaryStat !== undefined || r.secondaryRange !== undefined : false;
+
+    const ok = r !== null &&
+      isNonEmptyStr(r.id) && !seenIds.has(r.id) &&
+      isNonEmptyStr(r.nameEn) && isNonEmptyStr(r.nameVi) && isNonEmptyStr(r.descEn) && isNonEmptyStr(r.descVi) &&
+      typeof r.slot === 'string' && VALID_SLOT_SET.has(r.slot) &&
+      typeof r.tier === 'number' && Number.isInteger(r.tier) && r.tier >= 1 && r.tier <= 4 &&
+      typeof r.requiredLevel === 'number' && Number.isFinite(r.requiredLevel) && r.requiredLevel >= 1 &&
+      (r.classRestriction === null || (typeof r.classRestriction === 'string' && VALID_CLASS_SET.has(r.classRestriction))) &&
+      typeof r.basePrice === 'number' && Number.isFinite(r.basePrice) && r.basePrice > 0 &&
+      typeof r.primaryStat === 'string' && VALID_STAT_SET.has(r.primaryStat) && isValidRange(r.primaryRange) &&
+      (!hasSecondary || (typeof r.secondaryStat === 'string' && VALID_STAT_SET.has(r.secondaryStat) && isValidRange(r.secondaryRange))) &&
+      Array.isArray(r.affixPool) && r.affixPool.length > 0 && r.affixPool.every((s) => typeof s === 'string' && VALID_STAT_SET.has(s)) &&
+      isValidSpecialTraits(r.specialTraits) && (r.registryTag === undefined || isNonEmptyStr(r.registryTag));
+
+    if (!ok || !r) {
+      droppedIds.push(rowLabel);
+      return;
+    }
+
+    const id = r.id as string;
+    const slot = r.slot as EquipmentSlot;
+    const tier = r.tier as number;
+    const kind = getItemLevelKind(slot);
+    const requiredLevel = DEFAULT_ITEM_LEVELS_CONFIG.kinds[kind].enabled
+      ? getTierRequiredLevel(kind, tier)
+      : (r.requiredLevel as number);
+    seenIds.add(id);
+    valid.push({
+      id,
+      nameEn: r.nameEn as string,
+      nameVi: r.nameVi as string,
+      descEn: r.descEn as string,
+      descVi: r.descVi as string,
+      slot,
+      tier,
+      requiredLevel,
+      classRestriction: r.classRestriction as ItemTemplate['classRestriction'],
+      basePrice: r.basePrice as number,
+      primaryStat: r.primaryStat as StatKey,
+      primaryRange: [(r.primaryRange as [number, number])[0], (r.primaryRange as [number, number])[1]],
+      ...(hasSecondary
+        ? {
+            secondaryStat: r.secondaryStat as StatKey,
+            secondaryRange: [(r.secondaryRange as [number, number])[0], (r.secondaryRange as [number, number])[1]] as [number, number],
+          }
+        : {}),
+      affixPool: [...(r.affixPool as StatKey[])],
+      ...(r.specialTraits !== undefined
+        ? { specialTraits: { ...(r.specialTraits as NonNullable<ItemTemplate['specialTraits']>) } }
+        : {}),
+      registryTag: (r.registryTag as ItemTemplate['registryTag']) ?? BUILTIN_ITEM_REGISTRY_TAG,
+    });
+  });
+
+  if (droppedIds.length > 0) {
+    console.warn(`[items] Dropped ${droppedIds.length} invalid item template(s): ${droppedIds.join(', ')}`);
+  }
+  return valid;
+}
+
+export const ITEM_TEMPLATES: ItemTemplate[] = [
+  ...validateItemTemplates(rawItemsData),
+  ...MODULE_ITEM_TEMPLATES,
 ];
 
-export const ITEM_TEMPLATES: ItemTemplate[] = RAW_ITEM_TEMPLATES.map((tpl) => ({
-  ...tpl,
-  registryTag: tpl.registryTag ?? BUILTIN_ITEM_REGISTRY_TAG,
-}));
-
-export const ITEM_TEMPLATES_BY_ID: Record<string, ItemTemplate> =
-  ITEM_TEMPLATES.reduce((acc, tpl) => {
-    acc[tpl.id] = tpl;
-    return acc;
-  }, {} as Record<string, ItemTemplate>);
+export const ITEM_TEMPLATES_BY_ID: Record<string, ItemTemplate> = ITEM_TEMPLATES.reduce((acc, tpl) => {
+  acc[tpl.id] = tpl;
+  return acc;
+}, {} as Record<string, ItemTemplate>);
 
 export function getItemTemplate(templateId: string): ItemTemplate | undefined {
   return ITEM_TEMPLATES_BY_ID[templateId];

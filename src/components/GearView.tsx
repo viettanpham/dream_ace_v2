@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDownWideNarrow,
   ArrowUp,
@@ -14,24 +14,28 @@ import {
   SlidersHorizontal,
   Sparkles,
   Star,
-  Tag,
   Trash2,
   Unlock,
   Wand2,
   X,
 } from 'lucide-react';
 import { sanitizeAutoEquipConfig } from '../data/autoEquipConfig';
+import { sanitizeMaxLevel } from '../data/balance';
 import {
   EMPTY_STAT_BLOCK,
   MECH_CLASSES,
   MECH_CLASS_LIST,
   STAT_KEYS,
 } from '../data/classes';
+import { getSupplyTemplateById } from '../data/consumables';
+import { getCatalogRow } from '../data/iconCatalog';
 import {
   ENCHANT_CONFIG,
   EQUIPMENT_SLOTS,
   EQUIPMENT_SLOT_META,
+  ITEM_SLOTS,
   RARITY_META,
+  SHOP_CONFIG,
 } from '../data/items';
 import {
   getEffectiveItemStats,
@@ -44,17 +48,20 @@ import {
   sumGearSpecialTraits,
   validateEquipOnGear,
 } from '../engine/equipment';
+import { computeSupplyPrice } from '../engine/itemPrice';
 import {
   countActiveInventoryFilters,
   filterAndSortInventory,
   type InventoryEntryView,
 } from '../engine/inventory';
+import { sanitizeNoticeDurationSec } from '../engine/migration';
 import { getGearPassiveBonuses } from '../engine/skills';
 import {
   calculateDerivedStats,
   calculateEffectiveStats,
   calculateGearPowerRating,
 } from '../engine/stats';
+import { sanitizeSupplyLoadoutSlots } from '../engine/supplies';
 import {
   formatEquipValidationReason,
   formatItemTraitsList,
@@ -79,21 +86,46 @@ import type {
   InventorySortKey,
   ItemInstance,
   ItemRarity,
+  PaperDollSlot,
   StatBlock,
+  SupplyTemplate,
 } from '../types/game';
 import { soundFx } from '../utils/sound';
 import { AutoEquipModal } from './AutoEquipModal';
+import { Notice } from './Notice';
 import { BottomSheet } from './BottomSheet';
+import { CatalogIcon } from './CatalogIcon';
 import { FighterSvg } from './FighterSvg';
 import { ClassIcon, ConsumableIcon, SlotIcon } from './GameIcons';
+import {
+  GearSlotTile,
+  isEquipmentSlotKey,
+  PAPER_DOLL_LEFT_SLOTS,
+  PAPER_DOLL_RIGHT_SLOTS,
+  type GearPaperDollSlotKey,
+} from './GearSlotTile';
+import { GearSwapPicker } from './GearSwapPicker';
+import { GearSocketRow, ModuleSocketList } from './ModuleSocketList';
 import { QuickSellModal } from './QuickSellModal';
+import {
+  formatSupplyEffectSummary,
+  getSupplyName,
+  SupplyLoadoutBar,
+} from './SupplyLoadoutBar';
+import { SupplyTradeConfirm } from './SupplyTradeConfirm';
 
 type GearSelection =
-  | { kind: 'slot'; slot: EquipmentSlot }
+  | { kind: 'slot'; slot: PaperDollSlot }
   | { kind: 'inventory'; instanceId: string }
   | null;
 
-const RARITY_OPTIONS: ItemRarity[] = ['common', 'rare', 'epic', 'legendary'];
+const RARITY_OPTIONS: ItemRarity[] = [
+  'common',
+  'uncommon',
+  'rare',
+  'epic',
+  'legendary',
+];
 const TIER_OPTIONS = [1, 2, 3, 4] as const;
 const SORT_OPTIONS: InventorySortKey[] = [
   'newest',
@@ -135,6 +167,7 @@ export function GearView() {
   const { lang, t } = useI18n();
   const pilot = useGameStore((s) => s.pilot);
   const adminConfig = useGameStore((s) => s.adminConfig);
+  const currentMaxLevel = sanitizeMaxLevel(adminConfig?.maxLevel);
   const filterState = useGameStore((s) => s.inventoryFilterState);
   const quickSellUndo = useGameStore((s) => s.quickSellUndo);
   const autoEquipUndo = useGameStore((s) => s.autoEquipUndo);
@@ -167,12 +200,17 @@ export function GearView() {
   const undoAutoEquip = useGameStore((s) => s.undoAutoEquip);
   const clearAutoEquipUndo = useGameStore((s) => s.clearAutoEquipUndo);
   const useConsumable = useGameStore((s) => s.useConsumable);
+  const setSupplyLoadout = useGameStore((s) => s.setSupplyLoadout);
+  const sellSupply = useGameStore((s) => s.sellSupply);
+  const [pendingSellSupply, setPendingSellSupply] =
+    useState<SupplyTemplate | null>(null);
 
   const [selection, setSelection] = useState<GearSelection>(null);
   const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
   const [mobileStatsExpanded, setMobileStatsExpanded] = useState(false);
+  const [desktopStatsExpanded, setDesktopStatsExpanded] = useState(false);
   const [confirmingUnequipSlot, setConfirmingUnequipSlot] =
-    useState<EquipmentSlot | null>(null);
+    useState<PaperDollSlot | null>(null);
   const [confirmingSellId, setConfirmingSellId] = useState<string | null>(null);
   const [enchantFeedback, setEnchantFeedback] =
     useState<EnchantAttemptResult | null>(null);
@@ -183,11 +221,24 @@ export function GearView() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmBulkRare, setConfirmBulkRare] = useState(false);
   const [quickSellOpen, setQuickSellOpen] = useState(false);
+  const [swapPickerSlot, setSwapPickerSlot] = useState<PaperDollSlot | null>(null);
+  const [swapPickerSocketIndex, setSwapPickerSocketIndex] = useState<number | null>(null);
   const [autoEquipPlan, setAutoEquipPlan] = useState<AutoEquipPlan | null>(
     null
   );
-  const [inventoryNotice, setInventoryNotice] = useState<string | null>(null);
-  const [undoSecondsLeft, setUndoSecondsLeft] = useState(0);
+  type ActiveGearBanner =
+    | { id: number; kind: 'quicksell' }
+    | { id: number; kind: 'autoequip' }
+    | { id: number; kind: 'notice'; text: string };
+
+  const [activeBanner, setActiveBanner] = useState<ActiveGearBanner | null>(() => {
+    if (quickSellUndo) return { id: 1, kind: 'quicksell' };
+    if (autoEquipUndo) return { id: 1, kind: 'autoequip' };
+    return null;
+  });
+  const bannerSeqRef = useRef(2);
+  const prevQuickSellUndoRef = useRef(quickSellUndo);
+  const prevAutoEquipUndoRef = useRef(autoEquipUndo);
 
   // Virtualized grid measurement state
   const gridContainerRef = useRef<HTMLDivElement | null>(null);
@@ -201,26 +252,35 @@ export function GearView() {
   const activeClass = MECH_CLASSES[activeGear.classId];
   const ownedGears = MECH_CLASS_LIST.filter((c) => pilot.gears[c.id].owned);
 
-  // Manage 5-second Quick Sell Undo timer
-  useEffect(() => {
-    if (!quickSellUndo) {
-      setUndoSecondsLeft(0);
+  const setInventoryNotice = useCallback((text: string | null) => {
+    if (!text) {
+      setActiveBanner(null);
       return;
     }
-    const updateTimer = () => {
-      const elapsed = Date.now() - quickSellUndo.soldAt;
-      const remaining = Math.max(0, 5000 - elapsed);
-      if (remaining <= 0) {
-        clearQuickSellUndo();
-        setUndoSecondsLeft(0);
-      } else {
-        setUndoSecondsLeft(Math.ceil(remaining / 1000));
-      }
-    };
-    updateTimer();
-    const interval = setInterval(updateTimer, 250);
-    return () => clearInterval(interval);
-  }, [quickSellUndo, clearQuickSellUndo]);
+    setActiveBanner({
+      id: bannerSeqRef.current++,
+      kind: 'notice',
+      text,
+    });
+  }, []);
+
+  useEffect(() => {
+    if (quickSellUndo && quickSellUndo !== prevQuickSellUndoRef.current) {
+      setActiveBanner({ id: bannerSeqRef.current++, kind: 'quicksell' });
+    } else if (!quickSellUndo && prevQuickSellUndoRef.current) {
+      setActiveBanner((prev) => (prev?.kind === 'quicksell' ? null : prev));
+    }
+    prevQuickSellUndoRef.current = quickSellUndo;
+  }, [quickSellUndo]);
+
+  useEffect(() => {
+    if (autoEquipUndo && autoEquipUndo !== prevAutoEquipUndoRef.current) {
+      setActiveBanner({ id: bannerSeqRef.current++, kind: 'autoequip' });
+    } else if (!autoEquipUndo && prevAutoEquipUndoRef.current) {
+      setActiveBanner((prev) => (prev?.kind === 'autoequip' ? null : prev));
+    }
+    prevAutoEquipUndoRef.current = autoEquipUndo;
+  }, [autoEquipUndo]);
 
   // Measure virtualized grid container
   useEffect(() => {
@@ -286,26 +346,50 @@ export function GearView() {
   ]);
 
   const currentEquipBonuses = useMemo(
-    () => sumGearEquipmentStats(activeGear, pilot.inventory),
-    [activeGear, pilot.inventory]
+    () =>
+      sumGearEquipmentStats(
+        activeGear,
+        pilot.inventory,
+        adminConfig,
+        pilot.warehouse
+      ),
+    [activeGear, pilot.inventory, adminConfig, pilot.warehouse]
   );
   const currentEquipTraits = useMemo(
-    () => sumGearSpecialTraits(activeGear, pilot.inventory),
-    [activeGear, pilot.inventory]
+    () =>
+      sumGearSpecialTraits(
+        activeGear,
+        pilot.inventory,
+        adminConfig,
+        pilot.warehouse
+      ),
+    [activeGear, pilot.inventory, adminConfig, pilot.warehouse]
   );
 
   const previewEquipBonuses = useMemo(
-    () => sumGearEquipmentStats(previewGear, pilot.inventory),
-    [previewGear, pilot.inventory]
+    () =>
+      sumGearEquipmentStats(
+        previewGear,
+        pilot.inventory,
+        adminConfig,
+        pilot.warehouse
+      ),
+    [previewGear, pilot.inventory, adminConfig, pilot.warehouse]
   );
   const previewEquipTraits = useMemo(
-    () => sumGearSpecialTraits(previewGear, pilot.inventory),
-    [previewGear, pilot.inventory]
+    () =>
+      sumGearSpecialTraits(
+        previewGear,
+        pilot.inventory,
+        adminConfig,
+        pilot.warehouse
+      ),
+    [previewGear, pilot.inventory, adminConfig, pilot.warehouse]
   );
 
   const passiveBonuses = useMemo(
-    () => getGearPassiveBonuses(activeGear),
-    [activeGear]
+    () => getGearPassiveBonuses(activeGear, adminConfig),
+    [activeGear, adminConfig]
   );
 
   const currentStats = useMemo(
@@ -361,8 +445,14 @@ export function GearView() {
   );
 
   const powerRating = useMemo(
-    () => calculateGearPowerRating(activeGear, pilot.inventory),
-    [activeGear, pilot.inventory]
+    () =>
+      calculateGearPowerRating(
+        activeGear,
+        pilot.inventory,
+        adminConfig,
+        pilot.warehouse
+      ),
+    [activeGear, pilot.inventory, adminConfig, pilot.warehouse]
   );
 
   const statDeltas: StatBlock = useMemo(() => {
@@ -383,14 +473,10 @@ export function GearView() {
 
   // Per-slot counts across entire inventory
   const slotCounts = useMemo(() => {
-    const counts: Record<EquipmentSlot, number> = {
-      main_weapon: 0,
-      sub_weapon: 0,
-      armor: 0,
-      engine: 0,
-      cpu: 0,
-      accessory: 0,
-    };
+    const counts = {} as Record<EquipmentSlot, number>;
+    for (const slot of ITEM_SLOTS) {
+      counts[slot] = 0;
+    }
     for (const inst of pilot.inventory) {
       counts[inst.slot] += 1;
     }
@@ -451,17 +537,14 @@ export function GearView() {
     endRow * cols
   );
 
-  const handleSelectSlot = (slot: EquipmentSlot) => {
+  const handleSelectSlot = (slot: PaperDollSlot) => {
     soundFx.playClick();
     setEnchantFeedback(null);
     setConfirmingUnequipSlot(null);
     setConfirmingSellId(null);
-    if (equippedMap[slot]) {
-      setSelection({ kind: 'slot', slot });
-      setMobileDetailOpen(true);
-    } else {
-      setSelection(null);
-      setMobileDetailOpen(false);
+    setSelection({ kind: 'slot', slot });
+    setMobileDetailOpen(true);
+    if (!equippedMap[slot]) {
       setInventoryFilterState({ slot });
     }
   };
@@ -495,13 +578,13 @@ export function GearView() {
   const handleConfirmEquip = () => {
     if (!selectedInventoryInstance) return;
     const res = equipItem(selectedInventoryInstance.instanceId);
-    if (res.canEquip) {
+    if (res.canEquip && selectedInventoryInstance.slot !== 'module') {
       setSelection({ kind: 'slot', slot: selectedInventoryInstance.slot });
       setConfirmingSellId(null);
     }
   };
 
-  const handleConfirmUnequip = (slot: EquipmentSlot) => {
+  const handleConfirmUnequip = (slot: PaperDollSlot) => {
     unequipSlot(slot);
     setConfirmingUnequipSlot(null);
     setSelection(null);
@@ -509,7 +592,7 @@ export function GearView() {
     setEnchantFeedback(null);
   };
 
-  const handleEnchant = (slot: EquipmentSlot) => {
+  const handleEnchant = (slot: PaperDollSlot) => {
     const res = enchantEquippedSlot(slot);
     if (res) setEnchantFeedback(res);
   };
@@ -607,13 +690,41 @@ export function GearView() {
 
   const handleUseConsumable = (c: ConsumableItem) => {
     const res = useConsumable(c.id);
-    if (!res.ok) return;
+    if (!res.ok) {
+      setInventoryNotice(t('inv.consumableUseFailed'));
+      return;
+    }
     if (res.kind === 'equipment_crate' && res.openedItem) {
       setInventoryNotice(
         t('inv.consumableOpenedFeedback', {
           item: getItemInstanceName(lang, res.openedItem, true),
         })
       );
+    } else if (res.kind === 'supply_crate') {
+      const entries = res.openedSupplies ?? [];
+      const gotParts = entries
+        .filter((e) => e.qty > 0)
+        .map((e) => `${getSupplyName(e.templateId, t)} x${e.qty}`);
+      const lostParts = entries
+        .filter((e) => (e.lost ?? 0) > 0)
+        .map((e) => `${getSupplyName(e.templateId, t)} x${e.lost}`);
+      if (gotParts.length === 0 && lostParts.length === 0) {
+        setInventoryNotice(t('inv.consumableSupplyCrateEmpty'));
+      } else {
+        const base =
+          gotParts.length > 0
+            ? t('inv.consumableSupplyCrateFeedback', {
+                items: gotParts.join(', '),
+              })
+            : t('inv.consumableSupplyCrateFeedback', { items: '0' });
+        const lostSuffix =
+          lostParts.length > 0
+            ? t('inv.consumableSupplyCrateLostPart', {
+                lostItems: lostParts.join(', '),
+              })
+            : '';
+        setInventoryNotice(`${base}${lostSuffix}`);
+      }
     } else if (res.kind === 'enchant_stone') {
       setInventoryNotice(
         t('inv.consumableEnchantFeedback', { pct: c.bonusPct ?? 20 })
@@ -629,6 +740,35 @@ export function GearView() {
         t('inv.consumableExpFeedback', { battles: c.battlesCount ?? 5 })
       );
     }
+  };
+
+  const handleAddSupplyToBag = (tpl: SupplyTemplate) => {
+    const current = activeGear.supplyLoadout ?? [];
+    const maxSlots = sanitizeSupplyLoadoutSlots(adminConfig.supplyLoadoutSlots);
+    if (current.length >= maxSlots) {
+      setInventoryNotice(t('inv.supplyBagFullNotice', { max: maxSlots }));
+      return;
+    }
+    const res = setSupplyLoadout(activeGear.classId, [...current, tpl.id]);
+    if (res.reason === 'locked') {
+      setInventoryNotice(t('supply.lockedHint'));
+      return;
+    }
+    if (res.rejected.some((r) => r.reason === 'over_slots')) {
+      setInventoryNotice(t('inv.supplyBagFullNotice', { max: maxSlots }));
+      return;
+    }
+    if (res.rejected.some((r) => r.reason === 'family_duplicate')) {
+      setInventoryNotice(t('inv.supplyBagDuplicateFamilyNotice'));
+      return;
+    }
+    if (!res.ok || res.rejected.length > 0) {
+      setInventoryNotice(t('inv.consumableUseFailed'));
+      return;
+    }
+    setInventoryNotice(
+      t('inv.supplyAddedToBagNotice', { name: getSupplyName(tpl.id, t) })
+    );
   };
 
   const toggleRarityFilter = (rarity: ItemRarity) => {
@@ -676,6 +816,9 @@ export function GearView() {
     if (fb.code === 'max_level') {
       return t('enchant.msg.max_level', { item: itemName });
     }
+    if (fb.code === 'not_enchantable') {
+      return t('enchant.msg.not_enchantable', { item: itemName });
+    }
     if (fb.code === 'insufficient_credits') {
       return t('enchant.msg.insufficient_credits', {
         cost: fb.creditsSpent.toLocaleString(),
@@ -696,7 +839,18 @@ export function GearView() {
     });
   };
 
-  const derivedMetrics = [
+  const curAcc = currentDerived.accuracyPct ?? 0;
+  const prevAcc = previewDerived.accuracyPct ?? 0;
+
+  const derivedMetrics: Array<{
+    key: string;
+    label: string;
+    cur: number;
+    prev: number;
+    suffix?: string;
+    color: string;
+    title?: string;
+  }> = [
     {
       key: 'hp',
       label: 'HP',
@@ -743,6 +897,18 @@ export function GearView() {
     },
   ];
 
+  if (curAcc > 0 || prevAcc > 0) {
+    derivedMetrics.push({
+      key: 'accuracy',
+      label: t('derived.accuracy'),
+      cur: curAcc,
+      prev: prevAcc,
+      suffix: '%',
+      color: 'text-teal-300',
+      title: t('derived.accuracyHint', { val: prevAcc }),
+    });
+  }
+
   const activeDetailInstance = selectedInventoryInstance ?? selectedSlotInstance;
   const activeDetailStats = activeDetailInstance
     ? getEffectiveItemStats(activeDetailInstance)
@@ -761,7 +927,30 @@ export function GearView() {
       : null;
 
   const renderDetailContent = () => {
-    if (!activeDetailInstance || !activeDetailStats) return null;
+    if (!activeDetailInstance || !activeDetailStats) {
+      const emptySlot = selection?.kind === 'slot' ? selection.slot : null;
+      const slotLabel = emptySlot ? getSlotLabel(lang, emptySlot) : '';
+      return (
+        <div className="flex-1 min-h-[180px] rounded border border-slate-800/80 bg-[#080C14] p-5 flex flex-col items-center justify-center text-center space-y-2.5">
+          <div className="font-display text-lg font-semibold text-slate-300">
+            {emptySlot ? t('gear.emptySlotDetailTitle', { slot: slotLabel }) : t('gear.emptyDetailTitle')}
+          </div>
+          <p className="text-xs text-slate-500 max-w-xs leading-relaxed">
+            {emptySlot ? t('gear.emptySlotDetailDesc', { slot: slotLabel }) : t('gear.emptyDetailDesc')}
+          </p>
+          {emptySlot && (
+            <button
+              type="button"
+              data-testid="detail-pick-btn"
+              onClick={() => setSwapPickerSlot(emptySlot)}
+              className="min-h-[40px] px-4 rounded-lg border border-emerald-500/60 bg-emerald-500/20 hover:bg-emerald-500/30 text-xs font-bold text-emerald-200 transition-colors cursor-pointer"
+            >
+              {t('gear.pickBtn')}
+            </button>
+          )}
+        </div>
+      );
+    }
     const sellPrice = getSellPrice(activeDetailInstance);
     const isLocked = Boolean(activeDetailInstance.locked);
     const isFavorited = Boolean(activeDetailInstance.favorited);
@@ -771,9 +960,8 @@ export function GearView() {
       confirmingSellId === activeDetailInstance.instanceId;
 
     return (
-      <div className="flex-1 flex flex-col justify-between gap-3">
-        <div className="space-y-3">
-          {/* Item Header + Lock/Favorite Quick Toggles */}
+      <div className="flex-1 flex flex-col gap-3">
+        {/* Item Header + Lock/Favorite Quick Toggles */}
           <div>
             <div className="flex items-start justify-between gap-2">
               <h3
@@ -933,6 +1121,18 @@ export function GearView() {
                     >
                       {t('shop.unequipShortcut')}
                     </button>
+                    {activeDetailInstance.slot !== 'module' && (
+                      <button
+                        type="button"
+                        data-testid="detail-swap-btn"
+                        onClick={() =>
+                          setSwapPickerSlot(activeDetailInstance.slot as PaperDollSlot)
+                        }
+                        className="px-2 py-0.5 rounded bg-emerald-500/25 hover:bg-emerald-500/40 text-emerald-100 font-bold cursor-pointer"
+                      >
+                        {t('gear.swapBtn')}
+                      </button>
+                    )}
                   </span>
                 )}
                 {isLocked && (
@@ -947,6 +1147,114 @@ export function GearView() {
               </div>
             )}
           </div>
+
+        {/* Action Buttons (>= 44px height) */}
+        {activeDetailInstance.slot !== 'module' && (
+        <div className="flex flex-wrap items-center gap-2 pb-3 border-b border-slate-800/80">
+          {selection?.kind === 'inventory' &&
+            activeDetailOwnerGear !== activeGear.classId && (
+              <>
+                <button
+                  type="button"
+                  disabled={!activeValidation?.canEquip}
+                  onClick={handleConfirmEquip}
+                  className="flex-1 min-h-[44px] px-4 inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-white font-semibold text-sm lg:text-xs transition-colors cursor-pointer whitespace-nowrap"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>
+                    {t('gear.confirmEquip', {
+                      gear: getClassName(lang, activeGear.classId),
+                    })}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    soundFx.playClick();
+                    setSelection(null);
+                    setMobileDetailOpen(false);
+                  }}
+                  className="min-h-[44px] px-4 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-300 text-sm lg:text-xs font-medium transition-colors cursor-pointer whitespace-nowrap"
+                >
+                  {t('common.cancel')}
+                </button>
+              </>
+            )}
+
+          {selection?.kind === 'inventory' &&
+            activeDetailOwnerGear === activeGear.classId && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (activeDetailInstance.slot !== 'module') {
+                    setSelection({
+                      kind: 'slot',
+                      slot: activeDetailInstance.slot,
+                    });
+                  }
+                }}
+                className="flex-1 min-h-[44px] px-4 rounded-lg border border-sky-500/50 bg-sky-500/15 hover:bg-sky-500/25 text-sky-200 font-semibold text-sm lg:text-xs transition-colors cursor-pointer"
+              >
+                {t('gear.currentlyEquipped')} · Enchant / Unequip
+              </button>
+            )}
+
+          {selection?.kind === 'slot' && activeEnchantMeta && (
+            <>
+              {!activeEnchantMeta.isMax && (
+                <button
+                  type="button"
+                  disabled={pilot.credits < activeEnchantMeta.cost}
+                  onClick={() => handleEnchant(selection.slot)}
+                  className="flex-1 min-h-[44px] px-3.5 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-slate-950 font-semibold text-sm lg:text-xs transition-colors cursor-pointer whitespace-nowrap"
+                >
+                  {pilot.credits < activeEnchantMeta.cost
+                    ? t('equip.needCredits', {
+                        cost: activeEnchantMeta.cost.toLocaleString(),
+                      })
+                    : t('equip.enchantAction', {
+                        level: activeEnchantMeta.nextLevel,
+                        cost: activeEnchantMeta.cost.toLocaleString(),
+                      })}
+                </button>
+              )}
+
+              {confirmingUnequipSlot === selection.slot ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => handleConfirmUnequip(selection.slot)}
+                    className="min-h-[44px] px-4 rounded-lg bg-red-600 hover:bg-red-500 text-white font-semibold text-sm lg:text-xs transition-colors cursor-pointer whitespace-nowrap"
+                  >
+                    {t('gear.confirmUnequip')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      soundFx.playClick();
+                      setConfirmingUnequipSlot(null);
+                    }}
+                    className="min-h-[44px] px-3.5 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-300 text-sm lg:text-xs font-medium cursor-pointer whitespace-nowrap"
+                  >
+                    {t('common.cancel')}
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    soundFx.playClick();
+                    setConfirmingUnequipSlot(selection.slot);
+                  }}
+                  className="min-h-[44px] px-4 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200 text-sm lg:text-xs font-medium transition-colors cursor-pointer whitespace-nowrap"
+                >
+                  {t('gear.previewUnequip')}
+                </button>
+              )}
+            </>
+          )}
+        </div>
+        )}
 
           <p className="text-sm lg:text-xs text-slate-300 leading-relaxed">
             {getItemInstanceDesc(lang, activeDetailInstance)}
@@ -990,7 +1298,7 @@ export function GearView() {
           </div>
 
           {/* Live +/- Comparison Block */}
-          {isPreviewActive && (
+          {isPreviewActive && activeDetailInstance.slot !== 'module' && (
             <div className="rounded border border-slate-800 bg-[#080C14] p-3 space-y-1.5">
               <div className="text-xs font-semibold text-amber-300">
                 {t('gear.comparisonHeading')}
@@ -1020,8 +1328,14 @@ export function GearView() {
             </div>
           )}
 
+          {activeDetailInstance.slot === 'module' && (
+            <ModuleSocketList moduleInstance={activeDetailInstance} />
+          )}
+
           {/* Cannot-Equip Inline Warning */}
-          {activeValidation && !activeValidation.canEquip && (
+          {activeValidation &&
+            !activeValidation.canEquip &&
+            activeDetailInstance.slot !== 'module' && (
             <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-red-400 bg-red-500/10 border border-red-500/30 rounded px-3 py-2">
               <div className="flex items-center gap-1.5 min-w-0">
                 <Ban className="w-4 h-4 shrink-0" />
@@ -1112,549 +1426,525 @@ export function GearView() {
               )}
             </div>
           )}
-        </div>
-
-        {/* Action Buttons (>= 44px height) */}
-        <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-slate-800/80">
-          {selection?.kind === 'inventory' &&
-            activeDetailOwnerGear !== activeGear.classId && (
-              <>
-                <button
-                  type="button"
-                  disabled={!activeValidation?.canEquip}
-                  onClick={handleConfirmEquip}
-                  className="flex-1 min-h-[44px] px-4 inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-white font-semibold text-sm lg:text-xs transition-colors cursor-pointer whitespace-nowrap"
-                >
-                  <Check className="w-4 h-4" />
-                  <span>
-                    {t('gear.confirmEquip', {
-                      gear: getClassName(lang, activeGear.classId),
-                    })}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    soundFx.playClick();
-                    setSelection(null);
-                    setMobileDetailOpen(false);
-                  }}
-                  className="min-h-[44px] px-4 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-300 text-sm lg:text-xs font-medium transition-colors cursor-pointer whitespace-nowrap"
-                >
-                  {t('common.cancel')}
-                </button>
-              </>
-            )}
-
-          {selection?.kind === 'inventory' &&
-            activeDetailOwnerGear === activeGear.classId && (
-              <button
-                type="button"
-                onClick={() =>
-                  setSelection({
-                    kind: 'slot',
-                    slot: activeDetailInstance.slot,
-                  })
-                }
-                className="flex-1 min-h-[44px] px-4 rounded-lg border border-sky-500/50 bg-sky-500/15 hover:bg-sky-500/25 text-sky-200 font-semibold text-sm lg:text-xs transition-colors cursor-pointer"
-              >
-                {t('gear.currentlyEquipped')} · Enchant / Unequip
-              </button>
-            )}
-
-          {selection?.kind === 'slot' && activeEnchantMeta && (
-            <>
-              {!activeEnchantMeta.isMax && (
-                <button
-                  type="button"
-                  disabled={pilot.credits < activeEnchantMeta.cost}
-                  onClick={() => handleEnchant(selection.slot)}
-                  className="flex-1 min-h-[44px] px-3.5 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-slate-950 font-semibold text-sm lg:text-xs transition-colors cursor-pointer whitespace-nowrap"
-                >
-                  {pilot.credits < activeEnchantMeta.cost
-                    ? t('equip.needCredits', {
-                        cost: activeEnchantMeta.cost.toLocaleString(),
-                      })
-                    : t('equip.enchantAction', {
-                        level: activeEnchantMeta.nextLevel,
-                        cost: activeEnchantMeta.cost.toLocaleString(),
-                      })}
-                </button>
-              )}
-
-              {confirmingUnequipSlot === selection.slot ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => handleConfirmUnequip(selection.slot)}
-                    className="min-h-[44px] px-4 rounded-lg bg-red-600 hover:bg-red-500 text-white font-semibold text-sm lg:text-xs transition-colors cursor-pointer whitespace-nowrap"
-                  >
-                    {t('gear.confirmUnequip')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      soundFx.playClick();
-                      setConfirmingUnequipSlot(null);
-                    }}
-                    className="min-h-[44px] px-3.5 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-300 text-sm lg:text-xs font-medium cursor-pointer whitespace-nowrap"
-                  >
-                    {t('common.cancel')}
-                  </button>
-                </>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    soundFx.playClick();
-                    setConfirmingUnequipSlot(selection.slot);
-                  }}
-                  className="min-h-[44px] px-4 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200 text-sm lg:text-xs font-medium transition-colors cursor-pointer whitespace-nowrap"
-                >
-                  {t('gear.previewUnequip')}
-                </button>
-              )}
-            </>
-          )}
-        </div>
       </div>
+    );
+  };
+
+  const renderPaperDollTile = (
+    slotKey: GearPaperDollSlotKey,
+    variant: 'desktop' | 'phone'
+  ) => {
+    if (!isEquipmentSlotKey(slotKey)) {
+      const extNum = slotKey.replace('ext', '');
+      const fullLabel = t('slot.extender', { n: extNum });
+      const shortLabel = t('slotShort.extender', { n: extNum });
+      const lockedLabel = t('slot.lockedSoon');
+      return (
+        <GearSlotTile
+          key={`${variant}-${slotKey}`}
+          slotKey={slotKey}
+          label={variant === 'desktop' ? shortLabel : fullLabel}
+          locked
+          lockedLabel={lockedLabel}
+          title={`${fullLabel} — ${lockedLabel}`}
+          variant={variant}
+        />
+      );
+    }
+
+    const slot = slotKey;
+    const slotMeta = EQUIPMENT_SLOT_META[slot];
+    const inst = equippedMap[slot];
+    const fullLabel = getSlotLabel(lang, slot);
+    const shortLabel = getSlotShort(lang, slot);
+    const itemName = inst ? getItemInstanceName(lang, inst) : undefined;
+    const isSelected = selection?.kind === 'slot' && selection.slot === slot;
+    const isTargetOfPreview = Boolean(
+      selectedInventoryInstance &&
+        selectedInventoryInstance.slot === slot &&
+        getItemEquippedByGear(
+          pilot.gears,
+          selectedInventoryInstance.instanceId
+        ) !== activeGear.classId
+    );
+    const isUnequipping = confirmingUnequipSlot === slot;
+    const title = inst
+      ? `${fullLabel}: ${itemName}${
+          inst.enchantLevel > 0 ? ` (+${inst.enchantLevel})` : ''
+        } · ${inst.rollQuality}%`
+      : `${fullLabel}: —`;
+
+    return (
+      <GearSlotTile
+        key={`${variant}-${slot}`}
+        slotKey={slot}
+        label={shortLabel}
+        instance={inst}
+        itemName={itemName}
+        selected={isSelected}
+        previewTarget={isTargetOfPreview}
+        confirmingUnequip={isUnequipping}
+        classLocked={slotMeta.classLocked}
+        classOnlyTitle={t('common.classOnly', {
+          className: getClassName(lang, activeGear.classId),
+        })}
+        starterBadgeLabel={t('inv.starterBadge')}
+        title={title}
+        variant={variant}
+        onSelect={() => handleSelectSlot(slot)}
+      />
     );
   };
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-5 space-y-3.5 sm:space-y-4">
-      {/* ==================== TOP ROW: Mobile (Ship+KeyStats -> 3x2 Slots) / Desktop (Slots | Ship | Stats) ==================== */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 sm:gap-4 items-stretch">
-        {/* COL 2 on Desktop / FIRST on Mobile: Hovering Space Fighter + Key Stats + Collapsible Full Stats */}
-        <section className="order-1 lg:order-2 lg:col-span-5 rounded-lg border border-slate-800/90 bg-[#0C121D]/95 p-3.5 sm:p-4 flex flex-col justify-between items-center relative overflow-hidden gap-3">
-          <svg
-            viewBox="0 0 360 280"
-            className="pointer-events-none absolute inset-0 w-full h-full opacity-25"
+      {/* ==================== DESKTOP 2-COL: Left (Paper-Doll + Stats Bar + Inventory, 7) | Right (Sticky Detail, 5) ==================== */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 sm:gap-4 items-start">
+        <div className="lg:col-span-7 flex flex-col gap-3.5 sm:gap-4 min-w-0">
+          <section className="rounded-lg border border-slate-800/90 bg-[#0C121D]/95 p-3.5 flex flex-col lg:grid lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:items-center gap-2.5 xl:gap-3 relative">
+          <div
+            className="pointer-events-none absolute inset-0 overflow-hidden rounded-lg"
             aria-hidden="true"
           >
-            <circle
-              cx="180"
-              cy="128"
-              r="88"
-              stroke="#334155"
-              strokeWidth="1"
-              strokeDasharray="5 5"
-              fill="none"
-            />
-            <circle
-              cx="180"
-              cy="128"
-              r="120"
-              stroke="#1E293B"
-              strokeWidth="1"
-              fill="none"
-            />
-            <line
-              x1="30"
-              y1="128"
-              x2="330"
-              y2="128"
-              stroke="#1E293B"
-              strokeWidth="1"
-            />
-          </svg>
+            <svg
+              viewBox="0 0 360 280"
+              className="pointer-events-none absolute inset-0 w-full h-full opacity-25"
+            >
+              <circle
+                cx="180"
+                cy="128"
+                r="88"
+                stroke="#334155"
+                strokeWidth="1"
+                strokeDasharray="5 5"
+                fill="none"
+              />
+              <circle
+                cx="180"
+                cy="128"
+                r="120"
+                stroke="#1E293B"
+                strokeWidth="1"
+                fill="none"
+              />
+              <line
+                x1="30"
+                y1="128"
+                x2="330"
+                y2="128"
+                stroke="#1E293B"
+                strokeWidth="1"
+              />
+            </svg>
 
+            <div
+              className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-52 h-52 rounded-full blur-3xl opacity-20"
+              style={{ backgroundColor: activeClass.accentHex }}
+            />
+          </div>
+
+          {/* Desktop Left Slot Rail (>= lg) */}
           <div
-            className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-52 h-52 rounded-full blur-3xl opacity-20"
-            style={{ backgroundColor: activeClass.accentHex }}
-          />
+            data-testid="gear-rail-left"
+            className="hidden lg:flex flex-col items-center gap-1.5 shrink-0 relative z-10"
+          >
+            {PAPER_DOLL_LEFT_SLOTS.map((slotKey) =>
+              renderPaperDollTile(slotKey, 'desktop')
+            )}
+          </div>
 
-          {/* Active Gear Level & Power Rating */}
-          <div className="relative z-10 w-full flex items-start justify-between gap-2">
-            <div>
-              <div className="flex items-baseline gap-2">
-                <span className="font-display text-xl font-bold tracking-wide text-slate-50 leading-none">
-                  {getClassName(lang, activeGear.classId)}
-                </span>
-                <span className="font-mono-nums text-xs font-bold text-amber-400">
-                  {t('common.levelShort')}
-                  {activeGear.level}
-                </span>
+          {/* Center Ship Showcase + Key Stats + Collapsible Full Stats + Owned Gear Selector */}
+          <div className="relative z-10 w-full lg:h-full min-w-0 flex flex-col justify-between items-center gap-3">
+            {/* Active Gear Level & Power Rating */}
+            <div className="w-full flex items-start justify-between gap-2">
+              <div>
+                <div className="flex items-baseline gap-2">
+                  <span className="font-display text-xl font-bold tracking-wide text-slate-50 leading-none">
+                    {getClassName(lang, activeGear.classId)}
+                  </span>
+                  <span className="font-mono-nums text-xs font-bold text-amber-400">
+                    {t('common.levelShort')}
+                    {activeGear.level}
+                  </span>
+                </div>
+                <div className="text-xs text-slate-400 mt-0.5">
+                  {getClassCode(lang, activeGear.classId)} ·{' '}
+                  {getClassRole(lang, activeGear.classId)}
+                </div>
               </div>
-              <div className="text-xs text-slate-400 mt-0.5">
-                {getClassCode(lang, activeGear.classId)} ·{' '}
-                {getClassRole(lang, activeGear.classId)}
+
+              <div className="text-right">
+                <div className="font-mono-nums text-xs text-sky-300 font-semibold">
+                  {t('common.power')}: {powerRating}
+                </div>
+                {activeGear.unspentPoints > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('garage')}
+                    className="text-xs font-mono-nums font-semibold text-emerald-400 hover:text-emerald-300 cursor-pointer whitespace-nowrap"
+                  >
+                    {t('gear.allocateHint', { count: activeGear.unspentPoints })}
+                  </button>
+                )}
               </div>
             </div>
 
-            <div className="text-right">
-              <div className="font-mono-nums text-xs text-sky-300 font-semibold">
-                {t('common.power')}: {powerRating}
+            {/* Mobile Compact Showcase: Ship Left + Key Stats Right */}
+            <div className="w-full flex items-center justify-center lg:py-2 gap-3">
+              <FighterSvg
+                classId={activeGear.classId}
+                side="ally"
+                facing="right"
+                size="lg"
+                heroHover
+                className="w-32 h-32 sm:w-40 sm:h-40 lg:w-44 lg:h-44 xl:w-52 xl:h-52 shrink-0"
+              />
+
+              {/* Key stats strip shown only on < lg */}
+              <div className="lg:hidden flex-1 min-w-0 grid grid-cols-2 gap-1.5 font-mono-nums">
+                <div className="rounded border border-slate-800 bg-[#080C14]/90 px-2 py-1.5">
+                  <div className="text-[11px] text-slate-400">HP</div>
+                  <div className="text-sm font-bold text-emerald-400">
+                    {currentDerived.maxHp}
+                  </div>
+                </div>
+                <div className="rounded border border-slate-800 bg-[#080C14]/90 px-2 py-1.5">
+                  <div className="text-[11px] text-slate-400">SHD</div>
+                  <div className="text-sm font-bold text-sky-400">
+                    {currentDerived.maxShield}
+                  </div>
+                </div>
+                <div className="rounded border border-slate-800 bg-[#080C14]/90 px-2 py-1.5">
+                  <div className="text-[11px] text-slate-400">ATK</div>
+                  <div className="text-sm font-bold text-slate-100">
+                    {currentStats.attack}
+                  </div>
+                </div>
+                <div className="rounded border border-slate-800 bg-[#080C14]/90 px-2 py-1.5">
+                  <div className="text-[11px] text-slate-400">SPD</div>
+                  <div className="text-sm font-bold text-amber-300">
+                    {currentDerived.speed}
+                  </div>
+                </div>
               </div>
-              {activeGear.unspentPoints > 0 && (
+            </div>
+
+            {/* Mobile Collapsible Full Stats Toggle (< lg) */}
+            <div className="lg:hidden w-full space-y-2">
+              <button
+                type="button"
+                onClick={() => setMobileStatsExpanded((v) => !v)}
+                className="w-full min-h-[44px] px-3 rounded-lg border border-slate-800 bg-[#080C14]/90 text-slate-200 text-sm font-semibold flex items-center justify-between cursor-pointer"
+              >
+                <span>
+                  {mobileStatsExpanded
+                    ? t('mobile.hideStats')
+                    : t('mobile.fullStats')}
+                </span>
+                {mobileStatsExpanded ? (
+                  <ChevronUp className="w-4 h-4 text-amber-400" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-slate-400" />
+                )}
+              </button>
+
+              {mobileStatsExpanded && (
+                <div className="rounded-lg border border-slate-800 bg-[#080C14]/95 p-3 space-y-2.5">
+                  <div className="grid grid-cols-3 gap-2 font-mono-nums">
+                    {STAT_KEYS.map((key) => (
+                      <div
+                        key={key}
+                        className="rounded border border-slate-800/80 bg-slate-950/70 px-2 py-1.5 flex items-center justify-between text-xs"
+                      >
+                        <span className="text-slate-400">
+                          {getStatShort(lang, key)}
+                        </span>
+                        <span className="font-bold text-slate-100">
+                          {currentStats[key]}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 font-mono-nums">
+                    {derivedMetrics
+                      .filter((m) => m.key !== 'accuracy' || m.cur > 0)
+                      .map((m) => (
+                        <div
+                          key={m.key}
+                          data-testid={
+                            m.key === 'accuracy'
+                              ? 'gear-mobile-derived-accuracy'
+                              : undefined
+                          }
+                          title={
+                            m.key === 'accuracy'
+                              ? t('derived.accuracyHint', { val: m.cur })
+                              : m.title
+                          }
+                          className="rounded border border-slate-800/80 bg-slate-950/70 px-2 py-1.5"
+                        >
+                          <div className="text-[10px] text-slate-400 truncate">
+                            {m.label}
+                          </div>
+                          <div className={`text-xs font-bold ${m.color}`}>
+                            {m.cur}
+                            {m.suffix ?? ''}
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                  {currentEquipTraits.detectStealth && (
+                    <div className="pt-0.5">
+                      <span
+                        data-testid="gear-mobile-stealth-detect-chip"
+                        title={t('derived.detectStealthHint')}
+                        className="inline-flex items-center gap-1 rounded border border-teal-500/40 bg-teal-500/10 px-2 py-0.5 text-[11px] font-medium text-teal-300"
+                      >
+                        <SlotIcon slot="radar" className="w-3 h-3 shrink-0" />
+                        <span>{t('derived.detectStealth')}</span>
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Owned Gears Selector (with ClassIcon) */}
+            <div className="w-full flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {ownedGears.map((cls) => {
+                  const g = pilot.gears[cls.id];
+                  const isSelected = cls.id === activeGear.classId;
+                  return (
+                    <button
+                      key={cls.id}
+                      type="button"
+                      onClick={() => {
+                        setSelection(null);
+                        setMobileDetailOpen(false);
+                        setConfirmingUnequipSlot(null);
+                        setConfirmingSellId(null);
+                        setEnchantFeedback(null);
+                        selectActiveGear(cls.id);
+                      }}
+                      className={`min-h-[44px] lg:min-h-0 lg:h-8 px-3 lg:px-2.5 rounded border text-xs font-display font-semibold transition-colors cursor-pointer inline-flex items-center gap-1.5 ${
+                        isSelected
+                          ? 'bg-slate-800 border-amber-400/80 text-slate-50'
+                          : 'bg-slate-900/70 border-slate-800 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <ClassIcon classId={cls.id} className="w-3.5 h-3.5 shrink-0" />
+                      <span>{getClassName(lang, cls.id)}</span>
+                      <span className="font-mono-nums text-[11px] opacity-80">
+                        Lv.{g.level}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {ownedGears.length < 4 && (
                 <button
                   type="button"
                   onClick={() => setActiveTab('garage')}
-                  className="text-xs font-mono-nums font-semibold text-emerald-400 hover:text-emerald-300 cursor-pointer whitespace-nowrap"
+                  className="min-h-[44px] lg:min-h-0 px-2 text-xs font-medium text-amber-400 hover:text-amber-300 cursor-pointer whitespace-nowrap"
                 >
-                  {t('gear.allocateHint', { count: activeGear.unspentPoints })}
+                  + Garage ({ownedGears.length}/4)
                 </button>
               )}
             </div>
+
+            {/* Desktop Supply Loadout Row (>= lg) */}
+            <div className="hidden lg:block w-full">
+              <SupplyLoadoutBar variant="desktop" gear={activeGear} />
+            </div>
           </div>
 
-          {/* Mobile Compact Showcase: Ship Left + Key Stats Right */}
-          <div className="relative z-10 w-full flex items-center justify-center lg:py-3 gap-3">
-            <FighterSvg
-              classId={activeGear.classId}
-              side="ally"
-              facing="right"
-              size="lg"
-              heroHover
-              className="w-32 h-32 sm:w-40 sm:h-40 lg:w-52 lg:h-52 shrink-0"
-            />
+          {/* Desktop Right Slot Rail (>= lg) */}
+          <div
+            data-testid="gear-rail-right"
+            className="hidden lg:flex flex-col items-center gap-1.5 shrink-0 relative z-10"
+          >
+            {PAPER_DOLL_RIGHT_SLOTS.map((slotKey) =>
+              renderPaperDollTile(slotKey, 'desktop')
+            )}
+          </div>
 
-            {/* Key stats strip shown only on < lg */}
-            <div className="lg:hidden flex-1 min-w-0 grid grid-cols-2 gap-1.5 font-mono-nums">
-              <div className="rounded border border-slate-800 bg-[#080C14]/90 px-2 py-1.5">
-                <div className="text-[11px] text-slate-400">HP</div>
-                <div className="text-sm font-bold text-emerald-400">
-                  {currentDerived.maxHp}
-                </div>
+          {/* Phone Two-Column 12-Slot Grid (< lg) */}
+          <div
+            data-testid="gear-phone-slots"
+            className="lg:hidden relative z-10 w-full pt-2 border-t border-slate-800/80 space-y-2"
+          >
+            <div className="flex items-center justify-between gap-2 px-0.5">
+              <h2 className="font-display text-base font-bold tracking-wide text-slate-100">
+                {t('gear.slotsHeading')}
+              </h2>
+              <span className="text-xs font-mono-nums text-slate-400">
+                {EQUIPMENT_SLOTS.filter((s) => Boolean(equippedMap[s])).length}/{EQUIPMENT_SLOTS.length}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div
+                data-testid="gear-phone-left"
+                className="flex flex-col gap-1.5 min-w-0"
+              >
+                {PAPER_DOLL_LEFT_SLOTS.map((slotKey) =>
+                  renderPaperDollTile(slotKey, 'phone')
+                )}
               </div>
-              <div className="rounded border border-slate-800 bg-[#080C14]/90 px-2 py-1.5">
-                <div className="text-[11px] text-slate-400">SHD</div>
-                <div className="text-sm font-bold text-sky-400">
-                  {currentDerived.maxShield}
-                </div>
-              </div>
-              <div className="rounded border border-slate-800 bg-[#080C14]/90 px-2 py-1.5">
-                <div className="text-[11px] text-slate-400">ATK</div>
-                <div className="text-sm font-bold text-slate-100">
-                  {currentStats.attack}
-                </div>
-              </div>
-              <div className="rounded border border-slate-800 bg-[#080C14]/90 px-2 py-1.5">
-                <div className="text-[11px] text-slate-400">SPD</div>
-                <div className="text-sm font-bold text-amber-300">
-                  {currentDerived.speed}
-                </div>
+              <div
+                data-testid="gear-phone-right"
+                className="flex flex-col gap-1.5 min-w-0"
+              >
+                {PAPER_DOLL_RIGHT_SLOTS.map((slotKey) =>
+                  renderPaperDollTile(slotKey, 'phone')
+                )}
               </div>
             </div>
           </div>
 
-          {/* Mobile Collapsible Full Stats Toggle (< lg) */}
-          <div className="lg:hidden relative z-10 w-full space-y-2">
-            <button
-              type="button"
-              onClick={() => setMobileStatsExpanded((v) => !v)}
-              className="w-full min-h-[44px] px-3 rounded-lg border border-slate-800 bg-[#080C14]/90 text-slate-200 text-sm font-semibold flex items-center justify-between cursor-pointer"
-            >
-              <span>
-                {mobileStatsExpanded
-                  ? t('mobile.hideStats')
-                  : t('mobile.fullStats')}
-              </span>
-              {mobileStatsExpanded ? (
+          {/* Phone Supply Loadout Row (< lg) */}
+          <div className="lg:hidden relative z-10 w-full pt-2 border-t border-slate-800/80">
+            <SupplyLoadoutBar variant="phone" gear={activeGear} />
+          </div>
+
+          <GearSocketRow
+            onSelectSocket={(idx) => {
+              setSwapPickerSlot(null);
+              setSwapPickerSocketIndex(idx);
+            }}
+          />
+        </section>
+
+        {/* Collapsible Desktop Stats Bar (>= lg) */}
+        <section
+          data-testid="gear-stats-bar"
+          className="hidden lg:flex flex-col gap-2 rounded-lg border border-slate-800/90 bg-[#0C121D]/95 p-3.5"
+        >
+          <button
+            type="button"
+            data-testid="gear-stats-toggle"
+            aria-expanded={desktopStatsExpanded}
+            onClick={() => setDesktopStatsExpanded((v) => !v)}
+            className="w-full flex items-center justify-between gap-2 text-left cursor-pointer"
+          >
+            <div className="flex items-center gap-2">
+              <h2 className="font-display text-lg font-bold tracking-wide text-slate-100">
+                {t('gear.statsHeading')}
+              </h2>
+              {isPreviewActive && (
+                <span className="text-[11px] font-semibold text-amber-300">+/-</span>
+              )}
+            </div>
+            <span className="inline-flex items-center gap-1 text-xs font-medium text-slate-400 hover:text-slate-200">
+              <span>{desktopStatsExpanded ? t('mobile.hideStats') : t('mobile.fullStats')}</span>
+              {desktopStatsExpanded ? (
                 <ChevronUp className="w-4 h-4 text-amber-400" />
               ) : (
                 <ChevronDown className="w-4 h-4 text-slate-400" />
               )}
-            </button>
-
-            {mobileStatsExpanded && (
-              <div className="rounded-lg border border-slate-800 bg-[#080C14]/95 p-3 space-y-2.5">
-                <div className="grid grid-cols-3 gap-2 font-mono-nums">
-                  {STAT_KEYS.map((key) => (
-                    <div
-                      key={key}
-                      className="rounded border border-slate-800/80 bg-slate-950/70 px-2 py-1.5 flex items-center justify-between text-xs"
-                    >
-                      <span className="text-slate-400">
-                        {getStatShort(lang, key)}
-                      </span>
-                      <span className="font-bold text-slate-100">
-                        {currentStats[key]}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-                <div className="grid grid-cols-3 gap-2 font-mono-nums">
-                  {derivedMetrics.map((m) => (
-                    <div
-                      key={m.key}
-                      className="rounded border border-slate-800/80 bg-slate-950/70 px-2 py-1.5"
-                    >
-                      <div className="text-[10px] text-slate-400 truncate">
-                        {m.label}
-                      </div>
-                      <div className={`text-xs font-bold ${m.color}`}>
-                        {m.cur}
-                        {m.suffix ?? ''}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Owned Gears Selector (with ClassIcon) */}
-          <div className="relative z-10 w-full flex items-center justify-between gap-2 flex-wrap">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {ownedGears.map((cls) => {
-                const g = pilot.gears[cls.id];
-                const isSelected = cls.id === activeGear.classId;
-                return (
-                  <button
-                    key={cls.id}
-                    type="button"
-                    onClick={() => {
-                      setSelection(null);
-                      setMobileDetailOpen(false);
-                      setConfirmingUnequipSlot(null);
-                      setConfirmingSellId(null);
-                      setEnchantFeedback(null);
-                      selectActiveGear(cls.id);
-                    }}
-                    className={`min-h-[44px] lg:min-h-0 lg:h-8 px-3 lg:px-2.5 rounded border text-xs font-display font-semibold transition-colors cursor-pointer inline-flex items-center gap-1.5 ${
-                      isSelected
-                        ? 'bg-slate-800 border-amber-400/80 text-slate-50'
-                        : 'bg-slate-900/70 border-slate-800 text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    <ClassIcon classId={cls.id} className="w-3.5 h-3.5 shrink-0" />
-                    <span>{getClassName(lang, cls.id)}</span>
-                    <span className="font-mono-nums text-[11px] opacity-80">
-                      Lv.{g.level}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-
-            {ownedGears.length < 4 && (
-              <button
-                type="button"
-                onClick={() => setActiveTab('garage')}
-                className="min-h-[44px] lg:min-h-0 px-2 text-xs font-medium text-amber-400 hover:text-amber-300 cursor-pointer whitespace-nowrap"
-              >
-                + Garage ({ownedGears.length}/4)
-              </button>
-            )}
-          </div>
-        </section>
-
-        {/* COL 1 on Desktop / SECOND on Mobile: 6 Equipment Slots */}
-        <section className="order-2 lg:order-1 lg:col-span-4 rounded-lg border border-slate-800/90 bg-[#0C121D]/95 p-3.5 flex flex-col justify-between gap-2.5">
-          <div className="flex items-center justify-between gap-2 px-0.5">
-            <h2 className="font-display text-lg font-bold tracking-wide text-slate-100">
-              {t('gear.slotsHeading')}
-            </h2>
-            <span className="text-xs font-mono-nums text-slate-400">
-              {EQUIPMENT_SLOTS.filter((s) => Boolean(equippedMap[s])).length}/6
             </span>
-          </div>
+          </button>
 
-          <div className="grid grid-cols-3 lg:grid-cols-1 gap-2 lg:gap-1.5 flex-1">
-            {EQUIPMENT_SLOTS.map((slot) => {
-              const slotMeta = EQUIPMENT_SLOT_META[slot];
-              const inst = equippedMap[slot];
-              const isSelected =
-                selection?.kind === 'slot' && selection.slot === slot;
-              const isTargetOfPreview =
-                selectedInventoryInstance &&
-                selectedInventoryInstance.slot === slot &&
-                getItemEquippedByGear(
-                  pilot.gears,
-                  selectedInventoryInstance.instanceId
-                ) !== activeGear.classId;
-              const isUnequipping = confirmingUnequipSlot === slot;
-
-              return (
-                <button
-                  key={slot}
-                  type="button"
-                  onClick={() => handleSelectSlot(slot)}
-                  className={`w-full aspect-square lg:aspect-auto lg:min-h-[48px] p-2 lg:px-3 lg:py-1.5 rounded-lg lg:rounded border text-center lg:text-left transition-colors cursor-pointer flex flex-col lg:flex-row items-center justify-between gap-1 lg:gap-2.5 ${
-                    isUnequipping
-                      ? 'border-red-400/80 bg-red-500/10'
-                      : isSelected
-                      ? 'border-sky-400 bg-sky-500/15'
-                      : isTargetOfPreview
-                      ? 'border-amber-400/80 bg-amber-500/10'
-                      : inst
-                      ? `${RARITY_META[inst.rarity].borderClass} bg-[#080C14] hover:border-slate-600`
-                      : 'border-slate-800/90 bg-[#080C14] hover:border-slate-700'
-                  }`}
+          {!desktopStatsExpanded ? (
+            <div className="flex flex-wrap items-center gap-1.5 font-mono-nums text-xs">
+              {[
+                { key: 'hp', label: 'HP', val: previewDerived.maxHp, delta: previewDerived.maxHp - currentDerived.maxHp, color: 'text-emerald-400', suffix: '' },
+                { key: 'shd', label: 'SHD', val: previewDerived.maxShield, delta: previewDerived.maxShield - currentDerived.maxShield, color: 'text-sky-400', suffix: '' },
+                { key: 'atk', label: getStatShort(lang, 'attack'), val: previewStats.attack, delta: statDeltas.attack, color: 'text-slate-100', suffix: '' },
+                { key: 'def', label: getStatShort(lang, 'defense'), val: previewStats.defense, delta: statDeltas.defense, color: 'text-slate-100', suffix: '' },
+                { key: 'spd', label: 'SPD', val: previewDerived.speed, delta: previewDerived.speed - currentDerived.speed, color: 'text-amber-300', suffix: '' },
+                { key: 'sp', label: 'SP', val: previewDerived.maxSp, delta: previewDerived.maxSp - currentDerived.maxSp, color: 'text-amber-400', suffix: '' },
+                ...(curAcc > 0 || prevAcc > 0
+                  ? [{ key: 'accuracy', label: t('derived.accuracy'), val: prevAcc, delta: prevAcc - curAcc, color: 'text-teal-300', suffix: '%', title: t('derived.accuracyHint', { val: prevAcc }) }]
+                  : []),
+              ].map((item) => (
+                <div
+                  key={item.key}
+                  data-testid={item.key === 'accuracy' ? 'gear-derived-accuracy' : undefined}
+                  title={'title' in item ? item.title : undefined}
+                  className="rounded border border-slate-800/80 bg-[#080C14] px-2 py-1 inline-flex items-baseline gap-1.5"
                 >
-                  <div className="flex flex-col lg:flex-row items-center gap-1 lg:gap-2.5 min-w-0 w-full">
-                    <div className="flex items-center justify-between lg:justify-center w-full lg:w-auto">
-                      <span
-                        className={`h-8 w-8 rounded border flex items-center justify-center shrink-0 ${
-                          inst
-                            ? `${RARITY_META[inst.rarity].borderClass} bg-slate-900 ${RARITY_META[inst.rarity].textClass}`
-                            : 'border-slate-800 bg-slate-950 text-slate-600'
-                        }`}
-                      >
-                        <SlotIcon slot={slot} className="w-4 h-4" />
+                  <span className="text-[11px] font-semibold text-slate-400">{item.label}</span>
+                  <span className={`font-bold ${item.delta > 0 ? 'text-emerald-400' : item.delta < 0 ? 'text-red-400' : item.color}`}>
+                    {item.val}{item.suffix}
+                  </span>
+                  {item.delta !== 0 && (
+                    <span className={`text-[11px] font-semibold ${item.delta > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      ({item.delta > 0 ? `+${item.delta}` : item.delta})
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="grid grid-cols-3 xl:grid-cols-4 gap-1.5 font-mono-nums">
+                {STAT_KEYS.map((key) => {
+                  const delta = statDeltas[key];
+                  return (
+                    <div key={key} className="rounded border border-slate-800/80 bg-[#080C14] px-2.5 py-1.5 flex items-center justify-between gap-1.5 text-xs">
+                      <span className="font-semibold text-slate-400">{getStatShort(lang, key)}</span>
+                      <span className="inline-flex items-baseline gap-1">
+                        <span className={`font-bold ${delta > 0 ? 'text-emerald-400' : delta < 0 ? 'text-red-400' : 'text-slate-100'}`}>
+                          {previewStats[key]}
+                        </span>
+                        {delta !== 0 && (
+                          <span className={`text-[11px] font-semibold ${delta > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                            ({delta > 0 ? `+${delta}` : delta})
+                          </span>
+                        )}
                       </span>
-                      {inst && inst.enchantLevel > 0 && (
-                        <span className="lg:hidden font-mono-nums text-[11px] font-bold text-amber-400">
-                          +{inst.enchantLevel}
-                        </span>
-                      )}
                     </div>
-
-                    <div className="min-w-0 w-full">
-                      <div className="flex items-center justify-center lg:justify-start gap-1 text-[11px] text-slate-400 leading-none">
-                        <span className="lg:hidden truncate">
-                          {getSlotShort(lang, slot)}
+                  );
+                })}
+              </div>
+              <div className="grid grid-cols-3 xl:grid-cols-4 gap-1.5 font-mono-nums">
+                {derivedMetrics.map((m) => {
+                  const diff = m.prev - m.cur;
+                  return (
+                    <div key={m.key} data-testid={m.key === 'accuracy' ? 'gear-derived-accuracy' : undefined} title={m.title} className="rounded border border-slate-800/80 bg-[#080C14] px-2.5 py-1.5">
+                      <div className="text-[10px] text-slate-400 truncate">{m.label}</div>
+                      <div className="text-xs font-bold flex items-baseline gap-1">
+                        <span className={diff > 0 ? 'text-emerald-400' : diff < 0 ? 'text-red-400' : m.color}>
+                          {m.prev}{m.suffix ?? ''}
                         </span>
-                        <span className="hidden lg:inline">
-                          {getSlotLabel(lang, slot)}
-                        </span>
-                        {slotMeta.classLocked && (
-                          <span
-                            title={t('common.classOnly', {
-                              className: getClassName(lang, activeGear.classId),
-                            })}
-                          >
-                            <Tag className="w-2.5 h-2.5 text-sky-400/80 shrink-0" />
+                        {diff !== 0 && (
+                          <span className={`text-[10px] ${diff > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                            {diff > 0 ? `+${diff}` : diff}
                           </span>
                         )}
                       </div>
-                      <div
-                        className={`mt-1 text-xs font-semibold truncate ${
-                          inst
-                            ? RARITY_META[inst.rarity].textClass
-                            : 'text-slate-600'
-                        }`}
-                      >
-                        {inst ? getItemInstanceName(lang, inst) : '—'}
-                      </div>
                     </div>
-                  </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
-                  {inst && (
-                    <div className="hidden lg:flex items-center gap-1.5 shrink-0 font-mono-nums text-[11px]">
-                      {inst.isStarter && (
-                        <span
-                          data-testid={`slot-starter-badge-${slot}`}
-                          className="px-1 py-0.2 rounded border border-cyan-500/45 bg-cyan-500/12 text-[10px] font-sans font-semibold text-cyan-300"
-                        >
-                          {t('inv.starterBadge')}
-                        </span>
-                      )}
-                      {inst.locked && (
-                        <Lock className="w-3 h-3 text-amber-300 shrink-0" />
-                      )}
-                      <span className="text-slate-500">{inst.rollQuality}%</span>
-                      {inst.enchantLevel > 0 && (
-                        <span className="font-bold text-amber-400">
-                          +{inst.enchantLevel}
-                        </span>
-                      )}
-                    </div>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </section>
-
-        {/* COL 3 (Desktop only >= lg): Live Combat Stats Readout with +/- Preview */}
-        <section className="hidden lg:flex lg:order-3 lg:col-span-3 rounded-lg border border-slate-800/90 bg-[#0C121D]/95 p-3.5 flex-col justify-between gap-3">
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="font-display text-lg font-bold tracking-wide text-slate-100">
-              {t('gear.statsHeading')}
-            </h2>
-            {isPreviewActive && (
-              <span className="text-[11px] font-semibold text-amber-300">
-                +/-
+          {(currentEquipTraits.detectStealth || previewEquipTraits.detectStealth) && (
+            <div>
+              <span
+                data-testid="gear-stealth-detect-chip"
+                title={t('derived.detectStealthHint')}
+                className={`inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[11px] font-medium ${
+                  !currentEquipTraits.detectStealth && previewEquipTraits.detectStealth
+                    ? 'border-emerald-500/45 bg-emerald-500/10 text-emerald-300'
+                    : currentEquipTraits.detectStealth && !previewEquipTraits.detectStealth
+                    ? 'border-red-500/45 bg-red-500/10 text-red-300 line-through'
+                    : 'border-teal-500/40 bg-teal-500/10 text-teal-300'
+                }`}
+              >
+                <SlotIcon slot="radar" className="w-3 h-3 shrink-0" />
+                <span>{t('derived.detectStealth')}</span>
               </span>
-            )}
-          </div>
-
-          <div className="divide-y divide-slate-800/80 border-y border-slate-800/80">
-            {STAT_KEYS.map((key) => {
-              const prevVal = previewStats[key];
-              const delta = statDeltas[key];
-              return (
-                <div
-                  key={key}
-                  className="py-1.5 flex items-center justify-between gap-2 text-xs"
-                >
-                  <span className="font-mono-nums font-semibold text-slate-400">
-                    {getStatShort(lang, key)}
-                  </span>
-                  <div className="flex items-baseline gap-1.5 font-mono-nums">
-                    <span
-                      className={`text-sm font-bold ${
-                        delta > 0
-                          ? 'text-emerald-400'
-                          : delta < 0
-                          ? 'text-red-400'
-                          : 'text-slate-100'
-                      }`}
-                    >
-                      {prevVal}
-                    </span>
-                    {delta !== 0 && (
-                      <span
-                        className={`text-[11px] font-semibold ${
-                          delta > 0 ? 'text-emerald-400' : 'text-red-400'
-                        }`}
-                      >
-                        ({delta > 0 ? `+${delta}` : delta})
-                      </span>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="grid grid-cols-2 gap-1.5">
-            {derivedMetrics.map((m) => {
-              const diff = m.prev - m.cur;
-              return (
-                <div
-                  key={m.key}
-                  className="rounded border border-slate-800/80 bg-[#080C14] px-2.5 py-1.5"
-                >
-                  <div className="text-[10px] text-slate-400 truncate">
-                    {m.label}
-                  </div>
-                  <div className="font-mono-nums text-xs font-bold flex items-baseline gap-1">
-                    <span
-                      className={
-                        diff > 0
-                          ? 'text-emerald-400'
-                          : diff < 0
-                          ? 'text-red-400'
-                          : m.color
-                      }
-                    >
-                      {m.prev}
-                      {m.suffix ?? ''}
-                    </span>
-                    {diff !== 0 && (
-                      <span
-                        className={`text-[10px] ${
-                          diff > 0 ? 'text-emerald-400' : 'text-red-400'
-                        }`}
-                      >
-                        {diff > 0 ? `+${diff}` : diff}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+            </div>
+          )}
         </section>
-      </div>
 
-      {/* ==================== BOTTOM ROW: Shared Cargo Grid + Controls | Inline Detail (Desktop) ==================== */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
         {/* Shared Cargo Grid ("Kho đồ chung") */}
-        <section className="lg:col-span-7 rounded-lg border border-slate-800/90 bg-[#0C121D]/95 p-3.5 sm:p-4 flex flex-col gap-3 relative">
+        <section className="rounded-lg border border-slate-800/90 bg-[#0C121D]/95 p-3.5 sm:p-4 flex flex-col gap-3 relative">
           {/* Header Row */}
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-baseline gap-2">
@@ -1712,97 +2002,87 @@ export function GearView() {
             </div>
           </div>
 
-          {/* 5-second Quick Sell Undo Toast */}
-          {quickSellUndo && undoSecondsLeft > 0 && (
-            <div
-              data-testid="quicksell-undo-toast"
-              className="rounded-lg border border-amber-400/60 bg-amber-500/15 px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-xs text-amber-100"
-            >
-              <span className="font-medium">
-                {t('qs.undoToast', {
-                  count: quickSellUndo.soldItems.length,
-                  credits: quickSellUndo.totalCredits.toLocaleString(),
-                })}{' '}
-                <span className="font-mono-nums text-amber-300">
-                  ({undoSecondsLeft}s)
-                </span>
-              </span>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  data-testid="quicksell-undo-btn"
-                  onClick={() => {
-                    const res = undoQuickSell();
-                    if (res.ok) {
-                      setInventoryNotice(
-                        t('qs.undoneFeedback', { count: res.restoredCount })
-                      );
-                    }
-                  }}
-                  className="min-h-[34px] px-3 rounded bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs cursor-pointer"
-                >
-                  {t('qs.undoBtn')}
-                </button>
-                <button
-                  type="button"
-                  onClick={clearQuickSellUndo}
-                  aria-label={t('error.closeBtn')}
-                  className="p-1 text-amber-300 hover:text-white cursor-pointer"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-          )}
+          {/* Shared Single-Slot Notice Banner above item grid */}
+          {(() => {
+            if (!activeBanner) return null;
+            const durationSec = sanitizeNoticeDurationSec(
+              adminConfig.noticeDurationSec
+            );
 
-          {/* Auto-Equip Undo Toast (kept until next auto-equip or undo) */}
-          {autoEquipUndo && (
-            <div
-              data-testid="autoequip-undo-toast"
-              className="rounded-lg border border-sky-400/60 bg-sky-500/15 px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-xs text-sky-100"
-            >
-              <span className="font-medium">
-                {t('ae.undoToast', { count: autoEquipUndo.changedSlotsCount })}
-              </span>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  data-testid="autoequip-undo-btn"
-                  onClick={() => {
-                    const res = undoAutoEquip();
-                    if (res.ok) {
-                      setInventoryNotice(t('ae.undoneFeedback'));
-                    }
+            if (activeBanner.kind === 'quicksell' && quickSellUndo) {
+              return (
+                <Notice
+                  key={activeBanner.id}
+                  testId="quicksell-undo-toast"
+                  tone="warning"
+                  text={t('qs.undoToast', {
+                    count: quickSellUndo.soldItems.length,
+                    credits: quickSellUndo.totalCredits.toLocaleString(),
+                  })}
+                  action={{
+                    label: t('qs.undoBtn'),
+                    testId: 'quicksell-undo-btn',
+                    onClick: () => {
+                      const res = undoQuickSell();
+                      if (res.ok) {
+                        setInventoryNotice(
+                          t('qs.undoneFeedback', { count: res.restoredCount })
+                        );
+                      }
+                    },
                   }}
-                  className="min-h-[34px] px-3 rounded bg-sky-400 hover:bg-sky-300 text-slate-950 font-bold text-xs cursor-pointer"
-                >
-                  {t('ae.undoBtn')}
-                </button>
-                <button
-                  type="button"
-                  onClick={clearAutoEquipUndo}
-                  aria-label={t('error.closeBtn')}
-                  className="p-1 text-sky-300 hover:text-white cursor-pointer"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-          )}
+                  durationSec={durationSec}
+                  onClose={() => {
+                    clearQuickSellUndo();
+                    setActiveBanner(null);
+                  }}
+                />
+              );
+            }
 
-          {/* Inline Action Notice */}
-          {inventoryNotice && (
-            <div className="rounded border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 flex items-center justify-between gap-2 text-xs text-emerald-200">
-              <span>{inventoryNotice}</span>
-              <button
-                type="button"
-                onClick={() => setInventoryNotice(null)}
-                className="text-emerald-300 hover:text-white cursor-pointer"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          )}
+            if (activeBanner.kind === 'autoequip' && autoEquipUndo) {
+              return (
+                <Notice
+                  key={activeBanner.id}
+                  testId="autoequip-undo-toast"
+                  tone="info"
+                  text={t('ae.undoToast', {
+                    count: autoEquipUndo.changedSlotsCount,
+                  })}
+                  action={{
+                    label: t('ae.undoBtn'),
+                    testId: 'autoequip-undo-btn',
+                    onClick: () => {
+                      const res = undoAutoEquip();
+                      if (res.ok) {
+                        setInventoryNotice(t('ae.undoneFeedback'));
+                      }
+                    },
+                  }}
+                  durationSec={durationSec}
+                  onClose={() => {
+                    clearAutoEquipUndo();
+                    setActiveBanner(null);
+                  }}
+                />
+              );
+            }
+
+            if (activeBanner.kind === 'notice') {
+              return (
+                <Notice
+                  key={activeBanner.id}
+                  testId="gear-inventory-notice"
+                  tone="success"
+                  text={activeBanner.text}
+                  durationSec={durationSec}
+                  onClose={() => setActiveBanner(null)}
+                />
+              );
+            }
+
+            return null;
+          })()}
 
           {/* Wrapped Slot Tabs WITH Shared Icons & Per-Slot Counts (NO horizontal scrollbar) */}
           <div
@@ -1826,7 +2106,7 @@ export function GearView() {
               </span>
             </button>
 
-            {EQUIPMENT_SLOTS.map((slot) => (
+            {ITEM_SLOTS.map((slot) => (
               <button
                 key={slot}
                 type="button"
@@ -2119,7 +2399,7 @@ export function GearView() {
                         <input
                           type="number"
                           min={1}
-                          max={50}
+                          max={currentMaxLevel}
                           placeholder="Min"
                           value={filterState.minLevel ?? ''}
                           onChange={(e) =>
@@ -2136,7 +2416,7 @@ export function GearView() {
                         <input
                           type="number"
                           min={1}
-                          max={50}
+                          max={currentMaxLevel}
                           placeholder="Max"
                           value={filterState.maxLevel ?? ''}
                           onChange={(e) =>
@@ -2458,14 +2738,107 @@ export function GearView() {
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-[380px] overflow-y-auto pr-1 tactical-scroll">
                   {consumablesList.map((c) => {
+                    const supplyTpl =
+                      c.kind === 'battle_supply' && c.templateId
+                        ? getSupplyTemplateById(c.templateId)
+                        : undefined;
+                    if (c.kind === 'battle_supply' && supplyTpl) {
+                      const realName = getSupplyName(supplyTpl.id, t);
+                      const effectText = formatSupplyEffectSummary(supplyTpl, t);
+                      const iconRow =
+                        getCatalogRow(
+                          supplyTpl.iconId,
+                          adminConfig.iconCatalogMods
+                        ) ?? null;
+                      const inLoadout = (
+                        activeGear.supplyLoadout ?? []
+                      ).includes(supplyTpl.id);
+
+                      return (
+                        <div
+                          key={c.id}
+                          data-testid={`consumable-supply-${supplyTpl.id}`}
+                          className="rounded-lg border border-sky-500/35 bg-[#080C14] p-3 flex flex-col justify-between gap-2.5 min-w-0"
+                        >
+                          <div className="flex items-start gap-2.5 min-w-0">
+                            <span className="h-9 w-9 rounded border border-sky-400/40 bg-sky-500/15 flex items-center justify-center shrink-0">
+                              <CatalogIcon
+                                row={iconRow}
+                                size="sm"
+                                showBadges={false}
+                                showArrowBadge={false}
+                              />
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-xs font-bold text-slate-100 truncate">
+                                  {realName}
+                                </span>
+                                <span className="font-mono-nums text-xs font-bold text-sky-300 shrink-0">
+                                  {t('inv.consumableQty', { qty: c.quantity })}
+                                </span>
+                              </div>
+                              <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                                <span className="text-[10px] font-mono-nums px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 shrink-0">
+                                  T{supplyTpl.tier}
+                                </span>
+                                <span className="text-[11px] text-emerald-300 truncate">
+                                  {effectText}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {inLoadout ? (
+                              <span
+                                data-testid={`supply-in-bag-${supplyTpl.id}`}
+                                className="min-h-[36px] flex-1 px-2.5 rounded border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 text-xs font-semibold inline-flex items-center justify-center"
+                              >
+                                {t('inv.supplyInBagLabel')}
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                data-testid={`supply-add-bag-${supplyTpl.id}`}
+                                onClick={() => handleAddSupplyToBag(supplyTpl)}
+                                className="min-h-[36px] flex-1 px-2.5 rounded bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold cursor-pointer"
+                              >
+                                {t('inv.supplyAddToBagBtn')}
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              data-testid={`supply-sell-one-${supplyTpl.id}`}
+                              onClick={() => setPendingSellSupply(supplyTpl)}
+                              className="min-h-[36px] px-3 rounded border border-amber-500/50 bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 text-xs font-semibold cursor-pointer shrink-0"
+                            >
+                              {t('inv.supplySellOneBtn')}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    }
+
                     const { name, desc } = renderConsumableText(c);
+                    const isSupplyCrate = c.kind === 'supply_crate';
                     return (
                       <div
                         key={c.id}
-                        className="rounded-lg border border-purple-500/35 bg-[#080C14] p-3 flex flex-col justify-between gap-2.5"
+                        className={`rounded-lg border bg-[#080C14] p-3 flex flex-col justify-between gap-2.5 ${
+                          isSupplyCrate
+                            ? 'border-amber-500/35'
+                            : 'border-purple-500/35'
+                        }`}
                       >
                         <div className="flex items-start gap-2.5">
-                          <span className="h-9 w-9 rounded border border-purple-400/40 bg-purple-500/15 text-purple-300 flex items-center justify-center shrink-0">
+                          <span
+                            className={`h-9 w-9 rounded border flex items-center justify-center shrink-0 ${
+                              isSupplyCrate
+                                ? 'border-amber-400/40 bg-amber-500/15 text-amber-300'
+                                : 'border-purple-400/40 bg-purple-500/15 text-purple-300'
+                            }`}
+                          >
                             <ConsumableIcon kind={c.kind} className="w-4 h-4" />
                           </span>
                           <div className="min-w-0 flex-1">
@@ -2473,7 +2846,11 @@ export function GearView() {
                               <span className="text-xs font-bold text-slate-100 truncate">
                                 {name}
                               </span>
-                              <span className="font-mono-nums text-xs font-bold text-purple-300 shrink-0">
+                              <span
+                                className={`font-mono-nums text-xs font-bold shrink-0 ${
+                                  isSupplyCrate ? 'text-amber-300' : 'text-purple-300'
+                                }`}
+                              >
                                 {t('inv.consumableQty', { qty: c.quantity })}
                               </span>
                             </div>
@@ -2487,9 +2864,13 @@ export function GearView() {
                           type="button"
                           data-testid={`use-consumable-${c.kind}`}
                           onClick={() => handleUseConsumable(c)}
-                          className="min-h-[36px] px-3 rounded bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold cursor-pointer"
+                          className={`min-h-[36px] px-3 rounded text-white text-xs font-semibold cursor-pointer ${
+                            isSupplyCrate
+                              ? 'bg-amber-600 hover:bg-amber-500'
+                              : 'bg-purple-600 hover:bg-purple-500'
+                          }`}
                         >
-                          {c.kind === 'equipment_crate'
+                          {c.kind === 'equipment_crate' || c.kind === 'supply_crate'
                             ? t('inv.consumableOpenBtn')
                             : t('inv.consumableUseBtn')}
                         </button>
@@ -2724,9 +3105,10 @@ export function GearView() {
             </div>
           )}
         </section>
+        </div>
 
-        {/* Inline Detail Panel (Desktop >= lg) */}
-        <section className="hidden lg:flex lg:col-span-5 rounded-lg border border-slate-800/90 bg-[#0C121D]/95 p-4 flex-col justify-between gap-3">
+        {/* Inline Detail Panel (Desktop >= lg, Sticky Right Column) */}
+        <section className="hidden lg:flex lg:col-span-5 lg:sticky lg:top-4 self-start max-h-[calc(100dvh-2rem)] overflow-y-auto tactical-scroll rounded-lg border border-slate-800/90 bg-[#0C121D]/95 p-4 flex-col justify-between gap-3">
           <div className="flex items-center justify-between gap-2">
             <h2 className="font-display text-lg font-bold tracking-wide text-slate-100">
               {t('gear.detailHeading')}
@@ -2742,25 +3124,17 @@ export function GearView() {
             )}
           </div>
 
-          {!activeDetailInstance || !activeDetailStats ? (
-            <div className="flex-1 min-h-[180px] rounded border border-slate-800/80 bg-[#080C14] p-5 flex flex-col items-center justify-center text-center space-y-1.5">
-              <div className="font-display text-lg font-semibold text-slate-300">
-                {t('gear.emptyDetailTitle')}
-              </div>
-              <p className="text-xs text-slate-500 max-w-xs leading-relaxed">
-                {t('gear.emptyDetailDesc')}
-              </p>
-            </div>
-          ) : (
-            renderDetailContent()
-          )}
+          {renderDetailContent()}
         </section>
       </div>
 
       {/* Mobile Bottom Sheet for Item Detail / Compare / Enchant (< lg) */}
       <div className="lg:hidden">
         <BottomSheet
-          open={mobileDetailOpen && Boolean(activeDetailInstance)}
+          open={
+            mobileDetailOpen &&
+            (Boolean(activeDetailInstance) || selection?.kind === 'slot')
+          }
           onClose={() => {
             setMobileDetailOpen(false);
             setConfirmingUnequipSlot(null);
@@ -2769,6 +3143,8 @@ export function GearView() {
           title={
             activeDetailInstance
               ? getItemInstanceName(lang, activeDetailInstance, true)
+              : selection?.kind === 'slot'
+              ? getSlotLabel(lang, selection.slot)
               : t('gear.detailHeading')
           }
           subtitle={
@@ -2795,13 +3171,8 @@ export function GearView() {
         onClose={() => setAutoEquipPlan(null)}
         onApply={() => {
           if (!autoEquipPlan) return;
-          const res = applyAutoEquip(autoEquipPlan);
+          applyAutoEquip(autoEquipPlan);
           setAutoEquipPlan(null);
-          if (res.ok) {
-            setInventoryNotice(
-              t('ae.appliedFeedback', { count: res.changedSlotsCount })
-            );
-          }
         }}
       />
 
@@ -2809,20 +3180,56 @@ export function GearView() {
       <QuickSellModal
         open={quickSellOpen}
         onClose={() => setQuickSellOpen(false)}
-        onSold={(count, credits, skipped) => {
-          setInventoryNotice(
-            skipped > 0
-              ? t('qs.soldWithSkippedNotice', {
-                  count,
-                  credits: credits.toLocaleString(),
-                  skipped,
-                })
-              : t('inv.bulkSoldFeedback', {
-                  count,
-                  credits: credits.toLocaleString(),
-                })
-          );
+        onSold={() => {}}
+      />
+
+      {/* Quick Swap / Pick Modal */}
+      <GearSwapPicker
+        open={swapPickerSlot !== null || swapPickerSocketIndex !== null}
+        slot={swapPickerSocketIndex !== null ? 'module' : swapPickerSlot}
+        socketIndex={swapPickerSocketIndex ?? undefined}
+        onClose={() => {
+          setSwapPickerSlot(null);
+          setSwapPickerSocketIndex(null);
         }}
+        onEquipped={(equippedSlot) => { setSelection({ kind: 'slot', slot: equippedSlot }); setConfirmingSellId(null); }}
+      />
+
+      {/* Supply Sell Confirmation */}
+      <SupplyTradeConfirm
+        mode="sell"
+        currency="CR"
+        template={pendingSellSupply}
+        voucher={null}
+        qty={1}
+        unitPrice={
+          pendingSellSupply
+            ? Math.round(
+                computeSupplyPrice(pendingSellSupply, adminConfig) *
+                  SHOP_CONFIG.sellPriceRatio
+              )
+            : 0
+        }
+        credits={pilot.credits}
+        iconCatalogMods={adminConfig.iconCatalogMods}
+        onConfirm={() => {
+          const tpl = pendingSellSupply;
+          setPendingSellSupply(null);
+          if (!tpl) return;
+          const res = sellSupply(tpl.id, 1);
+          if (res.ok && res.sold > 0) {
+            setInventoryNotice(
+              t('shop.supplySellNotice', {
+                qty: res.sold,
+                name: getSupplyName(tpl.id, t),
+                credits: res.creditsEarned.toLocaleString(),
+              })
+            );
+          } else {
+            setInventoryNotice(t('shop.supplySellFailed'));
+          }
+        }}
+        onCancel={() => setPendingSellSupply(null)}
       />
     </div>
   );

@@ -1,4 +1,4 @@
-import { BALANCE_CONFIG, COMBAT_FORMULAS } from './balance';
+import { BALANCE_CONFIG, COMBAT_FORMULAS, getMaxLevel } from './balance';
 
 export { BALANCE_CONFIG, COMBAT_FORMULAS };
 
@@ -7,11 +7,13 @@ export { BALANCE_CONFIG, COMBAT_FORMULAS };
  */
 export const PROGRESSION_CONFIG = {
   startingLevel: BALANCE_CONFIG.startingLevel,
-  maxLevel: BALANCE_CONFIG.maxLevel,
+  get maxLevel(): number {
+    return getMaxLevel();
+  },
   initialStatPoints: BALANCE_CONFIG.initialStatPoints,
   statPointsPerLevel: BALANCE_CONFIG.statPointsPerLevel,
   startingCredits: BALANCE_CONFIG.startingCredits,
   expBase: BALANCE_CONFIG.expBase,
   expExponent: BALANCE_CONFIG.expExponent,
   rewardMultDefault: BALANCE_CONFIG.rewardMultDefault,
-} as const;
+};

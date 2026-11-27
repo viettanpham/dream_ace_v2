@@ -1,4 +1,18 @@
-import { BALANCE_CONFIG, COMBAT_FORMULAS } from '../data/balance';
+import {
+  BALANCE_CONFIG,
+  COMBAT_FORMULAS,
+  computeLidarDetectCount,
+  DEFAULT_FLUX_TRANSFER_CONFIG,
+  DEFAULT_SKILL_MAX_LEVEL,
+  getEffectiveSkillMaxLevel,
+  getFluxMinPerAlly,
+  getFluxPlannedAmountEach,
+  getFluxTransferRule,
+  getUnlockedActiveSlots,
+  getUnlockedPassiveSlots,
+  sanitizeBattleRewardsConfig,
+  sanitizeFluxTransferConfig,
+} from '../data/balance';
 import { EMPTY_STAT_BLOCK, MECH_CLASSES, MECH_CLASS_LIST } from '../data/classes';
 import { DEFAULT_FORMATION_CONFIG, FORMATION_ROWS } from '../data/formationConfig';
 import { getSectorById } from '../data/maps';
@@ -13,11 +27,26 @@ import {
   getSkillById,
   SKILLS_LIST,
 } from '../data/skills';
+import { SUPPLY_TEMPLATES } from '../data/consumables';
+import {
+  getStatusKey,
+  getStatusStatModifier,
+  processRegistryTickEffects,
+  tickStatusDurations,
+} from './statusEngine';
+import {
+  buildEnrageActivationLogs,
+  computeCritWithOverflow,
+  getEnrageState,
+} from './enrage';
+import { resolveSkillSpecs } from './skillSpecs';
 import type {
   ActionType,
   ActiveStatusEffect,
   AdminConfig,
   BattleEvent,
+  BattleRewardsConfig,
+  BattleKind,
   BattleRoundSnapshot,
   BattleSize,
   BattleState,
@@ -29,11 +58,14 @@ import type {
   CombatUnit,
   EnemyArchetype,
   FloatingPopup,
+  FluxTransferConfig,
+  FluxTransferLevelRule,
   FormationConfig,
   ItemSpecialTraits,
   MechClassId,
   PilotAccount,
   SkillDefinition,
+  SpEconomyConfig,
   StatBlock,
   StatusEffectType,
   TeamColorRole,
@@ -51,9 +83,11 @@ import {
   pickRowForClass,
   sanitizeFormationConfig,
 } from './formation';
+import { getBattleOptions, pickDefaultBattle } from './frontline';
 import {
   canUnitUseSkill,
   type GearPassiveBonuses,
+  getEffectiveSpCost,
   getGearPassiveBonuses,
   isSkillAllowedForClass,
   MAX_ACTIVE_SKILL_BAR,
@@ -63,6 +97,33 @@ import {
   calculateEffectiveStats,
   generateNpcAllocations,
 } from './stats';
+import {
+  clampEnemyLevel,
+  rollEnemyLevelOffset,
+} from './enemyLevel';
+import { isPirateIncidentId } from './pirates';
+import {
+  clampShieldDamageMult,
+  computeShieldRegen,
+  getUnitHitsSinceOwnTurn,
+  sanitizeShieldCrackedMult,
+  sanitizeShieldCrackedTurns,
+  sanitizeShieldRegenConfig,
+} from './shieldRegen';
+import {
+  evaluateTurnPhaseAfterAction,
+  sanitizeTurnPhaseConfig,
+} from './turnPhase';
+import {
+  addOrRefreshStatus,
+  applyPrestageBuffs,
+  DEBUFF_TYPES,
+  sanitizePrestageConfig,
+} from './prestage';
+import { LIDAR_SKILL_ID, pickLidarCast } from './lidarAuto';
+import { generateNpcSupplies } from './npcSupply';
+
+export { DEBUFF_TYPES, pickLidarCast };
 
 let uidCounter = 1;
 function nextId(prefix: string): string {
@@ -87,24 +148,26 @@ function getSlotIndex(units: CombatUnit[], unitId: string): number {
   return Math.max(0, idx);
 }
 
-export const DEBUFF_TYPES = new Set<StatusEffectType>([
-  'burn',
-  'shield_break',
-  'slow',
-  'silence',
-  'vulnerable',
-  'def_down',
-]);
-
-export function hasStatus(unit: CombatUnit, type: StatusEffectType): boolean {
-  return unit.statuses.some((s) => s.type === type && s.turnsRemaining > 0);
+export function hasStatus(
+  unit: CombatUnit,
+  typeOrKey: StatusEffectType | string
+): boolean {
+  return unit.statuses.some(
+    (s) =>
+      (getStatusKey(s) === typeOrKey || s.type === typeOrKey) &&
+      s.turnsRemaining > 0
+  );
 }
 
 export function getStatus(
   unit: CombatUnit,
-  type: StatusEffectType
+  typeOrKey: StatusEffectType | string
 ): ActiveStatusEffect | undefined {
-  return unit.statuses.find((s) => s.type === type && s.turnsRemaining > 0);
+  return unit.statuses.find(
+    (s) =>
+      (getStatusKey(s) === typeOrKey || s.type === typeOrKey) &&
+      s.turnsRemaining > 0
+  );
 }
 
 export function isUnitStealthed(unit: CombatUnit): boolean {
@@ -119,6 +182,10 @@ export function getEffectiveUnitSpeed(unit: CombatUnit): number {
   }
   if (hasStatus(unit, 'slow')) {
     speed *= 1 - BALANCE_CONFIG.slowSpeedPenalty;
+  }
+  const regMod = getStatusStatModifier(unit, 'speed');
+  if (regMod.pct !== 0 || regMod.flat !== 0) {
+    speed = speed * Math.max(0.1, 1 + regMod.pct) + regMod.flat;
   }
   return Math.max(1, Math.round(speed));
 }
@@ -136,6 +203,17 @@ export function getEffectiveUnitDefense(
   if (siegeDef) def *= 1 + (siegeDef.magnitude ?? 0.8);
   const defDown = getStatus(unit, 'def_down');
   if (defDown) def *= Math.max(0.2, 1 - (defDown.magnitude ?? 0.3));
+  const regMod = getStatusStatModifier(unit, 'defense');
+  if (regMod.pct !== 0 || regMod.flat !== 0) {
+    def = def * Math.max(0.1, 1 + regMod.pct) + regMod.flat;
+  }
+  if (
+    (unit.derived.lastStandDefPct ?? 0) > 0 &&
+    unit.derived.maxHp > 0 &&
+    unit.hp / unit.derived.maxHp < 0.3
+  ) {
+    def *= 1 + (unit.derived.lastStandDefPct ?? 0) / 100;
+  }
   return Math.max(0, Math.round(def));
 }
 
@@ -146,6 +224,10 @@ export function getEffectiveUnitDodge(unit: CombatUnit): number {
   const evaUp = getStatus(unit, 'eva_up');
   if (evaUp) {
     dodge += Math.round((evaUp.magnitude ?? 0.25) * 40);
+  }
+  const regMod = getStatusStatModifier(unit, 'dodge');
+  if (regMod.pct !== 0 || regMod.flat !== 0) {
+    dodge += Math.round(regMod.pct * 100) + regMod.flat;
   }
   return Math.min(75, Math.max(0, dodge));
 }
@@ -173,47 +255,132 @@ function getEffectiveAttackDamageMult(
     mult += unit.derived.passiveSkillDmgPct ?? 0;
   }
 
-  return Math.max(0.35, mult);
-}
+  const regMod = getStatusStatModifier(unit, 'attack');
+  if (regMod.pct !== 0 || regMod.flat !== 0) {
+    mult += regMod.pct;
+    if (regMod.flat !== 0 && unit.derived.attackPower > 0) {
+      mult += regMod.flat / unit.derived.attackPower;
+    }
+  }
 
-function addOrRefreshStatus(
-  statuses: ActiveStatusEffect[],
-  entry: ActiveStatusEffect
-): ActiveStatusEffect[] {
-  const filtered = statuses.filter((s) => s.type !== entry.type);
-  return [...filtered, { ...entry, isDebuff: DEBUFF_TYPES.has(entry.type) }];
+  return Math.max(0.35, mult);
 }
 
 function removeStatus(
   statuses: ActiveStatusEffect[],
-  type: StatusEffectType
+  typeOrKey: StatusEffectType | string
 ): ActiveStatusEffect[] {
-  return statuses.filter((s) => s.type !== type);
+  return statuses.filter(
+    (s) => getStatusKey(s) !== typeOrKey && s.type !== typeOrKey
+  );
 }
 
-function buildNpcSkillLoadout(
+export const NPC_ROLE_SKILL_PRIORITY: Record<MechClassId, readonly string[]> = {
+  striker: [
+    'str_hotload_shells',
+    'str_deadeye_link',
+    'str_viper_sweep',
+    'str_ordnance_amp',
+  ],
+  interceptor: [
+    'int_sabot_burst',
+    'int_snap_riposte',
+    'int_mach_surge',
+    'int_afterburn_slip',
+  ],
+  siege: [
+    'sge_anchor_protocol',
+    'sge_bastion_lock',
+    'sge_grav_bolas',
+    'sge_aegis_sunder',
+  ],
+  support: [
+    'sup_nanite_mend',
+    'sup_lidar_sweep',
+    'sup_flux_transfer',
+    'sup_war_hymn',
+  ],
+};
+
+export function buildNpcSkillLoadout(
   classId: MechClassId,
-  level: number
-): { equippedSkillIds: string[]; skillLevels: Record<string, number> } {
+  level: number,
+  adminConfig?: Pick<
+    AdminConfig,
+    'skillMaxLevel' | 'passiveSlots' | 'activeSlots'
+  > | null
+): {
+  equippedSkillIds: string[];
+  equippedPassives: string[];
+  skillLevels: Record<string, number>;
+} {
+  const activeCap = getUnlockedActiveSlots(level, adminConfig?.activeSlots);
   const unlocked = SKILLS_LIST.filter(
     (s) =>
       s.classScope === classId &&
       s.category === 'normal' &&
       s.unlockLevel <= level
   );
-  const picked =
-    unlocked.length > 0
-      ? unlocked.slice(0, 3).map((s) => s.id)
-      : [...CLASS_STARTER_SKILLS[classId]];
-  const lv = Math.min(5, Math.max(1, Math.ceil(level / 5)));
+  let picked: string[] = [];
+  if (unlocked.length > 0) {
+    const unlockedIds = new Set(unlocked.map((s) => s.id));
+    const seen = new Set<string>();
+    const priorityIds = NPC_ROLE_SKILL_PRIORITY[classId] ?? [];
+    for (const id of priorityIds) {
+      if (picked.length >= activeCap) break;
+      if (unlockedIds.has(id) && !seen.has(id)) {
+        picked.push(id);
+        seen.add(id);
+      }
+    }
+    for (const skill of unlocked) {
+      if (picked.length >= activeCap) break;
+      if (!seen.has(skill.id)) {
+        picked.push(skill.id);
+        seen.add(skill.id);
+      }
+    }
+  } else {
+    picked = [...CLASS_STARTER_SKILLS[classId]].slice(0, activeCap);
+  }
+  const skillCap = getEffectiveSkillMaxLevel(adminConfig);
+  const lv = Math.min(skillCap, Math.max(1, Math.ceil(level / 5)));
   const skillLevels: Record<string, number> = {};
   for (const id of picked) {
     skillLevels[id] = lv;
   }
-  return { equippedSkillIds: picked, skillLevels };
+
+  const passiveCap = getUnlockedPassiveSlots(level, adminConfig?.passiveSlots);
+  const unlockedPassives = SKILLS_LIST.filter(
+    (s) =>
+      s.category === 'passive' &&
+      isSkillAllowedForClass(s, classId) &&
+      s.unlockLevel <= level
+  );
+  const equippedPassives: string[] = [];
+  for (const passive of unlockedPassives) {
+    if (equippedPassives.length >= passiveCap) break;
+    equippedPassives.push(passive.id);
+    skillLevels[passive.id] = lv;
+  }
+
+  return { equippedSkillIds: picked, equippedPassives, skillLevels };
 }
 
-function buildCombatUnit(params: {
+function clampBattleSkillLevels(
+  rawLevels: Record<string, number>,
+  skillCap: number
+): Record<string, number> {
+  const clamped: Record<string, number> = {};
+  for (const [id, lv] of Object.entries(rawLevels)) {
+    if (typeof lv === 'number' && lv >= 1) {
+      clamped[id] = Math.min(skillCap, Math.floor(lv));
+    }
+  }
+  return clamped;
+}
+
+export function buildCombatUnit(params: {
   id: string;
   name: string;
   callsign: string;
@@ -221,6 +388,8 @@ function buildCombatUnit(params: {
   row: CombatRow;
   formationCol?: number;
   hasLongRangeWeapon?: boolean;
+  accuracyPct?: number;
+  detectsStealth?: boolean;
   isPlayer: boolean;
   classId: MechClassId;
   archetype?: EnemyArchetype;
@@ -234,7 +403,28 @@ function buildCombatUnit(params: {
   equipmentBonuses?: StatBlock;
   specialTraits?: ItemSpecialTraits;
   passives?: GearPassiveBonuses;
+  adminConfig?: Partial<AdminConfig>;
 }): CombatUnit {
+  const skillCap = getEffectiveSkillMaxLevel(params.adminConfig);
+  const npcFallback = buildNpcSkillLoadout(
+    params.classId,
+    params.level,
+    params.adminConfig
+  );
+  const rawSkillLevels = params.skillLevels ?? npcFallback.skillLevels;
+  const effectiveSkillLevels = clampBattleSkillLevels(rawSkillLevels, skillCap);
+  const effectivePassives =
+    params.passives ??
+    getGearPassiveBonuses(
+      {
+        classId: params.classId,
+        level: params.level,
+        skillLevels: effectiveSkillLevels,
+        equippedPassives: npcFallback.equippedPassives,
+      },
+      params.adminConfig
+    );
+
   const stats = calculateEffectiveStats(
     params.classId,
     params.level,
@@ -242,14 +432,15 @@ function buildCombatUnit(params: {
     EMPTY_STAT_BLOCK,
     params.equipmentBonuses ?? EMPTY_STAT_BLOCK,
     params.specialTraits,
-    params.passives
+    effectivePassives
   );
   const baseDerived = calculateDerivedStats(
     params.classId,
     params.level,
     stats,
     params.specialTraits,
-    params.passives
+    effectivePassives,
+    params.adminConfig
   );
 
   const archDef = params.archetype
@@ -272,13 +463,15 @@ function buildCombatUnit(params: {
       }
     : baseDerived;
 
-  const npcFallback = buildNpcSkillLoadout(params.classId, params.level);
+  const activeSkillCap = params.isPlayer
+    ? MAX_ACTIVE_SKILL_BAR
+    : getUnlockedActiveSlots(params.level, params.adminConfig?.activeSlots);
   const equippedSkillIds = (params.equippedSkillIds ?? npcFallback.equippedSkillIds)
     .filter((id) => {
-      const sk = getSkillById(id);
+      const sk = getSkillById(id, params.adminConfig);
       return sk && sk.category !== 'passive' && isSkillAllowedForClass(sk, params.classId);
     })
-    .slice(0, MAX_ACTIVE_SKILL_BAR);
+    .slice(0, activeSkillCap);
 
   return {
     id: params.id,
@@ -292,14 +485,19 @@ function buildCombatUnit(params: {
         params.specialTraits?.longRange ||
         params.archetype === 'sniper'
     ),
+    accuracyPct: Math.min(
+      BALANCE_CONFIG.maxAccuracyPct,
+      Math.max(0, params.accuracyPct ?? 0)
+    ),
+    detectsStealth: Boolean(params.detectsStealth),
     isPlayer: params.isPlayer,
     classId: params.classId,
     archetype: params.archetype,
     isBoss: Boolean(params.isBoss),
     isStructure: Boolean(params.isStructure),
     level: params.level,
-    skillLevel: params.skillLevel ?? 1,
-    skillLevels: params.skillLevels ?? npcFallback.skillLevels,
+    skillLevel: Math.min(skillCap, Math.max(1, params.skillLevel ?? 1)),
+    skillLevels: effectiveSkillLevels,
     equippedSkillIds,
     skillCooldowns: {},
     usedOnceSkills: [],
@@ -337,26 +535,6 @@ export function sortTurnOrder(units: CombatUnit[]): string[] {
     .filter((u) => u.alive)
     .sort(compareUnitTurnPriority)
     .map((u) => u.id);
-}
-
-/**
- * Anti-Stalemate (Soft Enrage): after round 20, enemies deal +10% damage per round,
- * capped at +200% (3.0x total enemy damage). Returns fractional bonus (0..2.0).
- */
-export function getEnemyEnrageBonusPct(
-  round: number,
-  enabled = true,
-  startRound: number = BALANCE_CONFIG.enrageStartRound,
-  stepPct: number = BALANCE_CONFIG.enrageStepPct
-): number {
-  const safeStart = Math.max(1, Math.floor(startRound));
-  const safeStep = Math.max(0, stepPct);
-  if (!enabled || round <= safeStart) return 0;
-  const extraRounds = round - safeStart;
-  return Math.min(
-    BALANCE_CONFIG.enrageMaxBonusPct,
-    Math.round(extraRounds * safeStep * 1000) / 1000
-  );
 }
 
 export function createRoundHpSnapshot(
@@ -431,6 +609,7 @@ function toTurnQueueEntry(
   return {
     unitId: unit.id,
     name: unit.name,
+    level: unit.level,
     classId: unit.classId,
     side: unit.side,
     isPlayer: unit.isPlayer,
@@ -510,13 +689,35 @@ export function buildTurnQueue(battle: BattleState): TurnQueueView {
   };
 }
 
+export const ARCHETYPE_ROSTER_BY_SIZE: Record<BattleSize, EnemyArchetype[]> = {
+  4: ['gunship', 'drone', 'sniper', 'repair_ship'],
+  6: ['gunship', 'drone', 'gunship', 'sniper', 'repair_ship', 'sniper'],
+  8: [
+    'gunship',
+    'drone',
+    'gunship',
+    'drone',
+    'sniper',
+    'repair_ship',
+    'sniper',
+    'repair_ship',
+  ],
+};
+
 export function createInitialBattleState(
   pilot: PilotAccount,
   sectorId: string,
   rng: () => number = Math.random,
   squadSizeOverride?: BattleSize | null,
-  adminConfig?: Partial<AdminConfig>
+  adminConfig?: Partial<AdminConfig>,
+  battleKind?: BattleKind,
+  sourceId: string | null = null,
+  rewardMult?: number
 ): BattleState {
+  const resolvedKind: BattleKind =
+    battleKind ??
+    pickDefaultBattle(getBattleOptions(pilot, sectorId, adminConfig)) ??
+    'assault';
   const sector = getSectorById(sectorId);
   const rawSquadSize: BattleSize = squadSizeOverride ?? sector.squadSize ?? 4;
   const formationConfig = sanitizeFormationConfig(
@@ -531,9 +732,19 @@ export function createInitialBattleState(
   const classIds = MECH_CLASS_LIST.map((c) => c.id);
 
   // 1. Player's Deployed Gear (per-Gear level, stats, equipment, passives, and 6-slot skill bar)
-  const playerEquipBonuses = sumGearEquipmentStats(activeGear, pilot.inventory);
-  const playerTraits = sumGearSpecialTraits(activeGear, pilot.inventory);
-  const playerPassives = getGearPassiveBonuses(activeGear);
+  const playerEquipBonuses = sumGearEquipmentStats(
+    activeGear,
+    pilot.inventory,
+    adminConfig,
+    pilot.warehouse
+  );
+  const playerTraits = sumGearSpecialTraits(
+    activeGear,
+    pilot.inventory,
+    adminConfig,
+    pilot.warehouse
+  );
+  const playerPassives = getGearPassiveBonuses(activeGear, adminConfig);
 
   const savedFormation = Array.isArray(pilot.squadFormation)
     ? pilot.squadFormation
@@ -548,6 +759,11 @@ export function createInitialBattleState(
     row: savedPlayerSlot?.row ?? 'front',
     formationCol: 0,
     hasLongRangeWeapon: Boolean(playerTraits.longRange),
+    accuracyPct: Math.min(
+      BALANCE_CONFIG.maxAccuracyPct,
+      Math.max(0, playerTraits.accuracyPct ?? 0)
+    ),
+    detectsStealth: Boolean(playerTraits.detectStealth),
     isPlayer: true,
     classId: activeGear.classId,
     level: activeGear.level,
@@ -558,6 +774,7 @@ export function createInitialBattleState(
     equipmentBonuses: playerEquipBonuses,
     specialTraits: playerTraits,
     passives: playerPassives,
+    adminConfig,
   });
 
   // 2. AI Ally Wingmen (matching effectiveSquadCount - 1)
@@ -607,6 +824,7 @@ export function createInitialBattleState(
         classId: allyClass,
         level: allyLevel,
         allocatedPoints: generateNpcAllocations(allyClass, allyLevel, rng),
+        adminConfig,
       })
     );
   }
@@ -645,6 +863,7 @@ export function createInitialBattleState(
           hiredLv,
           rng
         ),
+        adminConfig,
       }),
     ]);
   }
@@ -663,22 +882,19 @@ export function createInitialBattleState(
   }
 
   // 3. Hostile Squadron (3-row auto-placement with small random variation)
-  const archetypeRosterBySize: Record<BattleSize, EnemyArchetype[]> = {
-    4: ['gunship', 'drone', 'sniper', 'repair_ship'],
-    6: ['gunship', 'drone', 'gunship', 'sniper', 'repair_ship', 'sniper'],
-    8: [
-      'gunship',
-      'drone',
-      'gunship',
-      'drone',
-      'sniper',
-      'repair_ship',
-      'sniper',
-      'repair_ship',
-    ],
-  };
-  const roster = archetypeRosterBySize[rawSquadSize];
+  const roster = ARCHETYPE_ROSTER_BY_SIZE[rawSquadSize];
   const rawEnemyUnits: CombatUnit[] = [];
+  const hasLevelOverride =
+    adminConfig?.battleLevelOffsetOverride !== undefined &&
+    adminConfig?.battleLevelOffsetOverride !== null;
+  const normalLevelKind =
+    resolvedKind === 'event' && isPirateIncidentId(sourceId)
+      ? 'pirate'
+      : resolvedKind;
+  const normalRolledOffset = hasLevelOverride
+    ? adminConfig!.battleLevelOffsetOverride!
+    : rollEnemyLevelOffset(normalLevelKind, adminConfig?.enemyLevel, rng);
+  let bossRolledOffset: number | null = null;
 
   for (let i = 0; i < effectiveSquadCount; i++) {
     const archetype = roster[i % roster.length];
@@ -692,21 +908,30 @@ export function createInitialBattleState(
       : isStructure
       ? 'Defense Turret'
       : randomItem(archDef.names, rng);
-    const effectiveLevelOffset =
-      adminConfig?.battleLevelOffsetOverride !== undefined &&
-      adminConfig?.battleLevelOffsetOverride !== null
-        ? adminConfig.battleLevelOffsetOverride
-        : sector.levelOffset;
-    const enemyLevel = Math.max(
-      1,
-      activeGear.level +
-        effectiveLevelOffset +
-        (isBoss
-          ? 1
-          : i === 0
-          ? 0
-          : Math.floor(rng() * 2) - (effectiveLevelOffset === 0 ? 1 : 0))
-    );
+    let effectiveLevelOffset: number;
+    if (hasLevelOverride) {
+      effectiveLevelOffset = adminConfig!.battleLevelOffsetOverride!;
+    } else if (isBoss) {
+      if (bossRolledOffset === null) {
+        bossRolledOffset = rollEnemyLevelOffset(
+          'boss',
+          adminConfig?.enemyLevel,
+          rng
+        );
+      }
+      effectiveLevelOffset = bossRolledOffset + sector.levelOffset;
+    } else {
+      effectiveLevelOffset = normalRolledOffset + sector.levelOffset;
+    }
+    const unitJitter = isBoss
+      ? 0
+      : i === 0
+      ? 0
+      : Math.floor(rng() * 2) - (effectiveLevelOffset === 0 ? 1 : 0);
+    const rawEnemyLevel = activeGear.level + effectiveLevelOffset + unitJitter;
+    const enemyLevel = hasLevelOverride
+      ? Math.max(1, rawEnemyLevel)
+      : clampEnemyLevel(rawEnemyLevel, adminConfig?.enemyLevel);
 
     rawEnemyUnits.push(
       buildCombatUnit({
@@ -728,6 +953,7 @@ export function createInitialBattleState(
           Math.max(1, enemyLevel),
           rng
         ),
+        adminConfig,
       })
     );
   }
@@ -738,9 +964,17 @@ export function createInitialBattleState(
     { rng, randomVariation: 0.25 }
   );
 
-  const units = [...allyUnits, ...enemyUnits];
+  const rawUnits = [...allyUnits, ...enemyUnits];
+  const prestageCfg = sanitizePrestageConfig(adminConfig?.prestage);
+  const prestageResult = prestageCfg.enabled
+    ? applyPrestageBuffs(rawUnits, adminConfig)
+    : { units: rawUnits, appliedByUnit: {} };
+  const units = prestageResult.units;
   const turnOrder = sortTurnOrder(units);
-  const placedPlayer = allyUnits.find((u) => u.isPlayer) ?? allyUnits[0];
+  const placedPlayer =
+    units.find((u) => u.side === 'ally' && u.isPlayer) ??
+    units.find((u) => u.side === 'ally') ??
+    allyUnits[0];
   const initialValidEnemies = placedPlayer
     ? getValidEnemyTargets(units, placedPlayer, 'attack')
     : enemyUnits;
@@ -758,8 +992,49 @@ export function createInitialBattleState(
     },
   };
 
+  const baseRuntime = pilot.baseStates?.[sector.id];
+  const sectorSupply = pilot.sectorSupply?.[sector.id] ?? 100;
+  const npcSupply = generateNpcSupplies(units, {
+    kind: resolvedKind,
+    difficulty: sector.difficulty,
+    cfg: adminConfig?.npcSupply,
+    supplyMaxPerTypePerBattle: adminConfig?.supplyMaxPerTypePerBattle,
+    templates: SUPPLY_TEMPLATES,
+    rng,
+    sectorSupply,
+    ownerFaction: baseRuntime?.faction,
+    baseStatus: baseRuntime?.status,
+    eventSupplyMult: 1,
+  });
+
+  const sectorSupplyLog: CombatLogEntry | null =
+    npcSupply !== undefined
+      ? {
+          id: nextId('log'),
+          round: 1,
+          actorName: sector.name,
+          tag: 'SYSTEM',
+          templateKey: 'log.sectorSupply',
+          params: {
+            n: Math.max(0, Math.min(100, Math.round(sectorSupply))),
+          },
+        }
+      : null;
+
+  const baseInitialLog = sectorSupplyLog
+    ? [sectorSupplyLog, openingLog]
+    : [openingLog];
+  const initialEnrageLogs = buildEnrageActivationLogs(
+    1,
+    adminConfig,
+    baseInitialLog
+  );
+
   return {
     sectorId: sector.id,
+    kind: resolvedKind,
+    sourceId: sourceId ?? null,
+    ...(rewardMult !== undefined ? { rewardMult } : {}),
     deployedGearId: activeGear.classId,
     squadSize,
     units,
@@ -772,12 +1047,20 @@ export function createInitialBattleState(
     lastPlayerTargetId: null,
     autoStopNotice: null,
     wingmanChat: null,
-    log: [openingLog],
+    log: [...baseInitialLog, ...initialEnrageLogs],
     events: [],
     roundSnapshots: [createRoundHpSnapshot(1, units)],
     popups: [],
     fxEvents: [],
     explodedUnitIds: [],
+    supplyByUnit: {},
+    ...(npcSupply !== undefined ? { npcSupply } : {}),
+    turnStep2Used: 0,
+    turnLockedSkillIds: [],
+    prestage: {
+      active: prestageCfg.enabled,
+      appliedByUnit: prestageResult.appliedByUnit,
+    },
     isResolving: false,
     summary: null,
   };
@@ -815,9 +1098,11 @@ const LONG_RANGE_SKILL_EFFECTS = new Set<SkillDefinition['effectKind']>([
 
 function getTargetableOpponents(
   units: CombatUnit[],
-  actorSide: CombatSide
+  actorSide: CombatSide,
+  detectsStealth?: boolean
 ): CombatUnit[] {
   const aliveOpp = units.filter((u) => u.side !== actorSide && u.alive);
+  if (detectsStealth) return aliveOpp;
   const nonStealth = aliveOpp.filter((u) => !isUnitStealthed(u));
   return nonStealth.length > 0 ? nonStealth : aliveOpp;
 }
@@ -845,11 +1130,12 @@ export function isRangedUnit(unit: CombatUnit): boolean {
 export function isLongRangeAction(
   actor: CombatUnit,
   action: ActionType,
-  skillId?: string
+  skillId?: string,
+  adminConfig?: Pick<AdminConfig, 'skillMods'> | null
 ): boolean {
   if (isRangedUnit(actor)) return true;
   if (action === 'skill' && skillId) {
-    const sk = getSkillById(skillId);
+    const sk = getSkillById(skillId, adminConfig);
     if (!sk) return false;
     if (sk.targetType === 'multi_enemy' || sk.targetType === 'all_enemies') {
       return true;
@@ -871,10 +1157,11 @@ export function getValidEnemyTargets(
   units: CombatUnit[],
   actor: CombatUnit,
   action: ActionType = 'attack',
-  skillId?: string
+  skillId?: string,
+  adminConfig?: Pick<AdminConfig, 'skillMods'> | null
 ): CombatUnit[] {
-  const basePool = getTargetableOpponents(units, actor.side);
-  if (isLongRangeAction(actor, action, skillId)) {
+  const basePool = getTargetableOpponents(units, actor.side, actor.detectsStealth);
+  if (isLongRangeAction(actor, action, skillId, adminConfig)) {
     return basePool;
   }
   for (const row of FORMATION_ROWS) {
@@ -940,6 +1227,57 @@ function hydrateFxUnits(
   };
 }
 
+export interface ApplyShieldThenHullOptions {
+  ignoreShield?: boolean;
+  shieldMult?: number;
+}
+
+export interface ShieldThenHullResult {
+  shieldLost: number;
+  hullDamage: number;
+  nextShield: number;
+  nextHp: number;
+  brokeNow: boolean;
+}
+
+export function applyShieldThenHull(
+  target: Pick<CombatUnit, 'hp' | 'shield'>,
+  damage: number,
+  opts: ApplyShieldThenHullOptions = {}
+): ShieldThenHullResult {
+  const safeDamage = Math.max(0, Number.isFinite(damage) ? damage : 0);
+  const startShield = Math.max(0, Number.isFinite(target.shield) ? target.shield : 0);
+  const startHp = Math.max(0, Number.isFinite(target.hp) ? target.hp : 0);
+  const m = clampShieldDamageMult(opts.shieldMult, 1);
+
+  let shieldLost = 0;
+  let nextShield = startShield;
+  let hullDamage = safeDamage;
+
+  if (!opts.ignoreShield && startShield > 0 && safeDamage > 0) {
+    if (startShield >= safeDamage * m) {
+      shieldLost = Math.min(startShield, Math.round(safeDamage * m));
+      nextShield = startShield - shieldLost;
+      hullDamage = 0;
+    } else {
+      shieldLost = startShield;
+      nextShield = 0;
+      hullDamage = Math.max(0, Math.round(safeDamage - startShield / m));
+    }
+  }
+
+  const nextHp = Math.max(0, startHp - hullDamage);
+  const brokeNow = startShield > 0 && nextShield === 0 && !opts.ignoreShield;
+
+  return {
+    shieldLost,
+    hullDamage,
+    nextShield,
+    nextHp,
+    brokeNow,
+  };
+}
+
 function applyDamageToUnit(
   unitsContext: CombatUnit[],
   attacker: CombatUnit,
@@ -947,14 +1285,14 @@ function applyDamageToUnit(
   rawPower: number,
   options: {
     defensePierce?: number;
-    ignoreDefAndShield?: boolean;
+    ignoreDef?: boolean;
     bonusCrit?: number;
     round: number;
     actionMeta: { skillId: string; hitIndex: number; totalHits: number };
     tag: 'ATTACK' | 'SKILL';
     isCounter?: boolean;
     isSplash?: boolean;
-    adminConfig?: AdminConfig;
+    adminConfig?: Partial<AdminConfig>;
     rng?: () => number;
     events?: BattleEvent[];
   }
@@ -1152,7 +1490,10 @@ function applyDamageToUnit(
 
   // Check Barrel Roll (evade_all) or standard Dodge
   const forceDodge = !isOneHit && !hasSureHit && hasStatus(curTarget, 'evade_all');
-  const effectiveDodge = getEffectiveUnitDodge(curTarget);
+  const effectiveDodge = Math.max(
+    0,
+    getEffectiveUnitDodge(curTarget) - (curAttacker.accuracyPct ?? 0)
+  );
   if (forceDodge || (!isOneHit && !hasSureHit && rng() * 100 < effectiveDodge)) {
     popups.push({
       id: nextId('pop'),
@@ -1198,24 +1539,33 @@ function applyDamageToUnit(
     };
   }
 
-  const totalCritChance = Math.min(
-    75,
-    curAttacker.derived.critChance + (options.bonusCrit ?? 0)
+  const enrageState = getEnrageState(options.round, options.adminConfig);
+
+  const critCalc = computeCritWithOverflow(
+    curAttacker.derived.critChance,
+    options.bonusCrit ?? 0,
+    enrageState.critRateUpPct,
+    enrageState.critOverflowRatio
   );
+  const totalCritChance = critCalc.totalCritChance;
   const isCrit = isOneHit || rng() * 100 < totalCritChance;
 
   const formationConfig =
     options.adminConfig?.formation ?? DEFAULT_FORMATION_CONFIG;
-  const ignoreDef = Boolean(options.ignoreDefAndShield);
+  const ignoreDef = Boolean(options.ignoreDef);
   const totalPierce = ignoreDef
     ? 1.0
     : Math.min(
         0.85,
         (options.defensePierce ?? 0) + curAttacker.derived.armorPiercePct / 100
       );
-  const effectiveDefense = Math.max(
+  const effectiveDefenseAfterPierce = Math.max(
     0,
     getEffectiveUnitDefense(curTarget, formationConfig) * (1 - totalPierce)
+  );
+  const effectiveDefense = Math.max(
+    0,
+    effectiveDefenseAfterPierce * (1 - enrageState.defDownPct / 100)
   );
   const mitigation = ignoreDef
     ? 1.0
@@ -1240,17 +1590,8 @@ function applyDamageToUnit(
   const vulnSt = getStatus(curTarget, 'vulnerable');
   const vulnMult = vulnSt ? 1 + (vulnSt.magnitude ?? 0.15) : 1.0;
 
-  // Anti-Stalemate (Soft Enrage): enemy outgoing damage scales after startRound (cap +200%)
-  const enrageBonus =
-    curAttacker.side === 'enemy'
-      ? getEnemyEnrageBonusPct(
-          options.round,
-          options.adminConfig?.softEnrageEnabled ?? true,
-          options.adminConfig?.enrageStartRound ?? BALANCE_CONFIG.enrageStartRound,
-          options.adminConfig?.enrageStepPct ?? BALANCE_CONFIG.enrageStepPct
-        )
-      : 0;
-  const enrageMult = 1 + enrageBonus;
+  // Anti-Stalemate (3-phase Enrage): applies to ALL attackers and defenders
+  const enrageMult = 1 + enrageState.damageUpPct / 100;
 
   let finalDamage = isOneHit
     ? 99999
@@ -1263,32 +1604,63 @@ function applyDamageToUnit(
           randomVariance(rng)
       );
   if (!isOneHit && isCrit) {
-    finalDamage = Math.round(finalDamage * COMBAT_FORMULAS.critDamageMultiplier);
+    const critMult =
+      COMBAT_FORMULAS.critDamageMultiplier +
+      (curAttacker.derived.critDamagePct ?? 0) / 100 +
+      (enrageState.critDamageUpPct + critCalc.overflowCritDamagePct) / 100;
+    finalDamage = Math.round(finalDamage * critMult);
+  }
+  if (
+    !isOneHit &&
+    (curAttacker.derived.executeDmgPct ?? 0) > 0 &&
+    curTarget.derived.maxHp > 0 &&
+    curTarget.hp / curTarget.derived.maxHp < 0.3
+  ) {
+    finalDamage = Math.round(
+      finalDamage * (1 + (curAttacker.derived.executeDmgPct ?? 0) / 100)
+    );
   }
   if (!isOneHit && curTarget.isDefending) {
     finalDamage = Math.round(finalDamage * COMBAT_FORMULAS.defendDamageMultiplier);
   }
   finalDamage = Math.max(6, finalDamage);
 
-  // Shield Break OR Hyper Shot (ignoreDefAndShield) bypasses shields completely!
-  const shieldDisabled =
-    ignoreDef || hasStatus(curTarget, 'shield_break');
-  let nextShield = curTarget.shield;
-  let nextHp = curTarget.hp;
-  let shieldAbsorbed = 0;
-  let hullDamage = 0;
-
-  if (!shieldDisabled && nextShield > 0) {
-    shieldAbsorbed = Math.min(nextShield, finalDamage);
-    nextShield -= shieldAbsorbed;
-    hullDamage = finalDamage - shieldAbsorbed;
-  } else {
-    hullDamage = finalDamage;
+  // Shield ALWAYS absorbs first (Starbreaker ignores DEF only; SH2b applies shield mult on skill hits)
+  const isSkillHit = options.tag === 'SKILL' && !options.isCounter;
+  let effectiveShieldMult = 1;
+  if (isSkillHit) {
+    const skillId = options.actionMeta.skillId;
+    const skillDef = skillId ? getSkillById(skillId, options.adminConfig) : undefined;
+    const overrideRaw = skillId
+      ? options.adminConfig?.shieldDamageOverrides?.[skillId]
+      : undefined;
+    const attackerMult =
+      typeof overrideRaw === 'number' && Number.isFinite(overrideRaw)
+        ? overrideRaw
+        : skillDef?.shieldDamageMult ?? 1;
+    const crackedMult = hasStatus(curTarget, 'shield_cracked')
+      ? sanitizeShieldCrackedMult(options.adminConfig?.shieldCrackedMult)
+      : 1;
+    effectiveShieldMult = clampShieldDamageMult(
+      Math.max(attackerMult, crackedMult),
+      1
+    );
   }
 
-  nextHp = Math.max(0, nextHp - hullDamage);
+  const dmgRes = applyShieldThenHull(curTarget, finalDamage, {
+    shieldMult: effectiveShieldMult,
+  });
+  const nextShield = dmgRes.nextShield;
+  const nextHp = dmgRes.nextHp;
+  const shieldAbsorbed = dmgRes.shieldLost;
+  const hullDamage = dmgRes.hullDamage;
+  const totalDamageDealt = shieldAbsorbed + hullDamage;
   const destroyed = nextHp <= 0;
   const hitShieldOnly = shieldAbsorbed > 0 && hullDamage === 0;
+  const loggedShieldMult =
+    shieldAbsorbed > 0 && effectiveShieldMult > 1
+      ? Number(effectiveShieldMult.toFixed(2))
+      : 1;
 
   if (hitShieldOnly) {
     popups.push({
@@ -1301,7 +1673,7 @@ function applyDamageToUnit(
     popups.push({
       id: nextId('pop'),
       unitId: curTarget.id,
-      text: isCrit ? `CRIT -${finalDamage}` : `-${finalDamage}`,
+      text: isCrit ? `CRIT -${totalDamageDealt}` : `-${totalDamageDealt}`,
       tone: isCrit ? 'crit' : 'damage',
     });
   }
@@ -1321,6 +1693,7 @@ function applyDamageToUnit(
       totalHits: options.actionMeta.totalHits,
       shieldAbsorbed,
       hullDamage,
+      shieldMult: loggedShieldMult,
       isCrit: isCrit ? 1 : 0,
       isDefending: curTarget.isDefending ? 1 : 0,
     },
@@ -1333,7 +1706,7 @@ function applyDamageToUnit(
     actorId: curAttacker.id,
     targetId: curTarget.id,
     type: 'damage',
-    amount: finalDamage,
+    amount: totalDamageDealt,
     shieldAbsorbed,
     hpDamage: hullDamage,
     skillId: options.actionMeta.skillId || undefined,
@@ -1377,6 +1750,39 @@ function applyDamageToUnit(
     ? 'shielded'
     : 'hit';
 
+  const shieldRegenCfg = sanitizeShieldRegenConfig(options.adminConfig?.shieldRegen);
+  let nextStatuses = destroyed ? [] : curTarget.statuses;
+  let nextHitsSinceOwnTurn = curTarget.hitsSinceOwnTurn;
+
+  if (!destroyed && dmgRes.brokeNow) {
+    nextStatuses = removeStatus(nextStatuses, 'shield_cracked');
+  }
+
+  if (shieldRegenCfg.enabled) {
+    if (curAttacker.side !== curTarget.side && (shieldAbsorbed > 0 || hullDamage > 0)) {
+      nextHitsSinceOwnTurn = getUnitHitsSinceOwnTurn(curTarget) + 1;
+    }
+    if (!destroyed && dmgRes.brokeNow) {
+      nextStatuses = addOrRefreshStatus(nextStatuses, {
+        type: 'shield_break',
+        turnsRemaining: shieldRegenCfg.restartTurns,
+        isDebuff: true,
+        sourceName: curAttacker.name,
+      });
+      options.events?.push({
+        id: nextId('ev'),
+        round: options.round,
+        turn: 0,
+        actorId: curAttacker.id,
+        targetId: curTarget.id,
+        type: 'status_applied',
+        statusId: 'shield_break',
+        skillId: options.actionMeta.skillId || undefined,
+        flags: { isDebuff: true },
+      });
+    }
+  }
+
   return {
     attackerAfter: curAttacker,
     targetAfter: {
@@ -1385,7 +1791,10 @@ function applyDamageToUnit(
       hp: nextHp,
       alive: !destroyed,
       isDefending: destroyed ? false : curTarget.isDefending,
-      statuses: destroyed ? [] : curTarget.statuses,
+      statuses: nextStatuses,
+      ...(nextHitsSinceOwnTurn !== undefined
+        ? { hitsSinceOwnTurn: nextHitsSinceOwnTurn }
+        : {}),
       animState: anim,
     },
     logs,
@@ -1393,8 +1802,110 @@ function applyDamageToUnit(
     destroyed,
     evaded: false,
     hitShieldOnly,
-    damageDealt: finalDamage,
+    damageDealt: totalDamageDealt,
     counteredAttackerKilled: false,
+  };
+}
+
+export interface ApplyShieldCrackedSource {
+  actorId?: string;
+  actorName?: string;
+  skillId?: string;
+  round?: number;
+  magnitude?: number;
+  events?: BattleEvent[];
+}
+
+export function applyShieldCracked(
+  target: CombatUnit,
+  turns: number,
+  source: string | ApplyShieldCrackedSource
+): {
+  targetAfter: CombatUnit;
+  applied: boolean;
+  logs: CombatLogEntry[];
+  popups: FloatingPopup[];
+} {
+  if (!target.alive) {
+    return { targetAfter: target, applied: false, logs: [], popups: [] };
+  }
+
+  const src: ApplyShieldCrackedSource =
+    typeof source === 'string' ? { actorName: source } : source;
+  const actorName = src.actorName ?? 'System';
+  const round = src.round ?? 1;
+
+  if (target.shield <= 0 || hasStatus(target, 'shield_break')) {
+    return {
+      targetAfter: target,
+      applied: false,
+      logs: [
+        {
+          id: nextId('log'),
+          round,
+          actorName,
+          tag: 'STATUS',
+          templateKey: 'log.shieldCrackNoShield',
+          params: {
+            target: target.name,
+          },
+        },
+      ],
+      popups: [],
+    };
+  }
+
+  const safeTurns = sanitizeShieldCrackedTurns(turns);
+  const safeMult = sanitizeShieldCrackedMult(src.magnitude);
+  const entry: ActiveStatusEffect = {
+    type: 'shield_cracked',
+    turnsRemaining: safeTurns,
+    magnitude: safeMult,
+    isDebuff: true,
+    sourceSkillId: src.skillId,
+    sourceName: actorName,
+  };
+
+  src.events?.push({
+    id: nextId('ev'),
+    round,
+    turn: 0,
+    actorId: src.actorId ?? '',
+    targetId: target.id,
+    type: 'status_applied',
+    statusId: 'shield_cracked',
+    skillId: src.skillId,
+    flags: { isDebuff: true },
+  });
+
+  return {
+    targetAfter: {
+      ...target,
+      statuses: addOrRefreshStatus(target.statuses, entry),
+    },
+    applied: true,
+    logs: [
+      {
+        id: nextId('log'),
+        round,
+        actorName,
+        tag: 'STATUS',
+        templateKey: 'log.statusApplied',
+        params: {
+          target: target.name,
+          status: 'shield_cracked',
+          turns: safeTurns,
+        },
+      },
+    ],
+    popups: [
+      {
+        id: nextId('pop'),
+        unitId: target.id,
+        text: 'SHD CRACK',
+        tone: 'status',
+      },
+    ],
   };
 }
 
@@ -1431,6 +1942,7 @@ function tryInflictStatus(
   const popupMap: Partial<Record<StatusEffectType, string>> = {
     burn: 'BURN',
     shield_break: 'SHD BREAK',
+    shield_cracked: 'SHD CRACK',
     slow: 'SLOW',
     silence: 'SILENCED',
     vulnerable: 'VULN +15%',
@@ -1478,15 +1990,198 @@ function decrementCooldowns(
   return next;
 }
 
+export interface SpTransferResolution {
+  updatedUnits: CombatUnit[];
+  popups: FloatingPopup[];
+  logEntry: CombatLogEntry;
+  recipientIds: string[];
+  totalMoved: number;
+  cost: number;
+  feePaid: number;
+  amountPerAlly: number;
+}
+
+export function getMaxAffordableFluxCount(
+  units: CombatUnit[],
+  actorId: string,
+  skillLevel: number,
+  cfg?: FluxTransferConfig | null,
+  skillMaxLevel: number = DEFAULT_SKILL_MAX_LEVEL
+): number {
+  const actor = units.find((u) => u.id === actorId);
+  if (!actor || !actor.alive) return 0;
+  const effCap = getEffectiveSkillMaxLevel(skillMaxLevel);
+  const rule = getFluxTransferRule(skillLevel, cfg, effCap);
+  const maxTargets = Math.max(0, Math.floor(rule.targets));
+  if (maxTargets <= 0) return 0;
+  const actorSp = Math.max(0, actor.sp);
+  const amountEach = getFluxPlannedAmountEach(
+    actorSp,
+    skillLevel,
+    cfg,
+    effCap
+  );
+  if (amountEach <= 0) return maxTargets;
+  for (let k = maxTargets; k >= 1; k--) {
+    const worstCaseCost = Math.ceil(k * amountEach * (1 + rule.fee / 100));
+    if (worstCaseCost <= actorSp) {
+      return k;
+    }
+  }
+  return 0;
+}
+
+export function resolveSpTransfer(
+  units: CombatUnit[],
+  actorId: string,
+  skillLevel: number,
+  cfg?: FluxTransferConfig | null,
+  count?: number,
+  round = 1,
+  nextIdFn: (prefix: string) => string = nextId,
+  skillId = 'sup_flux_transfer',
+  skillMaxLevel: number = DEFAULT_SKILL_MAX_LEVEL
+): SpTransferResolution {
+  const nextUnits = units.map((u) => ({ ...u }));
+  const actorIdx = nextUnits.findIndex((u) => u.id === actorId);
+  const popups: FloatingPopup[] = [];
+  const recipientIds: string[] = [];
+
+  if (actorIdx < 0 || !nextUnits[actorIdx].alive) {
+    return {
+      updatedUnits: nextUnits,
+      popups,
+      logEntry: {
+        id: nextIdFn('log'),
+        round,
+        actorName: '',
+        actorSide: 'ally',
+        tag: 'HEAL',
+        templateKey: 'log.spTransfer',
+        params: { actor: '', skillId, amount: 0, count: 0, fee: 0 },
+      },
+      recipientIds,
+      totalMoved: 0,
+      cost: 0,
+      feePaid: 0,
+      amountPerAlly: 0,
+    };
+  }
+
+  const actor = nextUnits[actorIdx];
+  const effCap = getEffectiveSkillMaxLevel(skillMaxLevel);
+  const rule = getFluxTransferRule(skillLevel, cfg, effCap);
+  const maxTargets = Math.max(0, Math.floor(rule.targets));
+  const maxAffordable = getMaxAffordableFluxCount(
+    nextUnits,
+    actorId,
+    skillLevel,
+    cfg,
+    effCap
+  );
+  const requested =
+    count === undefined ? maxTargets : Math.max(0, Math.floor(count));
+  const effectiveCount = Math.min(requested, maxTargets, maxAffordable);
+  const amountEach = getFluxPlannedAmountEach(
+    actor.sp,
+    skillLevel,
+    cfg,
+    effCap
+  );
+
+  const candidateIndices = nextUnits
+    .map((u, idx) => ({ u, idx }))
+    .filter(
+      ({ u }) =>
+        u.side === actor.side &&
+        u.alive &&
+        u.id !== actor.id &&
+        u.derived.maxSp > 0 &&
+        u.sp < u.derived.maxSp
+    )
+    .sort(
+      (a, b) =>
+        a.u.sp / a.u.derived.maxSp - b.u.sp / b.u.derived.maxSp
+    )
+    .slice(0, effectiveCount);
+
+  let totalMoved = 0;
+  if (amountEach > 0) {
+    for (const { idx } of candidateIndices) {
+      const ally = nextUnits[idx];
+      const received = Math.min(amountEach, Math.max(0, ally.derived.maxSp - ally.sp));
+      if (received <= 0) continue;
+      nextUnits[idx] = {
+        ...ally,
+        sp: ally.sp + received,
+        animState: 'shielded',
+      };
+      popups.push({
+        id: nextIdFn('pop'),
+        unitId: ally.id,
+        text: `+${received} SP`,
+        tone: 'buff',
+      });
+      recipientIds.push(ally.id);
+      totalMoved += received;
+    }
+  }
+
+  const rawCost =
+    totalMoved > 0 ? Math.ceil(totalMoved * (1 + rule.fee / 100)) : 0;
+  const nextActorSp = Math.max(0, actor.sp - rawCost);
+  const actualCost = Math.max(0, actor.sp - nextActorSp);
+  const feePaid = Math.max(0, rawCost - totalMoved);
+
+  nextUnits[actorIdx] = {
+    ...actor,
+    sp: nextActorSp,
+  };
+
+  const logEntry: CombatLogEntry = {
+    id: nextIdFn('log'),
+    round,
+    actorName: actor.name,
+    actorSide: actor.side,
+    tag: 'HEAL',
+    templateKey: 'log.spTransfer',
+    params: {
+      actor: actor.name,
+      skillId,
+      amount: totalMoved,
+      count: recipientIds.length,
+      fee: feePaid,
+    },
+  };
+
+  return {
+    updatedUnits: nextUnits,
+    popups,
+    logEntry,
+    recipientIds,
+    totalMoved,
+    cost: actualCost,
+    feePaid,
+    amountPerAlly: amountEach,
+  };
+}
+
+export interface ResolveUnitActionOptions {
+  skipTurnStartTicks?: boolean;
+  turnLockedSkillIds?: readonly string[];
+}
+
 export function resolveUnitAction(
   units: CombatUnit[],
   actorId: string,
   action: ActionType,
   targetId: string | null,
   round: number,
-  adminConfig?: AdminConfig,
+  adminConfig?: Partial<AdminConfig>,
   rng: () => number = Math.random,
-  skillId?: string
+  skillId?: string,
+  transferCount?: number,
+  options?: ResolveUnitActionOptions
 ): ActionResolution {
   const events: BattleEvent[] = [];
   const result = resolveUnitActionCore(
@@ -1498,7 +2193,9 @@ export function resolveUnitAction(
     events,
     adminConfig,
     rng,
-    skillId
+    skillId,
+    transferCount,
+    options
   );
 
   // Automatically record any buffs applied/refreshed during this turn
@@ -1548,9 +2245,11 @@ function resolveUnitActionCore(
   targetId: string | null,
   round: number,
   events: BattleEvent[],
-  adminConfig?: AdminConfig,
+  adminConfig?: Partial<AdminConfig>,
   rng: () => number = Math.random,
-  skillId?: string
+  skillId?: string,
+  transferCount?: number,
+  options?: ResolveUnitActionOptions
 ): Omit<ActionResolution, 'events'> {
   const originalActor = units.find((u) => u.id === actorId);
   if (!originalActor || !originalActor.alive) {
@@ -1564,13 +2263,16 @@ function resolveUnitActionCore(
     };
   }
 
-  events.push({
-    id: nextId('ev'),
-    round,
-    turn: 0,
-    actorId,
-    type: 'turn_start',
-  });
+  const skipTurnStartTicks = Boolean(options?.skipTurnStartTicks);
+  if (!skipTurnStartTicks) {
+    events.push({
+      id: nextId('ev'),
+      round,
+      turn: 0,
+      actorId,
+      type: 'turn_start',
+    });
+  }
 
   const cls = MECH_CLASSES[originalActor.classId];
   const fromSlotIndex = getSlotIndex(units, originalActor.id);
@@ -1588,121 +2290,240 @@ function resolveUnitActionCore(
   const destroyedUnitIds: string[] = [];
 
   // ---- Start-of-turn: Cooldown tick, Passive SP regen, Regen HoT, Burn DoT, Status tick ----
-  let actor: CombatUnit = {
-    ...nextUnits[actorIdx],
-    skillCooldowns: decrementCooldowns(nextUnits[actorIdx].skillCooldowns),
-  };
+  let actor: CombatUnit = skipTurnStartTicks
+    ? { ...nextUnits[actorIdx] }
+    : {
+        ...nextUnits[actorIdx],
+        skillCooldowns: decrementCooldowns(nextUnits[actorIdx].skillCooldowns),
+      };
 
-  if (actor.derived.spRegenPerTurn > 0) {
-    actor = {
-      ...actor,
-      sp: Math.min(actor.derived.maxSp, actor.sp + actor.derived.spRegenPerTurn),
-    };
-  }
+  // Capture whether shield_break is active on this own turn before status tick decrements it
+  const shieldBreakAtTurnStart = hasStatus(actor, 'shield_break');
+  const shieldRegenCfg = sanitizeShieldRegenConfig(adminConfig?.shieldRegen);
 
-  // Healing Field HoT tick
-  const regenSt = getStatus(actor, 'regen_hp');
-  if (regenSt) {
-    const healAmt = Math.min(
-      actor.derived.maxHp - actor.hp,
-      Math.max(4, Math.round(actor.derived.maxHp * (regenSt.magnitude ?? 0.1)))
-    );
-    if (healAmt > 0) {
-      actor = { ...actor, hp: actor.hp + healAmt };
-      events.push({
-        id: nextId('ev'),
-        round,
-        turn: 0,
-        actorId: actor.id,
-        targetId: actor.id,
-        type: 'heal',
-        amount: healAmt,
-        skillId: regenSt.sourceSkillId,
-        flags: { isRegen: true },
-      });
-      popups.push({
-        id: nextId('pop'),
-        unitId: actor.id,
-        text: `+${healAmt} HP`,
-        tone: 'heal',
-      });
-      logs.push({
-        id: nextId('log'),
-        round,
-        actorName: actor.name,
-        actorSide: actor.side,
-        tag: 'HEAL',
-        templateKey: 'log.regenTick',
-        params: { target: actor.name, amount: healAmt },
-      });
+  if (!skipTurnStartTicks) {
+    if (actor.derived.spRegenPerTurn > 0) {
+      actor = {
+        ...actor,
+        sp: Math.min(actor.derived.maxSp, actor.sp + actor.derived.spRegenPerTurn),
+      };
     }
-  }
 
-  // Burn DoT tick
-  if (hasStatus(actor, 'burn')) {
-    const burnDmg =
-      adminConfig?.godMode && actor.isPlayer
-        ? 0
-        : Math.max(
-            5,
-            Math.round(actor.derived.maxHp * BALANCE_CONFIG.burnDamageRatio)
-          );
-    const nextHp = Math.max(0, actor.hp - burnDmg);
-    const burnedOut = nextHp <= 0;
-    actor = {
-      ...actor,
-      hp: nextHp,
-      alive: !burnedOut,
-      animState: burnedOut ? 'destroyed' : 'hit',
-    };
-    if (burnDmg > 0) {
-      events.push({
-        id: nextId('ev'),
-        round,
-        turn: 0,
-        actorId: actor.id,
-        targetId: actor.id,
-        type: 'damage',
-        amount: burnDmg,
-        shieldAbsorbed: 0,
-        hpDamage: burnDmg,
-        flags: { isBurn: true, kill: burnedOut },
-      });
-      popups.push({
-        id: nextId('pop'),
-        unitId: actor.id,
-        text: `BURN -${burnDmg}`,
-        tone: 'status',
-      });
-      logs.push({
-        id: nextId('log'),
-        round,
-        actorName: actor.name,
-        actorSide: actor.side,
-        tag: 'STATUS',
-        templateKey: 'log.burnTick',
-        params: { target: actor.name, damage: burnDmg },
-      });
+    // Passive per-turn Shield Regeneration (next to SP regen, before status tick)
+    if (shieldRegenCfg.enabled) {
+      const shieldRegen = computeShieldRegen(actor, shieldRegenCfg);
+      if (shieldRegen.amount > 0) {
+        actor = {
+          ...actor,
+          shield: Math.min(
+            actor.derived.maxShield,
+            actor.shield + shieldRegen.amount
+          ),
+        };
+        events.push({
+          id: nextId('ev'),
+          round,
+          turn: 0,
+          actorId: actor.id,
+          targetId: actor.id,
+          type: 'shield_grant',
+          amount: shieldRegen.amount,
+          flags: { isRegen: true },
+        });
+        if (
+          actor.derived.maxShield > 0 &&
+          shieldRegen.amount >= actor.derived.maxShield * 0.01
+        ) {
+          popups.push({
+            id: nextId('pop'),
+            unitId: actor.id,
+            text: `SHD +${shieldRegen.amount}`,
+            tone: 'shield',
+          });
+        }
+        logs.push({
+          id: nextId('log'),
+          round,
+          actorName: actor.name,
+          actorSide: actor.side,
+          tag: 'SHIELD',
+          templateKey: 'log.shieldRegen',
+          params: {
+            target: actor.name,
+            amount: shieldRegen.amount,
+            reason: shieldRegen.reason,
+            multPct: shieldRegen.multPct,
+            hits: shieldRegen.hits,
+            classId: actor.classId,
+          },
+        });
+      }
+      if (getUnitHitsSinceOwnTurn(actor) > 0) {
+        actor = { ...actor, hitsSinceOwnTurn: 0 };
+      }
     }
-    if (burnedOut) {
-      destroyedUnitIds.push(actor.id);
-      events.push({
-        id: nextId('ev'),
+
+    // Passive self-only per-turn HP regeneration at unit's OWN turn start
+    const passiveHpRegenPct = actor.derived.hpRegenPctAdd ?? 0;
+    if (actor.alive && passiveHpRegenPct > 0 && actor.hp < actor.derived.maxHp) {
+      const passiveHpGain = Math.min(
+        actor.derived.maxHp - actor.hp,
+        Math.max(1, Math.round((actor.derived.maxHp * passiveHpRegenPct) / 100))
+      );
+      if (passiveHpGain > 0) {
+        actor = { ...actor, hp: actor.hp + passiveHpGain };
+        events.push({
+          id: nextId('ev'),
+          round,
+          turn: 0,
+          actorId: actor.id,
+          targetId: actor.id,
+          type: 'heal',
+          amount: passiveHpGain,
+          flags: { isRegen: true },
+        });
+        popups.push({
+          id: nextId('pop'),
+          unitId: actor.id,
+          text: `+${passiveHpGain} HP`,
+          tone: 'heal',
+        });
+        logs.push({
+          id: nextId('log'),
+          round,
+          actorName: actor.name,
+          actorSide: actor.side,
+          tag: 'HEAL',
+          templateKey: 'log.hpRegen',
+          params: {
+            target: actor.name,
+            amount: passiveHpGain,
+            pct: Number(passiveHpRegenPct.toFixed(2)),
+            classId: actor.classId,
+          },
+        });
+      }
+    }
+
+    // Healing Field HoT tick
+    const regenSt = getStatus(actor, 'regen_hp');
+    if (regenSt) {
+      const healAmt = Math.min(
+        actor.derived.maxHp - actor.hp,
+        Math.max(4, Math.round(actor.derived.maxHp * (regenSt.magnitude ?? 0.1)))
+      );
+      if (healAmt > 0) {
+        actor = { ...actor, hp: actor.hp + healAmt };
+        events.push({
+          id: nextId('ev'),
+          round,
+          turn: 0,
+          actorId: actor.id,
+          targetId: actor.id,
+          type: 'heal',
+          amount: healAmt,
+          skillId: regenSt.sourceSkillId,
+          flags: { isRegen: true },
+        });
+        popups.push({
+          id: nextId('pop'),
+          unitId: actor.id,
+          text: `+${healAmt} HP`,
+          tone: 'heal',
+        });
+        logs.push({
+          id: nextId('log'),
+          round,
+          actorName: actor.name,
+          actorSide: actor.side,
+          tag: 'HEAL',
+          templateKey: 'log.regenTick',
+          params: { target: actor.name, amount: healAmt },
+        });
+      }
+    }
+
+    // Burn DoT tick
+    if (hasStatus(actor, 'burn')) {
+      const burnDmg =
+        adminConfig?.godMode && actor.isPlayer
+          ? 0
+          : Math.max(
+              5,
+              Math.round(actor.derived.maxHp * BALANCE_CONFIG.burnDamageRatio)
+            );
+      const nextHp = Math.max(0, actor.hp - burnDmg);
+      const burnedOut = nextHp <= 0;
+      actor = {
+        ...actor,
+        hp: nextHp,
+        alive: !burnedOut,
+        animState: burnedOut ? 'destroyed' : 'hit',
+      };
+      if (burnDmg > 0) {
+        events.push({
+          id: nextId('ev'),
+          round,
+          turn: 0,
+          actorId: actor.id,
+          targetId: actor.id,
+          type: 'damage',
+          amount: burnDmg,
+          shieldAbsorbed: 0,
+          hpDamage: burnDmg,
+          flags: { isBurn: true, kill: burnedOut },
+        });
+        popups.push({
+          id: nextId('pop'),
+          unitId: actor.id,
+          text: `BURN -${burnDmg}`,
+          tone: 'status',
+        });
+        logs.push({
+          id: nextId('log'),
+          round,
+          actorName: actor.name,
+          actorSide: actor.side,
+          tag: 'STATUS',
+          templateKey: 'log.burnTick',
+          params: { target: actor.name, damage: burnDmg },
+        });
+      }
+      if (burnedOut) {
+        destroyedUnitIds.push(actor.id);
+        events.push({
+          id: nextId('ev'),
+          round,
+          turn: 0,
+          actorId: actor.id,
+          targetId: actor.id,
+          type: 'kill',
+          flags: { isBurn: true, kill: true },
+        });
+        logs.push({
+          id: nextId('log'),
+          round,
+          actorName: actor.name,
+          actorSide: actor.side,
+          tag: 'KO',
+          templateKey: 'log.destroyed',
+          params: { target: actor.name, classId: actor.classId },
+        });
+      }
+    }
+
+    // Generic DoT/HoT tick for registry-only effects with tickTiming (once per own turn)
+    if (actor.alive) {
+      actor = processRegistryTickEffects({
+        actor,
         round,
-        turn: 0,
-        actorId: actor.id,
-        targetId: actor.id,
-        type: 'kill',
-        flags: { isBurn: true, kill: true },
-      });
-      logs.push({
-        id: nextId('log'),
-        round,
-        actorName: actor.name,
-        actorSide: actor.side,
-        tag: 'KO',
-        templateKey: 'log.destroyed',
-        params: { target: actor.name, classId: actor.classId },
+        adminConfig,
+        applyShieldThenHull,
+        nextId,
+        events,
+        popups,
+        logs,
+        destroyedUnitIds,
       });
     }
   }
@@ -1710,19 +2531,14 @@ function resolveUnitActionCore(
   // Check if releasing a charged shot (str_solar_capacitor) BEFORE ticking statuses
   const chargingSt = getStatus(actor, 'charging');
 
-  // Tick down active non-permanent status durations (99 = toggle/until-attack)
-  actor = {
-    ...actor,
-    statuses: actor.alive
-      ? actor.statuses
-          .map((s) =>
-            s.turnsRemaining >= 90
-              ? s
-              : { ...s, turnsRemaining: s.turnsRemaining - 1 }
-          )
-          .filter((s) => s.turnsRemaining > 0)
-      : [],
-  };
+  if (!skipTurnStartTicks) {
+    // Tick down active non-permanent status durations (99 = toggle/until-attack)
+    // and grant IMM_CONTROL when a registry-only control effect expires by duration.
+    actor = {
+      ...actor,
+      statuses: actor.alive ? tickStatusDurations(actor.statuses).statuses : [],
+    };
+  }
   nextUnits[actorIdx] = actor;
 
   if (!actor.alive) {
@@ -1739,15 +2555,16 @@ function resolveUnitActionCore(
   // ---- AUTO-RELEASE CHARGED SHOT ON NEXT TURN ----
   if (chargingSt) {
     const chargedSkill = getSkillById(
-      chargingSt.sourceSkillId ?? 'str_solar_capacitor'
+      chargingSt.sourceSkillId ?? 'str_solar_capacitor',
+      adminConfig
     );
     const skillLv =
       actor.skillLevels[chargedSkill?.id ?? 'str_solar_capacitor'] ?? 1;
     const scaled = chargedSkill
-      ? getScaledSkillStats(chargedSkill, skillLv)
+      ? getScaledSkillStats(chargedSkill, skillLv, adminConfig)
       : { powerMultiplier: 3.2 };
 
-    const opponents = getTargetableOpponents(nextUnits, actor.side);
+    const opponents = getTargetableOpponents(nextUnits, actor.side, actor.detectsStealth);
     const chosenTarget =
       opponents.find((u) => u.id === chargingSt.targetId) ?? opponents[0];
 
@@ -1816,7 +2633,7 @@ function resolveUnitActionCore(
       actor.derived.maxSp - actor.sp,
       COMBAT_FORMULAS.defendSpGain
     );
-    const shieldBlocked = hasStatus(actor, 'shield_break');
+    const shieldBlocked = shieldBreakAtTurnStart || hasStatus(actor, 'shield_break');
     const shieldRecovered = shieldBlocked
       ? 0
       : Math.min(
@@ -1888,15 +2705,20 @@ function resolveUnitActionCore(
   if (action === 'skill') {
     const requestedSkillId = skillId ?? actor.equippedSkillIds[0];
     const usability = requestedSkillId
-      ? canUnitUseSkill(actor, requestedSkillId)
+      ? canUnitUseSkill(
+          actor,
+          requestedSkillId,
+          adminConfig,
+          options?.turnLockedSkillIds
+        )
       : null;
     const skill: SkillDefinition | undefined = requestedSkillId
-      ? getSkillById(requestedSkillId)
+      ? getSkillById(requestedSkillId, adminConfig)
       : undefined;
 
     if (skill && usability && usability.canUse) {
       const skillLv = actor.skillLevels[skill.id] ?? actor.skillLevel ?? 1;
-      const scaled = getScaledSkillStats(skill, skillLv);
+      const scaled = getScaledSkillStats(skill, skillLv, adminConfig);
 
       // Deduct SP, set Cooldown, record Once-Per-Battle
       const nextCooldowns =
@@ -2235,9 +3057,16 @@ function resolveUnitActionCore(
               magnitude: scaled.buffMagnitude,
               sourceSkillId: skill.id,
             });
-            const shieldBoost = Math.round(
-              act.derived.maxShield * (scaled.secondaryMagnitude || 0.3)
-            );
+            const shieldBlocked =
+              shieldBreakAtTurnStart || hasStatus(act, 'shield_break');
+            const shieldPowerMult = 1 + (act.derived.shieldPowerPct ?? 0) / 100;
+            const shieldBoost = shieldBlocked
+              ? 0
+              : Math.round(
+                  act.derived.maxShield *
+                    (scaled.secondaryMagnitude || 0.3) *
+                    shieldPowerMult
+                );
             nextShield = Math.min(act.derived.maxShield, act.shield + shieldBoost);
           }
           nextUnits[actorIdx] = {
@@ -2490,7 +3319,7 @@ function resolveUnitActionCore(
 
         // ---- CHARGE SHOT (2-turn striker skill) ----
         case 'charge_attack': {
-          const opp = getTargetableOpponents(nextUnits, act.side);
+          const opp = getTargetableOpponents(nextUnits, act.side, act.detectsStealth);
           const lockedTarget = opp.find((u) => u.id === targetId) ?? opp[0];
           nextUnits[actorIdx] = {
             ...act,
@@ -2529,7 +3358,7 @@ function resolveUnitActionCore(
 
         // ---- OFFENSIVE MULTI / SPLASH / AOE / SINGLE SKILLS ----
         case 'multi_attack': {
-          const opp = getTargetableOpponents(nextUnits, act.side);
+          const opp = getTargetableOpponents(nextUnits, act.side, act.detectsStealth);
           const targets = opp.slice(0, skill.maxTargets ?? 3);
           const dmgMult = getEffectiveAttackDamageMult(act, true);
           const rawPower = act.derived.attackPower * 2.15 * scaled.powerMultiplier * dmgMult;
@@ -2580,7 +3409,7 @@ function resolveUnitActionCore(
         }
 
         case 'splash_attack': {
-          const opp = getTargetableOpponents(nextUnits, act.side);
+          const opp = getTargetableOpponents(nextUnits, act.side, act.detectsStealth);
           const chosen = opp.find((u) => u.id === targetId) ?? opp[0];
           const targetSlotIndices: number[] = [];
           if (chosen) {
@@ -2714,7 +3543,7 @@ function resolveUnitActionCore(
         case 'attack_shield_break':
         case 'attack_pierce':
         case 'pierce_all_elite': {
-          const opp = getTargetableOpponents(nextUnits, act.side);
+          const opp = getTargetableOpponents(nextUnits, act.side, act.detectsStealth);
           const chosen = opp.find((u) => u.id === targetId) ?? opp[0];
           if (chosen) {
             const cIdx = nextUnits.findIndex((u) => u.id === chosen.id);
@@ -2732,7 +3561,7 @@ function resolveUnitActionCore(
                   skill.effectKind === 'attack_pierce'
                     ? skill.secondaryRatio ?? 0.3
                     : 0,
-                ignoreDefAndShield: skill.effectKind === 'pierce_all_elite',
+                ignoreDef: skill.effectKind === 'pierce_all_elite',
                 round,
                 actionMeta: { skillId: skill.id, hitIndex: 1, totalHits: 1 },
                 tag: 'SKILL',
@@ -2767,23 +3596,24 @@ function resolveUnitActionCore(
                 logs.push(...st.logs);
                 popups.push(...st.popups);
               } else if (skill.effectKind === 'attack_shield_break') {
-                const st = tryInflictStatus(
+                // shield sunder: applies Khiên nứt via shared helper after damage
+                const crackRes = applyShieldCracked(
                   targetAfter,
+                  sanitizeShieldCrackedTurns(adminConfig?.shieldCrackedTurns),
                   {
-                    type: 'shield_break',
-                    turnsRemaining: skill.duration ?? 2,
-                    sourceSkillId: skill.id,
-                  },
-                  1.0,
-                  act.name,
-                  round,
-                  rng,
-                  events,
-                  act.id
+                    actorId: act.id,
+                    actorName: act.name,
+                    skillId: skill.id,
+                    round,
+                    magnitude: sanitizeShieldCrackedMult(
+                      adminConfig?.shieldCrackedMult
+                    ),
+                    events,
+                  }
                 );
-                targetAfter = st.targetAfter;
-                logs.push(...st.logs);
-                popups.push(...st.popups);
+                targetAfter = crackRes.targetAfter;
+                logs.push(...crackRes.logs);
+                popups.push(...crackRes.popups);
               }
             }
             nextUnits[cIdx] = targetAfter;
@@ -2811,7 +3641,7 @@ function resolveUnitActionCore(
         }
 
         case 'silence_target': {
-          const opp = getTargetableOpponents(nextUnits, act.side);
+          const opp = getTargetableOpponents(nextUnits, act.side, act.detectsStealth);
           const chosen = opp.find((u) => u.id === targetId) ?? opp[0];
           if (chosen) {
             const cIdx = nextUnits.findIndex((u) => u.id === chosen.id);
@@ -2857,15 +3687,42 @@ function resolveUnitActionCore(
           const enemies = nextUnits.filter(
             (u) => u.side !== act.side && u.alive
           );
+          const stealthedIndices: number[] = [];
+          for (let i = 0; i < enemies.length; i++) {
+            const eIdx = nextUnits.findIndex((u) => u.id === enemies[i].id);
+            if (eIdx !== -1 && hasStatus(nextUnits[eIdx], 'stealth')) {
+              stealthedIndices.push(eIdx);
+            }
+          }
+          for (let i = stealthedIndices.length - 1; i > 0; i--) {
+            const j = Math.floor(rng() * (i + 1));
+            const tmp = stealthedIndices[i];
+            stealthedIndices[i] = stealthedIndices[j];
+            stealthedIndices[j] = tmp;
+          }
+          const detectLimit = computeLidarDetectCount(
+            skillLv,
+            adminConfig?.stealth,
+            getEffectiveSkillMaxLevel(adminConfig)
+          );
+          const revealedUnitIds = new Set<string>(
+            stealthedIndices
+              .slice(0, detectLimit)
+              .map((idx) => nextUnits[idx].id)
+          );
+
           let revealedCount = 0;
+          const revealedNames: string[] = [];
           const slotIndices: number[] = [];
           for (const enemy of enemies) {
             const eIdx = nextUnits.findIndex((u) => u.id === enemy.id);
             slotIndices.push(getSlotIndex(units, enemy.id));
             let stList = nextUnits[eIdx].statuses;
-            if (hasStatus(nextUnits[eIdx], 'stealth')) {
+            const shouldReveal = revealedUnitIds.has(enemy.id);
+            if (shouldReveal) {
               stList = removeStatus(stList, 'stealth');
               revealedCount += 1;
+              revealedNames.push(enemy.name);
               popups.push({
                 id: nextId('pop'),
                 unitId: enemy.id,
@@ -2879,7 +3736,11 @@ function resolveUnitActionCore(
               magnitude: scaled.buffMagnitude,
               sourceSkillId: skill.id,
             });
-            nextUnits[eIdx] = { ...nextUnits[eIdx], statuses: stList };
+            nextUnits[eIdx] = {
+              ...nextUnits[eIdx],
+              statuses: stList,
+              ...(shouldReveal ? { revealedThisRound: true } : {}),
+            };
             popups.push({
               id: nextId('pop'),
               unitId: enemy.id,
@@ -2893,11 +3754,15 @@ function resolveUnitActionCore(
             actorName: act.name,
             actorSide: act.side,
             tag: 'STATUS',
-            templateKey: 'log.scanReveal',
+            templateKey:
+              revealedNames.length > 0 ? 'log.scanReveal' : 'log.scanRevealNone',
             params: {
               actor: act.name,
               skillId: skill.id,
               revealed: revealedCount,
+              ...(revealedNames.length > 0
+                ? { revealedNames: revealedNames.join(', ') }
+                : {}),
             },
           });
           return {
@@ -2927,9 +3792,12 @@ function resolveUnitActionCore(
             )[0];
           if (chosenAlly) {
             const aIdx = nextUnits.findIndex((u) => u.id === chosenAlly.id);
+            const healPowerMult = 1 + (act.derived.healPowerPct ?? 0) / 100;
             const healAmt = Math.min(
               chosenAlly.derived.maxHp - chosenAlly.hp,
-              Math.round(chosenAlly.derived.maxHp * scaled.buffMagnitude)
+              Math.round(
+                chosenAlly.derived.maxHp * scaled.buffMagnitude * healPowerMult
+              )
             );
             nextUnits[aIdx] = {
               ...chosenAlly,
@@ -2975,6 +3843,7 @@ function resolveUnitActionCore(
               fxEvent: {
                 id: nextId('fx'),
                 kind: 'heal',
+                tone: 'heal',
                 fromSide: act.side,
                 fromSlotIndex,
                 toSide: act.side,
@@ -3031,6 +3900,7 @@ function resolveUnitActionCore(
               fxEvent: {
                 id: nextId('fx'),
                 kind: 'heal',
+                tone: 'sp',
                 fromSide: act.side,
                 fromSlotIndex,
                 toSide: act.side,
@@ -3044,8 +3914,48 @@ function resolveUnitActionCore(
           break;
         }
 
+        case 'sp_transfer': {
+          const transfer = resolveSpTransfer(
+            nextUnits,
+            act.id,
+            skillLv,
+            adminConfig?.fluxTransfer,
+            transferCount,
+            round,
+            nextId,
+            skill.id,
+            getEffectiveSkillMaxLevel(adminConfig)
+          );
+          popups.push(...transfer.popups);
+          logs.push(transfer.logEntry);
+          const toSlotIndices = transfer.recipientIds.map((id) =>
+            getSlotIndex(units, id)
+          );
+          return {
+            updatedUnits: transfer.updatedUnits,
+            logEntries: logs,
+            popups,
+            fxEvent: {
+              id: nextId('fx'),
+              kind: 'heal',
+              tone: 'sp',
+              fromSide: act.side,
+              fromSlotIndex,
+              toSide: act.side,
+              toSlotIndices,
+              accentHex: '#38BDF8',
+            },
+            destroyedUnitIds,
+            soundCue: 'heal',
+          };
+        }
+
         case 'heal_field_hot': {
           const slotIndices: number[] = [];
+          const healPowerMult = 1 + (act.derived.healPowerPct ?? 0) / 100;
+          const effectiveHotMagnitude = Number(
+            (scaled.buffMagnitude * healPowerMult).toFixed(4)
+          );
           for (let i = 0; i < nextUnits.length; i++) {
             const ally = nextUnits[i];
             if (ally.side !== act.side || !ally.alive) continue;
@@ -3055,7 +3965,7 @@ function resolveUnitActionCore(
               statuses: addOrRefreshStatus(ally.statuses, {
                 type: 'regen_hp',
                 turnsRemaining: skill.duration ?? 3,
-                magnitude: scaled.buffMagnitude,
+                magnitude: effectiveHotMagnitude,
                 sourceSkillId: skill.id,
               }),
               animState: ally.id === act.id ? 'casting' : 'shielded',
@@ -3063,7 +3973,7 @@ function resolveUnitActionCore(
             popups.push({
               id: nextId('pop'),
               unitId: ally.id,
-              text: `REGEN ${Math.round(scaled.buffMagnitude * 100)}%`,
+              text: `REGEN ${Math.round(effectiveHotMagnitude * 100)}%`,
               tone: 'heal',
             });
           }
@@ -3083,6 +3993,7 @@ function resolveUnitActionCore(
             fxEvent: {
               id: nextId('fx'),
               kind: 'heal',
+              tone: 'heal',
               fromSide: act.side,
               fromSlotIndex,
               toSide: act.side,
@@ -3105,10 +4016,20 @@ function resolveUnitActionCore(
               ally.derived.maxSp - ally.sp,
               scaled.spAmount || 10
             );
-            const shdGain = Math.min(
-              ally.derived.maxShield - ally.shield,
-              Math.round(ally.derived.maxShield * (scaled.buffMagnitude || 0.25))
-            );
+            const shieldBlocked =
+              (ally.id === act.id && shieldBreakAtTurnStart) ||
+              hasStatus(ally, 'shield_break');
+            const shieldPowerMult = 1 + (act.derived.shieldPowerPct ?? 0) / 100;
+            const shdGain = shieldBlocked
+              ? 0
+              : Math.min(
+                  ally.derived.maxShield - ally.shield,
+                  Math.round(
+                    ally.derived.maxShield *
+                      (scaled.buffMagnitude || 0.25) *
+                      shieldPowerMult
+                  )
+                );
             totalRestored += spGain + shdGain;
             nextUnits[i] = {
               ...ally,
@@ -3156,6 +4077,7 @@ function resolveUnitActionCore(
             fxEvent: {
               id: nextId('fx'),
               kind: 'heal',
+              tone: 'shield',
               fromSide: act.side,
               fromSlotIndex,
               toSide: act.side,
@@ -3216,6 +4138,7 @@ function resolveUnitActionCore(
             fxEvent: {
               id: nextId('fx'),
               kind: 'heal',
+              tone: 'buff',
               fromSide: act.side,
               fromSlotIndex,
               toSide: act.side,
@@ -3267,6 +4190,7 @@ function resolveUnitActionCore(
               fxEvent: {
                 id: nextId('fx'),
                 kind: 'heal',
+                tone: 'buff',
                 fromSide: act.side,
                 fromSlotIndex,
                 toSide: act.side,
@@ -3326,6 +4250,7 @@ function resolveUnitActionCore(
             fxEvent: {
               id: nextId('fx'),
               kind: 'heal',
+              tone: 'buff',
               fromSide: act.side,
               fromSlotIndex,
               toSide: act.side,
@@ -3344,14 +4269,17 @@ function resolveUnitActionCore(
             const ally = nextUnits[i];
             if (ally.side !== act.side || !ally.alive) continue;
             slotIndices.push(getSlotIndex(units, ally.id));
+            const shieldBlocked =
+              (ally.id === act.id && shieldBreakAtTurnStart) ||
+              hasStatus(ally, 'shield_break');
             const hpGain = ally.derived.maxHp - ally.hp;
-            const shdGain = ally.derived.maxShield - ally.shield;
+            const shdGain = shieldBlocked ? 0 : ally.derived.maxShield - ally.shield;
             const hadDebuff = ally.statuses.some((s) => DEBUFF_TYPES.has(s.type));
             totalRestored += hpGain + shdGain;
             nextUnits[i] = {
               ...ally,
               hp: ally.derived.maxHp,
-              shield: ally.derived.maxShield,
+              shield: ally.shield + shdGain,
               statuses: ally.statuses.filter((s) => !DEBUFF_TYPES.has(s.type)),
               animState: ally.id === act.id ? 'casting' : 'shielded',
             };
@@ -3418,6 +4346,7 @@ function resolveUnitActionCore(
             fxEvent: {
               id: nextId('fx'),
               kind: 'heal',
+              tone: 'heal',
               fromSide: act.side,
               fromSlotIndex,
               toSide: act.side,
@@ -3426,6 +4355,109 @@ function resolveUnitActionCore(
             },
             destroyedUnitIds,
             soundCue: 'heal',
+          };
+        }
+
+        case 'spec': {
+          const livingAllies = nextUnits.filter(
+            (u) => u.side === act.side && u.alive
+          );
+          const hasSpecKind = (k: string) =>
+            Boolean(skill.effects?.some((e) => e.kind === k));
+          let targets: CombatUnit[] = [];
+          if (skill.targetType === 'self') {
+            targets = [act];
+          } else if (skill.targetType === 'all_allies') {
+            targets = livingAllies;
+          } else if (skill.targetType === 'single_ally') {
+            const explicit = targetId
+              ? livingAllies.find((a) => a.id === targetId)
+              : undefined;
+            if (explicit) {
+              targets = [explicit];
+            } else if (
+              hasSpecKind('restore_shield_pct') &&
+              !hasSpecKind('heal_hp_pct')
+            ) {
+              const eligible = livingAllies
+                .filter(
+                  (a) =>
+                    a.derived.maxShield > 0 && !hasStatus(a, 'shield_break')
+                )
+                .sort(
+                  (a, b) =>
+                    a.shield / Math.max(1, a.derived.maxShield) -
+                      b.shield / Math.max(1, b.derived.maxShield) ||
+                    a.id.localeCompare(b.id)
+                );
+              const fallback =
+                eligible[0] ??
+                [...livingAllies].sort(
+                  (a, b) =>
+                    a.shield / Math.max(1, a.derived.maxShield) -
+                      b.shield / Math.max(1, b.derived.maxShield) ||
+                    a.id.localeCompare(b.id)
+                )[0];
+              if (fallback) targets = [fallback];
+            } else {
+              const lowest = [...livingAllies].sort(
+                (a, b) =>
+                  a.hp / Math.max(1, a.derived.maxHp) -
+                    b.hp / Math.max(1, b.derived.maxHp) ||
+                  a.id.localeCompare(b.id)
+              )[0];
+              if (lowest) targets = [lowest];
+            }
+          } else {
+            const enemies = getValidEnemyTargets(
+              nextUnits,
+              act,
+              'skill',
+              skill.id,
+              adminConfig
+            );
+            if (skill.targetType === 'single_enemy') {
+              const chosen =
+                (targetId
+                  ? enemies.find((e) => e.id === targetId)
+                  : undefined) ?? enemies[0];
+              if (chosen) targets = [chosen];
+            } else if (skill.targetType === 'multi_enemy') {
+              const primary = targetId
+                ? enemies.find((e) => e.id === targetId)
+                : undefined;
+              const ordered = primary
+                ? [primary, ...enemies.filter((e) => e.id !== primary.id)]
+                : enemies;
+              targets = ordered.slice(0, skill.maxTargets ?? 3);
+            } else {
+              targets = enemies;
+            }
+          }
+
+          const specRes = resolveSkillSpecs(act, skill, targets, scaled, {
+            units: nextUnits,
+            round,
+            spCost: usability.spCost,
+            adminConfig,
+            rng,
+            shieldBreakAtTurnStart,
+            fromSlotIndex,
+            getSlotIndex,
+            nextId,
+            events,
+            popups,
+            logs,
+            destroyedUnitIds,
+            applyDamageToUnit,
+          });
+          return {
+            updatedUnits: specRes.updatedUnits,
+            logEntries: specRes.logEntries,
+            popups: specRes.popups,
+            fxEvent: specRes.fxEvent,
+            destroyedUnitIds: specRes.destroyedUnitIds,
+            soundCue: specRes.soundCue,
           };
         }
       }
@@ -3506,23 +4538,44 @@ function resolveUnitActionCore(
   if (!res.evaded && nextUnits[targetIdx].alive && actor.archetype) {
     const archDef = ENEMY_ARCHETYPE_DEFS[actor.archetype];
     if (archDef.inflictsStatus && archDef.statusChance) {
-      const st = tryInflictStatus(
-        nextUnits[targetIdx],
-        {
-          type: archDef.inflictsStatus,
-          turnsRemaining: 2,
-          sourceName: actor.name,
-        },
-        archDef.statusChance * 0.55,
-        actor.name,
-        round,
-        rng,
-        events,
-        actor.id
-      );
-      nextUnits[targetIdx] = st.targetAfter;
-      logs.push(...st.logs);
-      popups.push(...st.popups);
+      if (archDef.inflictsStatus === 'shield_cracked') {
+        if (rng() <= archDef.statusChance * 0.55) {
+          const crackRes = applyShieldCracked(
+            nextUnits[targetIdx],
+            sanitizeShieldCrackedTurns(adminConfig?.shieldCrackedTurns),
+            {
+              actorId: actor.id,
+              actorName: actor.name,
+              round,
+              magnitude: sanitizeShieldCrackedMult(
+                adminConfig?.shieldCrackedMult
+              ),
+              events,
+            }
+          );
+          nextUnits[targetIdx] = crackRes.targetAfter;
+          logs.push(...crackRes.logs);
+          popups.push(...crackRes.popups);
+        }
+      } else {
+        const st = tryInflictStatus(
+          nextUnits[targetIdx],
+          {
+            type: archDef.inflictsStatus,
+            turnsRemaining: 2,
+            sourceName: actor.name,
+          },
+          archDef.statusChance * 0.55,
+          actor.name,
+          round,
+          rng,
+          events,
+          actor.id
+        );
+        nextUnits[targetIdx] = st.targetAfter;
+        logs.push(...st.logs);
+        popups.push(...st.popups);
+      }
     }
   }
 
@@ -3538,31 +4591,56 @@ function resolveUnitActionCore(
       if (!otherOpponent.alive) continue;
       const oIdx = nextUnits.findIndex((u) => u.id === otherOpponent.id);
       fxTargetSlots.push(getSlotIndex(units, otherOpponent.id));
-      const shieldDisabled = hasStatus(otherOpponent, 'shield_break');
       const actualSplash =
         (adminConfig?.godMode && otherOpponent.isPlayer) ||
         hasStatus(otherOpponent, 'invincible')
           ? 0
           : splashDmg;
-      let nextShd = otherOpponent.shield;
-      let nextHp = otherOpponent.hp;
-      let splashAbsorbed = 0;
-      let splashHpDmg = 0;
-      if (!shieldDisabled && nextShd > 0) {
-        splashAbsorbed = Math.min(nextShd, actualSplash);
-        nextShd -= splashAbsorbed;
-        splashHpDmg = actualSplash - splashAbsorbed;
-        nextHp = Math.max(0, nextHp - splashHpDmg);
-      } else {
-        splashHpDmg = actualSplash;
-        nextHp = Math.max(0, nextHp - splashHpDmg);
-      }
+      const splashDmgRes = applyShieldThenHull(otherOpponent, actualSplash);
+      const nextShd = splashDmgRes.nextShield;
+      const nextHp = splashDmgRes.nextHp;
+      const splashAbsorbed = splashDmgRes.shieldLost;
+      const splashHpDmg = splashDmgRes.hullDamage;
       const splashKo = nextHp <= 0;
+
+      let nextSplashStatuses = splashKo ? [] : otherOpponent.statuses;
+      let nextSplashHits = otherOpponent.hitsSinceOwnTurn;
+      if (!splashKo && splashDmgRes.brokeNow) {
+        nextSplashStatuses = removeStatus(nextSplashStatuses, 'shield_cracked');
+      }
+      if (shieldRegenCfg.enabled) {
+        if (actor.side !== otherOpponent.side && (splashAbsorbed > 0 || splashHpDmg > 0)) {
+          nextSplashHits = getUnitHitsSinceOwnTurn(otherOpponent) + 1;
+        }
+        if (!splashKo && splashDmgRes.brokeNow) {
+          nextSplashStatuses = addOrRefreshStatus(nextSplashStatuses, {
+            type: 'shield_break',
+            turnsRemaining: shieldRegenCfg.restartTurns,
+            isDebuff: true,
+            sourceName: actor.name,
+          });
+          events.push({
+            id: nextId('ev'),
+            round,
+            turn: 0,
+            actorId: actor.id,
+            targetId: otherOpponent.id,
+            type: 'status_applied',
+            statusId: 'shield_break',
+            flags: { isDebuff: true },
+          });
+        }
+      }
+
       nextUnits[oIdx] = {
         ...otherOpponent,
         shield: nextShd,
         hp: nextHp,
         alive: !splashKo,
+        statuses: nextSplashStatuses,
+        ...(nextSplashHits !== undefined
+          ? { hitsSinceOwnTurn: nextSplashHits }
+          : {}),
         animState: splashKo ? 'destroyed' : 'hit',
       };
       if (actualSplash > 0) {
@@ -3654,11 +4732,219 @@ function resolveUnitActionCore(
   };
 }
 
+const SUPPORT_RESERVE_EFFECT_KINDS = new Set<SkillDefinition['effectKind']>([
+  'heal_single',
+  'heal_field_hot',
+  'energize_shield_field',
+  'full_recovery_elite',
+]);
+
+const isSpecHpHealSkill = (s: SkillDefinition): boolean =>
+  s.effectKind === 'spec' &&
+  Boolean(s.effects?.some((e) => e.kind === 'heal_hp_pct'));
+
+const isSpecShieldRestoreSkill = (s: SkillDefinition): boolean =>
+  s.effectKind === 'spec' &&
+  Boolean(s.effects?.some((e) => e.kind === 'restore_shield_pct'));
+
+const isSupportReserveSkill = (s: SkillDefinition): boolean =>
+  SUPPORT_RESERVE_EFFECT_KINDS.has(s.effectKind) ||
+  isSpecHpHealSkill(s) ||
+  isSpecShieldRestoreSkill(s);
+
+export type FluxTransferRulesInput =
+  | (FluxTransferLevelRule & {
+      spEconomy?: SpEconomyConfig | null;
+      skillMaxLevel?: number;
+      minPerLevel?: number;
+      allySpBelowPct?: number;
+      keepSelfPct?: number;
+    })
+  | (FluxTransferConfig & {
+      spEconomy?: SpEconomyConfig | null;
+      skillMaxLevel?: number;
+    });
+
+export function computeFluxBattlePressure(
+  units: CombatUnit[],
+  side: CombatSide
+): number {
+  let ownCur = 0;
+  let ownMax = 0;
+  let foeCur = 0;
+  let foeMax = 0;
+  for (const u of units) {
+    const cur = u.alive ? Math.max(0, u.hp) + Math.max(0, u.shield) : 0;
+    const max = Math.max(0, u.derived.maxHp) + Math.max(0, u.derived.maxShield);
+    if (u.side === side) {
+      ownCur += cur;
+      ownMax += max;
+    } else {
+      foeCur += cur;
+      foeMax += max;
+    }
+  }
+  const ownRatio = ownMax > 0 ? ownCur / ownMax : 0;
+  const foeRatio = foeMax > 0 ? foeCur / foeMax : 0;
+  return ownRatio - foeRatio;
+}
+
+export function pickFluxCount(
+  units: CombatUnit[],
+  actorId: string,
+  rules: FluxTransferRulesInput,
+  pressure?: number,
+  rng: () => number = Math.random
+): number {
+  const actor = units.find((u) => u.id === actorId);
+  if (!actor || !actor.alive || actor.derived.maxSp <= 0 || actor.sp <= 0) {
+    return 0;
+  }
+
+  const fluxLv = actor.skillLevels['sup_flux_transfer'] ?? actor.skillLevel ?? 1;
+  const sanitizedCfg = sanitizeFluxTransferConfig(
+    'levels' in rules
+      ? rules
+      : {
+          ...DEFAULT_FLUX_TRANSFER_CONFIG,
+          levels: DEFAULT_FLUX_TRANSFER_CONFIG.levels.map(() => ({
+            targets: rules.targets,
+            pct: rules.pct,
+            fee: rules.fee,
+          })),
+          minPerLevel: rules.minPerLevel,
+          allySpBelowPct: rules.allySpBelowPct,
+          keepSelfPct: rules.keepSelfPct,
+        }
+  );
+  const effSkillMax = getEffectiveSkillMaxLevel(
+    'skillMaxLevel' in rules ? rules.skillMaxLevel : undefined
+  );
+  const rule: FluxTransferLevelRule =
+    'levels' in rules
+      ? getFluxTransferRule(fluxLv, sanitizedCfg, effSkillMax)
+      : rules;
+  const spEconomy =
+    'spEconomy' in rules && rules.spEconomy ? { spEconomy: rules.spEconomy } : undefined;
+
+  const maxTargets = Math.max(0, Math.floor(rule.targets));
+  if (maxTargets <= 0) return 0;
+
+  const diff =
+    typeof pressure === 'number' && Number.isFinite(pressure)
+      ? pressure
+      : computeFluxBattlePressure(units, actor.side);
+
+  if (diff >= 0.2 && rng() >= 0.5) {
+    return 0;
+  }
+  const baseKeepRatio = sanitizedCfg.keepSelfPct / 100;
+  const keepSelfRatio = diff <= -0.2 ? Math.min(baseKeepRatio, 0.15) : baseKeepRatio;
+  const allyBelowRatio = sanitizedCfg.allySpBelowPct / 100;
+
+  // Never cast if support has a ready heal/shield/revive skill it can afford; keep reserve SP logic
+  let reserveSp = 0;
+  for (const sid of actor.equippedSkillIds) {
+    const sk = getSkillById(sid);
+    if (!sk || !isSupportReserveSkill(sk)) continue;
+    if (!isSkillAllowedForClass(sk, actor.classId)) continue;
+    if ((actor.skillCooldowns[sid] ?? 0) > 0) continue;
+    if (sk.oncePerBattle && actor.usedOnceSkills.includes(sid)) continue;
+    reserveSp += getEffectiveSpCost(sk, actor, spEconomy);
+    if (canUnitUseSkill(actor, sid, spEconomy).canUse) {
+      return 0;
+    }
+  }
+
+  // Emergency rule: cast only if at least 1 ally (self excluded) is below threshold (default 25% SP)
+  const underThresholdAllies = units.filter(
+    (u) =>
+      u.side === actor.side &&
+      u.alive &&
+      u.id !== actor.id &&
+      u.derived.maxSp > 0 &&
+      u.sp < u.derived.maxSp * allyBelowRatio
+  );
+  if (underThresholdAllies.length === 0) return 0;
+
+  const maxAffordable = getMaxAffordableFluxCount(
+    units,
+    actorId,
+    fluxLv,
+    sanitizedCfg,
+    effSkillMax
+  );
+  if (maxAffordable <= 0) return 0;
+
+  const amountEach = getFluxPlannedAmountEach(
+    actor.sp,
+    fluxLv,
+    sanitizedCfg,
+    effSkillMax
+  );
+  if (amountEach <= 0) return 0;
+
+  const hasReadySkillAboveSp = (ally: CombatUnit): boolean =>
+    ally.equippedSkillIds.some((sid) => {
+      const sk = getSkillById(sid);
+      if (!sk || sk.category === 'passive') return false;
+      if (!isSkillAllowedForClass(sk, ally.classId)) return false;
+      if ((ally.skillCooldowns[sid] ?? 0) > 0) return false;
+      if (sk.oncePerBattle && ally.usedOnceSkills.includes(sid)) return false;
+      return getEffectiveSpCost(sk, ally, spEconomy) > ally.sp;
+    });
+
+  const orderedUnderThreshold = [...underThresholdAllies].sort((a, b) => {
+    const aNeed = hasReadySkillAboveSp(a) ? 0 : 1;
+    const bNeed = hasReadySkillAboveSp(b) ? 0 : 1;
+    if (aNeed !== bNeed) return aNeed - bNeed;
+    return a.sp / a.derived.maxSp - b.sp / b.derived.maxSp;
+  });
+
+  const desiredK = Math.min(
+    maxTargets,
+    orderedUnderThreshold.length,
+    maxAffordable
+  );
+
+  // Match resolveSpTransfer recipient pool (lowest SP% non-full allies) for exact SP cost check
+  const transferPool = units
+    .filter(
+      (u) =>
+        u.side === actor.side &&
+        u.alive &&
+        u.id !== actor.id &&
+        u.derived.maxSp > 0 &&
+        u.sp < u.derived.maxSp
+    )
+    .sort((a, b) => a.sp / a.derived.maxSp - b.sp / b.derived.maxSp);
+
+  const minRemainingSp = Math.max(reserveSp, keepSelfRatio * actor.derived.maxSp);
+
+  for (let k = desiredK; k >= 1; k--) {
+    let totalMoved = 0;
+    const slice = transferPool.slice(0, k);
+    for (const ally of slice) {
+      totalMoved += Math.min(amountEach, Math.max(0, ally.derived.maxSp - ally.sp));
+    }
+    if (totalMoved <= 0) continue;
+    const cost = Math.ceil(totalMoved * (1 + rule.fee / 100));
+    if (actor.sp - cost >= minRemainingSp) {
+      return k;
+    }
+  }
+
+  return 0;
+}
+
 export function chooseAiDecision(
   actor: CombatUnit,
   units: CombatUnit[],
-  rng: () => number = Math.random
-): { action: ActionType; targetId: string | null; skillId?: string } {
+  rng: () => number = Math.random,
+  adminConfig?: Partial<AdminConfig>,
+  turnLockedSkillIds?: readonly string[],
+  step2UsedSoFar: number = 0
+): { action: ActionType; targetId: string | null; skillId?: string; transferCount?: number } {
   const allies = units.filter((u) => u.side === actor.side && u.alive);
   const enemies = getValidEnemyTargets(units, actor, 'attack');
 
@@ -3679,17 +4965,36 @@ export function chooseAiDecision(
 
   // Evaluate usable skills strictly on actor's equipped skill bar
   const usableSkills = actor.equippedSkillIds
-    .map((id) => getSkillById(id))
+    .map((id) => getSkillById(id, adminConfig))
     .filter(
-      (s): s is SkillDefinition => Boolean(s) && canUnitUseSkill(actor, s!.id).canUse
+      (s): s is SkillDefinition =>
+        Boolean(s) &&
+        canUnitUseSkill(actor, s!.id, adminConfig, turnLockedSkillIds).canUse
     );
 
   // Repair Ship / Support heals injured allies first
+  const aoeSpecHealSkill = usableSkills.find(
+    (s) => s.targetType === 'all_allies' && isSpecHpHealSkill(s)
+  );
+  if (aoeSpecHealSkill) {
+    const injuredMulti = allies.filter(
+      (a) => a.derived.maxHp > 0 && a.hp < a.derived.maxHp * 0.7
+    );
+    if (injuredMulti.length >= 2) {
+      return {
+        action: 'skill',
+        targetId: null,
+        skillId: aoeSpecHealSkill.id,
+      };
+    }
+  }
+
   const healSkill = usableSkills.find(
     (s) =>
       s.effectKind === 'heal_single' ||
       s.effectKind === 'heal_field_hot' ||
-      s.effectKind === 'full_recovery_elite'
+      s.effectKind === 'full_recovery_elite' ||
+      (s.targetType !== 'all_allies' && isSpecHpHealSkill(s))
   );
   if (healSkill) {
     const injured = [...allies]
@@ -3698,28 +5003,97 @@ export function chooseAiDecision(
     if (injured.length > 0) {
       return {
         action: 'skill',
-        targetId: injured[0].id,
+        targetId: healSkill.targetType === 'all_allies' ? null : injured[0].id,
         skillId: healSkill.id,
       };
     }
   }
 
-  // Scan if any opposing ship is stealthed
-  const scanSkill = usableSkills.find((s) => s.effectKind === 'scan_reveal');
-  if (
-    scanSkill &&
-    units.some((u) => u.side !== actor.side && u.alive && isUnitStealthed(u))
-  ) {
-    return { action: 'skill', targetId: null, skillId: scanSkill.id };
+  // Support shield restoration (spec skills like sup_energize_target)
+  const shieldSpecSkill = usableSkills.find((s) => isSpecShieldRestoreSkill(s));
+  if (shieldSpecSkill) {
+    const lowShieldAllies = [...allies]
+      .filter(
+        (a) =>
+          a.derived.maxShield > 0 &&
+          !hasStatus(a, 'shield_break') &&
+          (a.shield < a.derived.maxShield || hasStatus(a, 'shield_cracked'))
+      )
+      .sort(
+        (a, b) =>
+          a.shield / a.derived.maxShield - b.shield / b.derived.maxShield ||
+          a.id.localeCompare(b.id)
+      );
+    if (lowShieldAllies.length > 0) {
+      return {
+        action: 'skill',
+        targetId:
+          shieldSpecSkill.targetType === 'all_allies' ||
+          shieldSpecSkill.targetType === 'self'
+            ? null
+            : lowShieldAllies[0].id,
+        skillId: shieldSpecSkill.id,
+      };
+    }
   }
 
-  // Offensive or tactical skill roll
+  // NPC Support Lidar sweep (step-2 skill governed by pickLidarCast)
+  if (
+    pickLidarCast(
+      units,
+      actor,
+      {
+        role: 'npc',
+        adminConfig,
+        step2UsedSoFar,
+        turnLockedSkillIds,
+      },
+      rng
+    )
+  ) {
+    return { action: 'skill', targetId: null, skillId: LIDAR_SKILL_ID };
+  }
+
+  // Support Flux Transfer (sp_transfer): dedicated emergency threshold & keep-self rule
+  const fluxSkill = usableSkills.find((s) => s.effectKind === 'sp_transfer');
+  if (fluxSkill) {
+    const fluxCfg = sanitizeFluxTransferConfig(adminConfig?.fluxTransfer);
+    const pressure = computeFluxBattlePressure(units, actor.side);
+    const fluxCount = pickFluxCount(
+      units,
+      actor.id,
+      {
+        ...fluxCfg,
+        spEconomy: adminConfig?.spEconomy,
+        skillMaxLevel: getEffectiveSkillMaxLevel(adminConfig),
+      },
+      pressure,
+      rng
+    );
+    if (fluxCount > 0) {
+      return {
+        action: 'skill',
+        targetId: null,
+        skillId: fluxSkill.id,
+        transferCount: fluxCount,
+      };
+    }
+  }
+
+  // Offensive or tactical skill roll (sp_transfer & scan_reveal excluded; handled above)
   const tacticalSkills = usableSkills.filter(
-    (s) => !s.isToggle && s.effectKind !== 'heal_single' && s.effectKind !== 'heal_field_hot'
+    (s) =>
+      !s.isToggle &&
+      s.effectKind !== 'heal_single' &&
+      s.effectKind !== 'heal_field_hot' &&
+      s.effectKind !== 'sp_transfer' &&
+      s.effectKind !== 'scan_reveal' &&
+      !isSpecHpHealSkill(s) &&
+      !isSpecShieldRestoreSkill(s)
   );
   if (tacticalSkills.length > 0 && rng() < 0.55) {
     const pick = randomItem(tacticalSkills, rng);
-    const skillEnemies = getValidEnemyTargets(units, actor, 'skill', pick.id);
+    const skillEnemies = getValidEnemyTargets(units, actor, 'skill', pick.id, adminConfig);
     const skillEnemyTarget =
       actor.archetype === 'sniper'
         ? [...skillEnemies].sort((a, b) => a.hp - b.hp)[0]
@@ -3749,6 +5123,188 @@ export function chooseAiDecision(
   return { action: 'attack', targetId: target.id };
 }
 
+export interface TurnDecision {
+  action: ActionType;
+  targetId: string | null;
+  skillId?: string;
+  transferCount?: number;
+  matchedRuleIndex?: number | null;
+}
+
+export interface MultiStepTurnResolution extends ActionResolution {
+  decisionsCount: number;
+  step2SkillIds: string[];
+  fxEvents: CombatFxEvent[];
+  lastDecision: TurnDecision | null;
+  lastMatchedRuleIndex: number | null;
+}
+
+export function resolveMultiStepTurn(params: {
+  units: CombatUnit[];
+  actorId: string;
+  round: number;
+  adminConfig?: Partial<AdminConfig>;
+  rng?: () => number;
+  initialTurnStep2Used?: number;
+  initialTurnLockedSkillIds?: readonly string[];
+  chooseNextDecision: (
+    currentUnits: CombatUnit[],
+    currentActor: CombatUnit,
+    turnLockedSkillIds: string[],
+    stepIndex: number,
+    step2UsedSoFar: number
+  ) => TurnDecision | null | undefined;
+}): MultiStepTurnResolution {
+  const {
+    units,
+    actorId,
+    round,
+    adminConfig,
+    rng = Math.random,
+    initialTurnStep2Used = 0,
+    initialTurnLockedSkillIds = [],
+    chooseNextDecision,
+  } = params;
+
+  const turnPhaseCfg = sanitizeTurnPhaseConfig(adminConfig?.turnPhase);
+  const baseStep2Used = Math.max(0, Math.floor(initialTurnStep2Used || 0));
+  const maxSteps = Math.max(1, turnPhaseCfg.maxStep2PerTurn - baseStep2Used + 1);
+
+  let currentUnits = units;
+  let step2Used = baseStep2Used;
+  let lockedSkillIds: string[] = [...initialTurnLockedSkillIds];
+  const step2SkillIds: string[] = [];
+  const logEntries: CombatLogEntry[] = [];
+  const events: BattleEvent[] = [];
+  const popups: FloatingPopup[] = [];
+  const fxEvents: CombatFxEvent[] = [];
+  const destroyedUnitIds: string[] = [];
+  let lastFxEvent: CombatFxEvent | null = null;
+  let lastSoundCue: ActionResolution['soundCue'] = 'defend';
+  let lastDecision: TurnDecision | null = null;
+  let lastMatchedRuleIndex: number | null = null;
+  let decisionsCount = 0;
+
+  for (let stepIdx = 0; stepIdx < maxSteps; stepIdx++) {
+    const currentActor = currentUnits.find((u) => u.id === actorId);
+    const hasAliveEnemies = currentUnits.some(
+      (u) => currentActor && u.side !== currentActor.side && u.alive
+    );
+    const hasAliveAllies = currentUnits.some(
+      (u) => currentActor && u.side === currentActor.side && u.alive
+    );
+    if (!currentActor || !currentActor.alive || !hasAliveEnemies || !hasAliveAllies) {
+      break;
+    }
+
+    const picked = chooseNextDecision(
+      currentUnits,
+      currentActor,
+      lockedSkillIds,
+      stepIdx,
+      step2Used
+    );
+    const decision: TurnDecision = picked ?? {
+      action: 'defend',
+      targetId: null,
+    };
+    decisionsCount += 1;
+    lastDecision = decision;
+    lastMatchedRuleIndex = decision.matchedRuleIndex ?? null;
+
+    const skillDef =
+      decision.action === 'skill' && decision.skillId
+        ? getSkillById(decision.skillId, adminConfig)
+        : undefined;
+
+    const res = resolveUnitAction(
+      currentUnits,
+      actorId,
+      decision.action,
+      decision.targetId,
+      round,
+      adminConfig,
+      rng,
+      decision.skillId,
+      decision.transferCount,
+      {
+        skipTurnStartTicks: stepIdx > 0 || baseStep2Used > 0,
+        turnLockedSkillIds: lockedSkillIds,
+      }
+    );
+
+    currentUnits = res.updatedUnits;
+    logEntries.push(...res.logEntries);
+    events.push(...res.events);
+    popups.push(...res.popups);
+    destroyedUnitIds.push(...res.destroyedUnitIds);
+    if (res.fxEvent) {
+      fxEvents.push(res.fxEvent);
+      lastFxEvent = res.fxEvent;
+    }
+    lastSoundCue = res.soundCue;
+
+    const actorAfter = currentUnits.find((u) => u.id === actorId);
+    const aliveEnemiesCount = currentUnits.filter(
+      (u) => u.side === 'enemy' && u.alive
+    ).length;
+    const aliveAlliesCount = currentUnits.filter(
+      (u) => u.side === 'ally' && u.alive
+    ).length;
+    const didCastSkill =
+      decision.action === 'skill' &&
+      Boolean(decision.skillId) &&
+      res.events.some(
+        (ev) =>
+          ev.type === 'skill_cast' &&
+          ev.actorId === actorId &&
+          ev.skillId === decision.skillId
+      );
+
+    const phaseOutcome = evaluateTurnPhaseAfterAction({
+      skill: skillDef,
+      didCastSkill,
+      actorAlive: Boolean(actorAfter?.alive),
+      aliveEnemiesCount,
+      aliveAlliesCount,
+      turnStep2Used: step2Used,
+      turnLockedSkillIds: lockedSkillIds,
+      cfg: turnPhaseCfg,
+    });
+
+    if (!phaseOutcome.keepTurn) {
+      break;
+    }
+
+    if (decision.skillId) {
+      step2SkillIds.push(decision.skillId);
+    }
+    step2Used = phaseOutcome.nextTurnStep2Used;
+    lockedSkillIds = phaseOutcome.nextTurnLockedSkillIds;
+  }
+
+  return {
+    updatedUnits: currentUnits,
+    logEntries,
+    events,
+    popups,
+    fxEvent: lastFxEvent,
+    fxEvents,
+    destroyedUnitIds,
+    soundCue: lastSoundCue,
+    decisionsCount,
+    step2SkillIds,
+    lastDecision,
+    lastMatchedRuleIndex,
+  };
+}
+
+export function clearRevealedFlags(units: CombatUnit[]): CombatUnit[] {
+  return units.map((u) =>
+    u.revealedThisRound ? { ...u, revealedThisRound: false } : u
+  );
+}
+
 /**
  * Pure per-enemy base reward formula (before global REWARD_MULT).
  * EXP per enemy = 25 + 8 * enemyLevel (x5 for bosses)
@@ -3776,17 +5332,36 @@ export function calculateSingleEnemyReward(
   };
 }
 
+function resolveBattleRewardsInput(
+  configOrAdmin?: BattleRewardsConfig | AdminConfig | null
+): BattleRewardsConfig {
+  if (
+    configOrAdmin &&
+    typeof configOrAdmin === 'object' &&
+    ('battleRewards' in configOrAdmin || 'rewardMultiplier' in configOrAdmin)
+  ) {
+    return sanitizeBattleRewardsConfig(
+      (configOrAdmin as AdminConfig).battleRewards
+    );
+  }
+  return sanitizeBattleRewardsConfig(configOrAdmin);
+}
+
 /**
- * Rebalanced Battle Rewards + War Points (battle + first-time base capture bonus):
- * - Victory = 100% of full victory pool (+ baseCaptureBonusWp if first capture)
- * - Defeat / Retreat = 50% of destroyed enemies + 20% flat consolation of full victory
+ * Rebalanced Battle Rewards + War Points:
+ * - Victory: 100% + national support bonus for low-level Gears (enemy WP scaled, baseCaptureBonusWp unscaled)
+ * - Defeat: destroyed-enemy shares (EXP/Credit/WP %), capped at defeatMaxPctOfVictory% of full victory
+ * - Retreat: defeat result x retreatRewardPct%
  */
 export function calculateBattleRewards(
   units: CombatUnit[],
   won: boolean,
   rewardMult: number = BALANCE_CONFIG.rewardMultDefault,
   sectorId?: string,
-  alreadyCaptured = true
+  alreadyCaptured = true,
+  battleRewardsOrAdmin?: BattleRewardsConfig | AdminConfig | null,
+  gearLevel?: number,
+  retreated = false
 ): {
   expGained: number;
   creditsGained: number;
@@ -3794,7 +5369,10 @@ export function calculateBattleRewards(
   baseCaptureBonusWp: number;
   fullVictoryExp: number;
   fullVictoryCredits: number;
+  supportExpPct: number;
+  supportCreditPct: number;
 } {
+  const cfg = resolveBattleRewardsInput(battleRewardsOrAdmin);
   const enemies = units.filter((u) => u.side === 'enemy');
 
   let fullExpRaw = 0;
@@ -3826,35 +5404,59 @@ export function calculateBattleRewards(
   }
 
   if (won) {
+    const effectiveLevel =
+      typeof gearLevel === 'number' && Number.isFinite(gearLevel)
+        ? Math.max(1, Math.floor(gearLevel))
+        : cfg.supportMaxLevel + 1;
+    const bonusLevelSteps = Math.max(
+      0,
+      cfg.supportMaxLevel + 1 - effectiveLevel
+    );
+    const supportExpPct = bonusLevelSteps * cfg.supportExpPerLevelPct;
+    const supportCreditPct = bonusLevelSteps * cfg.supportCreditWpPerLevelPct;
+    const expMult = 1 + supportExpPct / 100;
+    const creditWpMult = 1 + supportCreditPct / 100;
+
     return {
-      expGained: Math.round(fullVictoryExp * BALANCE_CONFIG.victoryRewardRatio),
-      creditsGained: Math.round(
-        fullVictoryCredits * BALANCE_CONFIG.victoryRewardRatio
+      expGained: Math.round(
+        fullVictoryExp * BALANCE_CONFIG.victoryRewardRatio * expMult
       ),
-      warPointsGained: Math.round(fullWpRaw) + baseCaptureBonusWp,
+      creditsGained: Math.round(
+        fullVictoryCredits * BALANCE_CONFIG.victoryRewardRatio * creditWpMult
+      ),
+      warPointsGained: Math.round(fullWpRaw * creditWpMult) + baseCaptureBonusWp,
       baseCaptureBonusWp,
       fullVictoryExp,
       fullVictoryCredits,
+      supportExpPct,
+      supportCreditPct,
     };
   }
 
-  const destroyedExp =
-    destroyedExpRaw * rewardMult * BALANCE_CONFIG.defeatDestroyedRatio;
-  const destroyedCredits =
-    destroyedCreditsRaw * rewardMult * BALANCE_CONFIG.defeatDestroyedRatio;
-  const destroyedWp = destroyedWpRaw * BALANCE_CONFIG.defeatDestroyedRatio;
+  const rawDefeatExp =
+    destroyedExpRaw * rewardMult * (cfg.defeatExpPct / 100);
+  const rawDefeatCredits =
+    destroyedCreditsRaw * rewardMult * (cfg.defeatCreditPct / 100);
+  const rawDefeatWp = destroyedWpRaw * (cfg.defeatWpPct / 100);
 
-  const consolationExp = fullVictoryExp * BALANCE_CONFIG.defeatConsolationRatio;
-  const consolationCredits =
-    fullVictoryCredits * BALANCE_CONFIG.defeatConsolationRatio;
-  const consolationWp = fullWpRaw * BALANCE_CONFIG.defeatConsolationRatio;
+  const capExp = fullVictoryExp * (cfg.defeatMaxPctOfVictory / 100);
+  const capCredits = fullVictoryCredits * (cfg.defeatMaxPctOfVictory / 100);
+  const capWp = fullWpRaw * (cfg.defeatMaxPctOfVictory / 100);
+
+  const defeatExp = Math.round(Math.min(rawDefeatExp, capExp));
+  const defeatCredits = Math.round(Math.min(rawDefeatCredits, capCredits));
+  const defeatWp = Math.round(Math.min(rawDefeatWp, capWp));
+
+  const retreatMult = retreated ? cfg.retreatRewardPct / 100 : 1;
 
   return {
-    expGained: Math.round(destroyedExp + consolationExp),
-    creditsGained: Math.round(destroyedCredits + consolationCredits),
-    warPointsGained: Math.round(destroyedWp + consolationWp),
+    expGained: Math.round(defeatExp * retreatMult),
+    creditsGained: Math.round(defeatCredits * retreatMult),
+    warPointsGained: Math.round(defeatWp * retreatMult),
     baseCaptureBonusWp: 0,
     fullVictoryExp,
     fullVictoryCredits,
+    supportExpPct: 0,
+    supportCreditPct: 0,
   };
 }

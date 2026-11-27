@@ -30,14 +30,23 @@ export interface DerivedStats {
   critChance: number; // 5 to 65 (%)
   skillPower: number;
   armorPiercePct: number; // from equipped weapon/item traits (0 to 50)
+  accuracyPct?: number; // from equipped radar/item traits (0 to 30)
   splashPct: number; // splash damage % on basic attacks (0 to 40)
   spRegenPerTurn: number; // bonus SP regen per turn from item traits + passives
   passiveSkillDmgPct: number; // from Striker passive
+  critDamagePct?: number; // S1c-1: bonus critical damage percentage points (e.g. 25 => +25%)
+  healPowerPct?: number; // S1c-1: bonus outgoing HP heal percentage points
+  shieldPowerPct?: number; // S1c-1: bonus outgoing shield restore percentage points
+  shieldRegenPctAdd?: number; // S1c-1: additive per-turn shield regen % + cap
+  hpRegenPctAdd?: number; // S1c-1: additive own-turn-start self HP regen %
+  executeDmgPct?: number; // S1c-1: bonus damage % vs targets below 30% HP
+  lastStandDefPct?: number; // S1c-1: bonus own DEF % while own HP below 30%
 }
 
 export type StatusEffectType =
   | 'burn'
   | 'shield_break'
+  | 'shield_cracked'
   | 'slow'
   | 'silence'
   | 'stealth'
@@ -56,7 +65,8 @@ export type StatusEffectType =
   | 'regen_hp'
   | 'siege_mode'
   | 'siege_defense'
-  | 'charging';
+  | 'charging'
+  | 'registry_effect';
 
 export interface ActiveStatusEffect {
   type: StatusEffectType;
@@ -68,6 +78,9 @@ export interface ActiveStatusEffect {
   sourceSkillId?: string;
   targetId?: string; // stored target for Charge Shot
   sourceName?: string;
+  registryId?: string; // S1a: status registry id for registry-only effects
+  stacks?: number; // S1a: current stack count (>= 1)
+  sourceId?: string; // S1a: caster unit id
 }
 
 export type SkillClassScope = 'general' | MechClassId;
@@ -116,7 +129,60 @@ export type SkillIconKey =
   | 'feather'
   | 'sun'
   | 'cleanse'
-  | 'star';
+  | 'star'
+  | 'remove_moderator'
+  | 'explosion'
+  | 'flare'
+  | 'health_cross'
+  | 'security'
+  | 'shield_with_heart'
+  | 'center_focus_strong'
+  | 'air'
+  | 'health_and_safety'
+  | 'add_moderator'
+  | 'shield_moon';
+
+export type PassiveStatKey =
+  | 'attackPct'
+  | 'defPct'
+  | 'evaPct'
+  | 'speedFlat'
+  | 'spRegenFlat'
+  | 'maxHpPct'
+  | 'maxShieldPct'
+  | 'critFlat'
+  | 'critDamagePct'
+  | 'dodgeFlat'
+  | 'armorPierceFlat'
+  | 'healPowerPct'
+  | 'shieldPowerPct'
+  | 'shieldRegenPctAdd'
+  | 'hpRegenPctAdd'
+  | 'executeDmgPct'
+  | 'lastStandDefPct';
+
+export type SkillEffectSpecKind =
+  | 'damage'
+  | 'heal_hp_pct'
+  | 'restore_shield_pct'
+  | 'restore_sp'
+  | 'apply_status';
+
+export interface SkillEffectSpec {
+  kind: SkillEffectSpecKind;
+  target?: 'skill' | 'self';
+  powerMultiplier?: number;
+  pct?: number;
+  amount?: number;
+  value?: number;
+  statusId?: string;
+  duration?: number;
+}
+
+export interface PassiveStatEntry {
+  key: PassiveStatKey;
+  perLevel: number;
+}
 
 export type SkillEffectKind =
   | 'buff_def'
@@ -145,6 +211,7 @@ export type SkillEffectKind =
   | 'heal_single'
   | 'scan_reveal'
   | 'energize_single'
+  | 'sp_transfer'
   | 'heal_field_hot'
   | 'energize_shield_field'
   | 'team_atk_up'
@@ -156,7 +223,11 @@ export type SkillEffectKind =
   | 'passive_skill_dmg'
   | 'passive_def_pct'
   | 'passive_eva_spd'
-  | 'passive_sp_regen';
+  | 'passive_sp_regen'
+  | 'passive_stat'
+  | 'spec';
+
+export type SkillRegistryTag = 'sys' | 'mod';
 
 export interface SkillDefinition {
   id: string;
@@ -169,6 +240,7 @@ export interface SkillDefinition {
   targetType: SkillTargetType;
   effectKind: SkillEffectKind;
   powerMultiplier?: number; // e.g., 1.3 for 130%
+  shieldDamageMult?: number; // e.g., 1.5 for Aegis Sunder shield damage multiplier
   secondaryRatio?: number; // e.g., 0.5 for 50% splash, 0.3 for 30% pierce
   buffMagnitude?: number; // e.g., 0.25 for +25%
   secondaryMagnitude?: number; // e.g., second stat bonus in dual buffs
@@ -176,9 +248,24 @@ export interface SkillDefinition {
   maxTargets?: number; // e.g., 3 for Strafing Run
   charges?: number; // e.g., 2 for Target Lock
   spAmount?: number; // e.g., +20 SP / +10 SP
+  passiveStats?: PassiveStatEntry[]; // S1c-1: generic per-level passive stat table (1-2 entries)
+  effects?: SkillEffectSpec[]; // S1c-2: generic composable skill effect specs (1-3 entries)
   oncePerBattle?: boolean;
   isToggle?: boolean;
+  phaseOverride?: 'step2' | 'step3';
   openingCardId?: string;
+  registryTag?: SkillRegistryTag;
+}
+
+export interface SkillModDefinition extends SkillDefinition {
+  category: 'normal' | 'passive';
+  nameVi: string;
+  nameEn: string;
+  descVi: string;
+  descEn: string;
+  iconId: string;
+  disabled?: boolean;
+  registryTag: 'mod';
 }
 
 export interface OpeningCardDefinition {
@@ -203,7 +290,8 @@ export interface SkillValidationResult {
     | 'is_passive'
     | 'not_learned'
     | 'already_equipped'
-    | 'bar_full';
+    | 'bar_full'
+    | 'passive_slots_full';
   requiredGearLevel?: number;
   requiredCardId?: string;
   cost?: number;
@@ -220,7 +308,10 @@ export interface BattleSkillUsability {
     | 'on_cooldown'
     | 'already_used'
     | 'blocked_by_siege'
-    | 'insufficient_sp';
+    | 'insufficient_sp'
+    | 'flux_min_sp'
+    | 'used_this_turn'
+    | 'revealed_this_round';
   cooldownRemaining: number;
   spCost: number;
   isToggleActive?: boolean;
@@ -332,15 +423,48 @@ export interface SectorDefinition {
   description: string;
 }
 
+export interface MapBounds {
+  width: number;
+  height: number;
+}
+
+export interface MapInitialRaid {
+  target: string;
+  from: string;
+  months: number;
+}
+
+export interface MapBaseTypeMeta {
+  battleSize: BattleSize;
+  tokenShape: BaseTokenShape;
+}
+
+export interface MapPackDefinition {
+  schemaVersion: number;
+  mapId: string;
+  nameVi: string;
+  nameEn: string;
+  bounds: MapBounds;
+  defaultSelectedNodeId: string;
+  initialRaid: MapInitialRaid | null;
+  baseTypes: Record<BaseType, MapBaseTypeMeta>;
+  nodes: SectorDefinition[];
+  lanes: MapLaneDefinition[];
+}
+
 export type EquipmentSlot =
   | 'main_weapon'
   | 'sub_weapon'
   | 'armor'
   | 'engine'
   | 'cpu'
-  | 'accessory';
+  | 'accessory'
+  | 'radar'
+  | 'module';
 
-export type ItemRarity = 'common' | 'rare' | 'epic' | 'legendary';
+export type PaperDollSlot = Exclude<EquipmentSlot, 'module'>;
+
+export type ItemRarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
 
 export interface ItemSpecialTraits {
   critBonusPct?: number;
@@ -349,6 +473,8 @@ export interface ItemSpecialTraits {
   spRegenPerTurn?: number;
   evasionMod?: number;
   longRange?: boolean;
+  accuracyPct?: number;
+  detectStealth?: boolean;
 }
 
 export type ItemRegistryTag = 'sys' | (string & {});
@@ -406,16 +532,104 @@ export interface ShopItemListing extends ItemInstance {
   soldOut?: boolean;
 }
 
+export interface SupplyShopListing {
+  templateId: string;
+  remaining: number;
+}
+
+export interface SupplyShopWpListing {
+  slotId: string;
+  templateId: string;
+  remaining: number;
+}
+
+export interface SupplyShopRefreshState {
+  used: number;
+}
+
+export type VoucherKind = 'credit' | 'exp';
+
+export type VoucherWeightMode = 'perType' | 'tierDecay';
+
+export interface VoucherDef {
+  id: string;
+  kind: VoucherKind;
+  value: number;
+  system?: boolean;
+  weight?: number;
+  maxStock?: number;
+}
+
+export interface VoucherOverride {
+  weight?: number;
+  maxStock?: number;
+}
+
+export interface VoucherConfig {
+  creditPerWp: number;
+  expPerWp: number;
+  mode: VoucherWeightMode;
+  baseWeight: number;
+  tierDecayPct: number;
+  typesPerRoll: number;
+  overrides: Record<string, VoucherOverride>;
+  custom: VoucherDef[];
+}
+
+export interface VoucherShopListing {
+  voucherId: string;
+  remaining: number;
+}
+
 export type ConsumableKind =
   | 'equipment_crate'
   | 'enchant_stone'
   | 'respec_token'
-  | 'exp_boost';
+  | 'exp_boost'
+  | 'battle_supply'
+  | 'supply_crate';
+
+export type SupplyFamily = 'hp_kit' | 'shield_kit' | 'sp_kit' | 'buff' | 'utility';
+
+export type SupplyEffectKind =
+  | 'heal_hp_pct'
+  | 'restore_shield_pct'
+  | 'restore_sp_pct'
+  | 'heal_hp'
+  | 'restore_shield'
+  | 'restore_sp'
+  | 'reveal_stealth_front';
+
+export interface SupplyEffect {
+  kind: SupplyEffectKind;
+  value: number;
+}
+
+export interface SupplyTemplate {
+  id: string;
+  family: SupplyFamily;
+  tier: 1 | 2 | 3 | 4 | 5;
+  unlockLevel: number;
+  iconId: string;
+  effects: SupplyEffect[];
+  cooldownTurns: number;
+  perBattleLimit: number;
+  priceOverride?: number;
+  registryTag: 'sys' | 'mods';
+}
+
+export interface BattleSupplyUnitState {
+  usedThisTurn: number;
+  usedCountsByTemplate: Record<string, number>;
+  cooldownsByTemplate: Record<string, number>;
+  stockByTemplate?: Record<string, number>;
+}
 
 export interface ConsumableItem {
   id: string;
   kind: ConsumableKind;
   quantity: number;
+  templateId?: string;
   slot?: EquipmentSlot;
   minRarity?: ItemRarity;
   bonusPct?: number;
@@ -487,9 +701,42 @@ export interface QuickSellUndoState {
   soldItems: ItemInstance[];
   totalCredits: number;
   soldAt: number;
+  soldFromWarehouseIds?: string[];
 }
 
-export type EquippedSlotIds = Record<EquipmentSlot, string | null>;
+export type ModuleFamily = 'stat' | 'trait' | 'skill';
+
+export type ModuleTraitKey =
+  | 'critBonusPct'
+  | 'armorPiercePct'
+  | 'spRegenPerTurn'
+  | 'accuracyPct';
+
+export interface ModuleTemplate {
+  id: string;
+  nameVi: string;
+  nameEn: string;
+  descVi: string;
+  descEn: string;
+  iconId: string;
+  family: ModuleFamily;
+  tier: 1 | 2 | 3 | 4;
+  requiredLevel: number;
+  effectKey: StatKey | ModuleTraitKey | string;
+  value: number;
+  skillId?: string;
+  registryTag: 'sys' | 'mods';
+}
+
+export type ExtenderEquipFailureReason =
+  | 'socket_locked'
+  | 'level_too_low'
+  | 'not_module'
+  | 'same_effect'
+  | 'skill_limit'
+  | 'in_other_gear';
+
+export type EquippedSlotIds = Record<PaperDollSlot, string | null>;
 
 export interface EquipValidationResult {
   canEquip: boolean;
@@ -500,6 +747,7 @@ export interface EquipValidationResult {
 
 export type EnchantResultCode =
   | 'max_level'
+  | 'not_enchantable'
   | 'insufficient_credits'
   | 'success'
   | 'failed';
@@ -605,6 +853,31 @@ export type SimpleLowHpAction = 'defend' | 'heal' | 'retreat' | 'nothing';
 
 export type SimpleElitePolicy = 'immediate' | 'boss_only' | 'off';
 
+export type LidarAutoMode = 'smart' | 'fixed';
+
+export interface LidarAutoConfig {
+  enabled: boolean;
+  mode: LidarAutoMode;
+  minSpPct: number; // default 50 (0..100)
+}
+
+export type FluxAutoMode = 'smart' | 'fixed';
+
+export interface FluxAutoConfig {
+  enabled: boolean;
+  mode: FluxAutoMode;
+  allySpBelowPct: number; // default 25 (0..100)
+  keepSelfPct: number; // default 50 (0..100)
+}
+
+export interface AutoSuppliesConfig {
+  enabled: boolean;
+  hpBelowPct: number; // default 35 (5..90)
+  shieldBelowPct: number; // default 25 (5..90)
+  spBelowPct: number; // default 20 (5..90)
+  buffAtStart: boolean; // default true (stored for CS5)
+}
+
 export interface SimpleTacticsConfig {
   presetId: SimpleTacticsPresetId;
   preferredTarget: SimpleTargetPref;
@@ -612,7 +885,10 @@ export interface SimpleTacticsConfig {
   lowHpThresholdPct: number; // default 35 (10..80)
   lowHpAction: SimpleLowHpAction;
   elitePolicy: SimpleElitePolicy;
-  prioritySkillIds: string[]; // up to 3 skill IDs from equipped bar (A > B > C)
+  prioritySkillIds: string[]; // up to MAX_PRIORITY_SKILLS skill IDs from equipped bar (A > B > C ...)
+  lidarAuto?: LidarAutoConfig;
+  fluxAuto?: FluxAutoConfig;
+  autoSupplies?: AutoSuppliesConfig;
 }
 
 export type TacticsMode = 'simple' | 'custom';
@@ -626,6 +902,18 @@ export interface GearTacticsProfile {
 
 export type AutoRepeatLimit = 1 | 5 | 10 | 20 | 'infinite';
 
+export type BattleKind =
+  | 'assault'
+  | 'defend'
+  | 'patrol'
+  | 'mission'
+  | 'event';
+
+export interface LaunchBattleOptions {
+  kind?: BattleKind;
+  sourceId?: string | null;
+}
+
 export type AutoStopReason =
   | 'completed'
   | 'defeat'
@@ -636,6 +924,8 @@ export type AutoStopReason =
   | 'boss_present'
   | 'auto_retreat'
   | 'inventory_full'
+  | 'node_not_contested'
+  | 'source_inactive'
   | 'manual_stop';
 
 export type AutoRepeatDefeatRule =
@@ -647,6 +937,8 @@ export interface AutoRepeatSession {
   active: boolean;
   limit: AutoRepeatLimit;
   sectorId: string;
+  kind?: BattleKind;
+  sourceId?: string | null;
   completedRuns: number;
   wins: number;
   consecutiveDefeats?: number;
@@ -673,6 +965,7 @@ export type TeamColorRole = 'me' | 'ally' | 'enemy' | 'boss';
 export interface TurnQueueEntry {
   unitId: string;
   name: string;
+  level: number;
   classId: MechClassId;
   side: CombatSide;
   isPlayer: boolean;
@@ -699,11 +992,24 @@ export interface GearUnit {
   unspentPoints: number;
   allocatedPoints: StatBlock;
   equipped: EquippedSlotIds;
-  skillLevels: Record<string, number>; // learned skillId -> 1..5
+  skillLevels: Record<string, number>; // learned skillId -> 1..20
   equippedSkillBar: string[]; // up to 6 active skills (class + general only)
+  equippedPassives?: string[]; // equipped passive skillIds (up to unlocked slots)
+  supplyLoadout: string[]; // battle supply templateIds equipped for battle
+  extenders?: (string | null)[]; // 5 extender module slot ids (null = empty)
   tactics: GearTacticsProfile;
   battlesWon: number;
   battlesFought: number;
+}
+
+export type WorldClockSpeedMode = 'fast' | 'normal' | 'slow' | 'custom';
+
+export interface WorldClockState {
+  worldDay: number;
+  lastTickAt: number | null;
+  speedMode: WorldClockSpeedMode;
+  secondsPerDay: number;
+  paused: boolean;
 }
 
 export interface PilotAccount {
@@ -712,6 +1018,8 @@ export interface PilotAccount {
   warPoints: number;
   ownedOpeningCards: string[];
   inventory: ItemInstance[];
+  warehouse: ItemInstance[];
+  worldClock: WorldClockState;
   gears: Record<MechClassId, GearUnit>;
   activeGearId: MechClassId;
   unlockedSectorIds: string[];
@@ -726,6 +1034,9 @@ export interface PilotAccount {
   activeEnchantBonusPct?: number;
   squadFormation?: SquadFormationUnit[];
   formationCustomized?: boolean;
+  pirateIncidents?: PirateIncident[];
+  sectorSupply?: Record<string, number>;
+  vouchers?: Record<string, number>;
 }
 
 export type EnemyArchetype = 'drone' | 'gunship' | 'sniper' | 'repair_ship';
@@ -776,6 +1087,8 @@ export interface CombatUnit {
   row: CombatRow;
   formationCol?: number; // 0..(cols-1) within its row for adjacent splash & grid/radar layout
   hasLongRangeWeapon?: boolean;
+  accuracyPct?: number;
+  detectsStealth?: boolean;
   isPlayer: boolean;
   classId: MechClassId;
   archetype?: EnemyArchetype;
@@ -795,6 +1108,8 @@ export interface CombatUnit {
   isDefending: boolean;
   alive: boolean;
   statuses: ActiveStatusEffect[];
+  hitsSinceOwnTurn?: number;
+  revealedThisRound?: boolean;
   animState: UnitAnimState;
 }
 
@@ -830,16 +1145,27 @@ export type CombatLogTag =
 
 export type CombatLogTemplateKey =
   | 'log.battleStart'
+  | 'log.sectorSupply'
+  | 'log.enragePhaseActivated'
   | 'log.defend'
   | 'log.healSquad'
   | 'log.healSingle'
+  | 'log.shieldSingle'
   | 'log.energize'
+  | 'log.spTransfer'
   | 'log.evade'
   | 'log.damage'
   | 'log.destroyed'
   | 'log.statusApplied'
+  | 'log.shieldCrackNoShield'
+  | 'log.shieldBreakBlocked'
   | 'log.burnTick'
   | 'log.regenTick'
+  | 'log.registryDotTick'
+  | 'log.registryHotTick'
+  | 'log.controlResisted'
+  | 'log.shieldRegen'
+  | 'log.hpRegen'
   | 'log.statusCleansed'
   | 'log.splashDamage'
   | 'log.retreat'
@@ -848,12 +1174,24 @@ export type CombatLogTemplateKey =
   | 'log.charging'
   | 'log.counterAttack'
   | 'log.scanReveal'
+  | 'log.scanRevealNone'
   | 'log.invincibleBlock'
   | 'log.silencedBlocked'
   | 'log.wingmanChat'
   | 'log.unitMovesRow'
   | 'log.invalidTarget'
-  | 'log.autoRepeatStopped';
+  | 'log.autoRepeatStopped'
+  | 'log.useSupply'
+  | 'log.supplyScanReveal'
+  | 'log.supplyScanNone'
+  | 'log.emergencyResupplyAlly'
+  | 'log.emergencyResupplyEnemy'
+  | 'log.prestageConfirm'
+  | 'log.repairFreeDefeat'
+  | 'log.repairFreeRetreat'
+  | 'log.repairFee'
+  | 'log.supplyDrop'
+  | 'log.supplyDropLost';
 
 export interface CombatLogEntry {
   id: string;
@@ -869,10 +1207,12 @@ export interface CombatLogEntry {
 }
 
 export type CombatFxKind = 'laser' | 'missile' | 'railgun' | 'heal';
+export type CombatFxTone = 'heal' | 'shield' | 'sp' | 'buff';
 
 export interface CombatFxEvent {
   id: string;
   kind: CombatFxKind;
+  tone?: CombatFxTone;
   fromSide: CombatSide;
   fromSlotIndex: number; // 0..7
   fromUnitId?: string;
@@ -885,6 +1225,8 @@ export interface CombatFxEvent {
 export interface BattleSummary {
   outcome: 'victory' | 'defeat';
   retreated?: boolean;
+  kind?: BattleKind;
+  sourceId?: string | null;
   deployedGearId: MechClassId;
   sectorId: string;
   rounds: number;
@@ -892,6 +1234,20 @@ export interface BattleSummary {
   creditsGained: number;
   warPointsGained: number;
   baseCaptureBonusWp: number;
+  supportExpPct?: number;
+  supportCreditPct?: number;
+  repairFee?: number;
+  repairFree?: boolean;
+  retreatPenaltyExp?: number;
+  retreatPenaltyCredit?: number;
+  retreatPenaltyWp?: number;
+  defeatPenaltyExp?: number;
+  expBeforePenalty?: number;
+  voucherCreditUsed?: Record<string, number>;
+  voucherExpUsed?: Record<string, number>;
+  voucherCreditRefund?: number;
+  voucherExpRefund?: number;
+  voucherRedeemed?: boolean;
   leveledUp: boolean;
   previousLevel: number;
   newLevel: number;
@@ -902,6 +1258,8 @@ export interface BattleSummary {
   totalEnemies: number;
   alliesSurviving: number;
   droppedItems: ItemInstance[];
+  supplyDrop?: { templateId: string; qty: number; lostQty?: number };
+  missionSupplyDrop?: { templateId: string; qty: number; lostQty?: number };
 }
 
 export interface WingmanChatter {
@@ -1059,6 +1417,9 @@ export interface BattleStatsSummary {
 
 export interface BattleState {
   sectorId: string;
+  kind?: BattleKind;
+  sourceId?: string | null;
+  rewardMult?: number;
   deployedGearId: MechClassId;
   squadSize: BattleSize;
   units: CombatUnit[];
@@ -1077,8 +1438,22 @@ export interface BattleState {
   popups: FloatingPopup[];
   fxEvents: CombatFxEvent[];
   explodedUnitIds: string[];
+  supplyByUnit?: Record<string, BattleSupplyUnitState>;
+  npcSupply?: BattleNpcSupplyState;
+  turnStep2Used?: number;
+  turnLockedSkillIds?: string[];
+  prestage?: PrestageState;
   isResolving: boolean;
   summary: BattleSummary | null;
+}
+
+export interface BattleNpcSupplyState {
+  stockByUnit: Record<string, Record<string, number>>;
+  sectorSupply: number;
+  emergencyUsed: {
+    ally: boolean;
+    enemy: boolean;
+  };
 }
 
 export type BattleSpeed = 1 | 2 | 3 | 5 | 10 | 12 | 15 | 20 | 30;
@@ -1095,7 +1470,9 @@ export interface AutoEquipClassWeights {
   splashPct: number;
   spRegenPerTurn: number;
   evasionMod: number;
+  accuracyPct: number;
   longRangeBonus: number;
+  detectStealthBonus: number;
   tierBonus: number;
   qualityWeight: number;
 }
@@ -1111,11 +1488,13 @@ export interface AutoEquipTraitDeltas {
   splashPct: number;
   spRegenPerTurn: number;
   evasionMod: number;
+  accuracyPct: number;
   longRangeDelta: -1 | 0 | 1;
+  detectStealthDelta: -1 | 0 | 1;
 }
 
 export interface AutoEquipSlotPlan {
-  slot: EquipmentSlot;
+  slot: PaperDollSlot;
   currentItem: ItemInstance | null;
   nextItem: ItemInstance | null;
   currentScore: number;
@@ -1161,7 +1540,9 @@ export interface StarterSlotConfig {
 
 export interface StarterSetConfig {
   enabled: boolean;
-  slots: Record<EquipmentSlot, StarterSlotConfig>;
+  slots: Omit<Record<PaperDollSlot, StarterSlotConfig>, 'radar'> & {
+    radar?: StarterSlotConfig;
+  };
   rookieBoostPct: number;
   boostScope: StarterBoostScope;
 }
@@ -1220,17 +1601,118 @@ export interface StatusDisplaySettings {
 
 export type StatusDisplayDefaults = Partial<StatusDisplaySettings>;
 
+export interface ShieldRegenConfig {
+  enabled: boolean;
+  basePct: number;
+  perPointPct: number;
+  capPct: number;
+  notHitMult: number;
+  hitPenaltyPct: number;
+  minHitMultPct: number;
+  restartTurns: number;
+}
+
+export type ItemLevelKind = 'equipment' | 'radar' | 'module';
+
+export interface ItemKindLevelRule {
+  init: number;
+  step: number;
+  enabled: boolean;
+}
+
+export interface ItemLevelsConfig {
+  kinds: Record<ItemLevelKind, ItemKindLevelRule>;
+  shopAboveLevel: number;
+  shopTierAhead: number;
+  dropWindow: number;
+  dropDifficultyBonus: Record<SectorDifficulty, number>;
+}
+
+export interface SpEconomyConfig {
+  regenPerSpirit: number;
+  classFactor: Record<MechClassId, number>;
+  costLevelPct: number;
+}
+
+export interface SupplyLimitMultConfig {
+  assaultAttacker: number;
+  assaultDefender: number;
+  defendDefender: number;
+  defendAttacker: number;
+  bossEscort: number;
+  bossPlayers: number;
+}
+
+export interface SupplyEconomyConfig {
+  maxUsesPerBattle: number;
+  spPriceMult: number;
+  limitMult?: SupplyLimitMultConfig;
+}
+
+export type EnemyLevelRangeKind =
+  | 'patrol'
+  | 'pirate'
+  | 'assault'
+  | 'defend'
+  | 'boss';
+
+export interface EnemyLevelRange {
+  min: number;
+  max: number;
+  peak: number;
+}
+
+export interface EnemyLevelConfig {
+  ranges: Record<EnemyLevelRangeKind, EnemyLevelRange>;
+  peakChancePct: number;
+  enemyLevelCapOverMax: number;
+}
+
+export type ModuleDropEffectKey = StatKey | ModuleTraitKey;
+
+export interface ModuleDropConfig {
+  factor: number;
+  shopCount: number;
+  effectWeights: Record<ModuleDropEffectKey, number>;
+}
+
+export type EnragePhaseKey = 'rage' | 'frenzy' | 'berserker';
+
+export interface EnragePhaseConfig {
+  startRound: number;
+  everyRounds: number;
+  maxStacks: number;
+  value: number;
+}
+
+export interface EnrageBerserkerConfig {
+  startRound: number;
+  everyRounds: number;
+  maxStacks: number;
+  critRatePct: number;
+  critDamagePct: number;
+  critOverflowRatio?: number;
+}
+
+export interface EnrageConfig {
+  rage: EnragePhaseConfig;
+  frenzy: EnragePhaseConfig;
+  berserker: EnrageBerserkerConfig;
+}
+
 export interface AdminConfig {
   godMode: boolean;
   oneHitKills: boolean;
   alwaysWin: boolean;
   rewardMultiplier: number;
+  battleRewards?: BattleRewardsConfig;
+  battlePenalty?: BattlePenaltyConfig;
   battleSizeOverride: BattleSize | null;
   softEnrageEnabled: boolean;
-  enrageStartRound: number;
-  enrageStepPct: number;
+  enrage?: EnrageConfig;
   forceBoss: boolean;
   battleLevelOffsetOverride: number | null;
+  maxLevel?: number;
   shopMinStock: number;
   shopMaxStock: number;
   shopRarityWeights: Record<ItemRarity, number>;
@@ -1240,9 +1722,239 @@ export interface AdminConfig {
   starterSet?: StarterSetConfig;
   iconCatalogMods?: IconCatalogModRow[];
   statusDisplayDefaults?: StatusDisplayDefaults;
+  cardPopupStaggerMs?: number;
+  cardPopupFlightMs?: number;
+  cardPopupMaxConcurrent?: number;
+  cardPopupZoneWidthPct?: number;
+  cardPopupZoneHeightPct?: number;
+  cardPopupStartScalePct?: number;
+  cardPopupEndScalePct?: number;
+  radarPopupStartScalePct?: number;
+  radarPopupSmallScalePct?: number;
+  radarPopupLargeScalePct?: number;
+  radarPopupBigMaxUnits?: number;
+  shieldRegen?: ShieldRegenConfig;
+  spEconomy?: SpEconomyConfig;
+  fluxTransfer?: FluxTransferConfig;
+  supplyEconomy?: SupplyEconomyConfig;
+  enemyLevel?: EnemyLevelConfig;
+  shieldCrackedMult?: number;
+  shieldCrackedTurns?: number;
+  shieldDamageOverrides?: Record<string, number>;
+  boxCapacity?: number;
+  warehouseCapacity: number;
+  ignoreFrontline?: boolean;
+  noticeDurationSec?: number;
+  supplyLoadoutSlots?: number;
+  supplyUsesPerTurn?: number;
+  supplyScanCount?: number;
+  supplyShopMinTypes?: number;
+  supplyShopMaxTypes?: number;
+  supplyShopMinQty?: number;
+  supplyShopMaxQty?: number;
+  supplyShopMaxRefreshes?: number;
+  supplyShopRefreshBaseCost?: number;
+  supplyWpPriceDivisor?: number;
+  supplyWpMinTier?: number;
+  supplyWpDupWeight?: number;
+  supplyWpMaxCopies?: number;
+  extenderLevelsPerSocket?: number;
+  maxSkillModulesPerGear?: number;
+  itemLevels?: ItemLevelsConfig;
+  moduleDrop?: ModuleDropConfig;
+  pirates?: PiratesConfig;
+  turnPhase?: TurnPhaseConfig;
+  prestage?: PrestageConfig;
+  stealth?: StealthConfig;
+  npcSupply?: Partial<NpcSupplyConfig>;
+  supplyMaxPerTypePerBattle?: number;
+  skillMaxLevel?: number;
+  mapPack?: MapPackDefinition | null;
+  passiveScaleAfter5?: number;
+  restorePctCap?: number;
+  passiveSlots?: PassiveSlotsConfig;
+  activeSlots?: ActiveSlotsConfig;
+  skillMods?: SkillModDefinition[];
+  vouchers?: VoucherConfig;
+  supplyRewards?: SupplyRewardsConfig;
   showRawI18nKeys: boolean;
 }
 
-export type BaseTab = 'gear' | 'garage' | 'skill' | 'shop' | 'map';
+export interface SupplyRewardSourceConfig {
+  chancePct: number;
+  qtyMin: number;
+  qtyMax: number;
+}
+
+export interface SupplyCrateRewardsConfig {
+  typesMin: number;
+  typesMax: number;
+  qtyMin: number;
+  qtyMax: number;
+}
+
+export interface SupplyRewardsConfig {
+  minTier: number;
+  maxTier: number;
+  victory: SupplyRewardSourceConfig;
+  mission: SupplyRewardSourceConfig;
+  event: SupplyRewardSourceConfig;
+  crate: SupplyCrateRewardsConfig;
+}
+
+export interface BattleRewardsConfig {
+  supportMaxLevel: number;
+  supportExpPerLevelPct: number;
+  supportCreditWpPerLevelPct: number;
+  defeatExpPct: number;
+  defeatCreditPct: number;
+  defeatWpPct: number;
+  defeatMaxPctOfVictory: number;
+  retreatRewardPct: number;
+}
+
+export interface RepairFeeTierConfig {
+  freeLevel: number;
+  freeCredits: number;
+  hpCoef: number;
+  shieldCoef: number;
+  cap: number;
+}
+
+export interface BattlePenaltyConfig {
+  retreatFreeLevel: number;
+  retreatExpPenaltyPct: number;
+  retreatShortfallExtraCreditPct: number;
+  retreatWpPenaltyPct: number;
+  defeatFreeLevel: number;
+  defeatExpPenaltyFactor: number;
+  repairDefeat: RepairFeeTierConfig;
+  repairRetreat: RepairFeeTierConfig;
+}
+
+export interface PassiveSlotsConfig {
+  initial: number;
+  everyLevels: number;
+  max: number;
+}
+
+export interface ActiveSlotsConfig {
+  initial: number;
+  everyLevels: number;
+  max: number;
+}
+
+export type NpcSupplyKitFamily = 'hp_kit' | 'shield_kit' | 'sp_kit';
+
+export interface NpcSupplyConfig {
+  enabled: boolean;
+  typesMin: number;
+  typesMax: number;
+  qtyMin: number;
+  qtyMax: number;
+  noSupplyChance: {
+    mob: number;
+    boss: number;
+  };
+  thresholds: {
+    hp: number;
+    shield: number;
+    sp: number;
+  };
+  losingGap: number;
+  losingBonus: number;
+  winningCut: number;
+  emergency: {
+    enabled: boolean;
+    minRound: number;
+    gap: number;
+    minSectorSupply: number;
+  };
+  sector: {
+    drainPerBattle: number;
+    regenPerMonth: number;
+    minQtyFactor: number;
+    maxExtraEmptyChance: number;
+    enemyScarcityWeight: number;
+  };
+  baseStatusMult: Record<BaseStatus, number>;
+  tierOffset: {
+    Standard: number;
+    Hard: number;
+    Elite: number;
+    boss: number;
+    event: number;
+  };
+  kindMult: Record<CombatSide, Record<BattleKind, number>>;
+  diffMult: Record<SectorDifficulty, number>;
+  bossQtyMult: number;
+  underdogRatio: number;
+  familyWeights: {
+    drone: Partial<Record<NpcSupplyKitFamily, number>>;
+    gunship: Partial<Record<NpcSupplyKitFamily, number>>;
+    sniper: Partial<Record<NpcSupplyKitFamily, number>>;
+    repair_ship: Partial<Record<NpcSupplyKitFamily, number>>;
+    ally: Partial<Record<NpcSupplyKitFamily, number>>;
+  };
+}
+
+export interface StealthConfig {
+  lidarDetectMin: number;
+  lidarDetectMax: number;
+}
+
+export interface TurnPhaseConfig {
+  maxStep2PerTurn: number;
+}
+
+export interface PrestageConfig {
+  enabled: boolean;
+  countdownSec: number;
+  groupFromSize?: number;
+}
+
+export interface PrestageState {
+  active: boolean;
+  appliedByUnit: Record<string, string[]>;
+}
+
+export interface FluxTransferLevelRule {
+  targets: number;
+  pct: number;
+  fee: number;
+}
+
+export interface FluxTransferConfig {
+  levels: FluxTransferLevelRule[];
+  minPerLevel?: number;
+  allySpBelowPct?: number;
+  keepSelfPct?: number;
+}
+
+export interface PirateSizeWeights {
+  4: number;
+  6: number;
+  8: number;
+}
+
+export interface PiratesConfig {
+  enabled: boolean;
+  maxActive: number;
+  spawnChancePerMonth: number;
+  ensureOneWhenIdle: boolean;
+  sizeWeights: PirateSizeWeights;
+  expiryMonths: number;
+  rewardMult: number;
+}
+
+export interface PirateIncident {
+  id: string;
+  nodeId: string;
+  size: BattleSize;
+  createdMonth: number;
+  expiresMonth: number;
+}
+
+export type BaseTab = 'gear' | 'warehouse' | 'garage' | 'skill' | 'shop' | 'map';
 
 export type ScreenState = 'TITLE' | 'HANGAR' | 'SHOP' | 'BATTLE';

@@ -1,0 +1,1266 @@
+{
+  "schemaVersion": 1,
+  "templates": [
+    {
+      "id": "tpl_mw_pulse_cannon",
+      "nameEn": "Pulse Cannon",
+      "nameVi": "Pháo Xung Trọng Kích",
+      "descEn": "Heavy kinetic-pulse cannon with high raw firepower at the cost of slight handling drag.",
+      "descVi": "Pháo xung hạng nặng có hỏa lực ATK rất cao nhưng giảm nhẹ độ linh hoạt né tránh.",
+      "slot": "main_weapon",
+      "tier": 1,
+      "requiredLevel": 1,
+      "classRestriction": null,
+      "basePrice": 180,
+      "primaryStat": "attack",
+      "primaryRange": [
+        10,
+        15
+      ],
+      "affixPool": [
+        "attack",
+        "defense",
+        "shield",
+        "spirit"
+      ],
+      "specialTraits": {
+        "evasionMod": -2
+      },
+      "registryTag": "sys"
+    },
+    {
+      "id": "tpl_mw_rail_lance",
+      "nameEn": "Rail Lance",
+      "nameVi": "Thương Điện Từ Rail",
+      "descEn": "Precision electromagnetic lance tuned for lethal critical strikes.",
+      "descVi": "Pháo điện từ chính xác cao chuyên tạo đòn chí mạng chết người.",
+      "slot": "main_weapon",
+      "tier": 2,
+      "requiredLevel": 3,
+      "classRestriction": null,
+      "basePrice": 320,
+      "primaryStat": "attack",
+      "primaryRange": [
+        12,
+        18
+      ],
+      "secondaryStat": "evasion",
+      "secondaryRange": [
+        3,
+        6
+      ],
+      "affixPool": [
+        "attack",
+        "evasion",
+        "fuel",
+        "spirit"
+      ],
+      "specialTraits": {
+        "critBonusPct": 8,
+        "longRange": true
+      },
+      "registryTag": "sys"
+    },
+    {
+      "id": "tpl_mw_scatter_gun",
+      "nameEn": "Scatter Gun",
+      "nameVi": "Pháo Đạn Chùm Xuyên Giáp",
+      "descEn": "Close-range flak shredder whose tungsten flechettes pierce heavy enemy plating.",
+      "descVi": "Pháo đạn chùm cận chiến phóng mảnh vonfram xuyên thẳng giáp địch.",
+      "slot": "main_weapon",
+      "tier": 2,
+      "requiredLevel": 4,
+      "classRestriction": null,
+      "basePrice": 340,
+      "primaryStat": "attack",
+      "primaryRange": [
+        11,
+        17
+      ],
+      "secondaryStat": "defense",
+      "secondaryRange": [
+        3,
+        6
+      ],
+      "affixPool": [
+        "attack",
+        "defense",
+        "fuel",
+        "evasion"
+      ],
+      "specialTraits": {
+        "armorPiercePct": 18
+      },
+      "registryTag": "sys"
+    },
+    {
+      "id": "tpl_mw_plasma_repeater",
+      "nameEn": "Plasma Repeater",
+      "nameVi": "Súng Plasma Liên Thanh",
+      "descEn": "Rapid-cycling plasma emitter feeding excess charge into the Gear SP capacitor.",
+      "descVi": "Pháo plasma tốc độ bắn cao tự nạp lại năng lượng SP mỗi lượt.",
+      "slot": "main_weapon",
+      "tier": 3,
+      "requiredLevel": 6,
+      "classRestriction": null,
+      "basePrice": 460,
+      "primaryStat": "attack",
+      "primaryRange": [
+        13,
+        19
+      ],
+      "secondaryStat": "spirit",
+      "secondaryRange": [
+        5,
+        9
+      ],
+      "affixPool": [
+        "attack",
+        "spirit",
+        "fuel",
+        "shield"
+      ],
+      "specialTraits": {
+        "spRegenPerTurn": 3
+      },
+      "registryTag": "sys"
+    },
+    {
+      "id": "tpl_mw_nova_beam",
+      "nameEn": "Nova Beam Cannon",
+      "nameVi": "Đại Bác Tia Nova",
+      "descEn": "Flagship-grade particle beam spilling thermal splash onto adjacent targets.",
+      "descVi": "Đại bác hạt cấp kỳ hạm gây sát thương lan nhiệt sang phi cơ địch lân cận.",
+      "slot": "main_weapon",
+      "tier": 4,
+      "requiredLevel": 9,
+      "classRestriction": null,
+      "basePrice": 680,
+      "primaryStat": "attack",
+      "primaryRange": [
+        16,
+        23
+      ],
+      "secondaryStat": "spirit",
+      "secondaryRange": [
+        5,
+        10
+      ],
+      "affixPool": [
+        "attack",
+        "spirit",
+        "evasion",
+        "shield"
+      ],
+      "specialTraits": {
+        "splashPct": 22,
+        "critBonusPct": 5,
+        "longRange": true
+      },
+      "registryTag": "sys"
+    },
+    {
+      "id": "tpl_sw_missile_pod",
+      "nameEn": "Missile Pod",
+      "nameVi": "Khoang Tên Lửa Lan",
+      "descEn": "Under-wing micro-missile bay delivering splash damage and steady SP flow.",
+      "descVi": "Khoang tên lửa dưới cánh gây sát thương lan và hồi thêm SP mỗi lượt.",
+      "slot": "sub_weapon",
+      "tier": 1,
+      "requiredLevel": 1,
+      "classRestriction": null,
+      "basePrice": 170,
+      "primaryStat": "attack",
+      "primaryRange": [
+        6,
+        10
+      ],
+      "secondaryStat": "spirit",
+      "secondaryRange": [
+        3,
+        6
+      ],
+      "affixPool": [
+        "attack",
+        "spirit",
+        "fuel",
+        "shield"
+      ],
+      "specialTraits": {
+        "splashPct": 18,
+        "spRegenPerTurn": 2
+      },
+      "registryTag": "sys"
+    },
+    {
+      "id": "tpl_sw_flak_turret",
+      "nameEn": "Flak Turret",
+      "nameVi": "Tháp Pháo Phòng Không",
+      "descEn": "Automated point-defense autocannon cracking armored drones.",
+      "descVi": "Tháp pháo tự động phá giáp drone và gia cố độ bền thân tàu.",
+      "slot": "sub_weapon",
+      "tier": 2,
+      "requiredLevel": 3,
+      "classRestriction": null,
+      "basePrice": 280,
+      "primaryStat": "attack",
+      "primaryRange": [
+        7,
+        11
+      ],
+      "secondaryStat": "defense",
+      "secondaryRange": [
+        5,
+        9
+      ],
+      "affixPool": [
+        "attack",
+        "defense",
+        "shield",
+        "evasion"
+      ],
+      "specialTraits": {
+        "armorPiercePct": 12
+      },
+      "registryTag": "sys"
+    },
+    {
+      "id": "tpl_sw_aegis_drone",
+      "nameEn": "Aegis Escort Pod",
+      "nameVi": "Vệ Tinh Hộ Tống Aegis",
+      "descEn": "Autonomous orbital shield drone amplifying barrier capacity and SP recovery.",
+      "descVi": "Drone hộ tống bay quanh phi cơ tăng mạnh Khiên và hồi SP mỗi lượt.",
+      "slot": "sub_weapon",
+      "tier": 2,
+      "requiredLevel": 4,
+      "classRestriction": null,
+      "basePrice": 310,
+      "primaryStat": "shield",
+      "primaryRange": [
+        9,
+        14
+      ],
+      "secondaryStat": "spirit",
+      "secondaryRange": [
+        4,
+        7
+      ],
+      "affixPool": [
+        "shield",
+        "spirit",
+        "defense",
+        "fuel"
+      ],
+      "specialTraits": {
+        "spRegenPerTurn": 3
+      },
+      "registryTag": "sys"
+    },
+    {
+      "id": "tpl_sw_phantom_seekers",
+      "nameEn": "Phantom Seekers",
+      "nameVi": "Tên Lửa Truy Đuổi Phantom",
+      "descEn": "Agile heat-seeking darts built to finish evasive fighters with bonus crit.",
+      "descVi": "Tên lửa tầm nhiệt linh hoạt tăng mạnh né tránh và tỉ lệ chí mạng.",
+      "slot": "sub_weapon",
+      "tier": 3,
+      "requiredLevel": 6,
+      "classRestriction": null,
+      "basePrice": 430,
+      "primaryStat": "evasion",
+      "primaryRange": [
+        7,
+        12
+      ],
+      "secondaryStat": "attack",
+      "secondaryRange": [
+        7,
+        11
+      ],
+      "affixPool": [
+        "evasion",
+        "attack",
+        "fuel",
+        "spirit"
+      ],
+      "specialTraits": {
+        "critBonusPct": 7,
+        "longRange": true
+      },
+      "registryTag": "sys"
+    },
+    {
+      "id": "tpl_sw_ion_torpedo",
+      "nameEn": "Ion Torpedo Bay",
+      "nameVi": "Khoang Ngư Lôi Ion",
+      "descEn": "Heavy ion warheads tearing through hull plating and splashing nearby craft.",
+      "descVi": "Ngư lôi ion hạng nặng xuyên giáp sâu và gây nổ lan diện rộng.",
+      "slot": "sub_weapon",
+      "tier": 4,
+      "requiredLevel": 9,
+      "classRestriction": null,
+      "basePrice": 610,
+      "primaryStat": "attack",
+      "primaryRange": [
+        10,
+        16
+      ],
+      "secondaryStat": "shield",
+      "secondaryRange": [
+        6,
+        10
+      ],
+      "affixPool": [
+        "attack",
+        "shield",
+        "spirit",
+        "defense"
+      ],
+      "specialTraits": {
+        "armorPiercePct": 15,
+        "splashPct": 15,
+        "longRange": true
+      },
+      "registryTag": "sys"
+    },
+    {
+      "id": "tpl_ar_striker_vanguard",
+      "nameEn": "Vanguard Bomber Hull",
+      "nameVi": "Giáp Oanh Tạc Vanguard",
+      "descEn": "Balanced composite fuselage reinforcing Striker ordnance wings.",
+      "descVi": "Lớp giáp tổng hợp cân bằng tăng phòng thủ và hỏa lực cho Striker.",
+      "slot": "armor",
+      "tier": 1,
+      "requiredLevel": 1,
+      "classRestriction": "striker",
+      "basePrice": 190,
+      "primaryStat": "defense",
+      "primaryRange": [
+        8,
+        13
+      ],
+      "secondaryStat": "attack",
+      "secondaryRange": [
+        4,
+        7
+      ],
+      "affixPool": [
+        "defense",
+        "attack",
+        "shield",
+        "fuel"
+      ],
+      "registryTag": "sys"
+    },
+    {
+      "id": "tpl_ar_striker_valkyrie",
+      "nameEn": "Valkyrie Assault Shell",
+      "nameVi": "Vỏ Thiết Giáp Valkyrie",
+      "descEn": "Heavy reactive bomber plating with reinforced shield emitters for Striker.",
+      "descVi": "Vỏ phản ứng hạng nặng bảo vệ khoang bom Striker dưới hỏa lực dày.",
+      "slot": "armor",
+      "tier": 3,
+      "requiredLevel": 5,
+      "classRestriction": "striker",
+      "basePrice": 440,
+      "primaryStat": "defense",
+      "primaryRange": [
+        12,
+        18
+      ],
+      "secondaryStat": "shield",
+      "secondaryRange": [
+        7,
+        11
+      ],
+      "affixPool": [
+        "defense",
+        "shield",
+        "attack",
+        "spirit"
+      ],
+      "specialTraits": {
+        "armorPiercePct": 6
+      },
+      "registryTag": "sys"
+    },
+    {
+      "id": "tpl_ar_interceptor_carbon",
+      "nameEn": "Carbon Dart Skin",
+      "nameVi": "Vỏ Carbon Mũi Tên",
+      "descEn": "Ultra-light radar-absorbent carbon frame tailored for Interceptor agility.",
+      "descVi": "Vỏ carbon siêu nhẹ tối ưu tốc độ ngoặt và né đòn cho Interceptor.",
+      "slot": "armor",
+      "tier": 1,
+      "requiredLevel": 1,
+      "classRestriction": "interceptor",
+      "basePrice": 190,
+      "primaryStat": "evasion",
+      "primaryRange": [
+        9,
+        14
+      ],
+      "secondaryStat": "fuel",
+      "secondaryRange": [
+        5,
+        8
+      ],
+      "affixPool": [
+        "evasion",
+        "fuel",
+        "attack",
+        "shield"
+      ],
+      "specialTraits": {
+        "critBonusPct": 4
+      },
+      "registryTag": "sys"
+    },
+    {
+      "id": "tpl_ar_interceptor_wraith",
+      "nameEn": "Wraith Stealth Frame",
+      "nameVi": "Giáp Tàng Hình Wraith",
+      "descEn": "Phase-coated aerodynamic hull pushing Interceptor evasion and crit to the limit.",
+      "descVi": "Khung vỏ khí động học tàng hình đẩy độ né tránh và chí mạng của Interceptor lên tối đa.",
+      "slot": "armor",
+      "tier": 3,
+      "requiredLevel": 5,
+      "classRestriction": "interceptor",
+      "basePrice": 450,
+      "primaryStat": "evasion",
+      "primaryRange": [
+        13,
+        19
+      ],
+      "secondaryStat": "attack",
+      "secondaryRange": [
+        6,
+        10
+      ],
+      "affixPool": [
+        "evasion",
+        "attack",
+        "fuel",
+        "spirit"
+      ],
+      "specialTraits": {
+        "critBonusPct": 8
+      },
+      "registryTag": "sys"
+    },
+    {
+      "id": "tpl_ar_siege_bastion",
+      "nameEn": "Bastion Titanium Hull",
+      "nameVi": "Giáp Pháo Hạm Bastion",
+      "descEn": "Multi-layer titanium bulkheads absorbing massive bombardment on Siege gunships.",
+      "descVi": "Giáp titanium nhiều lớp giúp pháo hạm Siege chống chịu hỏa lực tập trung.",
+      "slot": "armor",
+      "tier": 1,
+      "requiredLevel": 1,
+      "classRestriction": "siege",
+      "basePrice": 200,
+      "primaryStat": "defense",
+      "primaryRange": [
+        11,
+        16
+      ],
+      "secondaryStat": "shield",
+      "secondaryRange": [
+        6,
+        10
+      ],
+      "affixPool": [
+        "defense",
+        "shield",
+        "attack",
+        "spirit"
+      ],
+      "specialTraits": {
+        "evasionMod": -2
+      },
+      "registryTag": "sys"
+    },
+    {
+      "id": "tpl_ar_siege_titan",
+      "nameEn": "Titan Dreadnought Plate",
+      "nameVi": "Thiết Giáp Kỳ Hạm Titan",
+      "descEn": "Ceramic-titanium dreadnought hull built to outlast elite starfighter waves.",
+      "descVi": "Giáp gốm-titanium siêu dày biến Siege thành pháo đài bất khả xâm phạm.",
+      "slot": "armor",
+      "tier": 3,
+      "requiredLevel": 5,
+      "classRestriction": "siege",
+      "basePrice": 470,
+      "primaryStat": "defense",
+      "primaryRange": [
+        15,
+        22
+      ],
+      "secondaryStat": "shield",
+      "secondaryRange": [
+        10,
+        15
+      ],
+      "affixPool": [
+        "defense",
+        "shield",
+        "attack",
+        "spirit"
+      ],
+      "specialTraits": {
+        "evasionMod": -3
+      },
+      "registryTag": "sys"
+    },
+    {
+      "id": "tpl_ar_support_conduit",
+      "nameEn": "Conduit Relay Hull",
+      "nameVi": "Vỏ Siêu Dẫn Conduit",
+      "descEn": "Superconducting chassis channeling barrier power across Support repair pods.",
+      "descVi": "Khung vỏ siêu dẫn tăng cường Khiên và Tinh thần cho tàu Support.",
+      "slot": "armor",
+      "tier": 1,
+      "requiredLevel": 1,
+      "classRestriction": "support",
+      "basePrice": 190,
+      "primaryStat": "shield",
+      "primaryRange": [
+        9,
+        14
+      ],
+      "secondaryStat": "spirit",
+      "secondaryRange": [
+        6,
+        10
+      ],
+      "affixPool": [
+        "shield",
+        "spirit",
+        "defense",
+        "fuel"
+      ],
+      "specialTraits": {
+        "spRegenPerTurn": 2
+      },
+      "registryTag": "sys"
+    },
+    {
+      "id": "tpl_ar_support_seraph",
+      "nameEn": "Seraph Harmonic Shell",
+      "nameVi": "Vỏ Cộng Hưởng Seraph",
+      "descEn": "Crystalline emitter hull amplifying fleet-wide shield and repair output.",
+      "descVi": "Lớp vỏ tinh thể cộng hưởng khuếch đại năng lượng sửa chữa và hồi SP cho Support.",
+      "slot": "armor",
+      "tier": 3,
+      "requiredLevel": 5,
+      "classRestriction": "support",
+      "basePrice": 450,
+      "primaryStat": "spirit",
+      "primaryRange": [
+        12,
+        18
+      ],
+      "secondaryStat": "shield",
+      "secondaryRange": [
+        10,
+        15
+      ],
+      "affixPool": [
+        "spirit",
+        "shield",
+        "defense",
+        "evasion"
+      ],
+      "specialTraits": {
+        "spRegenPerTurn": 4
+      },
+      "registryTag": "sys"
+    },
+    {
+      "id": "tpl_en_striker_ion",
+      "nameEn": "Twin Ion Thrusters",
+      "nameVi": "Động Cơ Ion Kép VX",
+      "descEn": "Dependable twin ion nozzles balancing speed and ordnance lift for Striker.",
+      "descVi": "Cặp ống xả ion ổn định cho oanh tạc cơ Striker.",
+      "slot": "engine",
+      "tier": 1,
+      "requiredLevel": 1,
+      "classRestriction": "striker",
+      "basePrice": 185,
+      "primaryStat": "fuel",
+      "primaryRange": [
+        8,
+        13
+      ],
+      "secondaryStat": "attack",
+      "secondaryRange": [
+        4,
+        7
+      ],
+      "affixPool": [
+        "fuel",
+        "attack",
+        "evasion",
+        "defense"
+      ],
+      "registryTag": "sys"
+    },
+    {
+      "id": "tpl_en_striker_afterburner",
+      "nameEn": "Overdrive Afterburner",
+      "nameVi": "Động Cơ Đốt Sau Overdrive",
+      "descEn": "High-thrust Striker drive routing excess plasma into main weapons.",
+      "descVi": "Động cơ đốt sau công suất lớn tăng mạnh tốc độ lượt và hỏa lực Striker.",
+      "slot": "engine",
+      "tier": 3,
+      "requiredLevel": 6,
+      "classRestriction": "striker",
+      "basePrice": 460,
+      "primaryStat": "fuel",
+      "primaryRange": [
+        12,
+        18
+      ],
+      "secondaryStat": "attack",
+      "secondaryRange": [
+        7,
+        12
+      ],
+      "affixPool": [
+        "fuel",
+        "attack",
+        "evasion",
+        "spirit"
+      ],
+      "specialTraits": {
+        "critBonusPct": 5
+      },
+      "registryTag": "sys"
+    },
+    {
+      "id": "tpl_en_interceptor_vector",
+      "nameEn": "Vector Jet Drive",
+      "nameVi": "Động Cơ Phản Lực Vector",
+      "descEn": "Multi-axis vector thrusters securing first-strike initiative for Interceptor.",
+      "descVi": "Vòi đẩy đa hướng giúp Interceptor chiếm quyền ra đòn trước.",
+      "slot": "engine",
+      "tier": 1,
+      "requiredLevel": 1,
+      "classRestriction": "interceptor",
+      "basePrice": 190,
+      "primaryStat": "fuel",
+      "primaryRange": [
+        10,
+        15
+      ],
+      "secondaryStat": "evasion",
+      "secondaryRange": [
+        6,
+        10
+      ],
+      "affixPool": [
+        "fuel",
+        "evasion",
+        "attack",
+        "spirit"
+      ],
+      "registryTag": "sys"
+    },
+    {
+      "id": "tpl_en_interceptor_slipstream",
+      "nameEn": "Slipstream Warp Core",
+      "nameVi": "Động Cơ Xung Tốc Slipstream",
+      "descEn": "Zero-lag experimental drive pushing Interceptor velocity beyond radar lock.",
+      "descVi": "Động cơ thử nghiệm không độ trễ đạt tốc độ và né tránh cực đại.",
+      "slot": "engine",
+      "tier": 3,
+      "requiredLevel": 6,
+      "classRestriction": "interceptor",
+      "basePrice": 470,
+      "primaryStat": "fuel",
+      "primaryRange": [
+        15,
+        22
+      ],
+      "secondaryStat": "evasion",
+      "secondaryRange": [
+        9,
+        14
+      ],
+      "affixPool": [
+        "fuel",
+        "evasion",
+        "attack",
+        "shield"
+      ],
+      "specialTraits": {
+        "critBonusPct": 6
+      },
+      "registryTag": "sys"
+    },
+    {
+      "id": "tpl_en_siege_hydraulic",
+      "nameEn": "Heavy Torque Drive",
+      "nameVi": "Cụm Đẩy Hạng Nặng HX",
+      "descEn": "Stabilized recoil thrusters keeping Siege gunships steady during railgun salvos.",
+      "descVi": "Hệ đẩy mô-men lớn ổn định thân tàu và tăng giáp cho Siege.",
+      "slot": "engine",
+      "tier": 1,
+      "requiredLevel": 1,
+      "classRestriction": "siege",
+      "basePrice": 185,
+      "primaryStat": "fuel",
+      "primaryRange": [
+        6,
+        10
+      ],
+      "secondaryStat": "defense",
+      "secondaryRange": [
+        6,
+        10
+      ],
+      "affixPool": [
+        "fuel",
+        "defense",
+        "shield",
+        "attack"
+      ],
+      "registryTag": "sys"
+    },
+    {
+      "id": "tpl_en_siege_colossus",
+      "nameEn": "Colossus Plasma Drive",
+      "nameVi": "Động Cơ Plasma Colossus",
+      "descEn": "Twin capital-grade plasma drives feeding both spinal cannons and shields.",
+      "descVi": "Cặp động cơ plasma cỡ lớn gia tăng cả Khiên, Phòng thủ và Lực đẩy cho Siege.",
+      "slot": "engine",
+      "tier": 3,
+      "requiredLevel": 6,
+      "classRestriction": "siege",
+      "basePrice": 480,
+      "primaryStat": "defense",
+      "primaryRange": [
+        11,
+        16
+      ],
+      "secondaryStat": "fuel",
+      "secondaryRange": [
+        9,
+        14
+      ],
+      "affixPool": [
+        "defense",
+        "fuel",
+        "shield",
+        "attack"
+      ],
+      "specialTraits": {
+        "armorPiercePct": 8
+      },
+      "registryTag": "sys"
+    },
+    {
+      "id": "tpl_en_support_harmonic",
+      "nameEn": "Harmonic Stabilizer",
+      "nameVi": "Động Cơ Điều Hòa AX",
+      "descEn": "Low-vibration propulsion keeping Support repair emitters locked on squadmates.",
+      "descVi": "Hệ đẩy êm mượt giúp Support nạp SP ổn định và giữ tốc độ đội hình.",
+      "slot": "engine",
+      "tier": 1,
+      "requiredLevel": 1,
+      "classRestriction": "support",
+      "basePrice": 185,
+      "primaryStat": "fuel",
+      "primaryRange": [
+        7,
+        11
+      ],
+      "secondaryStat": "spirit",
+      "secondaryRange": [
+        6,
+        10
+      ],
+      "affixPool": [
+        "fuel",
+        "spirit",
+        "shield",
+        "evasion"
+      ],
+      "specialTraits": {
+        "spRegenPerTurn": 2
+      },
+      "registryTag": "sys"
+    },
+    {
+      "id": "tpl_en_support_aether",
+      "nameEn": "Aether Pulse Drive",
+      "nameVi": "Động Cơ Xung Aether",
+      "descEn": "Resonant propulsion harvesting thrust eddies directly into SP reserves.",
+      "descVi": "Cụm đẩy cộng hưởng hồi SP dồi dào và nâng mạnh tốc độ cho Support.",
+      "slot": "engine",
+      "tier": 3,
+      "requiredLevel": 6,
+      "classRestriction": "support",
+      "basePrice": 460,
+      "primaryStat": "spirit",
+      "primaryRange": [
+        11,
+        16
+      ],
+      "secondaryStat": "fuel",
+      "secondaryRange": [
+        10,
+        15
+      ],
+      "affixPool": [
+        "spirit",
+        "fuel",
+        "shield",
+        "evasion"
+      ],
+      "specialTraits": {
+        "spRegenPerTurn": 4
+      },
+      "registryTag": "sys"
+    },
+    {
+      "id": "tpl_cpu_tactical",
+      "nameEn": "Tactical Fire-Control CPU",
+      "nameVi": "CPU Điều Khiển Hỏa Lực",
+      "descEn": "Standard ballistic computer synchronizing wing cannons for crisp damage.",
+      "descVi": "Máy tính ngắm bắn tiêu chuẩn tăng độ chính xác và sát thương.",
+      "slot": "cpu",
+      "tier": 1,
+      "requiredLevel": 1,
+      "classRestriction": null,
+      "basePrice": 175,
+      "primaryStat": "attack",
+      "primaryRange": [
+        6,
+        10
+      ],
+      "secondaryStat": "evasion",
+      "secondaryRange": [
+        4,
+        7
+      ],
+      "affixPool": [
+        "attack",
+        "evasion",
+        "fuel",
+        "spirit"
+      ],
+      "specialTraits": {
+        "critBonusPct": 4
+      },
+      "registryTag": "sys"
+    },
+    {
+      "id": "tpl_cpu_reflex",
+      "nameEn": "Reflex Gyro Processor",
+      "nameVi": "CPU Con Quay Phản Xạ",
+      "descEn": "Predictive flight-path gyro boosting dodge rate and thruster response.",
+      "descVi": "Bộ xử lý quỹ đạo bay tăng vượt trội né tránh và tốc độ lượt.",
+      "slot": "cpu",
+      "tier": 2,
+      "requiredLevel": 3,
+      "classRestriction": null,
+      "basePrice": 290,
+      "primaryStat": "evasion",
+      "primaryRange": [
+        9,
+        14
+      ],
+      "secondaryStat": "fuel",
+      "secondaryRange": [
+        6,
+        10
+      ],
+      "affixPool": [
+        "evasion",
+        "fuel",
+        "shield",
+        "attack"
+      ],
+      "registryTag": "sys"
+    },
+    {
+      "id": "tpl_cpu_oracle",
+      "nameEn": "Oracle Telemetry Core",
+      "nameVi": "CPU Viễn Trắc Oracle",
+      "descEn": "Wide-band combat link expanding SP pool and regenerating SP every turn.",
+      "descVi": "Liên kết viễn trắc mở rộng dung lượng Tinh thần và tự hồi SP.",
+      "slot": "cpu",
+      "tier": 2,
+      "requiredLevel": 4,
+      "classRestriction": null,
+      "basePrice": 320,
+      "primaryStat": "spirit",
+      "primaryRange": [
+        10,
+        15
+      ],
+      "secondaryStat": "shield",
+      "secondaryRange": [
+        5,
+        9
+      ],
+      "affixPool": [
+        "spirit",
+        "shield",
+        "fuel",
+        "defense"
+      ],
+      "specialTraits": {
+        "spRegenPerTurn": 3
+      },
+      "registryTag": "sys"
+    },
+    {
+      "id": "tpl_cpu_predator",
+      "nameEn": "Predator Lock-On AI",
+      "nameVi": "CPU Khóa Mục Tiêu Predator",
+      "descEn": "Multi-spectrum hunter AI exposing hull seams for high crit and armor pierce.",
+      "descVi": "AI săn mồi phát hiện khe hở giáp, tăng mạnh chí mạng và xuyên giáp.",
+      "slot": "cpu",
+      "tier": 3,
+      "requiredLevel": 6,
+      "classRestriction": null,
+      "basePrice": 450,
+      "primaryStat": "attack",
+      "primaryRange": [
+        9,
+        14
+      ],
+      "secondaryStat": "evasion",
+      "secondaryRange": [
+        7,
+        11
+      ],
+      "affixPool": [
+        "attack",
+        "evasion",
+        "spirit",
+        "fuel"
+      ],
+      "specialTraits": {
+        "critBonusPct": 10,
+        "armorPiercePct": 10
+      },
+      "registryTag": "sys"
+    },
+    {
+      "id": "tpl_cpu_sovereign",
+      "nameEn": "Sovereign Fleet Core",
+      "nameVi": "CPU Kỳ Hạm Sovereign",
+      "descEn": "Quantum command AI optimizing offense, barrier modulation, and SP cycling.",
+      "descVi": "Lõi chỉ huy lượng tử tối ưu toàn diện tấn công, khiên và hồi SP.",
+      "slot": "cpu",
+      "tier": 4,
+      "requiredLevel": 9,
+      "classRestriction": null,
+      "basePrice": 660,
+      "primaryStat": "spirit",
+      "primaryRange": [
+        12,
+        18
+      ],
+      "secondaryStat": "attack",
+      "secondaryRange": [
+        10,
+        15
+      ],
+      "affixPool": [
+        "spirit",
+        "attack",
+        "shield",
+        "evasion",
+        "defense"
+      ],
+      "specialTraits": {
+        "critBonusPct": 8,
+        "spRegenPerTurn": 4
+      },
+      "registryTag": "sys"
+    },
+    {
+      "id": "tpl_ac_capacitor",
+      "nameEn": "Auxiliary Shield Reactor",
+      "nameVi": "Lò Phản Ứng Khiên Phụ",
+      "descEn": "Compact energy cell expanding rechargeable barrier reserves.",
+      "descVi": "Khối lò phản ứng nhỏ gọn nâng dung lượng Khiên năng lượng.",
+      "slot": "accessory",
+      "tier": 1,
+      "requiredLevel": 1,
+      "classRestriction": null,
+      "basePrice": 170,
+      "primaryStat": "shield",
+      "primaryRange": [
+        9,
+        14
+      ],
+      "secondaryStat": "defense",
+      "secondaryRange": [
+        3,
+        6
+      ],
+      "affixPool": [
+        "shield",
+        "defense",
+        "spirit",
+        "fuel"
+      ],
+      "registryTag": "sys"
+    },
+    {
+      "id": "tpl_ac_overclock",
+      "nameEn": "Overclock Plasma Coil",
+      "nameVi": "Lò Phản Ứng Ép Xung",
+      "descEn": "High-output coil accelerating SP generation and weapon punch.",
+      "descVi": "Cuộn phản ứng công suất cao tăng hỏa lực và hồi SP mỗi lượt.",
+      "slot": "accessory",
+      "tier": 2,
+      "requiredLevel": 3,
+      "classRestriction": null,
+      "basePrice": 300,
+      "primaryStat": "spirit",
+      "primaryRange": [
+        8,
+        13
+      ],
+      "secondaryStat": "attack",
+      "secondaryRange": [
+        5,
+        9
+      ],
+      "affixPool": [
+        "spirit",
+        "attack",
+        "fuel",
+        "shield"
+      ],
+      "specialTraits": {
+        "spRegenPerTurn": 3
+      },
+      "registryTag": "sys"
+    },
+    {
+      "id": "tpl_ac_chaff",
+      "nameEn": "ECM Jammer Core",
+      "nameVi": "Lò Tác Chiến Điện Tử ECM",
+      "descEn": "Low-signature reactor powering chaff decoys and evasive thrusters.",
+      "descVi": "Lõi năng lượng nhiễu xạ tăng mạnh Né tránh và Tốc độ lượt.",
+      "slot": "accessory",
+      "tier": 2,
+      "requiredLevel": 4,
+      "classRestriction": null,
+      "basePrice": 310,
+      "primaryStat": "evasion",
+      "primaryRange": [
+        8,
+        13
+      ],
+      "secondaryStat": "fuel",
+      "secondaryRange": [
+        5,
+        9
+      ],
+      "affixPool": [
+        "evasion",
+        "fuel",
+        "shield",
+        "attack"
+      ],
+      "registryTag": "sys"
+    },
+    {
+      "id": "tpl_ac_aegis_core",
+      "nameEn": "Fortress Fusion Core",
+      "nameVi": "Lò Nhiệt Hạch Pháo Đài",
+      "descEn": "Dense fusion core reinforcing both hull plating and energy shields.",
+      "descVi": "Lõi nhiệt hạch mật độ cao gia cường đồng thời Giáp thân và Khiên.",
+      "slot": "accessory",
+      "tier": 3,
+      "requiredLevel": 6,
+      "classRestriction": null,
+      "basePrice": 440,
+      "primaryStat": "defense",
+      "primaryRange": [
+        10,
+        15
+      ],
+      "secondaryStat": "shield",
+      "secondaryRange": [
+        10,
+        15
+      ],
+      "affixPool": [
+        "defense",
+        "shield",
+        "spirit",
+        "attack"
+      ],
+      "registryTag": "sys"
+    },
+    {
+      "id": "tpl_ac_singularity",
+      "nameEn": "Singularity Micro-Core",
+      "nameVi": "Lò Vi Trọng Lực Singularity",
+      "descEn": "Exotic gravity-well reactor enhancing splash discharge, crit, and speed.",
+      "descVi": "Lõi trường hấp dẫn tăng tốc độ, chí mạng và sát thương lan cho vũ khí.",
+      "slot": "accessory",
+      "tier": 4,
+      "requiredLevel": 9,
+      "classRestriction": null,
+      "basePrice": 650,
+      "primaryStat": "fuel",
+      "primaryRange": [
+        11,
+        17
+      ],
+      "secondaryStat": "attack",
+      "secondaryRange": [
+        9,
+        14
+      ],
+      "affixPool": [
+        "fuel",
+        "attack",
+        "evasion",
+        "shield",
+        "spirit"
+      ],
+      "specialTraits": {
+        "critBonusPct": 6,
+        "splashPct": 14
+      },
+      "registryTag": "sys"
+    },
+    {
+      "id": "tpl_rd_scout",
+      "nameEn": "Scout Radar",
+      "nameVi": "Radar Trinh Sát",
+      "descEn": "Lightweight recon scanner improving target lock and evasive tracking.",
+      "descVi": "Radar trinh sát nhẹ giúp tăng độ chính xác khóa mục tiêu và né tránh.",
+      "slot": "radar",
+      "tier": 1,
+      "requiredLevel": 1,
+      "classRestriction": null,
+      "basePrice": 176,
+      "primaryStat": "evasion",
+      "primaryRange": [3, 6],
+      "secondaryStat": "defense",
+      "secondaryRange": [2, 4],
+      "affixPool": ["evasion", "attack", "fuel", "spirit"],
+      "specialTraits": {
+        "accuracyPct": 4
+      },
+      "registryTag": "sys"
+    },
+    {
+      "id": "tpl_rd_fire_control",
+      "nameEn": "Fire-Control Radar",
+      "nameVi": "Radar Điều Khiển Hỏa Lực",
+      "descEn": "Ballistic tracking array calibrating salvo trajectory and target-lock accuracy.",
+      "descVi": "Cụm radar dẫn bắn hiệu chỉnh quỹ đạo và tăng độ chính xác khóa mục tiêu.",
+      "slot": "radar",
+      "tier": 2,
+      "requiredLevel": 3,
+      "classRestriction": null,
+      "basePrice": 310,
+      "primaryStat": "evasion",
+      "primaryRange": [4, 7],
+      "secondaryStat": "attack",
+      "secondaryRange": [4, 7],
+      "affixPool": ["attack", "evasion", "fuel", "spirit"],
+      "specialTraits": {
+        "accuracyPct": 6
+      },
+      "registryTag": "sys"
+    },
+    {
+      "id": "tpl_rd_wideband",
+      "nameEn": "Wide-Band Radar",
+      "nameVi": "Radar Dải Rộng",
+      "descEn": "Multi-spectrum sensor suite stabilizing defensive tracking and target lock.",
+      "descVi": "Tổ hợp cảm biến đa dải tần giúp ổn định phòng thủ và khóa mục tiêu.",
+      "slot": "radar",
+      "tier": 2,
+      "requiredLevel": 4,
+      "classRestriction": null,
+      "basePrice": 315,
+      "primaryStat": "evasion",
+      "primaryRange": [5, 8],
+      "secondaryStat": "defense",
+      "secondaryRange": [4, 7],
+      "affixPool": ["spirit", "fuel", "shield", "evasion"],
+      "specialTraits": {
+        "accuracyPct": 5
+      },
+      "registryTag": "sys"
+    },
+    {
+      "id": "tpl_rd_phased",
+      "nameEn": "Phased-Array Radar",
+      "nameVi": "Radar Mảng Pha",
+      "descEn": "Solid-state phased array delivering rapid multi-target lock accuracy.",
+      "descVi": "Radar mảng pha quét điện tử cho độ chính xác khóa mục tiêu vượt trội.",
+      "slot": "radar",
+      "tier": 3,
+      "requiredLevel": 6,
+      "classRestriction": null,
+      "basePrice": 445,
+      "primaryStat": "evasion",
+      "primaryRange": [8, 12],
+      "secondaryStat": "attack",
+      "secondaryRange": [5, 8],
+      "affixPool": ["evasion", "attack", "spirit", "fuel"],
+      "specialTraits": {
+        "accuracyPct": 9
+      },
+      "registryTag": "sys"
+    },
+    {
+      "id": "tpl_rd_hunter",
+      "nameEn": "Hunter Radar",
+      "nameVi": "Radar Săn Mồi",
+      "descEn": "High-gain interceptor scanner sharpening evasive lock-on and strike accuracy.",
+      "descVi": "Radar truy kích công suất cao giúp tăng né tránh và độ chính xác công kích.",
+      "slot": "radar",
+      "tier": 3,
+      "requiredLevel": 6,
+      "classRestriction": null,
+      "basePrice": 450,
+      "primaryStat": "evasion",
+      "primaryRange": [6, 9],
+      "secondaryStat": "attack",
+      "secondaryRange": [5, 8],
+      "affixPool": ["attack", "spirit", "evasion", "defense"],
+      "specialTraits": {
+        "accuracyPct": 8
+      },
+      "registryTag": "sys"
+    },
+    {
+      "id": "tpl_rd_aegis_eye",
+      "nameEn": "AEGIS Eye",
+      "nameVi": "Mắt Thần AEGIS",
+      "descEn": "Apex orbital sensor core delivering pinpoint target lock and evasive guidance.",
+      "descVi": "Lõi cảm biến tối thượng tối ưu độ chính xác khóa mục tiêu và dẫn đường cơ động.",
+      "slot": "radar",
+      "tier": 4,
+      "requiredLevel": 9,
+      "classRestriction": null,
+      "basePrice": 670,
+      "primaryStat": "evasion",
+      "primaryRange": [9, 13],
+      "secondaryStat": "attack",
+      "secondaryRange": [7, 10],
+      "affixPool": ["attack", "evasion", "spirit", "shield", "fuel"],
+      "specialTraits": {
+        "accuracyPct": 12
+      },
+      "registryTag": "sys"
+    }
+  ]
+}

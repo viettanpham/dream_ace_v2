@@ -1,0 +1,9 @@
+# TASK A2a Report
+- **ITEM 1 (`skills.json`)**: Chuyển 38 skill hệ thống sang `src/data/skills.json` (`schemaVersion: 1`, `registryTag: "sys"`); `validateSkillDefinitions()` + `EFFECT_KIND_VALIDATORS` giữ snapshot byte-equal và lọc row lỗi với `console.warn`.
+- **ITEM 2 (`skillMods` engine)**: Thêm `SkillModDefinition`, `adminConfig.skillMods` (tối đa 100), `MOD_EFFECT_KINDS`, `sanitizeSkillMods()`, merge ở `getSkillById`/`getSkillsForClass` (sys thắng khi trùng ID), giữ level `'mod_'` trong `sanitizeGearSkills` nhưng chặn dùng/hiệu lực/passive slots khi disabled, tên/mô tả inline qua `getSkillName`/`getSkillDesc`, giữ nguyên khi SV1a export/import (`CURRENT_SAVE_VERSION = 14`).
+- **ITEM Y (Admin CP examples)**: Thêm dòng ví dụ động dưới `skillMaxLevel`, `passiveScaleAfter5`, `restorePctCap` trong `AdminPanel.tsx` + `vi.ts`/`en.ts`.
+- **ITEM Z (Popup clipping)**: Đổi `truncate` -> `whitespace-nowrap overflow-visible` ở `BattleUnitCard.tsx`; cập nhật `estimatePopupBoxSize()` (`charW` 8/10, `+28`, `x1.2`, `height+4`) và giữ tâm card hẹp trong `cardPopupQueue.ts`.
+- **Files**: `src/data/{skills.json,skills.ts}`, `src/types/game.ts`, `src/engine/{skills,combat,migration,tactics,prestage,lidarAuto,fluxAuto}.ts`, `src/store/useGameStore.ts`, `src/i18n/{index,vi,en}.ts`, `src/components/{SkillView,BattleScreen,PhoneSkillsSheet,UnitDetailSheet,AutoTacticsModal,AdminPanel,BattleUnitCard}.tsx`, `src/utils/cardPopupQueue.ts`, `src/engine/__tests__/skillModsA2a.test.ts`, `docs/CODEMAP.md`.
+- **`src/data/skills.ts` lines**: `662 -> 272` (< 300).
+- **Checks**: `vitest` 5 files / 25 tests PASS (`skillModsA2a`, `skillConfigS1b`, `popIcon`, `cardPopupZoneIconsPop2`, `cardPopStatusPop1`), `tsc --noEmit` & `lint_applet` PASS; không đụng assert cũ đã biết (`saveV10Migration 68/236`, `engine.test 1070/1600/1802`, `battleFxFix prestage 226/319`).
+- **Browser**: NOT checked in a real browser (popup text, Admin example lines).
