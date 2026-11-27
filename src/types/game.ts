@@ -1605,6 +1605,7 @@ export interface EnrageBerserkerConfig {
   maxStacks: number;
   critRatePct: number;
   critDamagePct: number;
+  critOverflowRatio?: number;
 }
 
 export interface EnrageConfig {

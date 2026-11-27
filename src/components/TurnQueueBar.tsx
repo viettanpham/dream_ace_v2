@@ -8,11 +8,16 @@ import {
   TrendingUp,
   X,
 } from 'lucide-react';
+import { getCatalogRow } from '../data/iconCatalog';
 import { buildTurnQueue } from '../engine/combat';
 import {
+  ENRAGE_PHASE_ORDER,
+  formatEnragePhaseSummaryPart,
   formatEnrageTooltip,
   getEnragePhaseDisplayName,
+  getEnragePhaseNextStackRound,
   getEnrageState,
+  sanitizeEnrageConfig,
   type EnrageState,
 } from '../engine/enrage';
 import { getClassName, getTeamTagLabel, useI18n } from '../i18n';
@@ -20,6 +25,7 @@ import { useGameStore } from '../store/useGameStore';
 import type {
   BattleSpeed,
   BattleState,
+  EnragePhaseKey,
   MechClassId,
   TeamColorRole,
   TurnQueueEntry,
@@ -285,6 +291,7 @@ export function TurnQueueBar({
     typeof window !== 'undefined' ? window.innerWidth < 640 : false
   );
   const [overflowOpen, setOverflowOpen] = useState(false);
+  const [enrageDetailOpen, setEnrageDetailOpen] = useState(false);
   const [inspectedEntry, setInspectedEntry] = useState<TurnQueueEntry | null>(
     null
   );
@@ -498,12 +505,162 @@ export function TurnQueueBar({
 
   const resolvedEnrage =
     enrageState ?? getEnrageState(battle.round, adminConfig);
-  const highestPhaseLabel = resolvedEnrage.highestPhase
-    ? getEnragePhaseDisplayName(resolvedEnrage.highestPhase, lang)
+  const latestPhase: EnragePhaseKey | null =
+    resolvedEnrage.latestPhase ?? resolvedEnrage.highestPhase;
+  const latestPhaseLabel = latestPhase
+    ? getEnragePhaseDisplayName(latestPhase, lang)
     : null;
-  const enrageTooltip = highestPhaseLabel
+  const totalEnrageStacks =
+    resolvedEnrage.totalStacks ??
+    resolvedEnrage.stacks.rage +
+      resolvedEnrage.stacks.frenzy +
+      resolvedEnrage.stacks.berserker;
+  const enrageTooltip = latestPhaseLabel
     ? formatEnrageTooltip(resolvedEnrage, lang)
     : undefined;
+  const sanitizedEnrageCfg = useMemo(
+    () => sanitizeEnrageConfig(adminConfig.enrage),
+    [adminConfig.enrage]
+  );
+
+  const fmtEnrageNum = (n: number) => String(Number(n.toFixed(2)));
+  const renderEnrageGlyph = (
+    iconId: string,
+    fallbackSymbol: string,
+    fallbackColor: string
+  ) => {
+    const row = getCatalogRow(iconId, adminConfig.iconCatalogMods);
+    return (
+      <span
+        data-enrage-icon={iconId}
+        className="material-symbols-outlined leading-none select-none shrink-0"
+        style={{ fontSize: '14px', color: row?.color ?? fallbackColor }}
+        aria-hidden="true"
+      >
+        {row?.symbol ?? fallbackSymbol}
+      </span>
+    );
+  };
+
+  const renderEnrageChip = () => {
+    if (!latestPhaseLabel || totalEnrageStacks <= 0) return null;
+    return (
+      <button
+        type="button"
+        data-testid="turn-queue-enrage-badge"
+        title={enrageTooltip}
+        aria-label={enrageTooltip}
+        aria-expanded={enrageDetailOpen}
+        onClick={() => setEnrageDetailOpen((prev) => !prev)}
+        className="inline-flex flex-wrap items-center gap-x-1 gap-y-0.5 max-w-full px-1.5 py-0.5 rounded bg-red-950/75 border border-red-500/60 hover:border-orange-400/80 text-[11px] font-mono-nums font-bold text-orange-200 leading-tight cursor-pointer transition-colors"
+      >
+        <span className="inline-flex items-center gap-0.5 shrink-0 text-orange-300">
+          <Flame className="w-3.5 h-3.5 text-orange-400 shrink-0" aria-hidden="true" />
+          <span className="hidden min-[380px]:inline">{latestPhaseLabel}</span>
+          <span>x{totalEnrageStacks}</span>
+        </span>
+        {resolvedEnrage.stacks.rage > 0 && (
+          <span
+            data-testid="enrage-chip-rage"
+            className="inline-flex items-center gap-0.5 shrink-0 text-sky-200"
+          >
+            <span aria-hidden="true" className="text-slate-400">·</span>
+            {renderEnrageGlyph('BS05', 'security', '#378ADD')}
+            <span>-{fmtEnrageNum(resolvedEnrage.defDownPct)}%</span>
+          </span>
+        )}
+        {resolvedEnrage.stacks.frenzy > 0 && (
+          <span
+            data-testid="enrage-chip-frenzy"
+            className="inline-flex items-center gap-0.5 shrink-0 text-emerald-200"
+          >
+            <span aria-hidden="true" className="text-slate-400">·</span>
+            {renderEnrageGlyph('BF02', 'swords', '#1D9E75')}
+            <span>+{fmtEnrageNum(resolvedEnrage.damageUpPct)}%</span>
+          </span>
+        )}
+        {resolvedEnrage.stacks.berserker > 0 && (
+          <>
+            <span
+              data-testid="enrage-chip-berserker-crit-rate"
+              className="inline-flex items-center gap-0.5 shrink-0 text-amber-200"
+            >
+              <span aria-hidden="true" className="text-slate-400">·</span>
+              {renderEnrageGlyph('SS04', 'flare', '#EF9F27')}
+              <span>+{fmtEnrageNum(resolvedEnrage.critRateUpPct)}%</span>
+            </span>
+            <span
+              data-testid="enrage-chip-berserker-crit-dmg"
+              className="inline-flex items-center gap-0.5 shrink-0 text-rose-200"
+            >
+              <span aria-hidden="true" className="text-slate-400">·</span>
+              {renderEnrageGlyph('SS05', 'explosion', '#E24B4A')}
+              <span>+{fmtEnrageNum(resolvedEnrage.critDamageUpPct)}%</span>
+            </span>
+          </>
+        )}
+      </button>
+    );
+  };
+
+  const renderEnrageDetailSheet = () => (
+    <BottomSheet
+      open={enrageDetailOpen && Boolean(latestPhaseLabel)}
+      onClose={() => setEnrageDetailOpen(false)}
+      testId="turn-queue-enrage-detail"
+      title={
+        <span className="inline-flex items-center gap-1.5 text-orange-300">
+          <Flame className="w-4 h-4 text-orange-400" aria-hidden="true" />
+          <span>{t('enrage.detailTitle')}</span>
+        </span>
+      }
+      subtitle={
+        latestPhaseLabel
+          ? `${t('battle.round', { round: queue.round })} · ${latestPhaseLabel} x${totalEnrageStacks}`
+          : undefined
+      }
+    >
+      <div className="space-y-2">
+        {ENRAGE_PHASE_ORDER.map((phase) => {
+          const phaseCfg = sanitizedEnrageCfg[phase];
+          const stacks = resolvedEnrage.stacks[phase];
+          const nextRound = getEnragePhaseNextStackRound(
+            resolvedEnrage.round,
+            phaseCfg
+          );
+          const summaryText = formatEnragePhaseSummaryPart(
+            phase,
+            resolvedEnrage,
+            lang,
+            true
+          );
+          return (
+            <div
+              key={phase}
+              data-testid={`enrage-detail-phase-${phase}`}
+              className={`rounded-lg border px-3 py-2 space-y-1 text-[12px] ${
+                stacks > 0
+                  ? 'border-orange-500/45 bg-red-950/25 text-slate-100'
+                  : 'border-slate-800/80 bg-[#0A101B] text-slate-400 opacity-80'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-semibold">{summaryText}</span>
+                <span className="font-mono-nums text-[11px] px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 text-amber-300 shrink-0">
+                  {stacks}/{phaseCfg.maxStacks}
+                </span>
+              </div>
+              <div className="text-[11px] font-mono-nums text-sky-300/90">
+                {nextRound !== null
+                  ? t('enrage.nextStackAt', { round: nextRound })
+                  : t('enrage.maxReached')}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </BottomSheet>
+  );
 
   const renderFullQueuePopover = () => (
     <div
@@ -620,36 +777,31 @@ export function TurnQueueBar({
     return (
       <div
         data-testid="turn-queue-phone-strip"
-        className="h-11 max-h-[44px] shrink-0 w-full max-w-full min-w-0 border-b border-slate-800/80 bg-[#0A0F18]/95 px-1.5 flex items-center gap-1.5 overflow-hidden"
+        className={`shrink-0 w-full max-w-full min-w-0 border-b border-slate-800/80 bg-[#0A0F18]/95 px-1.5 flex items-center gap-1.5 ${
+          latestPhaseLabel
+            ? 'min-h-[44px] flex-wrap py-1'
+            : 'h-11 max-h-[44px] overflow-hidden'
+        }`}
       >
         {/* Compact Round Badge */}
         <span
           data-testid="turn-queue-round-chip"
           title={enrageTooltip ?? t('battle.round', { round: queue.round })}
           className={`shrink-0 inline-flex items-center gap-1 px-1.5 h-8 rounded font-mono-nums text-[12px] font-bold whitespace-nowrap ${
-            highestPhaseLabel
+            latestPhaseLabel
               ? 'bg-red-950/75 border border-red-500/65 text-slate-100'
               : 'bg-slate-900 border border-slate-700 text-slate-200'
           }`}
         >
           <span>R{queue.round}</span>
-          {highestPhaseLabel && (
-            <span
-              data-testid="turn-queue-enrage-badge"
-              title={enrageTooltip}
-              className="inline-flex items-center gap-0.5 text-orange-300"
-            >
-              <Flame className="w-3 h-3 text-orange-400" />
-              <span>{highestPhaseLabel}</span>
-            </span>
-          )}
         </span>
+        {renderEnrageChip()}
 
         {/* Inner Horizontally Scrollable Track (strictly self-contained, never clips start/end chips or scrolls page) */}
         <div
           data-testid="turn-queue-phone-track"
           style={{ touchAction: 'pan-x' }}
-          className="flex-1 min-w-0 flex items-center justify-start gap-1.5 overflow-x-auto overflow-y-hidden px-1 scroll-px-1 battle-strip-scroll overscroll-x-contain"
+          className="flex-1 min-w-[120px] flex items-center justify-start gap-1.5 overflow-x-auto overflow-y-hidden px-1 scroll-px-1 battle-strip-scroll overscroll-x-contain"
           aria-label={t('queue.fullQueueTitle')}
         >
           {actingEntry && (
@@ -714,6 +866,7 @@ export function TurnQueueBar({
             );
           })}
         </div>
+        {renderEnrageDetailSheet()}
       </div>
     );
   }
@@ -752,13 +905,21 @@ export function TurnQueueBar({
       >
         <div
           data-testid="turn-queue-sidebar-header"
-          style={{
-            height: `${TURN_QUEUE_SIDEBAR_HEIGHTS.headerPx}px`,
-            minHeight: `${TURN_QUEUE_SIDEBAR_HEIGHTS.headerPx}px`,
-          }}
-          className="h-[32px] min-h-[32px] max-h-[32px] shrink-0 flex items-center justify-between gap-2"
+          style={
+            latestPhaseLabel
+              ? { minHeight: `${TURN_QUEUE_SIDEBAR_HEIGHTS.headerPx}px` }
+              : {
+                  height: `${TURN_QUEUE_SIDEBAR_HEIGHTS.headerPx}px`,
+                  minHeight: `${TURN_QUEUE_SIDEBAR_HEIGHTS.headerPx}px`,
+                }
+          }
+          className={`shrink-0 flex flex-wrap items-center justify-between gap-2 ${
+            latestPhaseLabel
+              ? 'min-h-[32px] py-0.5'
+              : 'h-[32px] min-h-[32px] max-h-[32px]'
+          }`}
         >
-          <div className="flex items-center gap-1.5 min-w-0">
+          <div className="flex flex-wrap items-center gap-1.5 min-w-0 max-w-full">
             {!battle.summary && (
               <span
                 data-testid="turn-queue-combat-icon"
@@ -773,23 +934,14 @@ export function TurnQueueBar({
               data-testid="turn-queue-round-chip"
               title={enrageTooltip}
               className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded font-mono-nums text-[12px] font-bold whitespace-nowrap ${
-                highestPhaseLabel
+                latestPhaseLabel
                   ? 'bg-red-950/70 border border-red-500/65 text-slate-100'
                   : 'bg-slate-900 border border-slate-700 text-slate-100'
               }`}
             >
               <span>{t('battle.round', { round: queue.round })}</span>
-              {highestPhaseLabel && (
-                <span
-                  data-testid="turn-queue-enrage-badge"
-                  title={enrageTooltip}
-                  className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded bg-red-500/25 text-orange-300 text-[12px] font-bold leading-none"
-                >
-                  <Flame className="w-3 h-3 text-orange-400 shrink-0" />
-                  <span>{highestPhaseLabel}</span>
-                </span>
-              )}
             </span>
+            {renderEnrageChip()}
           </div>
 
           <span className="text-[12px] text-slate-400 font-medium whitespace-nowrap">
@@ -1005,6 +1157,7 @@ export function TurnQueueBar({
             </div>
           </div>
         )}
+        {renderEnrageDetailSheet()}
       </div>
     );
   }
@@ -1013,12 +1166,12 @@ export function TurnQueueBar({
   return (
     <div
       data-testid="turn-queue-bar"
-      className="relative flex items-center gap-2 min-w-0 w-full"
+      className="relative flex flex-wrap items-center gap-2 min-w-0 w-full"
     >
-      {/* Left Header Badges: [Swords icon (tooltip)] [Round N (+ inline flame x1.7 when enraged)] */}
+      {/* Left Header Badges: [Swords icon (tooltip)] [Round N] [Compact Enrage Chip] */}
       <div
         data-testid="turn-queue-header"
-        className="flex items-center gap-1.5 shrink-0"
+        className="flex flex-wrap items-center gap-1.5 min-w-0 max-w-full"
       >
         {!battle.summary && (
           <span
@@ -1035,23 +1188,14 @@ export function TurnQueueBar({
           data-testid="turn-queue-round-chip"
           title={enrageTooltip}
           className={`inline-flex items-center gap-1.5 px-2 py-1 rounded font-mono-nums text-[12px] font-bold whitespace-nowrap ${
-            highestPhaseLabel
+            latestPhaseLabel
               ? 'bg-red-950/70 border border-red-500/65 text-slate-100'
               : 'bg-slate-900 border border-slate-700 text-slate-100'
           }`}
         >
           <span>{t('battle.round', { round: queue.round })}</span>
-          {highestPhaseLabel && (
-            <span
-              data-testid="turn-queue-enrage-badge"
-              title={enrageTooltip}
-              className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded bg-red-500/25 text-orange-300 text-[11px] font-bold leading-none"
-            >
-              <Flame className="w-3 h-3 text-orange-400 shrink-0" aria-hidden="true" />
-              <span>{highestPhaseLabel}</span>
-            </span>
-          )}
         </span>
+        {renderEnrageChip()}
       </div>
 
       {/* Fixed-Width Non-Scrolling Conveyor Track (overflow-hidden, zero scrollbar, zero auto-scroll) */}
@@ -1156,6 +1300,7 @@ export function TurnQueueBar({
           </div>
         )}
       </BottomSheet>
+      {renderEnrageDetailSheet()}
     </div>
   );
 }

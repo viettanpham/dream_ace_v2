@@ -21,6 +21,9 @@ export const MIN_ENRAGE_MAX_STACKS = 1;
 export const MAX_ENRAGE_MAX_STACKS = 1000;
 export const MIN_ENRAGE_VALUE = 0;
 export const MAX_ENRAGE_VALUE = 1000;
+export const DEFAULT_CRIT_OVERFLOW_RATIO = 2;
+export const MIN_CRIT_OVERFLOW_RATIO = 0;
+export const MAX_CRIT_OVERFLOW_RATIO = 10;
 
 export interface EnrageState {
   enabled: boolean;
@@ -30,10 +33,13 @@ export interface EnrageState {
     frenzy: number;
     berserker: number;
   };
+  totalStacks: number;
   defDownPct: number;
   damageUpPct: number;
   critRateUpPct: number;
   critDamageUpPct: number;
+  critOverflowRatio: number;
+  latestPhase: EnragePhaseKey | null;
   highestPhase: EnragePhaseKey | null;
 }
 
@@ -74,6 +80,23 @@ export function clampEnrageValue(raw: unknown, fallback: number): number {
   );
 }
 
+export function clampCritOverflowRatio(
+  raw: unknown,
+  fallback: number = DEFAULT_CRIT_OVERFLOW_RATIO
+): number {
+  const n = typeof raw === 'number' ? raw : Number(raw);
+  if (!Number.isFinite(n)) {
+    return Math.min(
+      MAX_CRIT_OVERFLOW_RATIO,
+      Math.max(MIN_CRIT_OVERFLOW_RATIO, Math.round(fallback * 100) / 100)
+    );
+  }
+  return Math.min(
+    MAX_CRIT_OVERFLOW_RATIO,
+    Math.max(MIN_CRIT_OVERFLOW_RATIO, Math.round(n * 100) / 100)
+  );
+}
+
 function sanitizeEnragePhase(
   raw: unknown,
   fallback: EnragePhaseConfig
@@ -100,6 +123,10 @@ function sanitizeEnrageBerserker(
     maxStacks: clampEnrageMaxStacks(rec.maxStacks, fallback.maxStacks),
     critRatePct: clampEnrageValue(rec.critRatePct, fallback.critRatePct),
     critDamagePct: clampEnrageValue(rec.critDamagePct, fallback.critDamagePct),
+    critOverflowRatio: clampCritOverflowRatio(
+      rec.critOverflowRatio,
+      fallback.critOverflowRatio ?? DEFAULT_CRIT_OVERFLOW_RATIO
+    ),
   };
 }
 
@@ -132,6 +159,51 @@ export function getEnrageStacks(
   return Math.min(maxS, 1 + Math.floor((r - start) / every));
 }
 
+export function getEnragePhaseNextStackRound(
+  round: number,
+  phase: Pick<EnragePhaseConfig, 'startRound' | 'everyRounds' | 'maxStacks'>
+): number | null {
+  const start = Math.max(MIN_ENRAGE_START_ROUND, Math.floor(phase.startRound));
+  const every = Math.max(MIN_ENRAGE_EVERY_ROUNDS, Math.floor(phase.everyRounds));
+  const maxS = Math.min(
+    MAX_ENRAGE_MAX_STACKS,
+    Math.max(MIN_ENRAGE_MAX_STACKS, Math.floor(phase.maxStacks))
+  );
+  const stacks = getEnrageStacks(round, {
+    startRound: start,
+    everyRounds: every,
+    maxStacks: maxS,
+  });
+  if (stacks >= maxS) return null;
+  if (stacks === 0) return start;
+  return start + stacks * every;
+}
+
+export function computeCritWithOverflow(
+  derivedCritChance: number,
+  bonusCrit: number,
+  critRateUpPct: number,
+  critOverflowRatio: number
+): {
+  rawCrit: number;
+  totalCritChance: number;
+  overflowPct: number;
+  overflowCritDamagePct: number;
+} {
+  const basePlusBonusCrit = Math.min(75, derivedCritChance + bonusCrit);
+  const rawCrit = basePlusBonusCrit + critRateUpPct;
+  const totalCritChance = Math.min(100, rawCrit);
+  const overflowPct = Math.max(0, rawCrit - 100);
+  const safeRatio = clampCritOverflowRatio(critOverflowRatio, 0);
+  const overflowCritDamagePct = Math.round(overflowPct * safeRatio * 100) / 100;
+  return {
+    rawCrit,
+    totalCritChance,
+    overflowPct,
+    overflowCritDamagePct,
+  };
+}
+
 export function getEnrageState(
   round: number,
   cfg?: Partial<Pick<AdminConfig, 'softEnrageEnabled' | 'enrage'>> | null
@@ -143,10 +215,13 @@ export function getEnrageState(
       enabled: false,
       round: safeRound,
       stacks: { rage: 0, frenzy: 0, berserker: 0 },
+      totalStacks: 0,
       defDownPct: 0,
       damageUpPct: 0,
       critRateUpPct: 0,
       critDamageUpPct: 0,
+      critOverflowRatio: 0,
+      latestPhase: null,
       highestPhase: null,
     };
   }
@@ -155,6 +230,12 @@ export function getEnrageState(
   const rageStacks = getEnrageStacks(safeRound, enrageCfg.rage);
   const frenzyStacks = getEnrageStacks(safeRound, enrageCfg.frenzy);
   const berserkerStacks = getEnrageStacks(safeRound, enrageCfg.berserker);
+  const stacks = {
+    rage: rageStacks,
+    frenzy: frenzyStacks,
+    berserker: berserkerStacks,
+  };
+  const totalStacks = rageStacks + frenzyStacks + berserkerStacks;
 
   const defDownPct = Math.min(
     100,
@@ -172,25 +253,35 @@ export function getEnrageState(
     0,
     Math.round(berserkerStacks * enrageCfg.berserker.critDamagePct * 100) / 100
   );
+  const critOverflowRatio = clampCritOverflowRatio(
+    enrageCfg.berserker.critOverflowRatio,
+    DEFAULT_CRIT_OVERFLOW_RATIO
+  );
 
-  let highestPhase: EnragePhaseKey | null = null;
-  if (berserkerStacks > 0) highestPhase = 'berserker';
-  else if (frenzyStacks > 0) highestPhase = 'frenzy';
-  else if (rageStacks > 0) highestPhase = 'rage';
+  let latestPhase: EnragePhaseKey | null = null;
+  let latestStartRound = -1;
+  for (const phase of ENRAGE_PHASE_ORDER) {
+    if (stacks[phase] > 0) {
+      const start = enrageCfg[phase].startRound;
+      if (start >= latestStartRound) {
+        latestStartRound = start;
+        latestPhase = phase;
+      }
+    }
+  }
 
   return {
     enabled: true,
     round: safeRound,
-    stacks: {
-      rage: rageStacks,
-      frenzy: frenzyStacks,
-      berserker: berserkerStacks,
-    },
+    stacks,
+    totalStacks,
     defDownPct,
     damageUpPct,
     critRateUpPct,
     critDamageUpPct,
-    highestPhase,
+    critOverflowRatio,
+    latestPhase,
+    highestPhase: latestPhase,
   };
 }
 
@@ -214,7 +305,11 @@ export function isEnrageConfigModified(
     cur.berserker.everyRounds !== def.berserker.everyRounds ||
     cur.berserker.maxStacks !== def.berserker.maxStacks ||
     Math.abs(cur.berserker.critRatePct - def.berserker.critRatePct) > 0.0001 ||
-    Math.abs(cur.berserker.critDamagePct - def.berserker.critDamagePct) > 0.0001
+    Math.abs(cur.berserker.critDamagePct - def.berserker.critDamagePct) > 0.0001 ||
+    Math.abs(
+      (cur.berserker.critOverflowRatio ?? DEFAULT_CRIT_OVERFLOW_RATIO) -
+        def.berserker.critOverflowRatio
+    ) > 0.0001
   );
 }
 

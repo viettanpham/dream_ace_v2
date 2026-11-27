@@ -1115,6 +1115,12 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'admin.enrageExFrenzyVal': '5 tầng = +{at5}% ST (tối đa +{atMax}%)',
   'admin.enrageExCritRate': '5 tầng = +{at5}% tỉ lệ crit (tối đa +{atMax}%)',
   'admin.enrageExCritDmg': '5 tầng = +{at5}% ST crit (tối đa +{atMax}%)',
+  'admin.enrageBerserkerOverflowRatio': 'Tỉ lệ đổi crit thừa -> sát thương crit',
+  'admin.enrageExOverflowRatio':
+    '130% crit -> 30% thừa x {ratio} = +{extra}% sát thương crit',
+  'enrage.detailTitle': 'Cuồng nộ chống kéo dài',
+  'enrage.nextStackAt': 'Tầng kế tiếp tại vòng {round}',
+  'enrage.maxReached': 'Đã đạt tầng tối đa',
 
   // Bổ sung Bản đồ (Căn cứ, Đồn trú, NPC, Hư hại/Sửa chữa, Đếm ngược tấn công, Chú giải)
   'sector.aegis_relay.name': 'Trạm Tiếp Sóng Aegis',

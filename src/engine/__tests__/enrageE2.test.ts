@@ -266,6 +266,7 @@ describe('TASK ENRAGE-2 — 3-phase anti-stalemate system', () => {
       maxStacks: 1000,
       critRatePct: 0,
       critDamagePct: 1000,
+      critOverflowRatio: 2,
     });
     expect(
       isAnyCheatActive({ ...migrated.adminConfig, enrage: clamped })

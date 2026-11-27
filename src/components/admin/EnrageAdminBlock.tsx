@@ -2,10 +2,12 @@ import { useState } from 'react';
 import { Flame, RotateCcw } from 'lucide-react';
 import { cloneEnrageConfig, DEFAULT_ENRAGE_CONFIG } from '../../data/balance';
 import {
+  clampCritOverflowRatio,
   clampEnrageEveryRounds,
   clampEnrageMaxStacks,
   clampEnrageStartRound,
   clampEnrageValue,
+  DEFAULT_CRIT_OVERFLOW_RATIO,
   formatEnrageAdminSummary,
   sanitizeEnrageConfig,
 } from '../../engine/enrage';
@@ -542,6 +544,53 @@ export function EnrageAdminBlock({
                 at5: fmtNum(5 * enrage.berserker.critDamagePct),
                 atMax: fmtNum(
                   enrage.berserker.maxStacks * enrage.berserker.critDamagePct
+                ),
+              })}
+            </p>
+          </label>
+
+          <label className="space-y-1 block">
+            <span className="text-[11px] text-slate-400 block">
+              {t('admin.enrageBerserkerOverflowRatio')}
+            </span>
+            <input
+              type="number"
+              min={0}
+              max={10}
+              step="any"
+              data-testid="admin-enrage-berserker-overflow-ratio"
+              value={
+                enrage.berserker.critOverflowRatio ?? DEFAULT_CRIT_OVERFLOW_RATIO
+              }
+              onChange={(e) => {
+                const raw = Number(e.target.value);
+                if (!Number.isFinite(raw)) return;
+                updateEnrage({
+                  ...enrage,
+                  berserker: {
+                    ...enrage.berserker,
+                    critOverflowRatio: clampCritOverflowRatio(
+                      raw,
+                      DEFAULT_ENRAGE_CONFIG.berserker.critOverflowRatio
+                    ),
+                  },
+                });
+              }}
+              className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+            />
+            <p
+              data-testid="admin-enrage-berserker-overflow-example"
+              className="text-[11px] font-mono-nums text-sky-300/90"
+            >
+              {t('admin.enrageExOverflowRatio', {
+                ratio: fmtNum(
+                  enrage.berserker.critOverflowRatio ??
+                    DEFAULT_CRIT_OVERFLOW_RATIO
+                ),
+                extra: fmtNum(
+                  30 *
+                    (enrage.berserker.critOverflowRatio ??
+                      DEFAULT_CRIT_OVERFLOW_RATIO)
                 ),
               })}
             </p>

@@ -188,6 +188,7 @@ export const DEFAULT_ENRAGE_CONFIG = {
     maxStacks: 10,
     critRatePct: 3,
     critDamagePct: 10,
+    critOverflowRatio: 2,
   },
 } as const;
 
@@ -200,12 +201,18 @@ export function cloneEnrageConfig(cfg: {
     maxStacks: number;
     critRatePct: number;
     critDamagePct: number;
+    critOverflowRatio?: number;
   };
 } = DEFAULT_ENRAGE_CONFIG) {
   return {
     rage: { ...cfg.rage },
     frenzy: { ...cfg.frenzy },
-    berserker: { ...cfg.berserker },
+    berserker: {
+      ...cfg.berserker,
+      critOverflowRatio:
+        cfg.berserker.critOverflowRatio ??
+        DEFAULT_ENRAGE_CONFIG.berserker.critOverflowRatio,
+    },
   };
 }
 

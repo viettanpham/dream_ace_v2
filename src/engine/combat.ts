@@ -32,7 +32,11 @@ import {
   processRegistryTickEffects,
   tickStatusDurations,
 } from './statusEngine';
-import { buildEnrageActivationLogs, getEnrageState } from './enrage';
+import {
+  buildEnrageActivationLogs,
+  computeCritWithOverflow,
+  getEnrageState,
+} from './enrage';
 import { resolveSkillSpecs } from './skillSpecs';
 import type {
   ActionType,
@@ -1527,14 +1531,13 @@ function applyDamageToUnit(
 
   const enrageState = getEnrageState(options.round, options.adminConfig);
 
-  const basePlusBonusCrit = Math.min(
-    75,
-    curAttacker.derived.critChance + (options.bonusCrit ?? 0)
+  const critCalc = computeCritWithOverflow(
+    curAttacker.derived.critChance,
+    options.bonusCrit ?? 0,
+    enrageState.critRateUpPct,
+    enrageState.critOverflowRatio
   );
-  const totalCritChance = Math.min(
-    100,
-    basePlusBonusCrit + enrageState.critRateUpPct
-  );
+  const totalCritChance = critCalc.totalCritChance;
   const isCrit = isOneHit || rng() * 100 < totalCritChance;
 
   const formationConfig =
@@ -1594,7 +1597,7 @@ function applyDamageToUnit(
     const critMult =
       COMBAT_FORMULAS.critDamageMultiplier +
       (curAttacker.derived.critDamagePct ?? 0) / 100 +
-      enrageState.critDamageUpPct / 100;
+      (enrageState.critDamageUpPct + critCalc.overflowCritDamagePct) / 100;
     finalDamage = Math.round(finalDamage * critMult);
   }
   if (

@@ -243,11 +243,13 @@ describe('Conveyor Turn Queue — buildTurnQueue & TurnQueueBar render', () => {
     expect(html).toContain(
       'title="Cuồng nộ: 2 tầng (thủ -10%) · Frenzy: 0 tầng (+0% sát thương) · Berserker: 0 tầng (+0% crit, +0% sát thương crit)"'
     );
-    // Enrage badge is nested inside turn-queue-round-chip (no separate enrage pill after closing round chip)
+    // Enrage chip renders right after turn-queue-round-chip with phase name, stack count, active icons, and 3-phase tooltip
     const roundChipSegment = html.slice(roundChipIdx, firstChipIdx);
     expect(roundChipSegment).toContain('Vòng 27');
     expect(roundChipSegment).toContain('data-testid="turn-queue-enrage-badge"');
     expect(roundChipSegment).toContain('Cuồng nộ');
+    expect(roundChipSegment).toContain('x2');
+    expect(roundChipSegment).toContain('-10%');
   });
 });
 

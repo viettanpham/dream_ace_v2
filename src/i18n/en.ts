@@ -1113,6 +1113,12 @@ export const EN_TRANSLATIONS = {
   'admin.enrageExFrenzyVal': '5 stacks = +{at5}% DMG (max +{atMax}%)',
   'admin.enrageExCritRate': '5 stacks = +{at5}% crit rate (max +{atMax}%)',
   'admin.enrageExCritDmg': '5 stacks = +{at5}% crit DMG (max +{atMax}%)',
+  'admin.enrageBerserkerOverflowRatio': 'Crit overflow -> crit DMG ratio',
+  'admin.enrageExOverflowRatio':
+    '130% crit -> 30% overflow x {ratio} = +{extra}% crit DMG',
+  'enrage.detailTitle': 'Anti-Stalemate Enrage',
+  'enrage.nextStackAt': 'Next stack at round {round}',
+  'enrage.maxReached': 'Max stacks reached',
 
   // Map UI Additions (Bases, Garrison, NPCs, Damaged/Repair, Raid Countdown, Legend)
   'sector.aegis_relay.name': 'Aegis Command Relay',
