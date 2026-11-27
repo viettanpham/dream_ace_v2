@@ -200,6 +200,43 @@ export function computeInitialPhoneMapView(
   };
 }
 
+export function computeInitialGeneratedMapView(
+  startPos: { x: number; y: number },
+  neighborPositions: ReadonlyArray<{ x: number; y: number }>,
+  boxWidth: number,
+  boxHeight: number,
+  bounds: MapBounds = getActiveMap().bounds
+): { zoom: number; pan: { x: number; y: number } } {
+  const safeW = Math.max(120, boxWidth);
+  const safeH = Math.max(120, boxHeight);
+  const viewW = Math.max(1, bounds.width);
+  const viewH = Math.max(1, bounds.height);
+  const baseScale = Math.min(safeW / viewW, safeH / viewH);
+
+  const pts = [startPos, ...neighborPositions];
+  const padX = 90;
+  const padY = 75;
+  const minX = Math.max(0, Math.min(...pts.map((p) => p.x)) - padX);
+  const maxX = Math.min(viewW, Math.max(...pts.map((p) => p.x)) + padX);
+  const minY = Math.max(0, Math.min(...pts.map((p) => p.y)) - padY);
+  const maxY = Math.min(viewH, Math.max(...pts.map((p) => p.y)) + padY);
+  const subW = Math.max(220, maxX - minX);
+  const subH = Math.max(160, maxY - minY);
+
+  const fitZoom = Math.min(
+    safeW / (subW * baseScale),
+    safeH / (subH * baseScale)
+  );
+  const zoom = clampMapZoom(Math.max(1.2, Number(fitZoom.toFixed(2))), bounds);
+  const rawPanX = -(startPos.x - viewW / 2) * baseScale * zoom;
+  const rawPanY = -(startPos.y - viewH / 2) * baseScale * zoom;
+
+  return {
+    zoom,
+    pan: clampMapPan(rawPanX, rawPanY, zoom, safeW, safeH, bounds),
+  };
+}
+
 function getFallbackMapBoxSize(phone: boolean): {
   width: number;
   height: number;
@@ -325,17 +362,39 @@ export function MapView() {
 
   const layoutMode = useBattleLayoutMode();
   const isPhone = layoutMode === 'phone-portrait';
-  const activeMapBounds = getActiveMap().bounds;
+  const activeMap = getActiveMap();
+  const activeMapBounds = activeMap.bounds;
+  const isGeneratedMap = activeMap.mapId !== 'sys_orbital_6';
+  const startNode =
+    activeMap.nodes.find((n) => n.id === activeMap.defaultSelectedNodeId) ??
+    getSectorById(selectedSectorId);
+  const startNeighborIds = new Set<string>();
+  for (const lane of activeMap.lanes) {
+    if (lane.from === startNode.id) startNeighborIds.add(lane.to);
+    else if (lane.to === startNode.id) startNeighborIds.add(lane.from);
+  }
+  const startNeighborPositions = activeMap.nodes
+    .filter((n) => startNeighborIds.has(n.id))
+    .map((n) => n.mapPos);
+
   const initialSelectedSector = getSectorById(selectedSectorId);
   const initialFallbackSize = getFallbackMapBoxSize(isPhone);
-  const initialView = isPhone
-    ? computeInitialPhoneMapView(
-        initialSelectedSector.mapPos,
+  const initialView = isGeneratedMap
+    ? computeInitialGeneratedMapView(
+        startNode.mapPos,
+        startNeighborPositions,
         initialFallbackSize.width,
         initialFallbackSize.height,
         activeMapBounds
       )
-    : { zoom: 1, pan: { x: 0, y: 0 } };
+    : isPhone
+      ? computeInitialPhoneMapView(
+          initialSelectedSector.mapPos,
+          initialFallbackSize.width,
+          initialFallbackSize.height,
+          activeMapBounds
+        )
+      : { zoom: 1, pan: { x: 0, y: 0 } };
 
   const [zoom, setZoom] = useState(initialView.zoom);
   const [pan, setPan] = useState(initialView.pan);
@@ -353,6 +412,7 @@ export function MapView() {
   const mapViewportRef = useRef<HTMLDivElement | null>(null);
   const userInteractedRef = useRef(false);
   const prevIsPhoneRef = useRef(isPhone);
+  const prevMapIdRef = useRef(activeMap.mapId);
   // Pointer drag-to-pan & 2-finger pinch-to-zoom state
   const pointersRef = useRef(new Map<number, { x: number; y: number }>());
   const pinchBaseRef = useRef<{ dist: number; zoom: number } | null>(null);
@@ -362,6 +422,7 @@ export function MapView() {
     panX: number;
     panY: number;
     moved: boolean;
+    captured: boolean;
   } | null>(null);
 
   const activeGear = pilot.gears[pilot.activeGearId];
@@ -468,23 +529,45 @@ export function MapView() {
     );
   };
 
-  const resetMapView = () => {
-    userInteractedRef.current = false;
+  const computePreferredInitialView = (size: { width: number; height: number }) => {
+    if (isGeneratedMap) {
+      return computeInitialGeneratedMapView(
+        startNode.mapPos,
+        startNeighborPositions,
+        size.width,
+        size.height,
+        activeMapBounds
+      );
+    }
     if (isPhone) {
-      const size = getCurrentMapBoxSize();
-      const view = computeInitialPhoneMapView(
+      return computeInitialPhoneMapView(
         selectedSector.mapPos,
         size.width,
         size.height,
         activeMapBounds
       );
+    }
+    return { zoom: 1, pan: { x: 0, y: 0 } };
+  };
+
+  const resetMapView = () => {
+    userInteractedRef.current = false;
+    const size = getCurrentMapBoxSize();
+    const view = computePreferredInitialView(size);
+    setZoom(view.zoom);
+    setPan(view.pan);
+  };
+
+  useEffect(() => {
+    if (prevMapIdRef.current !== activeMap.mapId) {
+      prevMapIdRef.current = activeMap.mapId;
+      userInteractedRef.current = false;
+      const size = getCurrentMapBoxSize();
+      const view = computePreferredInitialView(size);
       setZoom(view.zoom);
       setPan(view.pan);
-    } else {
-      setZoom(1);
-      setPan({ x: 0, y: 0 });
     }
-  };
+  }, [activeMap.mapId]);
 
   useEffect(() => {
     const el = mapViewportRef.current;
@@ -493,13 +576,8 @@ export function MapView() {
       if (el.clientWidth > 0 && el.clientHeight > 0) {
         const nextSize = { width: el.clientWidth, height: el.clientHeight };
         setMapBoxSize(nextSize);
-        if (isPhone && !userInteractedRef.current) {
-          const view = computeInitialPhoneMapView(
-            selectedSector.mapPos,
-            nextSize.width,
-            nextSize.height,
-            activeMapBounds
-          );
+        if ((isPhone || isGeneratedMap) && !userInteractedRef.current) {
+          const view = computePreferredInitialView(nextSize);
           setZoom(view.zoom);
           setPan(view.pan);
         }
@@ -511,6 +589,8 @@ export function MapView() {
     return () => ro.disconnect();
   }, [
     isPhone,
+    isGeneratedMap,
+    activeMap.mapId,
     selectedSector.mapPos,
     activeMapBounds.width,
     activeMapBounds.height,
@@ -531,28 +611,22 @@ export function MapView() {
     if (prevIsPhoneRef.current !== isPhone) {
       prevIsPhoneRef.current = isPhone;
       userInteractedRef.current = false;
-      if (isPhone) {
-        const el = mapViewportRef.current;
-        const size =
-          el && el.clientWidth > 0 && el.clientHeight > 0
-            ? { width: el.clientWidth, height: el.clientHeight }
-            : fallback;
-        const view = computeInitialPhoneMapView(
-          selectedSector.mapPos,
-          size.width,
-          size.height,
-          activeMapBounds
-        );
-        setZoom(view.zoom);
-        setPan(view.pan);
-      } else {
-        setZoom(1);
-        setPan({ x: 0, y: 0 });
+      const el = mapViewportRef.current;
+      const size =
+        el && el.clientWidth > 0 && el.clientHeight > 0
+          ? { width: el.clientWidth, height: el.clientHeight }
+          : fallback;
+      const view = computePreferredInitialView(size);
+      setZoom(view.zoom);
+      setPan(view.pan);
+      if (!isPhone) {
         setMapInfoOpen(false);
       }
     }
   }, [
     isPhone,
+    isGeneratedMap,
+    activeMap.mapId,
     selectedSector.mapPos,
     activeMapBounds.width,
     activeMapBounds.height,
@@ -589,7 +663,6 @@ export function MapView() {
   };
 
   const handlePointerDown = (e: PointerEvent<HTMLDivElement>) => {
-    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
     pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
     if (pointersRef.current.size === 1) {
@@ -599,6 +672,7 @@ export function MapView() {
         panX: pan.x,
         panY: pan.y,
         moved: false,
+        captured: false,
       };
       pinchBaseRef.current = null;
     } else if (pointersRef.current.size === 2) {
@@ -628,14 +702,24 @@ export function MapView() {
       if (Math.hypot(dx, dy) > 6) {
         dragOriginRef.current.moved = true;
         userInteractedRef.current = true;
+        if (!dragOriginRef.current.captured) {
+          dragOriginRef.current.captured = true;
+          (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+        }
       }
-      setPan(
-        clampPan(dragOriginRef.current.panX + dx, dragOriginRef.current.panY + dy)
-      );
+      if (dragOriginRef.current.moved) {
+        setPan(
+          clampPan(dragOriginRef.current.panX + dx, dragOriginRef.current.panY + dy)
+        );
+      }
     }
   };
 
   const handlePointerUp = (e: PointerEvent<HTMLDivElement>) => {
+    const target = e.currentTarget as HTMLElement;
+    if (target.hasPointerCapture?.(e.pointerId)) {
+      target.releasePointerCapture?.(e.pointerId);
+    }
     pointersRef.current.delete(e.pointerId);
     if (pointersRef.current.size < 2) {
       pinchBaseRef.current = null;
@@ -1830,7 +1914,7 @@ export function MapView() {
                     ))}
 
                   {/* Enlarged >= 44px transparent hit target */}
-                  <circle cx={pos.x} cy={pos.y} r="32" fill="transparent" />
+                  <circle cx={pos.x} cy={pos.y} r="32" fill="transparent" pointerEvents="all" />
 
                   {/* Main Token Body (Round or Square) */}
                   {isSquare ? (

@@ -2611,6 +2611,9 @@ export const EN_TRANSLATIONS = {
   'admin.worldGen.seed.desc':
     'Seed string determining deterministic base layout, lanes, and factions',
   'admin.worldGen.seed.random': 'Random',
+  'admin.worldGen.nameSet.title': 'Name set',
+  'admin.worldGen.nameSet.desc':
+    'Base name pool ordered by distance to both capitals',
   'admin.worldGen.resetProgressLabel':
     'Also reset character progress (erases GEARs, items, credits)',
   'admin.worldGen.createBtn': 'Create World',

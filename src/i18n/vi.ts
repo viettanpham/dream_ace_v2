@@ -2613,6 +2613,9 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'admin.worldGen.seed.desc':
     'Chuỗi hạt giống xác định vị trí, tuyến nối và phân bố căn cứ',
   'admin.worldGen.seed.random': 'Ngẫu nhiên',
+  'admin.worldGen.nameSet.title': 'Bộ tên',
+  'admin.worldGen.nameSet.desc':
+    'Kho tên căn cứ theo khoảng cách tới thủ đô hai phe',
   'admin.worldGen.resetProgressLabel':
     'Reset cả tiến trình nhân vật (xóa GEAR, đồ, tiền)',
   'admin.worldGen.createBtn': 'Tạo thế giới',

@@ -1,3 +1,4 @@
+import mapNamesData from '../data/mapNames.json';
 import { getBuiltInMapPack, validateMapPack } from '../data/maps';
 import type {
   BaseFaction,
@@ -13,10 +14,64 @@ export const MIN_GENERATED_BASES = 12;
 export const MAX_GENERATED_BASES = 50;
 export const DEFAULT_GENERATED_BASES = 20;
 
+interface MapNameSetData {
+  label: string;
+  ally: string[];
+  enemy: string[];
+  neutral: string[];
+}
+
+const RAW_NAME_SETS = (
+  mapNamesData as {
+    defaultSetId?: string;
+    sets: Record<string, MapNameSetData>;
+  }
+).sets;
+
+export const DEFAULT_MAP_NAME_SET_ID =
+  (mapNamesData as { defaultSetId?: string }).defaultSetId ??
+  Object.keys(RAW_NAME_SETS)[0] ??
+  'ace_online';
+
+export const MAP_NAME_SETS: ReadonlyArray<{ id: string; label: string }> =
+  Object.entries(RAW_NAME_SETS).map(([id, entry]) => ({
+    id,
+    label: entry.label,
+  }));
+
 export interface GenerateMapPackOptions {
   nodeCount: number;
   seed: string;
   lang?: Language;
+  nameSetId?: string;
+}
+
+function shuffleWithRng<T>(items: readonly T[], rng: () => number): T[] {
+  const arr = [...items];
+  for (let i = arr.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(rng() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function toRomanNumeral(num: number): string {
+  const table: Array<[number, string]> = [
+    [10, 'X'],
+    [9, 'IX'],
+    [5, 'V'],
+    [4, 'IV'],
+    [1, 'I'],
+  ];
+  let rem = Math.max(1, Math.floor(num));
+  let out = '';
+  for (const [val, sym] of table) {
+    while (rem >= val) {
+      out += sym;
+      rem -= val;
+    }
+  }
+  return out;
 }
 
 function hashSeed(seedText: string): number {
@@ -376,17 +431,28 @@ export function generateMapPack(
     }
   });
 
-  // 4. Select 1-3 far capital nodes scaled with count
-  const capitalCount = count >= 36 ? 3 : count >= 22 ? 2 : 1;
-  const capitalSet = new Set<number>(
-    sortedIndices
-      .filter((idx) => idx !== 0 && hops[idx] >= 2)
-      .sort((a, b) => {
-        if (hops[b] !== hops[a]) return hops[b] - hops[a];
-        return positions[b].x - positions[a].x;
-      })
-      .slice(0, capitalCount)
-  );
+  // 4. Strictly 2 capitals: start (node 0, allied) & single farthest node (hostile)
+  const enemyCapitalIdx = sortedIndices
+    .filter((idx) => idx !== 0)
+    .sort((a, b) => {
+      if (hops[b] !== hops[a]) return hops[b] - hops[a];
+      if (positions[b].x !== positions[a].x) return positions[b].x - positions[a].x;
+      return positions[b].y - positions[a].y;
+    })[0];
+
+  // Secondary BFS distances from the enemy capital for pooled base naming
+  const hopsFromEnemyCap = new Array<number>(count).fill(999);
+  hopsFromEnemyCap[enemyCapitalIdx] = 0;
+  const enemyBfsQueue: number[] = [enemyCapitalIdx];
+  while (enemyBfsQueue.length > 0) {
+    const cur = enemyBfsQueue.shift()!;
+    for (const next of adjIdx[cur]) {
+      if (hopsFromEnemyCap[next] > hopsFromEnemyCap[cur] + 1) {
+        hopsFromEnemyCap[next] = hopsFromEnemyCap[cur] + 1;
+        enemyBfsQueue.push(next);
+      }
+    }
+  }
 
   // 5. Assign factions: start = allied, start's neighbours = contested (1+ hostile, rest hostile/neutral)
   const factions = new Array<BaseFaction>(count);
@@ -408,11 +474,79 @@ export function generateMapPack(
 
   for (let i = 1; i < count; i += 1) {
     if (factions[i]) continue;
-    if (capitalSet.has(i)) {
+    if (i === enemyCapitalIdx) {
       factions[i] = 'hostile';
     } else {
       factions[i] = rng() < 0.25 ? 'neutral' : 'hostile';
     }
+  }
+
+  // 5b. Assign themed names from distance-matched pools without duplicates
+  const resolvedSetId =
+    opts.nameSetId && RAW_NAME_SETS[opts.nameSetId]
+      ? opts.nameSetId
+      : DEFAULT_MAP_NAME_SET_ID;
+  const activeNameSet = RAW_NAME_SETS[resolvedSetId] ?? RAW_NAME_SETS[DEFAULT_MAP_NAME_SET_ID];
+  const nameRng = mulberry32(hashSeed(`${cleanSeed}::${count}::${resolvedSetId}`));
+  const pools: Record<'ally' | 'enemy' | 'neutral', string[]> = {
+    ally: shuffleWithRng(activeNameSet.ally, nameRng),
+    enemy: shuffleWithRng(activeNameSet.enemy, nameRng),
+    neutral: shuffleWithRng(activeNameSet.neutral, nameRng),
+  };
+  const allBaseNames = [...pools.ally, ...pools.neutral, ...pools.enemy];
+
+  const alliedCapName = lang === 'en' ? 'VSS Alliance' : 'Liên Minh VSS';
+  const enemyCapName =
+    lang === 'en' ? 'Void Sovereign Trench' : 'Rãnh Void Sovereign';
+  const nodeNameByOrigIdx = new Array<string>(count);
+  nodeNameByOrigIdx[0] = alliedCapName;
+  nodeNameByOrigIdx[enemyCapitalIdx] = enemyCapName;
+  const usedNames = new Set<string>([alliedCapName, enemyCapName]);
+
+  const drawFromPool = (poolKey: 'ally' | 'enemy' | 'neutral'): string | null => {
+    const list = pools[poolKey];
+    while (list.length > 0) {
+      const candidate = list.shift()!;
+      if (!usedNames.has(candidate)) {
+        return candidate;
+      }
+    }
+    return null;
+  };
+
+  for (const origIdx of sortedIndices) {
+    if (origIdx === 0 || origIdx === enemyCapitalIdx) continue;
+    const dAlly = hops[origIdx];
+    const dEnemy = hopsFromEnemyCap[origIdx];
+    const poolOrder: Array<'ally' | 'enemy' | 'neutral'> =
+      dAlly < dEnemy - 1
+        ? ['ally', 'neutral', 'enemy']
+        : dEnemy < dAlly - 1
+          ? ['enemy', 'neutral', 'ally']
+          : ['neutral', 'ally', 'enemy'];
+
+    let picked: string | null = null;
+    for (const key of poolOrder) {
+      picked = drawFromPool(key);
+      if (picked) break;
+    }
+
+    if (!picked) {
+      for (let suffix = 2; suffix < 100 && !picked; suffix += 1) {
+        const roman = toRomanNumeral(suffix);
+        for (const base of allBaseNames) {
+          const candidate = `${base} ${roman}`;
+          if (!usedNames.has(candidate)) {
+            picked = candidate;
+            break;
+          }
+        }
+      }
+    }
+
+    const finalName = picked ?? `Base ${displayNumberByOrigIdx[origIdx]}`;
+    usedNames.add(finalName);
+    nodeNameByOrigIdx[origIdx] = finalName;
   }
 
   // 6. Build SectorDefinition entries
@@ -420,11 +554,6 @@ export function generateMapPack(
     14,
     Math.max(10, Math.round(10 + ((count - 12) / 38) * 4))
   );
-  const capitalRank = new Map<number, number>();
-  let capIdxCounter = 0;
-  for (const idx of Array.from(capitalSet)) {
-    capitalRank.set(idx, capIdxCounter++);
-  }
 
   const nodes: SectorDefinition[] = sortedIndices.map((origIdx) => {
     const hop = hops[origIdx];
@@ -433,12 +562,11 @@ export function generateMapPack(
     let baseLevel: number;
 
     if (origIdx === 0) {
-      baseType = 'relay';
-      baseLevel = 1;
-    } else if (capitalSet.has(origIdx)) {
       baseType = 'capital';
-      const rank = capitalRank.get(origIdx) ?? 0;
-      baseLevel = Math.min(14, Math.max(10, maxCapitalLevel - rank));
+      baseLevel = 1;
+    } else if (origIdx === enemyCapitalIdx) {
+      baseType = 'capital';
+      baseLevel = maxCapitalLevel;
     } else if (hop === 1 || rel <= 0.42) {
       const nearPool: BaseType[] =
         hop === 1
@@ -463,7 +591,7 @@ export function generateMapPack(
     const ratio = baseLevel / Math.max(1, tpl.baseLevel);
     const num = displayNumberByOrigIdx[origIdx];
     const regionCode = `Sector ${String(num).padStart(2, '0')}`;
-    const name = lang === 'en' ? `Base ${num}` : `Căn cứ ${num}`;
+    const name = nodeNameByOrigIdx[origIdx];
 
     return {
       id: nodeIdByOrigIdx[origIdx],

@@ -1,0 +1,64 @@
+{
+  "defaultSetId": "ace_online",
+  "sets": {
+    "ace_online": {
+      "label": "ACE Online",
+      "ally": [
+        "Stone Ruins",
+        "Tylent Jungle",
+        "Bach Mountain Chain",
+        "Blackburn Site",
+        "Zaylope Beach",
+        "Starlite Valley",
+        "Redline",
+        "Rock's Nest Bottom",
+        "Sunken City",
+        "Kahlua Beach",
+        "Nubarke Cave",
+        "Orina Peninsula",
+        "Daisy Riverhead"
+      ],
+      "enemy": [
+        "Reynard Beach",
+        "Edmont Valley",
+        "Desert of Ardor",
+        "The Violence Blizzard",
+        "Crystal Cave",
+        "Plain of Doleful Melody",
+        "Herremeze Relic Site",
+        "Rock's Nest Middle",
+        "Atus Beach",
+        "Gjert Road",
+        "Slope Port",
+        "Portsmouth Canyon"
+      ],
+      "neutral": [
+        "Castor",
+        "Polaris",
+        "Denebola",
+        "Alphard",
+        "Alioth",
+        "Pherkad",
+        "Eopi",
+        "Robenia City Orbit",
+        "J-Ark Hangar",
+        "J-Ark Engine Room",
+        "NGC Marine Laboratory",
+        "NGC Secret Base",
+        "Hazle Research Center",
+        "Violet Cave",
+        "Mirny Stope",
+        "El Dorado Metropolis",
+        "Floating Lake",
+        "Ash Lane",
+        "Akron",
+        "Maelstrom Desert",
+        "Infected Area",
+        "Ruined City",
+        "Petra Cave",
+        "Watermelon Island",
+        "Routhier"
+      ]
+    }
+  }
+}

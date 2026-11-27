@@ -240,6 +240,18 @@ export function getSectorName(lang: Language, sectorId: string): string {
   }
   const node = getMapNodeById(sectorId);
   if (node) {
+    if (lang === 'en' && node.name === 'Liên Minh VSS') {
+      return 'VSS Alliance';
+    }
+    if (lang === 'vi' && node.name === 'VSS Alliance') {
+      return 'Liên Minh VSS';
+    }
+    if (lang === 'en' && node.name === 'Rãnh Void Sovereign') {
+      return 'Void Sovereign Trench';
+    }
+    if (lang === 'vi' && node.name === 'Void Sovereign Trench') {
+      return 'Rãnh Void Sovereign';
+    }
     if (lang === 'en' && node.name.startsWith('Căn cứ ')) {
       return `Base ${node.name.slice('Căn cứ '.length)}`;
     }

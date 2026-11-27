@@ -8,6 +8,7 @@ import {
   getFluxMinPerAlly,
   getFluxPlannedAmountEach,
   getFluxTransferRule,
+  getUnlockedActiveSlots,
   getUnlockedPassiveSlots,
   sanitizeBattleRewardsConfig,
   sanitizeFluxTransferConfig,
@@ -304,12 +305,16 @@ export const NPC_ROLE_SKILL_PRIORITY: Record<MechClassId, readonly string[]> = {
 export function buildNpcSkillLoadout(
   classId: MechClassId,
   level: number,
-  adminConfig?: Pick<AdminConfig, 'skillMaxLevel' | 'passiveSlots'> | null
+  adminConfig?: Pick<
+    AdminConfig,
+    'skillMaxLevel' | 'passiveSlots' | 'activeSlots'
+  > | null
 ): {
   equippedSkillIds: string[];
   equippedPassives: string[];
   skillLevels: Record<string, number>;
 } {
+  const activeCap = getUnlockedActiveSlots(level, adminConfig?.activeSlots);
   const unlocked = SKILLS_LIST.filter(
     (s) =>
       s.classScope === classId &&
@@ -322,21 +327,21 @@ export function buildNpcSkillLoadout(
     const seen = new Set<string>();
     const priorityIds = NPC_ROLE_SKILL_PRIORITY[classId] ?? [];
     for (const id of priorityIds) {
-      if (picked.length >= MAX_ACTIVE_SKILL_BAR) break;
+      if (picked.length >= activeCap) break;
       if (unlockedIds.has(id) && !seen.has(id)) {
         picked.push(id);
         seen.add(id);
       }
     }
     for (const skill of unlocked) {
-      if (picked.length >= MAX_ACTIVE_SKILL_BAR) break;
+      if (picked.length >= activeCap) break;
       if (!seen.has(skill.id)) {
         picked.push(skill.id);
         seen.add(skill.id);
       }
     }
   } else {
-    picked = [...CLASS_STARTER_SKILLS[classId]].slice(0, MAX_ACTIVE_SKILL_BAR);
+    picked = [...CLASS_STARTER_SKILLS[classId]].slice(0, activeCap);
   }
   const skillCap = getEffectiveSkillMaxLevel(adminConfig);
   const lv = Math.min(skillCap, Math.max(1, Math.ceil(level / 5)));
@@ -375,7 +380,7 @@ function clampBattleSkillLevels(
   return clamped;
 }
 
-function buildCombatUnit(params: {
+export function buildCombatUnit(params: {
   id: string;
   name: string;
   callsign: string;
@@ -458,12 +463,15 @@ function buildCombatUnit(params: {
       }
     : baseDerived;
 
+  const activeSkillCap = params.isPlayer
+    ? MAX_ACTIVE_SKILL_BAR
+    : getUnlockedActiveSlots(params.level, params.adminConfig?.activeSlots);
   const equippedSkillIds = (params.equippedSkillIds ?? npcFallback.equippedSkillIds)
     .filter((id) => {
       const sk = getSkillById(id, params.adminConfig);
       return sk && sk.category !== 'passive' && isSkillAllowedForClass(sk, params.classId);
     })
-    .slice(0, MAX_ACTIVE_SKILL_BAR);
+    .slice(0, activeSkillCap);
 
   return {
     id: params.id,

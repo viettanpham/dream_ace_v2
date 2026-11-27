@@ -4,7 +4,9 @@ import {
   clampGeneratedNodeCount,
   createRandomSeedCode,
   DEFAULT_GENERATED_BASES,
+  DEFAULT_MAP_NAME_SET_ID,
   generateMapPack,
+  MAP_NAME_SETS,
   MAX_GENERATED_BASES,
   MIN_GENERATED_BASES,
   normalizeSeedText,
@@ -35,6 +37,7 @@ export function WorldGenAdminBlock({ onFlash }: WorldGenAdminBlockProps) {
     String(DEFAULT_GENERATED_BASES)
   );
   const [seedInput, setSeedInput] = useState('KESTREL');
+  const [nameSetId, setNameSetId] = useState(DEFAULT_MAP_NAME_SET_ID);
   const [resetProgress, setResetProgress] = useState(false);
   const [pending, setPending] = useState<PendingWorldConfirm | null>(null);
   const [resetConfirmText, setResetConfirmText] = useState('');
@@ -55,8 +58,9 @@ export function WorldGenAdminBlock({ onFlash }: WorldGenAdminBlockProps) {
         nodeCount: effectiveCount,
         seed: effectiveSeed,
         lang,
+        nameSetId,
       }),
-    [effectiveCount, effectiveSeed, lang]
+    [effectiveCount, effectiveSeed, lang, nameSetId]
   );
 
   const initialContestedCount = useMemo(() => {
@@ -81,6 +85,7 @@ export function WorldGenAdminBlock({ onFlash }: WorldGenAdminBlockProps) {
       nodeCount: effectiveCount,
       seed: effectiveSeed,
       lang,
+      nameSetId,
     });
     setPending({
       pack,
@@ -192,6 +197,28 @@ export function WorldGenAdminBlock({ onFlash }: WorldGenAdminBlockProps) {
             </button>
           </div>
         </div>
+
+        {/* Name set dropdown */}
+        <label className="md:col-span-2 p-2.5 rounded border border-slate-800 bg-slate-950/60 space-y-1 block min-w-0">
+          <span className="text-xs font-semibold text-slate-200 block">
+            {t('admin.worldGen.nameSet.title')}
+          </span>
+          <span className="text-[11px] text-slate-400 leading-snug block">
+            {t('admin.worldGen.nameSet.desc')}
+          </span>
+          <select
+            data-testid="world-gen-name-set"
+            value={nameSetId}
+            onChange={(e) => setNameSetId(e.target.value)}
+            className="w-full h-9 px-2 mt-1 rounded border border-slate-700 bg-slate-900 text-xs text-slate-100"
+          >
+            {MAP_NAME_SETS.map((entry) => (
+              <option key={entry.id} value={entry.id}>
+                {entry.label}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       {/* Optional progress reset checkbox */}
