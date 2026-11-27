@@ -201,6 +201,47 @@ export function BattleResultDialog({
                   </div>
                 )}
 
+                {summary.outcome === 'defeat' &&
+                  (summary.repairFree || (summary.repairFee ?? 0) > 0) && (
+                    <div
+                      data-testid="battle-result-repair-line"
+                      className={`col-span-2 rounded px-2.5 py-1.5 text-[12px] font-mono-nums border ${
+                        summary.repairFree
+                          ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                          : 'border-rose-500/30 bg-rose-500/10 text-rose-300'
+                      }`}
+                    >
+                      {summary.repairFree
+                        ? t('summary.repairFreeLine')
+                        : t('summary.repairFeeLine', {
+                            fee: Math.round(summary.repairFee ?? 0).toLocaleString(
+                              lang === 'vi' ? 'vi-VN' : 'en-US'
+                            ),
+                          })}
+                    </div>
+                  )}
+
+                {((summary.retreatPenaltyExp ?? 0) > 0 ||
+                  (summary.retreatPenaltyCredit ?? 0) > 0 ||
+                  (summary.retreatPenaltyWp ?? 0) > 0) && (
+                  <div
+                    data-testid="battle-result-retreat-penalty"
+                    className="col-span-2 rounded border border-rose-500/30 bg-rose-500/10 px-2.5 py-1.5 text-[12px] font-mono-nums text-rose-300"
+                  >
+                    {t('summary.retreatPenaltyLine', {
+                      exp: Math.round(summary.retreatPenaltyExp ?? 0).toLocaleString(
+                        lang === 'vi' ? 'vi-VN' : 'en-US'
+                      ),
+                      credit: Math.round(
+                        summary.retreatPenaltyCredit ?? 0
+                      ).toLocaleString(lang === 'vi' ? 'vi-VN' : 'en-US'),
+                      wp: Math.round(summary.retreatPenaltyWp ?? 0).toLocaleString(
+                        lang === 'vi' ? 'vi-VN' : 'en-US'
+                      ),
+                    })}
+                  </div>
+                )}
+
                 <div className="rounded border border-slate-800 bg-[#090D14] p-2.5 sm:p-3">
                   <div className="text-[12px] text-slate-400">
                     {t('summary.hostilesDestroyed')}

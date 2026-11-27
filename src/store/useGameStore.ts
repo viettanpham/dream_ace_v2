@@ -47,6 +47,10 @@ import {
   undoAutoEquipSnapshot,
 } from '../engine/autoEquip';
 import {
+  computeRepairFee,
+  computeRetreatPenalty,
+} from '../engine/battlePenalty';
+import {
   evaluateTurnPhaseAfterAction,
   sanitizeTurnPhaseConfig,
 } from '../engine/turnPhase';
@@ -839,8 +843,49 @@ function finalizeBattleOutcome(
 
   // Per-Gear EXP: ONLY the deployed Gear receives EXP & battle record!
   const levelResult = applyExpToGear(deployedGear, effectiveExpGained, { won });
+  const postRewardCredits = state.pilot.credits + rewards.creditsGained;
+  const postRewardWp = state.pilot.warPoints + rewards.warPointsGained;
+
+  // Order in finalizeBattleOutcome: rewards -> retreat penalty (retreat only) -> repair fee (defeat or retreat; victory never)
+  const retreatPenalty =
+    !won && retreated
+      ? computeRetreatPenalty(
+          levelResult.updatedGear.level,
+          levelResult.updatedGear.exp,
+          postRewardCredits,
+          postRewardWp,
+          state.adminConfig?.battlePenalty
+        )
+      : {
+          expPenalty: 0,
+          creditPenalty: 0,
+          wpPenalty: 0,
+          nextExp: levelResult.updatedGear.exp,
+          nextCredits: postRewardCredits,
+          nextWarPoints: postRewardWp,
+        };
+  const gearAfterPenalty = {
+    ...levelResult.updatedGear,
+    exp: retreatPenalty.nextExp,
+  };
+
+  const repairCheck = !won
+    ? computeRepairFee(
+        retreated ? 'retreat' : 'defeat',
+        gearAfterPenalty.level,
+        retreatPenalty.nextCredits,
+        updatedUnits,
+        state.adminConfig?.battlePenalty
+      )
+    : { fee: 0, free: false };
+  const repairPaid = repairCheck.free
+    ? 0
+    : Math.min(Math.max(0, retreatPenalty.nextCredits), repairCheck.fee);
+  const finalCredits = Math.max(0, retreatPenalty.nextCredits - repairPaid);
+  const finalWarPoints = Math.max(0, retreatPenalty.nextWarPoints);
+
   const battlesToNextLevel = estimateBattlesToNextLevel(
-    levelResult.updatedGear,
+    gearAfterPenalty,
     rewards.fullVictoryExp
   );
 
@@ -852,12 +897,12 @@ function finalizeBattleOutcome(
 
   const pilotWithBaseRewards: PilotAccount = {
     ...state.pilot,
-    credits: state.pilot.credits + rewards.creditsGained,
-    warPoints: state.pilot.warPoints + rewards.warPointsGained,
+    credits: finalCredits,
+    warPoints: finalWarPoints,
     inventory: [...droppedItems, ...state.pilot.inventory],
     gears: {
       ...state.pilot.gears,
-      [deployedGearId]: levelResult.updatedGear,
+      [deployedGearId]: gearAfterPenalty,
     },
     unlockedSectorIds: state.pilot.unlockedSectorIds,
     capturedSectorIds: nextCapturedSectors,
@@ -954,6 +999,30 @@ function finalizeBattleOutcome(
   let nextAutoRepeat = state.autoRepeatSession;
   let nextAutoRepeatToast: AutoRepeatRunToast | null = null;
   let finalLog = extraLog;
+  if (!won && (repairCheck.free || repairPaid > 0)) {
+    finalLog = [
+      ...finalLog,
+      repairCheck.free
+        ? {
+            id: `log_repair_${Date.now()}_${extraTurnCounter}`,
+            round: battle.round,
+            actorName: 'SYSTEM',
+            tag: 'SYSTEM' as const,
+            templateKey: retreated
+              ? ('log.repairFreeRetreat' as const)
+              : ('log.repairFreeDefeat' as const),
+            params: {},
+          }
+        : {
+            id: `log_repair_${Date.now()}_${extraTurnCounter}`,
+            round: battle.round,
+            actorName: 'SYSTEM',
+            tag: 'SYSTEM' as const,
+            templateKey: 'log.repairFee' as const,
+            params: { fee: repairPaid },
+          },
+    ];
+  }
   if (
     state.autoRepeatSession &&
     (state.autoRepeatSession.active ||
@@ -1096,6 +1165,11 @@ function finalizeBattleOutcome(
         baseCaptureBonusWp: rewards.baseCaptureBonusWp,
         supportExpPct: rewards.supportExpPct,
         supportCreditPct: rewards.supportCreditPct,
+        repairFee: repairPaid,
+        repairFree: repairCheck.free,
+        retreatPenaltyExp: retreatPenalty.expPenalty,
+        retreatPenaltyCredit: retreatPenalty.creditPenalty,
+        retreatPenaltyWp: retreatPenalty.wpPenalty,
         leveledUp: levelResult.leveledUp,
         previousLevel: levelResult.previousLevel,
         newLevel: levelResult.newLevel,

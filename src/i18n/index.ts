@@ -1076,6 +1076,19 @@ function formatCombatLogBody(
         actor: String(p.actor ?? ''),
       });
 
+    case 'log.repairFreeDefeat':
+      return translate(lang, 'log.repairFreeDefeat');
+
+    case 'log.repairFreeRetreat':
+      return translate(lang, 'log.repairFreeRetreat');
+
+    case 'log.repairFee':
+      return translate(lang, 'log.repairFee', {
+        fee: Number(p.fee ?? 0).toLocaleString(
+          lang === 'vi' ? 'vi-VN' : 'en-US'
+        ),
+      });
+
     case 'log.buffApplied': {
       const skillId = String(p.skillId ?? 'gen_hull_brace');
       return translate(lang, 'log.buffApplied', {

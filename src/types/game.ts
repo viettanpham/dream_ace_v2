@@ -1121,7 +1121,10 @@ export type CombatLogTemplateKey =
   | 'log.supplyScanNone'
   | 'log.emergencyResupplyAlly'
   | 'log.emergencyResupplyEnemy'
-  | 'log.prestageConfirm';
+  | 'log.prestageConfirm'
+  | 'log.repairFreeDefeat'
+  | 'log.repairFreeRetreat'
+  | 'log.repairFee';
 
 export interface CombatLogEntry {
   id: string;
@@ -1166,6 +1169,11 @@ export interface BattleSummary {
   baseCaptureBonusWp: number;
   supportExpPct?: number;
   supportCreditPct?: number;
+  repairFee?: number;
+  repairFree?: boolean;
+  retreatPenaltyExp?: number;
+  retreatPenaltyCredit?: number;
+  retreatPenaltyWp?: number;
   leveledUp: boolean;
   previousLevel: number;
   newLevel: number;
@@ -1622,6 +1630,7 @@ export interface AdminConfig {
   alwaysWin: boolean;
   rewardMultiplier: number;
   battleRewards?: BattleRewardsConfig;
+  battlePenalty?: BattlePenaltyConfig;
   battleSizeOverride: BattleSize | null;
   softEnrageEnabled: boolean;
   enrage?: EnrageConfig;
@@ -1700,6 +1709,23 @@ export interface BattleRewardsConfig {
   defeatWpPct: number;
   defeatMaxPctOfVictory: number;
   retreatRewardPct: number;
+}
+
+export interface RepairFeeTierConfig {
+  freeLevel: number;
+  freeCredits: number;
+  hpCoef: number;
+  shieldCoef: number;
+  cap: number;
+}
+
+export interface BattlePenaltyConfig {
+  retreatFreeLevel: number;
+  retreatExpPenaltyPct: number;
+  retreatShortfallExtraCreditPct: number;
+  retreatWpPenaltyPct: number;
+  repairDefeat: RepairFeeTierConfig;
+  repairRetreat: RepairFeeTierConfig;
 }
 
 export interface PassiveSlotsConfig {

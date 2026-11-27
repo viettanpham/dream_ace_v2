@@ -26,6 +26,7 @@ import { NpcSupplyAdminBlock } from './admin/NpcSupplyAdminBlock';
 import { EnemyLevelAdminBlock } from './admin/EnemyLevelAdminBlock';
 import { EnrageAdminBlock } from './admin/EnrageAdminBlock';
 import { BattleRewardsAdminBlock } from './admin/BattleRewardsAdminBlock';
+import { BattlePenaltyAdminBlock } from './admin/BattlePenaltyAdminBlock';
 import {
   AdminSection,
   AdminSectionsProvider,
@@ -1913,6 +1914,18 @@ export function AdminPanel() {
                   description={t('admin.battleSection.battleRewards.desc')}
                 >
                   <BattleRewardsAdminBlock
+                    adminConfig={adminConfig}
+                    adminUpdateConfig={adminUpdateConfig}
+                  />
+                </AdminSection>
+
+                {/* 3c. Defeat & Retreat Penalties + Repair Fees */}
+                <AdminSection
+                  id="battle-penalty"
+                  title={t('admin.battleSection.battlePenalty.title')}
+                  description={t('admin.battleSection.battlePenalty.desc')}
+                >
+                  <BattlePenaltyAdminBlock
                     adminConfig={adminConfig}
                     adminUpdateConfig={adminUpdateConfig}
                   />

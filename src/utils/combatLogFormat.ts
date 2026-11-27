@@ -256,6 +256,9 @@ export function isSystemOrKillLogEntry(entry: CombatLogEntry): boolean {
     entry.templateKey === 'log.enragePhaseActivated' ||
     entry.templateKey === 'log.prestageConfirm' ||
     entry.templateKey === 'log.retreat' ||
+    entry.templateKey === 'log.repairFreeDefeat' ||
+    entry.templateKey === 'log.repairFreeRetreat' ||
+    entry.templateKey === 'log.repairFee' ||
     entry.templateKey === 'log.invalidTarget' ||
     entry.templateKey === 'log.autoRepeatStopped'
   );
@@ -1393,6 +1396,9 @@ export function parseStructuredCombatLogRow(
     case 'log.prestageConfirm':
     case 'log.emergencyResupplyAlly':
     case 'log.emergencyResupplyEnemy':
+    case 'log.repairFreeDefeat':
+    case 'log.repairFreeRetreat':
+    case 'log.repairFee':
     case 'log.retreat':
     case 'log.wingmanChat':
     default: {
@@ -1407,7 +1413,10 @@ export function parseStructuredCombatLogRow(
           entry.templateKey === 'log.enragePhaseActivated' ||
           entry.templateKey === 'log.prestageConfirm' ||
           entry.templateKey === 'log.emergencyResupplyAlly' ||
-          entry.templateKey === 'log.emergencyResupplyEnemy'
+          entry.templateKey === 'log.emergencyResupplyEnemy' ||
+          entry.templateKey === 'log.repairFreeDefeat' ||
+          entry.templateKey === 'log.repairFreeRetreat' ||
+          entry.templateKey === 'log.repairFee'
             ? translate(lang, 'log.actionSystem')
             : actorFromParams,
         autoBadge,

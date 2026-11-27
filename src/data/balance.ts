@@ -1,4 +1,5 @@
 import type {
+  BattlePenaltyConfig,
   BattleRewardsConfig,
   BattleSpeed,
   FluxTransferConfig,
@@ -6,6 +7,7 @@ import type {
   ItemRarity,
   MechClassId,
   PassiveSlotsConfig,
+  RepairFeeTierConfig,
   SectorDifficulty,
   SkillCategory,
   SpEconomyConfig,
@@ -752,5 +754,94 @@ export function sanitizeBattleRewardsConfig(
     ),
   };
 }
+
+export const DEFAULT_BATTLE_PENALTY_CONFIG: BattlePenaltyConfig = {
+  retreatFreeLevel: 10,
+  retreatExpPenaltyPct: 10,
+  retreatShortfallExtraCreditPct: 20,
+  retreatWpPenaltyPct: 10,
+  repairDefeat: {
+    freeLevel: 20,
+    freeCredits: 100000,
+    hpCoef: 10,
+    shieldCoef: 10,
+    cap: 100000,
+  },
+  repairRetreat: {
+    freeLevel: 10,
+    freeCredits: 10000,
+    hpCoef: 10,
+    shieldCoef: 10,
+    cap: 50000,
+  },
+};
+
+function clampNonNegativeNum(raw: unknown, fallback: number): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return fallback;
+  return Math.max(0, raw);
+}
+
+function sanitizeRepairTier(
+  raw: unknown,
+  def: RepairFeeTierConfig
+): RepairFeeTierConfig {
+  const obj =
+    raw && typeof raw === 'object' && !Array.isArray(raw)
+      ? (raw as Record<string, unknown>)
+      : {};
+  return {
+    freeLevel: Math.round(clampNonNegativeNum(obj.freeLevel, def.freeLevel)),
+    freeCredits: Math.round(clampNonNegativeNum(obj.freeCredits, def.freeCredits)),
+    hpCoef: clampNonNegativeNum(obj.hpCoef, def.hpCoef),
+    shieldCoef: clampNonNegativeNum(obj.shieldCoef, def.shieldCoef),
+    cap: Math.round(clampNonNegativeNum(obj.cap, def.cap)),
+  };
+}
+
+export function cloneBattlePenaltyConfig(
+  cfg: BattlePenaltyConfig
+): BattlePenaltyConfig {
+  return {
+    ...cfg,
+    repairDefeat: { ...cfg.repairDefeat },
+    repairRetreat: { ...cfg.repairRetreat },
+  };
+}
+
+export function sanitizeBattlePenaltyConfig(raw: unknown): BattlePenaltyConfig {
+  const obj =
+    raw && typeof raw === 'object' && !Array.isArray(raw)
+      ? (raw as Record<string, unknown>)
+      : {};
+  return {
+    retreatFreeLevel: Math.round(
+      clampNonNegativeNum(
+        obj.retreatFreeLevel,
+        DEFAULT_BATTLE_PENALTY_CONFIG.retreatFreeLevel
+      )
+    ),
+    retreatExpPenaltyPct: clampNonNegativeNum(
+      obj.retreatExpPenaltyPct,
+      DEFAULT_BATTLE_PENALTY_CONFIG.retreatExpPenaltyPct
+    ),
+    retreatShortfallExtraCreditPct: clampNonNegativeNum(
+      obj.retreatShortfallExtraCreditPct,
+      DEFAULT_BATTLE_PENALTY_CONFIG.retreatShortfallExtraCreditPct
+    ),
+    retreatWpPenaltyPct: clampNonNegativeNum(
+      obj.retreatWpPenaltyPct,
+      DEFAULT_BATTLE_PENALTY_CONFIG.retreatWpPenaltyPct
+    ),
+    repairDefeat: sanitizeRepairTier(
+      obj.repairDefeat,
+      DEFAULT_BATTLE_PENALTY_CONFIG.repairDefeat
+    ),
+    repairRetreat: sanitizeRepairTier(
+      obj.repairRetreat,
+      DEFAULT_BATTLE_PENALTY_CONFIG.repairRetreat
+    ),
+  };
+}
+
 
 

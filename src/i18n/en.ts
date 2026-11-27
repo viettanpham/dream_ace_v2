@@ -713,6 +713,10 @@ export const EN_TRANSLATIONS = {
   'summary.captureBonusNote': 'Includes +{wp} WP Base Capture',
   'summary.nationalSupportNote':
     'National Support: +{expPct}% EXP, +{creditPct}% Credit/WP',
+  'summary.repairFeeLine': 'Repair fee: -{fee} CR',
+  'summary.repairFreeLine': 'Repair fee: Free (state-covered)',
+  'summary.retreatPenaltyLine':
+    'Retreat penalty: -{exp} EXP / -{credit} CR / -{wp} WP',
   'summary.battlesToNext': '~{count} wins to Lv.{next}',
   'summary.maxLevelReached': 'Max Level (Lv.{level})',
   'summary.sectorUnlocked': 'Unlocked Sector: {sector}',
@@ -764,6 +768,10 @@ export const EN_TRANSLATIONS = {
   'log.statusCleansed': '{actor} purged all negative statuses from allies.',
   'log.splashDamage': '{actor} splash ordnance hits {target} for {damage}!',
   'log.retreat': '{actor} ordered a tactical retreat from the sector.',
+  'log.repairFreeDefeat': 'State covers repair costs',
+  'log.repairFreeRetreat':
+    'State forced to cover repair costs due to tactical retreat',
+  'log.repairFee': 'Repair fee: -{fee} CR',
   'log.buffApplied': '{actor} activated {skill} (-{spCost} SP).',
   'log.stanceToggle': '{actor} switched {skill} {state}.',
   'log.charging': '{actor} begins charging {skill} — impact imminent next turn!',
@@ -2391,6 +2399,49 @@ export const EN_TRANSLATIONS = {
   'admin.battleRewards.retreatRewardPct.title': 'Retreat Reward % (of Defeat)',
   'admin.battleRewards.retreatRewardPct.desc':
     'Percentage of the capped defeat reward retained when retreating (0–100)',
+
+  // Admin CP — Defeat & Retreat Penalties (ECON-LOSS-b)
+  'admin.battleSection.battlePenalty.title': 'Defeat & Retreat Penalties',
+  'admin.battleSection.battlePenalty.desc':
+    'Retreat EXP/Credit/WP penalties and post-battle repair fees on defeat or retreat',
+  'admin.battlePenalty.headerNote':
+    'Configure retreat penalties and free-coverage thresholds/caps for repair fees',
+  'admin.battlePenalty.reset': 'Reset Defaults',
+  'admin.battlePenalty.exRetreat':
+    'Level {level}, {expPct}% EXP, max {need}: retreat penalty {creditPen} CR + {wpPen} WP',
+  'admin.battlePenalty.exRepairSummary':
+    'Free repair: Defeat Lv≤{defeatLv} & CR≤{defeatCr} (cap {defeatCap}); Retreat Lv≤{retreatLv} & CR≤{retreatCr} (cap {retreatCap})',
+  'admin.battlePenalty.retreatGroupTitle': 'Retreat Penalty',
+  'admin.battlePenalty.repairDefeatGroupTitle': 'Repair Fee on Defeat',
+  'admin.battlePenalty.repairRetreatGroupTitle': 'Repair Fee on Retreat',
+  'admin.battlePenalty.retreatFreeLevel.title': 'Penalty-Free Retreat Level',
+  'admin.battlePenalty.retreatFreeLevel.desc':
+    'Gears at or below this level pay no EXP, Credit, or WP penalty when retreating',
+  'admin.battlePenalty.retreatExpPenaltyPct.title': 'Retreat EXP Penalty %',
+  'admin.battlePenalty.retreatExpPenaltyPct.desc':
+    'Percent of EXP needed for next level; also Credit penalty % when Gear has enough EXP',
+  'admin.battlePenalty.retreatShortfallExtraCreditPct.title':
+    'Extra Credit Penalty % on EXP Shortfall',
+  'admin.battlePenalty.retreatShortfallExtraCreditPct.desc':
+    'Added to Credit penalty % when current Gear EXP is below the EXP penalty',
+  'admin.battlePenalty.retreatWpPenaltyPct.title': 'WP Penalty % of Credit Penalty',
+  'admin.battlePenalty.retreatWpPenaltyPct.desc':
+    'War Points deducted equal to this percentage of the Credit penalty (floored at 0)',
+  'admin.battlePenalty.repair.freeLevel.title': 'Free Repair Max Level',
+  'admin.battlePenalty.repair.freeLevel.desc':
+    'State pays repair fee when Gear level <= this threshold (with Credits cap)',
+  'admin.battlePenalty.repair.freeCredits.title': 'Free Repair Max Credits',
+  'admin.battlePenalty.repair.freeCredits.desc':
+    'Credits threshold (after rewards/penalty) required to keep state repair coverage',
+  'admin.battlePenalty.repair.hpCoef.title': 'HP Repair Coefficient',
+  'admin.battlePenalty.repair.hpCoef.desc':
+    'Credits charged per point of max HP (defeat) or lost HP (retreat)',
+  'admin.battlePenalty.repair.shieldCoef.title': 'Shield Repair Coefficient',
+  'admin.battlePenalty.repair.shieldCoef.desc':
+    'Credits charged per point of max Shield (defeat) or lost Shield (retreat)',
+  'admin.battlePenalty.repair.cap.title': 'Repair Fee Cap (CR)',
+  'admin.battlePenalty.repair.cap.desc':
+    'Maximum Credits charged for a single post-battle repair',
 } as const;
 
 export type TranslationKey = keyof typeof EN_TRANSLATIONS;

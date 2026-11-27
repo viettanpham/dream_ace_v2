@@ -715,6 +715,10 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'summary.captureBonusNote': 'Gồm +{wp} WP chiếm căn cứ',
   'summary.nationalSupportNote':
     'Hỗ trợ quốc gia: +{expPct}% EXP, +{creditPct}% Credit/WP',
+  'summary.repairFeeLine': 'Phí sửa chữa: -{fee} CR',
+  'summary.repairFreeLine': 'Phí sửa chữa: Miễn phí (quốc gia chi trả)',
+  'summary.retreatPenaltyLine':
+    'Phạt rút lui: -{exp} EXP / -{credit} CR / -{wp} WP',
   'summary.battlesToNext': 'Còn ~{count} trận thắng để lên Lv.{next}',
   'summary.maxLevelReached': 'Đã đạt Cấp tối đa (Lv.{level})',
   'summary.sectorUnlocked': 'Đã mở khu vực mới: {sector}',
@@ -766,6 +770,10 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'log.statusCleansed': '{actor} đã giải trừ toàn bộ hiệu ứng xấu cho đồng minh.',
   'log.splashDamage': 'Đạn nổ lan của {actor} đánh trúng {target} gây {damage}!',
   'log.retreat': '{actor} ra lệnh rút lui chiến thuật khỏi khu vực.',
+  'log.repairFreeDefeat': 'Quốc gia chi trả phí sửa chữa',
+  'log.repairFreeRetreat':
+    'Quốc gia phải hỗ trợ chi trả phí sửa chữa vì hành động rút lui',
+  'log.repairFee': 'Phí sửa chữa: -{fee} CR',
   'log.buffApplied': '{actor} kích hoạt {skill} (-{spCost} SP).',
   'log.stanceToggle': '{actor} chuyển trạng thái {skill}: {state}.',
   'log.charging': '{actor} bắt đầu tụ năng {skill} — sẽ tự khai hỏa vào lượt sau!',
@@ -2393,6 +2401,49 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'admin.battleRewards.retreatRewardPct.title': '% thưởng khi rút lui',
   'admin.battleRewards.retreatRewardPct.desc':
     'Phần trăm giữ lại trên phần thưởng thua (sau khi áp trần) khi rút lui (0–100)',
+
+  // Admin CP — Thua & rút lui (ECON-LOSS-b)
+  'admin.battleSection.battlePenalty.title': 'Thua & rút lui',
+  'admin.battleSection.battlePenalty.desc':
+    'Phạt EXP/Credit/WP khi rút lui và phí sửa chữa sau thua hoặc rút lui',
+  'admin.battlePenalty.headerNote':
+    'Cấu hình hình phạt rút lui và ngưỡng miễn phí/trần phí sửa chữa',
+  'admin.battlePenalty.reset': 'Khôi phục mặc định',
+  'admin.battlePenalty.exRetreat':
+    'Level {level}, {expPct}% EXP, tối đa {need}: rút lui phạt {creditPen} CR + {wpPen} WP',
+  'admin.battlePenalty.exRepairSummary':
+    'Miễn phí sửa chữa: Thua Lv≤{defeatLv} & CR≤{defeatCr} (trần {defeatCap}); Rút lui Lv≤{retreatLv} & CR≤{retreatCr} (trần {retreatCap})',
+  'admin.battlePenalty.retreatGroupTitle': 'Phạt rút lui',
+  'admin.battlePenalty.repairDefeatGroupTitle': 'Phí sửa chữa khi thua',
+  'admin.battlePenalty.repairRetreatGroupTitle': 'Phí sửa chữa khi rút lui',
+  'admin.battlePenalty.retreatFreeLevel.title': 'Cấp miễn phạt rút lui',
+  'admin.battlePenalty.retreatFreeLevel.desc':
+    'Gear từ cấp này trở xuống rút lui không bị phạt EXP, Credit hay WP',
+  'admin.battlePenalty.retreatExpPenaltyPct.title': '% EXP bị trừ khi rút lui',
+  'admin.battlePenalty.retreatExpPenaltyPct.desc':
+    'Tính theo lượng EXP cần để lên cấp; cũng là % Credit phạt khi đủ EXP',
+  'admin.battlePenalty.retreatShortfallExtraCreditPct.title':
+    '% Credit phạt thêm khi thiếu EXP',
+  'admin.battlePenalty.retreatShortfallExtraCreditPct.desc':
+    'Cộng vào tỉ lệ Credit phạt nếu EXP hiện có không đủ trả phần phạt EXP',
+  'admin.battlePenalty.retreatWpPenaltyPct.title': '% WP phạt theo Credit phạt',
+  'admin.battlePenalty.retreatWpPenaltyPct.desc':
+    'Điểm Chiến Trận bị trừ bằng tỉ lệ này của khoản phạt Credit (tối thiểu 0)',
+  'admin.battlePenalty.repair.freeLevel.title': 'Cấp miễn phí sửa chữa',
+  'admin.battlePenalty.repair.freeLevel.desc':
+    'Được quốc gia hỗ trợ toàn bộ phí nếu cấp Gear <= ngưỡng này (kèm điều kiện Credit)',
+  'admin.battlePenalty.repair.freeCredits.title': 'Credit tối đa được miễn phí',
+  'admin.battlePenalty.repair.freeCredits.desc':
+    'Ngưỡng Credit (sau thưởng/phạt) để vẫn được quốc gia chi trả phí sửa chữa',
+  'admin.battlePenalty.repair.hpCoef.title': 'Hệ số phí theo HP',
+  'admin.battlePenalty.repair.hpCoef.desc':
+    'Chi phí Credit nhân cho mỗi điểm HP tối đa (thua) hoặc HP mất (rút lui)',
+  'admin.battlePenalty.repair.shieldCoef.title': 'Hệ số phí theo Khiên',
+  'admin.battlePenalty.repair.shieldCoef.desc':
+    'Chi phí Credit nhân cho mỗi điểm Khiên tối đa (thua) hoặc Khiên mất (rút lui)',
+  'admin.battlePenalty.repair.cap.title': 'Trần phí sửa chữa (CR)',
+  'admin.battlePenalty.repair.cap.desc':
+    'Giới hạn Credit tối đa phải trả cho một lần sửa chữa sau trận',
 };
 
 
