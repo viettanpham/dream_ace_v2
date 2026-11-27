@@ -724,6 +724,36 @@
         { "key": "hpRegenPctAdd", "perLevel": 0.3 }
       ],
       "registryTag": "sys"
+    },
+    {
+      "id": "sup_healing_field",
+      "classScope": "support",
+      "category": "normal",
+      "icon": "health_cross",
+      "unlockLevel": 9,
+      "spCost": 26,
+      "cooldown": 4,
+      "targetType": "all_allies",
+      "effectKind": "spec",
+      "effects": [
+        { "kind": "heal_hp_pct", "pct": 0.15 }
+      ],
+      "registryTag": "sys"
+    },
+    {
+      "id": "sup_energize_target",
+      "classScope": "support",
+      "category": "normal",
+      "icon": "add_moderator",
+      "unlockLevel": 7,
+      "spCost": 12,
+      "cooldown": 2,
+      "targetType": "single_ally",
+      "effectKind": "spec",
+      "effects": [
+        { "kind": "restore_shield_pct", "pct": 0.4 }
+      ],
+      "registryTag": "sys"
     }
   ]
 }

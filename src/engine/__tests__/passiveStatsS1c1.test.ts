@@ -153,8 +153,8 @@ describe('TASK S1c-1: Generic passive_stat engine & 16 passives table', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const validated = validateSkillDefinitions(rawSkillsJson);
 
-    expect(validated).toHaveLength(50);
-    expect(SKILLS_LIST).toHaveLength(50);
+    expect(validated).toHaveLength(52);
+    expect(SKILLS_LIST).toHaveLength(52);
     expect(warnSpy).not.toHaveBeenCalled();
 
     for (const id of ALL_16_PASSIVE_IDS) {

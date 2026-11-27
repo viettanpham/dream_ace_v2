@@ -109,6 +109,20 @@ const VALID_CONDITIONS = new Set<TacticsConditionKind>(TACTICS_CONDITION_KINDS);
 const VALID_SELECTORS = new Set<TacticsTargetSelector>(TACTICS_TARGET_SELECTORS);
 const VALID_BUFFS = new Set<StatusEffectType>(TACTICS_BUFF_OPTIONS);
 
+const isHealSpecSkill = (s: SkillDefinition): boolean =>
+  s.effectKind === 'spec' &&
+  Boolean(s.effects?.some((e) => e.kind === 'heal_hp_pct'));
+
+const isShieldSpecSkill = (s: SkillDefinition): boolean =>
+  s.effectKind === 'spec' &&
+  Boolean(s.effects?.some((e) => e.kind === 'restore_shield_pct'));
+
+const isHealLikeSkill = (s: SkillDefinition): boolean =>
+  s.effectKind === 'heal_single' ||
+  s.effectKind === 'heal_field_hot' ||
+  s.effectKind === 'full_recovery_elite' ||
+  isHealSpecSkill(s);
+
 export function createDefaultAutoSafety(): AutoSafetyConfig {
   return {
     stopOnLowHpEnabled: false,
@@ -334,8 +348,12 @@ export function createPresetTactics(
     );
 
   const firstHeal = barSkills.find(
-    (s) => s.effectKind === 'heal_single' || s.effectKind === 'heal_field_hot'
+    (s) =>
+      s.effectKind === 'heal_single' ||
+      s.effectKind === 'heal_field_hot' ||
+      isHealSpecSkill(s)
   );
+  const firstShield = barSkills.find((s) => isShieldSpecSkill(s));
   const firstOffense = barSkills.find(
     (s) =>
       s.targetType === 'single_enemy' ||
@@ -367,9 +385,29 @@ export function createPresetTactics(
       rules.push(
         makeRule(
           createRuleId('bal'),
-          { kind: 'any_ally_hp_below', value: 50 },
+          {
+            kind: 'any_ally_hp_below',
+            value:
+              firstHeal.targetType === 'all_allies' && isHealSpecSkill(firstHeal)
+                ? 70
+                : 50,
+          },
           { type: 'skill', skillId: firstHeal.id },
           firstHeal.targetType === 'single_ally' ? 'lowest_hp_ally' : 'all_allies'
+        )
+      );
+    }
+    if (firstShield && firstShield.id !== firstHeal?.id) {
+      rules.push(
+        makeRule(
+          createRuleId('bal'),
+          { kind: 'always' },
+          { type: 'skill', skillId: firstShield.id },
+          firstShield.targetType === 'single_ally'
+            ? 'lowest_hp_ally'
+            : firstShield.targetType === 'self'
+            ? 'self'
+            : 'all_allies'
         )
       );
     }
@@ -946,11 +984,7 @@ export function generateTacticsFromSimple(
     );
   } else if (simple.lowHpAction === 'heal') {
     const selfHealSkill = allowedBarSkills.find(
-      (s) =>
-        s.effectKind === 'heal_single' ||
-        s.effectKind === 'heal_field_hot' ||
-        s.effectKind === 'full_recovery_elite' ||
-        s.effectKind === 'invincible_ally'
+      (s) => isHealLikeSkill(s) || s.effectKind === 'invincible_ally'
     );
     if (selfHealSkill) {
       rules.push(
@@ -972,10 +1006,28 @@ export function generateTacticsFromSimple(
     );
   }
 
-  // 2. Support-team emergency heal / cleanse if Support preset is active
+  // 2. Support-team emergency heal / shield / cleanse if Support preset is active
   if (simple.presetId === 'support_team') {
+    const aoeSpecHeal = allowedBarSkills.find(
+      (s) => s.targetType === 'all_allies' && isHealSpecSkill(s)
+    );
+    if (aoeSpecHeal) {
+      rules.push(
+        makeRule(
+          createRuleId('sim_supheal_aoe'),
+          { kind: 'any_ally_hp_below', value: 70 },
+          { type: 'skill', skillId: aoeSpecHeal.id },
+          'all_allies'
+        )
+      );
+      addedSkillIds.add(aoeSpecHeal.id);
+    }
     const allyHeal = allowedBarSkills.find(
-      (s) => s.effectKind === 'heal_single' || s.effectKind === 'heal_field_hot'
+      (s) =>
+        !addedSkillIds.has(s.id) &&
+        (s.effectKind === 'heal_single' ||
+          s.effectKind === 'heal_field_hot' ||
+          isHealSpecSkill(s))
     );
     if (allyHeal) {
       rules.push(
@@ -987,6 +1039,26 @@ export function generateTacticsFromSimple(
         )
       );
       addedSkillIds.add(allyHeal.id);
+    }
+    const shieldRestore = allowedBarSkills.find(
+      (s) => !addedSkillIds.has(s.id) && isShieldSpecSkill(s)
+    );
+    if (shieldRestore) {
+      rules.push(
+        makeRule(
+          createRuleId('sim_supshd'),
+          simple.skillUsage === 'save_sp_50'
+            ? { kind: 'my_sp_pct_gte', value: 50 }
+            : { kind: 'always' },
+          { type: 'skill', skillId: shieldRestore.id },
+          shieldRestore.targetType === 'all_allies'
+            ? 'all_allies'
+            : shieldRestore.targetType === 'self'
+            ? 'self'
+            : 'lowest_hp_ally'
+        )
+      );
+      addedSkillIds.add(shieldRestore.id);
     }
     const purify = allowedBarSkills.find((s) => s.effectKind === 'purify_team');
     if (purify) {
@@ -1049,18 +1121,25 @@ export function generateTacticsFromSimple(
     if (addedSkillIds.has(sk.id)) continue;
 
     let cond: TacticsCondition;
-    if (
-      sk.effectKind === 'heal_single' ||
-      sk.effectKind === 'heal_field_hot' ||
-      sk.effectKind === 'full_recovery_elite'
-    ) {
+    if (isHealLikeSkill(sk)) {
       const thresh =
-        simple.skillUsage === 'needed_only'
+        sk.targetType === 'all_allies' && isHealSpecSkill(sk)
+          ? simple.skillUsage === 'needed_only'
+            ? 55
+            : simple.skillUsage === 'save_sp_50'
+            ? 60
+            : 70
+          : simple.skillUsage === 'needed_only'
           ? 45
           : simple.skillUsage === 'save_sp_50'
           ? 55
           : 70;
       cond = { kind: 'any_ally_hp_below', value: thresh };
+    } else if (isShieldSpecSkill(sk)) {
+      cond =
+        simple.skillUsage === 'save_sp_50'
+          ? { kind: 'my_sp_pct_gte', value: 50 }
+          : { kind: 'always' };
     } else if (sk.effectKind === 'purify_team') {
       cond = { kind: 'any_ally_has_debuff' };
     } else if (sk.effectKind === 'scan_reveal') {
@@ -1328,6 +1407,23 @@ function resolveRuleTarget(
       if (rule.targetSelector === 'self') {
         return { targetUnit: actor, targetId: actor.id, valid: true };
       }
+      if (isShieldSpecSkill(skillDef) && !isHealSpecSkill(skillDef)) {
+        const shieldTarget = [...allies]
+          .filter(
+            (a) =>
+              a.derived.maxShield > 0 &&
+              !hasStatus(a, 'shield_break') &&
+              (a.shield < a.derived.maxShield || hasStatus(a, 'shield_cracked'))
+          )
+          .sort(
+            (a, b) =>
+              a.shield / a.derived.maxShield - b.shield / b.derived.maxShield ||
+              a.id.localeCompare(b.id)
+          )[0];
+        return shieldTarget
+          ? { targetUnit: shieldTarget, targetId: shieldTarget.id, valid: true }
+          : { targetUnit: null, targetId: null, valid: false };
+      }
       const lowestAlly = [...allies].sort(
         (a, b) =>
           a.hp / Math.max(1, a.derived.maxHp) -
@@ -1402,9 +1498,21 @@ function evaluateCondition(
 
     case 'any_ally_hp_below': {
       const threshold = condition.value ?? 45;
-      return allies.some(
+      const belowAllies = allies.filter(
         (a) => a.derived.maxHp > 0 && (a.hp / a.derived.maxHp) * 100 < threshold
       );
+      const skillDef =
+        rule.action.type === 'skill' && rule.action.skillId
+          ? getSkillById(rule.action.skillId, adminConfig)
+          : undefined;
+      if (
+        skillDef &&
+        skillDef.targetType === 'all_allies' &&
+        isHealSpecSkill(skillDef)
+      ) {
+        return belowAllies.length >= 2;
+      }
+      return belowAllies.length >= 1;
     }
 
     case 'any_ally_has_debuff':

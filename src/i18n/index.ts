@@ -846,6 +846,16 @@ function formatCombatLogBody(
       });
     }
 
+    case 'log.shieldSingle': {
+      const skillId = String(p.skillId ?? 'sup_energize_target');
+      return translate(lang, 'log.shieldSingle', {
+        actor: String(p.actor ?? ''),
+        target: String(p.target ?? ''),
+        skill: getSkillName(lang, skillId),
+        amount: Number(p.amount ?? 0),
+      });
+    }
+
     case 'log.energize': {
       const skillId = String(p.skillId ?? 'sup_flux_transfer');
       return translate(lang, 'log.energize', {
@@ -968,6 +978,11 @@ function formatCombatLogBody(
 
     case 'log.shieldCrackNoShield':
       return translate(lang, 'log.shieldCrackNoShield', {
+        target: String(p.target ?? ''),
+      });
+
+    case 'log.shieldBreakBlocked':
+      return translate(lang, 'log.shieldBreakBlocked', {
         target: String(p.target ?? ''),
       });
 

@@ -5,6 +5,7 @@ import {
   getFluxTransferRule,
 } from '../data/balance';
 import { getScaledSkillStats } from '../data/skills';
+import { getStatusEntry } from '../data/statusEffects';
 import { getSkillTargetLabel } from '../i18n';
 import {
   sanitizeShieldCrackedMult,
@@ -588,6 +589,60 @@ function describeEffectAtLevel(
         primaryText: formatted.map((f) => f.full).join(', '),
         compactValue: formatted.map((f) => f.compact).join(', ') || null,
         durationTurns: null,
+      };
+    }
+    case 'spec': {
+      const specs = scaled.effects ?? skill.effects ?? [];
+      const iconIds: string[] = [];
+      const fullParts: string[] = [];
+      const compactParts: string[] = [];
+      let durationTurns: number | null = null;
+      for (const eff of specs) {
+        if (eff.kind === 'damage') {
+          iconIds.push('BS01');
+          const pct = Math.round((eff.powerMultiplier ?? 1) * 100);
+          fullParts.push(lang === 'vi' ? `Sát thương ${pct}%` : `${pct}% DMG`);
+          compactParts.push(`${pct}% DMG`);
+        } else if (eff.kind === 'heal_hp_pct') {
+          iconIds.push('SS01');
+          const p = fmtPct(eff.pct ?? 0);
+          fullParts.push(lang === 'vi' ? `Hồi ${p} Max HP` : `Heal ${p} Max HP`);
+          compactParts.push(`${p} HP`);
+        } else if (eff.kind === 'restore_shield_pct') {
+          iconIds.push('BS05');
+          const p = fmtPct(eff.pct ?? 0);
+          fullParts.push(
+            lang === 'vi'
+              ? `Hồi ${p} Max Khiên (xóa Khiên nứt)`
+              : `Restore ${p} Max SHD (clears Cracked)`
+          );
+          compactParts.push(`${p} SHD`);
+        } else if (eff.kind === 'restore_sp') {
+          iconIds.push('SS02');
+          const sp = eff.amount ?? eff.value ?? 0;
+          fullParts.push(lang === 'vi' ? `Hồi +${sp} SP` : `+${sp} SP`);
+          compactParts.push(`+${sp} SP`);
+        } else if (eff.kind === 'apply_status' && eff.statusId) {
+          const entry = getStatusEntry(eff.statusId);
+          iconIds.push(entry?.iconId ?? 'BF01');
+          const stName = entry
+            ? lang === 'vi'
+              ? entry.nameVi
+              : entry.nameEn
+            : eff.statusId;
+          const t = eff.duration ?? entry?.durationTurns;
+          if (typeof t === 'number' && durationTurns === null) durationTurns = t;
+          fullParts.push(
+            t ? `${stName} (${t} ${lang === 'vi' ? 'lượt' : 't'})` : stName
+          );
+          compactParts.push(stName);
+        }
+      }
+      return {
+        iconIds: Array.from(new Set(iconIds)),
+        primaryText: fullParts.join(' · ') || '—',
+        compactValue: compactParts.join(' · ') || null,
+        durationTurns,
       };
     }
   }

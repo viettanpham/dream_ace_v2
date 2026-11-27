@@ -464,7 +464,7 @@ export const EN_TRANSLATIONS = {
   // SUPPORT
   'skill.sup_nanite_mend.name': 'Nanite Hull Mend',
   'skill.sup_nanite_mend.desc':
-    'Projects a concentrated repair beam restoring 30% Max HP to one selected ally.',
+    'Projects a concentrated repair beam restoring 30% Max HP to one selected ally. (ACE: Heal Target)',
   'skill.sup_regen_grid.name': 'Nanite Regen Grid',
   'skill.sup_regen_grid.desc':
     'Deploys fleet-wide repair drones restoring 10% Max HP per turn to all allies for 3 turns.',
@@ -479,7 +479,7 @@ export const EN_TRANSLATIONS = {
     'Synchronizes squadron targeting computers, granting +20% ATK to all allies for 3 turns.',
   'skill.sup_aegis_field.name': 'Aegis Capacitor Pulse',
   'skill.sup_aegis_field.desc':
-    'Pulses fleet capacitors, restoring +10 SP and recharging 25% Max Shield across all allies.',
+    'Pulses fleet capacitors, restoring +10 SP and recharging 25% Max Shield across all allies. (ACE: Energizing Field)',
   'skill.sup_iron_canopy.name': 'Iron Canopy Matrix',
   'skill.sup_iron_canopy.desc':
     'Projects interlocking armor-reinforcement fields, granting +20% DEF to all allies for 3 turns.',
@@ -507,6 +507,12 @@ export const EN_TRANSLATIONS = {
   'skill.sup_passive_reactor.name': 'Auxiliary Reactor',
   'skill.sup_passive_reactor.desc':
     'Passive (self only): At turn start, adds +0.5% Shield Regen (and cap) and self-heals +0.3% Max HP per level.',
+  'skill.sup_healing_field.name': 'Healing Field',
+  'skill.sup_healing_field.desc':
+    'Projects a fleet-wide repair field restoring 15% Max HP to all allies (ACE: Healing Field).',
+  'skill.sup_energize_target.name': 'Energize Target',
+  'skill.sup_energize_target.desc':
+    'Channels focused capacitor power to restore 40% Max Shield and remove Cracked Shield on one ally (ACE: Energize Target).',
 
   // Target labels
   'skill.target.self': 'Self',
@@ -724,6 +730,8 @@ export const EN_TRANSLATIONS = {
     '{actor} activates {skill} (-{spCost} SP), restoring {total} Shield/HP across the wing.',
   'log.healSingle':
     '{actor} repairs {target} with {skill} for +{amount} HP.',
+  'log.shieldSingle':
+    '{actor} restores +{amount} Shield to {target} with {skill}.',
   'log.energize':
     '{actor} transfers +{amount} SP to {target} via {skill}.',
   'log.spTransfer':
@@ -740,6 +748,7 @@ export const EN_TRANSLATIONS = {
   'log.destroyed': '{target} ({className}) exploded!',
   'log.statusApplied': '{target} afflicted with {status} ({turns}t)!',
   'log.shieldCrackNoShield': '{target}: No active shield to crack.',
+  'log.shieldBreakBlocked': '{target}: Shield broken, cannot restore.',
   'log.burnTick': '{target} suffers {damage} hull burn damage!',
   'log.regenTick': '{target} regenerates +{amount} hull HP!',
   'log.registryDotTick': '{target} suffers {damage} {resource} from {status}!',

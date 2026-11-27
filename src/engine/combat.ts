@@ -32,6 +32,7 @@ import {
   processRegistryTickEffects,
   tickStatusDurations,
 } from './statusEngine';
+import { resolveSkillSpecs } from './skillSpecs';
 import type {
   ActionType,
   ActiveStatusEffect,
@@ -4351,6 +4352,109 @@ function resolveUnitActionCore(
             soundCue: 'heal',
           };
         }
+
+        case 'spec': {
+          const livingAllies = nextUnits.filter(
+            (u) => u.side === act.side && u.alive
+          );
+          const hasSpecKind = (k: string) =>
+            Boolean(skill.effects?.some((e) => e.kind === k));
+          let targets: CombatUnit[] = [];
+          if (skill.targetType === 'self') {
+            targets = [act];
+          } else if (skill.targetType === 'all_allies') {
+            targets = livingAllies;
+          } else if (skill.targetType === 'single_ally') {
+            const explicit = targetId
+              ? livingAllies.find((a) => a.id === targetId)
+              : undefined;
+            if (explicit) {
+              targets = [explicit];
+            } else if (
+              hasSpecKind('restore_shield_pct') &&
+              !hasSpecKind('heal_hp_pct')
+            ) {
+              const eligible = livingAllies
+                .filter(
+                  (a) =>
+                    a.derived.maxShield > 0 && !hasStatus(a, 'shield_break')
+                )
+                .sort(
+                  (a, b) =>
+                    a.shield / Math.max(1, a.derived.maxShield) -
+                      b.shield / Math.max(1, b.derived.maxShield) ||
+                    a.id.localeCompare(b.id)
+                );
+              const fallback =
+                eligible[0] ??
+                [...livingAllies].sort(
+                  (a, b) =>
+                    a.shield / Math.max(1, a.derived.maxShield) -
+                      b.shield / Math.max(1, b.derived.maxShield) ||
+                    a.id.localeCompare(b.id)
+                )[0];
+              if (fallback) targets = [fallback];
+            } else {
+              const lowest = [...livingAllies].sort(
+                (a, b) =>
+                  a.hp / Math.max(1, a.derived.maxHp) -
+                    b.hp / Math.max(1, b.derived.maxHp) ||
+                  a.id.localeCompare(b.id)
+              )[0];
+              if (lowest) targets = [lowest];
+            }
+          } else {
+            const enemies = getValidEnemyTargets(
+              nextUnits,
+              act,
+              'skill',
+              skill.id,
+              adminConfig
+            );
+            if (skill.targetType === 'single_enemy') {
+              const chosen =
+                (targetId
+                  ? enemies.find((e) => e.id === targetId)
+                  : undefined) ?? enemies[0];
+              if (chosen) targets = [chosen];
+            } else if (skill.targetType === 'multi_enemy') {
+              const primary = targetId
+                ? enemies.find((e) => e.id === targetId)
+                : undefined;
+              const ordered = primary
+                ? [primary, ...enemies.filter((e) => e.id !== primary.id)]
+                : enemies;
+              targets = ordered.slice(0, skill.maxTargets ?? 3);
+            } else {
+              targets = enemies;
+            }
+          }
+
+          const specRes = resolveSkillSpecs(act, skill, targets, scaled, {
+            units: nextUnits,
+            round,
+            spCost: usability.spCost,
+            adminConfig,
+            rng,
+            shieldBreakAtTurnStart,
+            fromSlotIndex,
+            getSlotIndex,
+            nextId,
+            events,
+            popups,
+            logs,
+            destroyedUnitIds,
+            applyDamageToUnit,
+          });
+          return {
+            updatedUnits: specRes.updatedUnits,
+            logEntries: specRes.logEntries,
+            popups: specRes.popups,
+            fxEvent: specRes.fxEvent,
+            destroyedUnitIds: specRes.destroyedUnitIds,
+            soundCue: specRes.soundCue,
+          };
+        }
       }
     } else if (usability?.reason === 'silenced') {
       logs.push({
@@ -4630,6 +4734,19 @@ const SUPPORT_RESERVE_EFFECT_KINDS = new Set<SkillDefinition['effectKind']>([
   'full_recovery_elite',
 ]);
 
+const isSpecHpHealSkill = (s: SkillDefinition): boolean =>
+  s.effectKind === 'spec' &&
+  Boolean(s.effects?.some((e) => e.kind === 'heal_hp_pct'));
+
+const isSpecShieldRestoreSkill = (s: SkillDefinition): boolean =>
+  s.effectKind === 'spec' &&
+  Boolean(s.effects?.some((e) => e.kind === 'restore_shield_pct'));
+
+const isSupportReserveSkill = (s: SkillDefinition): boolean =>
+  SUPPORT_RESERVE_EFFECT_KINDS.has(s.effectKind) ||
+  isSpecHpHealSkill(s) ||
+  isSpecShieldRestoreSkill(s);
+
 export type FluxTransferRulesInput =
   | (FluxTransferLevelRule & {
       spEconomy?: SpEconomyConfig | null;
@@ -4724,7 +4841,7 @@ export function pickFluxCount(
   let reserveSp = 0;
   for (const sid of actor.equippedSkillIds) {
     const sk = getSkillById(sid);
-    if (!sk || !SUPPORT_RESERVE_EFFECT_KINDS.has(sk.effectKind)) continue;
+    if (!sk || !isSupportReserveSkill(sk)) continue;
     if (!isSkillAllowedForClass(sk, actor.classId)) continue;
     if ((actor.skillCooldowns[sid] ?? 0) > 0) continue;
     if (sk.oncePerBattle && actor.usedOnceSkills.includes(sid)) continue;
@@ -4851,11 +4968,28 @@ export function chooseAiDecision(
     );
 
   // Repair Ship / Support heals injured allies first
+  const aoeSpecHealSkill = usableSkills.find(
+    (s) => s.targetType === 'all_allies' && isSpecHpHealSkill(s)
+  );
+  if (aoeSpecHealSkill) {
+    const injuredMulti = allies.filter(
+      (a) => a.derived.maxHp > 0 && a.hp < a.derived.maxHp * 0.7
+    );
+    if (injuredMulti.length >= 2) {
+      return {
+        action: 'skill',
+        targetId: null,
+        skillId: aoeSpecHealSkill.id,
+      };
+    }
+  }
+
   const healSkill = usableSkills.find(
     (s) =>
       s.effectKind === 'heal_single' ||
       s.effectKind === 'heal_field_hot' ||
-      s.effectKind === 'full_recovery_elite'
+      s.effectKind === 'full_recovery_elite' ||
+      (s.targetType !== 'all_allies' && isSpecHpHealSkill(s))
   );
   if (healSkill) {
     const injured = [...allies]
@@ -4864,8 +4998,36 @@ export function chooseAiDecision(
     if (injured.length > 0) {
       return {
         action: 'skill',
-        targetId: injured[0].id,
+        targetId: healSkill.targetType === 'all_allies' ? null : injured[0].id,
         skillId: healSkill.id,
+      };
+    }
+  }
+
+  // Support shield restoration (spec skills like sup_energize_target)
+  const shieldSpecSkill = usableSkills.find((s) => isSpecShieldRestoreSkill(s));
+  if (shieldSpecSkill) {
+    const lowShieldAllies = [...allies]
+      .filter(
+        (a) =>
+          a.derived.maxShield > 0 &&
+          !hasStatus(a, 'shield_break') &&
+          (a.shield < a.derived.maxShield || hasStatus(a, 'shield_cracked'))
+      )
+      .sort(
+        (a, b) =>
+          a.shield / a.derived.maxShield - b.shield / b.derived.maxShield ||
+          a.id.localeCompare(b.id)
+      );
+    if (lowShieldAllies.length > 0) {
+      return {
+        action: 'skill',
+        targetId:
+          shieldSpecSkill.targetType === 'all_allies' ||
+          shieldSpecSkill.targetType === 'self'
+            ? null
+            : lowShieldAllies[0].id,
+        skillId: shieldSpecSkill.id,
       };
     }
   }
@@ -4920,7 +5082,9 @@ export function chooseAiDecision(
       s.effectKind !== 'heal_single' &&
       s.effectKind !== 'heal_field_hot' &&
       s.effectKind !== 'sp_transfer' &&
-      s.effectKind !== 'scan_reveal'
+      s.effectKind !== 'scan_reveal' &&
+      !isSpecHpHealSkill(s) &&
+      !isSpecShieldRestoreSkill(s)
   );
   if (tacticalSkills.length > 0 && rng() < 0.55) {
     const pick = randomItem(tacticalSkills, rng);

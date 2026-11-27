@@ -3,10 +3,11 @@ import rawSkillsData from './skills.json';
 import type {
   AdminConfig, IconCatalogModRow, MechClassId, OpeningCardDefinition,
   PassiveStatEntry, PassiveStatKey, SkillCategory, SkillClassScope,
-  SkillDefinition, SkillEffectKind, SkillIconKey, SkillModDefinition,
+  SkillDefinition, SkillEffectKind, SkillEffectSpec, SkillIconKey, SkillModDefinition,
   SkillRegistryTag, SkillTargetType,
 } from '../types/game';
 import { BALANCE_CONFIG, getEffectiveSkillMaxLevel, sanitizePassiveScaleAfter5, sanitizeRestorePctCap } from './balance';
+import { scaleSkillEffectSpecs, validateSpecSkillRow } from '../engine/skillSpecs';
 
 export const BUILTIN_SKILL_REGISTRY_TAG = 'sys' as const;
 export const MAX_SKILL_MODS = 100;
@@ -63,8 +64,9 @@ export function validatePassiveStatEntries(row: Record<string, unknown>): string
 
 export const EFFECT_KIND_VALIDATORS: Partial<Record<SkillEffectKind, (row: Record<string, unknown>) => string[]>> = {
   passive_stat: validatePassiveStatEntries,
+  spec: validateSpecSkillRow,
 };
-export const MOD_EFFECT_KINDS: SkillEffectKind[] = ['passive_stat'];
+export const MOD_EFFECT_KINDS: SkillEffectKind[] = ['passive_stat', 'spec'];
 
 const VALID_CLASS_SCOPES = new Set<SkillClassScope>(['general', 'striker', 'interceptor', 'siege', 'support']);
 const VALID_CATEGORIES = new Set<SkillCategory>(['normal', 'special', 'elite', 'passive']);
@@ -86,7 +88,7 @@ const VALID_EFFECT_KINDS = new Set<SkillEffectKind>([
   'heal_single', 'scan_reveal', 'energize_single', 'sp_transfer', 'heal_field_hot',
   'energize_shield_field', 'team_atk_up', 'team_def_up', 'team_eva_up', 'invincible_ally',
   'purify_team', 'full_recovery_elite', 'passive_skill_dmg', 'passive_def_pct',
-  'passive_eva_spd', 'passive_sp_regen', 'passive_stat',
+  'passive_eva_spd', 'passive_sp_regen', 'passive_stat', 'spec',
 ]);
 const OPTIONAL_NUMERIC_KEYS = [
   'powerMultiplier', 'shieldDamageMult', 'secondaryRatio', 'buffMagnitude',
@@ -288,11 +290,25 @@ export interface SkillScaleOptions {
   restorePctCap?: number;
 }
 
+export interface ScaledSkillStats {
+  level: number;
+  effectMult: number;
+  spCost: number;
+  cooldown: number;
+  powerMultiplier: number;
+  secondaryRatio: number;
+  buffMagnitude: number;
+  secondaryMagnitude: number;
+  spAmount: number;
+  passiveStats?: Array<PassiveStatEntry & { value: number }>;
+  effects?: SkillEffectSpec[];
+}
+
 export function getScaledSkillStats(
   skill: SkillDefinition,
   level: number,
   adminOrOpts?: Pick<AdminConfig, 'skillMaxLevel' | 'passiveScaleAfter5' | 'restorePctCap'> | SkillScaleOptions | null
-) {
+): ScaledSkillStats {
   const maxLv = getEffectiveSkillMaxLevel(adminOrOpts);
   const clampedLv = Math.max(1, Math.min(maxLv, Math.floor(level || 1)));
   const effectMult = 1 + (clampedLv - 1) * BALANCE_CONFIG.skillEffectScalePerLevel;
@@ -300,6 +316,7 @@ export function getScaledSkillStats(
   if (skill.category === 'passive') {
     const scaleAfter5 = sanitizePassiveScaleAfter5(adminOrOpts?.passiveScaleAfter5);
     const passiveMult = clampedLv <= 5 ? clampedLv : 5 + (clampedLv - 5) * scaleAfter5;
+    const restoreCap = sanitizeRestorePctCap(adminOrOpts?.restorePctCap);
     const scaledPassiveStats: Array<PassiveStatEntry & { value: number }> =
       Array.isArray(skill.passiveStats)
         ? skill.passiveStats.map((entry) => ({
@@ -314,6 +331,9 @@ export function getScaledSkillStats(
       secondaryMagnitude: Number(((skill.secondaryMagnitude ?? 0) * passiveMult).toFixed(3)),
       spAmount: Math.round((skill.spAmount ?? 0) * passiveMult),
       passiveStats: scaledPassiveStats,
+      ...(skill.effectKind === 'spec'
+        ? { effects: scaleSkillEffectSpecs(skill.effects, passiveMult, restoreCap) }
+        : {}),
     };
   }
 
@@ -332,5 +352,8 @@ export function getScaledSkillStats(
     secondaryRatio: skill.secondaryRatio ? Number((skill.secondaryRatio * effectMult).toFixed(2)) : 0,
     buffMagnitude, secondaryMagnitude,
     spAmount: skill.spAmount ? Math.round(skill.spAmount * effectMult) : 0,
+    ...(skill.effectKind === 'spec'
+      ? { effects: scaleSkillEffectSpecs(skill.effects, effectMult, restoreCap) }
+      : {}),
   };
 }

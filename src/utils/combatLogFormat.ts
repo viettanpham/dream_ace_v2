@@ -663,6 +663,57 @@ export function parseStructuredCombatLogRow(
       };
     }
 
+    case 'log.shieldSingle': {
+      const amount = Number(p.amount ?? 0);
+      const usedSkill = skillLabel || getSkillName(lang, 'sup_energize_target');
+      const isBigShield = amount >= 150;
+      const sentence = isVi
+        ? `${actorFromParams} dùng ${usedSkill} lên ${targetFromParams ?? '—'}, hồi ${amount} Khiên`
+        : `${actorFromParams} uses ${usedSkill} on ${targetFromParams ?? '—'}, restoring ${amount} Shield`;
+      return {
+        id: entry.id,
+        round,
+        turnLabel,
+        faction,
+        actorName: actorFromParams,
+        autoBadge,
+        actionKind: 'shield',
+        actionLabel: usedSkill,
+        targetName: targetFromParams,
+        valueText: `+${amount} SHD`,
+        valueTone: 'shield',
+        fallbackText,
+        sentence,
+        spCost: resolvedSkillSpCost,
+        isStrong: isBigShield,
+        strongTone: isBigShield ? 'heavy' : null,
+        ...avatarMeta,
+      };
+    }
+
+    case 'log.shieldBreakBlocked': {
+      const usedSkill = skillLabel || getSkillName(lang, 'sup_energize_target');
+      return {
+        id: entry.id,
+        round,
+        turnLabel,
+        faction,
+        actorName: actorFromParams,
+        autoBadge,
+        actionKind: 'shield',
+        actionLabel: usedSkill,
+        targetName: targetFromParams,
+        valueText: '0 SHD',
+        valueTone: 'shield',
+        fallbackText,
+        sentence: fallbackText,
+        spCost: null,
+        isStrong: false,
+        strongTone: null,
+        ...avatarMeta,
+      };
+    }
+
     case 'log.healSquad': {
       const total = Number(p.total ?? 0);
       const usedSkill = skillLabel || getSkillName(lang, 'sup_aegis_field');

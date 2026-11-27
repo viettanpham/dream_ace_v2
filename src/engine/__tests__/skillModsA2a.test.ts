@@ -175,12 +175,12 @@ describe('TASK A2a: skills.json + Admin skillMods engine + ITEM Z popups', () =>
 
   it('1) skills.json schema & snapshot equality + same-seed determinism when skillMods = []', () => {
     expect(CURRENT_SAVE_VERSION).toBe(14);
-    expect(Object.keys(EFFECT_KIND_VALIDATORS)).toEqual(['passive_stat']);
-    expect(MOD_EFFECT_KINDS).toEqual(['passive_stat']);
+    expect(Object.keys(EFFECT_KIND_VALIDATORS)).toEqual(['passive_stat', 'spec']);
+    expect(MOD_EFFECT_KINDS).toEqual(['passive_stat', 'spec']);
 
     expect(rawSkillsJson.schemaVersion).toBe(1);
-    expect(rawSkillsJson.skills).toHaveLength(50);
-    expect(SKILLS_LIST).toHaveLength(50);
+    expect(rawSkillsJson.skills).toHaveLength(52);
+    expect(SKILLS_LIST).toHaveLength(52);
     for (const skill of SKILLS_LIST) {
       expect(skill.registryTag).toBe(BUILTIN_SKILL_REGISTRY_TAG);
       expect(SKILLS_CATALOG[skill.id]).toEqual(skill);

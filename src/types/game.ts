@@ -161,6 +161,24 @@ export type PassiveStatKey =
   | 'executeDmgPct'
   | 'lastStandDefPct';
 
+export type SkillEffectSpecKind =
+  | 'damage'
+  | 'heal_hp_pct'
+  | 'restore_shield_pct'
+  | 'restore_sp'
+  | 'apply_status';
+
+export interface SkillEffectSpec {
+  kind: SkillEffectSpecKind;
+  target?: 'skill' | 'self';
+  powerMultiplier?: number;
+  pct?: number;
+  amount?: number;
+  value?: number;
+  statusId?: string;
+  duration?: number;
+}
+
 export interface PassiveStatEntry {
   key: PassiveStatKey;
   perLevel: number;
@@ -206,7 +224,8 @@ export type SkillEffectKind =
   | 'passive_def_pct'
   | 'passive_eva_spd'
   | 'passive_sp_regen'
-  | 'passive_stat';
+  | 'passive_stat'
+  | 'spec';
 
 export type SkillRegistryTag = 'sys' | 'mod';
 
@@ -230,6 +249,7 @@ export interface SkillDefinition {
   charges?: number; // e.g., 2 for Target Lock
   spAmount?: number; // e.g., +20 SP / +10 SP
   passiveStats?: PassiveStatEntry[]; // S1c-1: generic per-level passive stat table (1-2 entries)
+  effects?: SkillEffectSpec[]; // S1c-2: generic composable skill effect specs (1-3 entries)
   oncePerBattle?: boolean;
   isToggle?: boolean;
   phaseOverride?: 'step2' | 'step3';
@@ -1064,6 +1084,7 @@ export type CombatLogTemplateKey =
   | 'log.defend'
   | 'log.healSquad'
   | 'log.healSingle'
+  | 'log.shieldSingle'
   | 'log.energize'
   | 'log.spTransfer'
   | 'log.evade'
@@ -1071,6 +1092,7 @@ export type CombatLogTemplateKey =
   | 'log.destroyed'
   | 'log.statusApplied'
   | 'log.shieldCrackNoShield'
+  | 'log.shieldBreakBlocked'
   | 'log.burnTick'
   | 'log.regenTick'
   | 'log.registryDotTick'

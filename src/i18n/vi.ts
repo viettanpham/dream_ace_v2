@@ -509,6 +509,12 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'skill.sup_passive_reactor.name': 'Lò Phản Ứng Phụ',
   'skill.sup_passive_reactor.desc':
     'Bị động (chỉ bản thân): Đầu lượt tăng +0.5% tái tạo Khiên (và trần) và tự hồi +0.3% HP tối đa mỗi cấp.',
+  'skill.sup_healing_field.name': 'Trường Hồi Phục',
+  'skill.sup_healing_field.desc':
+    'Phát trường nanite diện rộng, hồi 15% HP tối đa cho toàn bộ đồng minh (tương ứng kỹ năng ACE: Trường Hồi Phục / Healing Field).',
+  'skill.sup_energize_target.name': 'Nạp Khiên Mục Tiêu',
+  'skill.sup_energize_target.desc':
+    'Tập trung tụ điện hồi 40% Khiên tối đa và xóa trạng thái Khiên nứt cho 1 đồng minh (tương ứng kỹ năng ACE: Nạp Khiên Mục Tiêu / Energize Target).',
 
   // Target labels
   'skill.target.self': 'Bản thân',
@@ -726,6 +732,8 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
     '{actor} kích hoạt {skill} (-{spCost} SP), hồi tổng cộng {total} Khiên/HP cho toàn đội.',
   'log.healSingle':
     '{actor} dùng {skill} sửa chữa {target} hồi +{amount} HP.',
+  'log.shieldSingle':
+    '{actor} dùng {skill} nạp +{amount} Khiên cho {target}.',
   'log.energize':
     '{actor} dùng {skill} tiếp +{amount} SP cho {target}.',
   'log.spTransfer':
@@ -742,6 +750,7 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'log.destroyed': '{target} ({className}) đã phát nổ!',
   'log.statusApplied': '{target} dính hiệu ứng {status} ({turns} lượt)!',
   'log.shieldCrackNoShield': '{target}: Không có khiên để làm nứt.',
+  'log.shieldBreakBlocked': '{target}: Khiên bị phá, không hồi được.',
   'log.burnTick': '{target} chịu {damage} sát thương Thiêu đốt!',
   'log.regenTick': '{target} hồi phục +{amount} HP thân tàu!',
   'log.registryDotTick': '{target} chịu {damage} {resource} từ {status}!',
