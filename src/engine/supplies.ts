@@ -5,8 +5,12 @@ import type {
   BattleKind,
   BattleState,
   BattleSupplyUnitState,
+  CombatFxEvent,
+  CombatFxTone,
+  CombatLogEntry,
   CombatUnit,
   ConsumableItem,
+  FloatingPopup,
   GearUnit,
   PilotAccount,
   SupplyEconomyConfig,
@@ -578,6 +582,7 @@ export interface ApplyBattleSupplyUseInput {
   > | null;
   kind?: BattleKind | null;
   rng?: () => number;
+  battleLimitOverride?: number | null;
 }
 
 export type ApplyBattleSupplyUseResult =
@@ -641,6 +646,7 @@ export function applyBattleSupplyUse({
   cfg,
   kind,
   rng,
+  battleLimitOverride,
 }: ApplyBattleSupplyUseInput): ApplyBattleSupplyUseResult {
   const unitIdx = units.findIndex((u) => u.id === unitId);
   const unit = unitIdx >= 0 ? units[unitIdx] : undefined;
@@ -662,6 +668,7 @@ export function applyBattleSupplyUse({
     cfg,
     kind,
     units,
+    battleLimitOverride,
   });
 
   if (!check.ok) {
@@ -743,6 +750,135 @@ export function applyBattleSupplyUse({
     },
     gains,
     ...(scanEff ? { revealedUnitIds, revealedNames } : {}),
+  };
+}
+
+export interface BuildSupplyUseFeedbackInput {
+  units: readonly CombatUnit[];
+  round: number;
+  actor: CombatUnit;
+  template: SupplyTemplate;
+  result: Extract<ApplyBattleSupplyUseResult, { ok: true }>;
+  uidSuffix: string;
+}
+
+export interface BuildSupplyUseFeedbackResult {
+  cue: 'heal' | 'shield';
+  popups: FloatingPopup[];
+  fxEvent: CombatFxEvent;
+  logEntry: CombatLogEntry;
+}
+
+export function buildSupplyUseFeedback({
+  units,
+  round,
+  actor,
+  template,
+  result,
+  uidSuffix,
+}: BuildSupplyUseFeedbackInput): BuildSupplyUseFeedbackResult {
+  const isScan = result.revealedNames !== undefined;
+  const revealedIds = result.revealedUnitIds ?? [];
+  const revealedNames = result.revealedNames ?? [];
+  const cue: 'heal' | 'shield' =
+    result.gains.shield > 0 && result.gains.hp === 0 ? 'shield' : 'heal';
+
+  const popups: FloatingPopup[] = [];
+  if (result.gains.hp > 0) {
+    popups.push({
+      id: `pop_sup_hp_${uidSuffix}`,
+      unitId: actor.id,
+      text: `+${result.gains.hp} HP`,
+      tone: 'heal',
+    });
+  }
+  if (result.gains.shield > 0) {
+    popups.push({
+      id: `pop_sup_shd_${uidSuffix}`,
+      unitId: actor.id,
+      text: `+${result.gains.shield} SHD`,
+      tone: 'shield',
+    });
+  }
+  if (result.gains.sp > 0) {
+    popups.push({
+      id: `pop_sup_sp_${uidSuffix}`,
+      unitId: actor.id,
+      text: `+${result.gains.sp} SP`,
+      tone: 'buff',
+    });
+  }
+  for (const revId of revealedIds) {
+    popups.push({
+      id: `pop_sup_rev_${revId}_${uidSuffix}`,
+      unitId: revId,
+      text: 'REVEALED!',
+      tone: 'status',
+    });
+  }
+
+  const sideUnits = units.filter((u) => u.side === actor.side);
+  const slotIdx = Math.max(
+    0,
+    sideUnits.findIndex((u) => u.id === actor.id)
+  );
+  const fxTone: CombatFxTone = isScan
+    ? 'sp'
+    : result.gains.hp > 0 || template.family === 'hp_kit'
+    ? 'heal'
+    : result.gains.shield > 0 || template.family === 'shield_kit'
+    ? 'shield'
+    : 'sp';
+  const fxAccentHex = fxTone === 'heal' ? '#10B981' : '#38BDF8';
+  const fxEvent: CombatFxEvent = {
+    id: `fx_sup_${uidSuffix}`,
+    kind: 'heal',
+    tone: fxTone,
+    fromSide: actor.side,
+    fromSlotIndex: slotIdx,
+    fromUnitId: actor.id,
+    toSide: actor.side,
+    toSlotIndices: [slotIdx],
+    toUnitIds: [actor.id],
+    accentHex: fxAccentHex,
+  };
+
+  const logEntry: CombatLogEntry = {
+    id: `log_sup_${uidSuffix}`,
+    round,
+    actorName: actor.name,
+    actorSide: actor.side,
+    actorIsPlayer: actor.isPlayer,
+    actorIsBoss: Boolean(actor.isBoss),
+    tag: isScan ? 'STATUS' : fxTone === 'shield' ? 'SHIELD' : 'HEAL',
+    templateKey: isScan
+      ? revealedNames.length > 0
+        ? 'log.supplyScanReveal'
+        : 'log.supplyScanNone'
+      : 'log.useSupply',
+    params: isScan
+      ? {
+          actor: actor.name,
+          templateId: template.id,
+          revealed: revealedNames.length,
+          ...(revealedNames.length > 0
+            ? { revealedNames: revealedNames.join(', ') }
+            : {}),
+        }
+      : {
+          actor: actor.name,
+          templateId: template.id,
+          hp: result.gains.hp,
+          shield: result.gains.shield,
+          sp: result.gains.sp,
+        },
+  };
+
+  return {
+    cue,
+    popups,
+    fxEvent,
+    logEntry,
   };
 }
 

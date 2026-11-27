@@ -679,6 +679,8 @@ export const EN_TRANSLATIONS = {
   'log.useSupply': '{actor} uses {supply}: {gains}',
   'log.supplyScanReveal': 'Scan: revealed {names}',
   'log.supplyScanNone': 'Scan: no targets detected',
+  'log.emergencyResupplyAlly': 'Allied forces receive emergency resupply',
+  'log.emergencyResupplyEnemy': 'Enemy forces receive emergency resupply',
   'log.evade': '{target} barrel-rolls and evades {action} from {actor}!',
   'log.damage':
     '{actor} hits {target} with {action} for {breakdown}{shieldMultTag}{critTag}{defendTag}.',

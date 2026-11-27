@@ -90,6 +90,7 @@ export interface PickAutoSuppliesInput {
   adminCfg?: Pick<AdminConfig, 'supplyUsesPerTurn' | 'supplyEconomy'> | null;
   kind?: BattleKind | null;
   units?: readonly CombatUnit[] | null;
+  battleLimitOverride?: number | null;
 }
 
 export function pickAutoSupplies({
@@ -101,6 +102,7 @@ export function pickAutoSupplies({
   adminCfg,
   kind,
   units,
+  battleLimitOverride,
 }: PickAutoSuppliesInput): string[] {
   const autoCfg = sanitizeAutoSuppliesConfig(cfg);
   if (!autoCfg.enabled || !unit.alive) return [];
@@ -156,6 +158,7 @@ export function pickAutoSupplies({
         cfg: adminCfg,
         kind,
         units,
+        battleLimitOverride,
       });
       return check.ok;
     });

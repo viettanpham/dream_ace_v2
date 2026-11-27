@@ -795,6 +795,12 @@ function formatCombatLogBody(
       return translate(lang, 'log.supplyScanNone');
     }
 
+    case 'log.emergencyResupplyAlly':
+      return translate(lang, 'log.emergencyResupplyAlly');
+
+    case 'log.emergencyResupplyEnemy':
+      return translate(lang, 'log.emergencyResupplyEnemy');
+
     case 'log.evade': {
       const actionText = formatActionParam(lang, p);
       return translate(lang, 'log.evade', {

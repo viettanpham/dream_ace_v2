@@ -1184,6 +1184,8 @@ export function parseStructuredCombatLogRow(
 
     case 'log.battleStart':
     case 'log.prestageConfirm':
+    case 'log.emergencyResupplyAlly':
+    case 'log.emergencyResupplyEnemy':
     case 'log.retreat':
     case 'log.wingmanChat':
     default: {
@@ -1194,7 +1196,9 @@ export function parseStructuredCombatLogRow(
         faction,
         actorName:
           entry.templateKey === 'log.battleStart' ||
-          entry.templateKey === 'log.prestageConfirm'
+          entry.templateKey === 'log.prestageConfirm' ||
+          entry.templateKey === 'log.emergencyResupplyAlly' ||
+          entry.templateKey === 'log.emergencyResupplyEnemy'
             ? translate(lang, 'log.actionSystem')
             : actorFromParams,
         autoBadge,

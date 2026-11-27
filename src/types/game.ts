@@ -1027,6 +1027,8 @@ export type CombatLogTemplateKey =
   | 'log.useSupply'
   | 'log.supplyScanReveal'
   | 'log.supplyScanNone'
+  | 'log.emergencyResupplyAlly'
+  | 'log.emergencyResupplyEnemy'
   | 'log.prestageConfirm';
 
 export interface CombatLogEntry {

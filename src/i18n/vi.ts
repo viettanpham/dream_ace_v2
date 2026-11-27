@@ -681,6 +681,8 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'log.useSupply': '{actor} dùng {supply}: {gains}',
   'log.supplyScanReveal': 'Quét: lộ {names}',
   'log.supplyScanNone': 'Quét: không phát hiện mục tiêu',
+  'log.emergencyResupplyAlly': 'Phe ta nhận tiếp tế khẩn cấp',
+  'log.emergencyResupplyEnemy': 'Phe địch nhận tiếp tế khẩn cấp',
   'log.evade': '{target} lộn vòng né gọn đòn {action} từ {actor}!',
   'log.damage':
     '{actor} dùng {action} bắn trúng {target} gây {breakdown}{shieldMultTag}{critTag}{defendTag}.',

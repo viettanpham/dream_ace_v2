@@ -119,6 +119,7 @@ import { sanitizeModuleDropConfig } from '../engine/moduleDrop';
 import {
   addSupplyToConsumables,
   applyBattleSupplyUse,
+  buildSupplyUseFeedback,
   getSupplyStockCount,
   sanitizeSupplyEconomyConfig,
   sanitizeSupplyLoadout,
@@ -130,6 +131,10 @@ import {
   tickBattleSupplyForUnit,
   type SupplyLoadoutReject,
 } from '../engine/supplies';
+import {
+  runNpcSupplyStep,
+  sanitizeNpcSupplyConfig,
+} from '../engine/npcSupply';
 import {
   pickAutoSupplies,
   sanitizeAutoSuppliesConfig,
@@ -3404,111 +3409,20 @@ export const useGameStore = create<GameStoreState>()(
           })
           .filter((c) => c.quantity > 0);
 
-        const isScan = res.revealedNames !== undefined;
-        const revealedIds = res.revealedUnitIds ?? [];
-        const revealedNames = res.revealedNames ?? [];
-
         const skipVisualFx = state.skipAnimations;
         const muteSound = state.skipAnimations || state.battleSpeed >= 10;
-        const cue: 'heal' | 'shield' =
-          res.gains.shield > 0 && res.gains.hp === 0 ? 'shield' : 'heal';
-        playCue(cue, muteSound);
-
         const uidSuffix = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-        const newPopups: FloatingPopup[] = [];
-        if (res.gains.hp > 0) {
-          newPopups.push({
-            id: `pop_sup_hp_${uidSuffix}`,
-            unitId: activeUnit.id,
-            text: `+${res.gains.hp} HP`,
-            tone: 'heal',
-          });
-        }
-        if (res.gains.shield > 0) {
-          newPopups.push({
-            id: `pop_sup_shd_${uidSuffix}`,
-            unitId: activeUnit.id,
-            text: `+${res.gains.shield} SHD`,
-            tone: 'shield',
-          });
-        }
-        if (res.gains.sp > 0) {
-          newPopups.push({
-            id: `pop_sup_sp_${uidSuffix}`,
-            unitId: activeUnit.id,
-            text: `+${res.gains.sp} SP`,
-            tone: 'buff',
-          });
-        }
-        for (const revId of revealedIds) {
-          newPopups.push({
-            id: `pop_sup_rev_${revId}_${uidSuffix}`,
-            unitId: revId,
-            text: 'REVEALED!',
-            tone: 'status',
-          });
-        }
+        const feedback = buildSupplyUseFeedback({
+          units: battle.units,
+          round: battle.round,
+          actor: activeUnit,
+          template,
+          result: res,
+          uidSuffix,
+        });
+        playCue(feedback.cue, muteSound);
 
-        const allyUnits = battle.units.filter((u) => u.side === activeUnit.side);
-        const slotIdx = Math.max(
-          0,
-          allyUnits.findIndex((u) => u.id === activeUnit.id)
-        );
-        const fxTone: CombatFxTone = isScan
-          ? 'sp'
-          : res.gains.hp > 0 || template.family === 'hp_kit'
-          ? 'heal'
-          : res.gains.shield > 0 || template.family === 'shield_kit'
-          ? 'shield'
-          : 'sp';
-        const fxAccentHex =
-          fxTone === 'heal' ? '#10B981' : '#38BDF8';
-        const supplyFx: CombatFxEvent = {
-          id: `fx_sup_${uidSuffix}`,
-          kind: 'heal',
-          tone: fxTone,
-          fromSide: activeUnit.side,
-          fromSlotIndex: slotIdx,
-          fromUnitId: activeUnit.id,
-          toSide: activeUnit.side,
-          toSlotIndices: [slotIdx],
-          toUnitIds: [activeUnit.id],
-          accentHex: fxAccentHex,
-        };
-
-        const supplyLog = enrichLogEntries(
-          [
-            {
-              id: `log_sup_${uidSuffix}`,
-              round: battle.round,
-              actorName: activeUnit.name,
-              actorSide: activeUnit.side,
-              tag: isScan ? 'STATUS' : fxTone === 'shield' ? 'SHIELD' : 'HEAL',
-              templateKey: isScan
-                ? revealedNames.length > 0
-                  ? 'log.supplyScanReveal'
-                  : 'log.supplyScanNone'
-                : 'log.useSupply',
-              params: isScan
-                ? {
-                    actor: activeUnit.name,
-                    templateId: template.id,
-                    revealed: revealedNames.length,
-                    ...(revealedNames.length > 0
-                      ? { revealedNames: revealedNames.join(', ') }
-                      : {}),
-                  }
-                : {
-                    actor: activeUnit.name,
-                    templateId: template.id,
-                    hp: res.gains.hp,
-                    shield: res.gains.shield,
-                    sp: res.gains.sp,
-                  },
-            },
-          ],
-          activeUnit
-        );
+        const supplyLog = enrichLogEntries([feedback.logEntry], activeUnit);
 
         set({
           battle: {
@@ -3518,10 +3432,10 @@ export const useGameStore = create<GameStoreState>()(
             log: [...battle.log, ...supplyLog],
             popups: skipVisualFx
               ? []
-              : [...battle.popups, ...newPopups].slice(-18),
+              : [...battle.popups, ...feedback.popups].slice(-18),
             fxEvents: skipVisualFx
               ? []
-              : [...battle.fxEvents, supplyFx].slice(-12),
+              : [...battle.fxEvents, feedback.fxEvent].slice(-12),
           },
           pilot: {
             ...state.pilot,
@@ -4238,14 +4152,41 @@ export const useGameStore = create<GameStoreState>()(
 
         const skipVisualFx = state.skipAnimations;
         const muteSound = state.skipAnimations || state.battleSpeed >= 10;
+
+        let workingBattle = battle;
+        let workingActor = activeUnit;
+        let npcSupplyEvents: BattleEvent[] = [];
+        const npcCfg = sanitizeNpcSupplyConfig(state.adminConfig?.npcSupply);
+        if (
+          !playerIsCharging &&
+          !activeUnit.isPlayer &&
+          !(activeUnit.isStructure && !activeUnit.isBoss) &&
+          workingBattle.npcSupply &&
+          npcCfg.enabled
+        ) {
+          const supplyStep = runNpcSupplyStep({
+            battle: workingBattle,
+            unitId: activeUnit.id,
+            npcCfg,
+            adminConfig: state.adminConfig,
+            templates: SUPPLY_TEMPLATES,
+            rng: Math.random,
+          });
+          workingBattle = supplyStep.battle;
+          npcSupplyEvents = supplyStep.events;
+          workingActor =
+            workingBattle.units.find((u) => u.id === activeUnit.id) ??
+            activeUnit;
+        }
+
         const resolution = resolveMultiStepTurn({
-          units: battle.units,
-          actorId: activeUnit.id,
-          round: battle.round,
+          units: workingBattle.units,
+          actorId: workingActor.id,
+          round: workingBattle.round,
           adminConfig: state.adminConfig,
           rng: Math.random,
-          initialTurnStep2Used: battle.turnStep2Used ?? 0,
-          initialTurnLockedSkillIds: battle.turnLockedSkillIds ?? [],
+          initialTurnStep2Used: workingBattle.turnStep2Used ?? 0,
+          initialTurnLockedSkillIds: workingBattle.turnLockedSkillIds ?? [],
           chooseNextDecision: (
             curUnits,
             curActor,
@@ -4256,7 +4197,7 @@ export const useGameStore = create<GameStoreState>()(
             playerIsCharging
               ? {
                   action: 'attack',
-                  targetId: battle.selectedTargetId,
+                  targetId: workingBattle.selectedTargetId,
                 }
               : chooseAiDecision(
                   curActor,
@@ -4276,33 +4217,37 @@ export const useGameStore = create<GameStoreState>()(
           (u) => u.side === 'ally' && u.alive
         );
 
-        const nextTurnCounter = battle.turnCounter + 1;
+        const nextTurnCounter = workingBattle.turnCounter + 1;
         const nextEvents = [
-          ...battle.events,
+          ...workingBattle.events,
+          ...stampTurnEvents(npcSupplyEvents, nextTurnCounter),
           ...stampTurnEvents(resolution.events, nextTurnCounter),
         ].slice(-5000);
-        const enrichedLogs = enrichLogEntries(resolution.logEntries, activeUnit);
-        const nextLog = [...battle.log, ...enrichedLogs];
+        const enrichedLogs = enrichLogEntries(
+          resolution.logEntries,
+          workingActor
+        );
+        const nextLog = [...workingBattle.log, ...enrichedLogs];
         const nextPopups = skipVisualFx
           ? []
-          : [...battle.popups, ...resolution.popups].slice(-18);
+          : [...workingBattle.popups, ...resolution.popups].slice(-18);
         const nextFx = skipVisualFx
           ? []
           : resolution.fxEvents.length > 0
-          ? [...battle.fxEvents, ...resolution.fxEvents].slice(-12)
-          : battle.fxEvents;
+          ? [...workingBattle.fxEvents, ...resolution.fxEvents].slice(-12)
+          : workingBattle.fxEvents;
         const nextExploded = skipVisualFx
           ? []
           : resolution.destroyedUnitIds.length > 0
-          ? [...battle.explodedUnitIds, ...resolution.destroyedUnitIds].slice(-8)
-          : battle.explodedUnitIds;
+          ? [...workingBattle.explodedUnitIds, ...resolution.destroyedUnitIds].slice(-8)
+          : workingBattle.explodedUnitIds;
 
         if (aliveEnemies.length === 0 || aliveAllies.length === 0) {
           const won = aliveEnemies.length === 0;
           set(
             finalizeBattleOutcome(
               state,
-              battle,
+              workingBattle,
               resolution.updatedUnits,
               won,
               false,
@@ -4319,23 +4264,25 @@ export const useGameStore = create<GameStoreState>()(
 
         // Reconcile upcoming units in current round by live Speed DESC
         const reconciledOrder = reconcileRemainingTurnOrder(
-          battle.turnOrder,
-          battle.activeTurnIndex,
+          workingBattle.turnOrder,
+          workingBattle.activeTurnIndex,
           resolution.updatedUnits
         );
         const { nextIndex, wrappedRound } = findNextAliveTurnIndex(
           reconciledOrder,
           resolution.updatedUnits,
-          battle.activeTurnIndex
+          workingBattle.activeTurnIndex
         );
 
         let finalUnits = resolution.updatedUnits;
         let nextTurnOrder = reconciledOrder;
         let finalTurnIndex = nextIndex;
-        const nextRound = wrappedRound ? battle.round + 1 : battle.round;
+        const nextRound = wrappedRound
+          ? workingBattle.round + 1
+          : workingBattle.round;
         let nextSnapshots = appendRoundSnapshot(
-          battle.roundSnapshots,
-          battle.round,
+          workingBattle.roundSnapshots,
+          workingBattle.round,
           resolution.updatedUnits
         );
         if (wrappedRound) {
@@ -4353,11 +4300,11 @@ export const useGameStore = create<GameStoreState>()(
         }
 
         // Occasional AI wingman radio callout (~28% chance when animations are enabled)
-        let nextWingmanChat = battle.wingmanChat ?? null;
+        let nextWingmanChat = workingBattle.wingmanChat ?? null;
         if (
           !skipVisualFx &&
-          activeUnit.side === 'ally' &&
-          !activeUnit.isPlayer &&
+          workingActor.side === 'ally' &&
+          !workingActor.isPlayer &&
           Math.random() < 0.28
         ) {
           const textKey =
@@ -4366,8 +4313,8 @@ export const useGameStore = create<GameStoreState>()(
             ];
           nextWingmanChat = {
             id: `chat_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-            unitId: activeUnit.id,
-            unitName: activeUnit.name,
+            unitId: workingActor.id,
+            unitName: workingActor.name,
             textKey,
           };
         }
@@ -4377,16 +4324,18 @@ export const useGameStore = create<GameStoreState>()(
           ? getValidEnemyTargets(finalUnits, playerNext, 'attack')
           : aliveEnemies;
         const currentTargetStillAlive = aliveEnemies.some(
-          (e) => e.id === battle.selectedTargetId
+          (e) => e.id === workingBattle.selectedTargetId
         );
         const currentAllyStillAlive = aliveAllies.some(
-          (a) => a.id === battle.selectedAllyTargetId
+          (a) => a.id === workingBattle.selectedAllyTargetId
         );
 
         set({
           battle: {
-            ...battle,
+            ...workingBattle,
             units: finalUnits,
+            supplyByUnit: workingBattle.supplyByUnit,
+            npcSupply: workingBattle.npcSupply,
             turnCounter: nextTurnCounter,
             log: nextLog,
             events: nextEvents,
@@ -4399,10 +4348,10 @@ export const useGameStore = create<GameStoreState>()(
             activeTurnIndex: finalTurnIndex,
             round: nextRound,
             selectedTargetId: currentTargetStillAlive
-              ? battle.selectedTargetId
+              ? workingBattle.selectedTargetId
               : validFrontEnemies[0]?.id ?? aliveEnemies[0]?.id ?? null,
             selectedAllyTargetId: currentAllyStillAlive
-              ? battle.selectedAllyTargetId
+              ? workingBattle.selectedAllyTargetId
               : aliveAllies[0]?.id ?? null,
             turnStep2Used: 0,
             turnLockedSkillIds: [],

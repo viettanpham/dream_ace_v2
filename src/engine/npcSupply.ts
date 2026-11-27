@@ -1,19 +1,38 @@
 import { SUPPLY_TEMPLATES } from '../data/consumables';
+import { getSectorById } from '../data/maps';
 import rawNpcSupplyData from '../data/npcSupply.json';
 import type {
+  AdminConfig,
+  AutoSuppliesConfig,
   BaseFaction,
   BaseStatus,
+  BattleEvent,
   BattleKind,
   BattleNpcSupplyState,
+  BattleState,
+  CombatFxEvent,
+  CombatLogEntry,
   CombatSide,
   CombatUnit,
   EnemyArchetype,
+  FloatingPopup,
   NpcSupplyConfig,
   NpcSupplyKitFamily,
   SectorDifficulty,
   SupplyTemplate,
 } from '../types/game';
-import { filterAutoOrNpcSupplies } from './supplies';
+import {
+  applyBattleSupplyUse,
+  buildSupplyUseFeedback,
+  filterAutoOrNpcSupplies,
+  sanitizeSupplyUsesPerTurn,
+  tickBattleSupplyForUnit,
+} from './supplies';
+import {
+  AUTO_SUPPLIES_MAX_PCT,
+  AUTO_SUPPLIES_MIN_PCT,
+  pickAutoSupplies,
+} from './supplyAi';
 
 export const DEFAULT_SUPPLY_MAX_PER_TYPE_PER_BATTLE = 10;
 export const MIN_SUPPLY_MAX_PER_TYPE_PER_BATTLE = 1;
@@ -604,5 +623,377 @@ export function generateNpcSupplies(
     stockByUnit,
     sectorSupply: safeSectorSupply,
     emergencyUsed: { ally: false, enemy: false },
+  };
+}
+
+export function computeSidePressure(
+  units: readonly CombatUnit[],
+  side: CombatSide
+): number {
+  let ownCur = 0;
+  let ownMax = 0;
+  let otherCur = 0;
+  let otherMax = 0;
+
+  for (const unit of units) {
+    if (!unit.alive) continue;
+    const cur = Math.max(0, unit.hp) + Math.max(0, unit.shield);
+    const max =
+      Math.max(0, unit.derived.maxHp) + Math.max(0, unit.derived.maxShield);
+    if (unit.side === side) {
+      ownCur += cur;
+      ownMax += max;
+    } else {
+      otherCur += cur;
+      otherMax += max;
+    }
+  }
+
+  const ownRatio = ownMax > 0 ? ownCur / ownMax : 0;
+  const otherRatio = otherMax > 0 ? otherCur / otherMax : 0;
+  return ownRatio - otherRatio;
+}
+
+function computeUnitSupplyTargetTier(
+  unit: Pick<CombatUnit, 'level' | 'side' | 'isBoss'>,
+  kind: BattleKind,
+  difficulty: SectorDifficulty,
+  cfg: NpcSupplyConfig,
+  allowedTemplates: readonly SupplyTemplate[]
+): number {
+  const maxTemplateTier = allowedTemplates.reduce(
+    (max, tpl) => Math.max(max, tpl.tier),
+    1
+  );
+  const baseTier = getBaseTierForLevel(unit.level, allowedTemplates);
+  const offset =
+    (unit.side === 'enemy' ? cfg.tierOffset[difficulty] : 0) +
+    (unit.isBoss ? cfg.tierOffset.boss : 0) +
+    (kind === 'event' ? cfg.tierOffset.event : 0);
+  return Math.max(1, Math.min(maxTemplateTier, Math.round(baseTier + offset)));
+}
+
+function pickHighestTierStockTemplate(
+  unitStock: Record<string, number>,
+  allowedById: ReadonlyMap<string, SupplyTemplate>
+): SupplyTemplate | undefined {
+  let best: SupplyTemplate | undefined;
+  for (const [tplId, qty] of Object.entries(unitStock)) {
+    if (!Number.isFinite(qty) || qty <= 0) continue;
+    const tpl = allowedById.get(tplId);
+    if (!tpl) continue;
+    if (!best) {
+      best = tpl;
+      continue;
+    }
+    if (tpl.tier !== best.tier) {
+      if (tpl.tier > best.tier) best = tpl;
+      continue;
+    }
+    const tplFamIdx = NPC_SUPPLY_FAMILIES.indexOf(
+      tpl.family as NpcSupplyKitFamily
+    );
+    const bestFamIdx = NPC_SUPPLY_FAMILIES.indexOf(
+      best.family as NpcSupplyKitFamily
+    );
+    if (tplFamIdx !== bestFamIdx) {
+      if (tplFamIdx >= 0 && (bestFamIdx < 0 || tplFamIdx < bestFamIdx)) {
+        best = tpl;
+      }
+    } else if (tpl.id < best.id) {
+      best = tpl;
+    }
+  }
+  return best;
+}
+
+export interface RunNpcSupplyStepInput {
+  battle: BattleState;
+  unitId: string;
+  npcCfg?: Partial<NpcSupplyConfig> | Record<string, unknown> | null;
+  adminConfig?: AdminConfig | null;
+  templates?: readonly SupplyTemplate[];
+  rng?: () => number;
+}
+
+export interface RunNpcSupplyStepResult {
+  battle: BattleState;
+  events: BattleEvent[];
+}
+
+export function runNpcSupplyStep({
+  battle,
+  unitId,
+  npcCfg,
+  adminConfig,
+  templates,
+}: RunNpcSupplyStepInput): RunNpcSupplyStepResult {
+  const safeCfg = sanitizeNpcSupplyConfig(npcCfg ?? adminConfig?.npcSupply);
+  if (!safeCfg.enabled || !battle.npcSupply) {
+    return { battle, events: [] };
+  }
+
+  const activeUnit = battle.units.find((u) => u.id === unitId);
+  if (
+    !activeUnit ||
+    !activeUnit.alive ||
+    activeUnit.isPlayer ||
+    (activeUnit.isStructure && !activeUnit.isBoss)
+  ) {
+    return { battle, events: [] };
+  }
+
+  const allowedTemplates = filterAutoOrNpcSupplies(
+    templates ?? SUPPLY_TEMPLATES
+  ).filter((tpl): tpl is SupplyTemplate & { family: NpcSupplyKitFamily } =>
+    NPC_SUPPLY_FAMILIES.includes(tpl.family as NpcSupplyKitFamily)
+  );
+  const allowedById = new Map<string, SupplyTemplate>(
+    allowedTemplates.map((t) => [t.id, t])
+  );
+  const maxPerType = sanitizeSupplyMaxPerTypePerBattle(
+    adminConfig?.supplyMaxPerTypePerBattle
+  );
+
+  // (a) Tick this unit's supply cooldowns/per-turn count at the start of its own turn
+  let workingSupplyByUnit =
+    tickBattleSupplyForUnit(battle.supplyByUnit, unitId) ?? battle.supplyByUnit;
+  let workingUnits = battle.units;
+  const workingStockByUnit: Record<string, Record<string, number>> = {
+    ...battle.npcSupply.stockByUnit,
+  };
+  let workingEmergencyUsed = { ...battle.npcSupply.emergencyUsed };
+  let stockChanged = false;
+  let emergencyTriggered = false;
+
+  const newLogs: CombatLogEntry[] = [];
+  const newPopups: FloatingPopup[] = [];
+  const newFxEvents: CombatFxEvent[] = [];
+  const events: BattleEvent[] = [];
+
+  // (b) Pressure across alive units on both sides
+  const pressure = computeSidePressure(workingUnits, activeUnit.side);
+
+  // ITEM 2: Emergency resupply (before picking, once per side per battle)
+  if (
+    safeCfg.emergency.enabled &&
+    battle.round >= safeCfg.emergency.minRound &&
+    pressure <= -safeCfg.emergency.gap &&
+    battle.npcSupply.sectorSupply >= safeCfg.emergency.minSectorSupply &&
+    !workingEmergencyUsed[activeUnit.side]
+  ) {
+    const difficulty: SectorDifficulty =
+      getSectorById(battle.sectorId)?.difficulty ?? 'Standard';
+    for (const unit of workingUnits) {
+      if (
+        !unit.alive ||
+        unit.side !== activeUnit.side ||
+        unit.isPlayer ||
+        (unit.isStructure && !unit.isBoss)
+      ) {
+        continue;
+      }
+      const uStock = { ...(workingStockByUnit[unit.id] ?? {}) };
+      const bestExisting = pickHighestTierStockTemplate(uStock, allowedById);
+      if (bestExisting) {
+        const curQty = Math.max(0, uStock[bestExisting.id] ?? 0);
+        const nextQty = Math.min(maxPerType, curQty + 1);
+        if (nextQty > 0) {
+          uStock[bestExisting.id] = nextQty;
+        }
+      } else {
+        const targetTier = computeUnitSupplyTargetTier(
+          unit,
+          battle.kind ?? 'patrol',
+          difficulty,
+          safeCfg,
+          allowedTemplates
+        );
+        const fallbackHpKit = pickTemplateForFamilyAndTier(
+          allowedTemplates,
+          'hp_kit',
+          targetTier
+        );
+        if (fallbackHpKit) {
+          uStock[fallbackHpKit.id] = Math.min(maxPerType, 1);
+        }
+      }
+      if (Object.keys(uStock).length > 0) {
+        workingStockByUnit[unit.id] = uStock;
+      }
+    }
+    workingEmergencyUsed = {
+      ...workingEmergencyUsed,
+      [activeUnit.side]: true,
+    };
+    stockChanged = true;
+    emergencyTriggered = true;
+    newLogs.push({
+      id: `log_emg_${activeUnit.side}_${battle.round}_${battle.turnCounter}`,
+      round: battle.round,
+      actorName: activeUnit.name,
+      actorSide: activeUnit.side,
+      actorIsPlayer: false,
+      actorIsBoss: Boolean(activeUnit.isBoss),
+      tag: 'SYSTEM',
+      templateKey:
+        activeUnit.side === 'ally'
+          ? 'log.emergencyResupplyAlly'
+          : 'log.emergencyResupplyEnemy',
+      params: {},
+    });
+  }
+
+  // (b)-(c) Situation-adjusted thresholds + pickAutoSupplies
+  const shift =
+    pressure <= -safeCfg.losingGap
+      ? safeCfg.losingBonus
+      : pressure >= safeCfg.losingGap
+      ? -safeCfg.winningCut
+      : 0;
+  const clampThresh = (val: number) =>
+    Math.max(
+      AUTO_SUPPLIES_MIN_PCT,
+      Math.min(AUTO_SUPPLIES_MAX_PCT, Math.round(val + shift))
+    );
+  const pickCfg: AutoSuppliesConfig = {
+    enabled: true,
+    hpBelowPct: clampThresh(safeCfg.thresholds.hp),
+    shieldBelowPct: clampThresh(safeCfg.thresholds.shield),
+    spBelowPct: clampThresh(safeCfg.thresholds.sp),
+    buffAtStart: false,
+  };
+
+  const actorStock = { ...(workingStockByUnit[unitId] ?? {}) };
+  const loadoutTemplates: SupplyTemplate[] = [];
+  for (const [tplId, qty] of Object.entries(actorStock)) {
+    if (!Number.isFinite(qty) || qty <= 0) continue;
+    const tpl = allowedById.get(tplId);
+    if (tpl) loadoutTemplates.push(tpl);
+  }
+
+  if (loadoutTemplates.length > 0) {
+    const maxPerTurn = sanitizeSupplyUsesPerTurn(adminConfig?.supplyUsesPerTurn);
+    const picks = pickAutoSupplies({
+      unit: activeUnit,
+      loadoutTemplates,
+      stockByTemplate: actorStock,
+      unitState: workingSupplyByUnit?.[unitId],
+      cfg: pickCfg,
+      adminCfg: adminConfig,
+      kind: battle.kind,
+      units: workingUnits,
+      battleLimitOverride: maxPerType,
+    });
+
+    for (let i = 0; i < picks.length && i < maxPerTurn; i++) {
+      const tpl = allowedById.get(picks[i]);
+      if (!tpl) continue;
+      const curStock = actorStock[tpl.id] ?? 0;
+      if (curStock <= 0) continue;
+
+      const useResult = applyBattleSupplyUse({
+        units: workingUnits,
+        supplyByUnit: workingSupplyByUnit,
+        unitId,
+        template: tpl,
+        stock: curStock,
+        isOwnTurn: true,
+        cfg: adminConfig,
+        kind: battle.kind,
+        battleLimitOverride: maxPerType,
+      });
+      if (!useResult.ok) continue;
+
+      workingUnits = useResult.units;
+      workingSupplyByUnit = useResult.supplyByUnit;
+      const nextQty = curStock - 1;
+      if (nextQty > 0) {
+        actorStock[tpl.id] = nextQty;
+      } else {
+        delete actorStock[tpl.id];
+      }
+      stockChanged = true;
+
+      const uidSuffix = `npc_${battle.round}_${battle.turnCounter}_${unitId}_${i}`;
+      const actorRef =
+        workingUnits.find((u) => u.id === unitId) ?? activeUnit;
+      const feedback = buildSupplyUseFeedback({
+        units: workingUnits,
+        round: battle.round,
+        actor: actorRef,
+        template: tpl,
+        result: useResult,
+        uidSuffix,
+      });
+      newLogs.push(feedback.logEntry);
+      newPopups.push(...feedback.popups);
+      newFxEvents.push(feedback.fxEvent);
+
+      if (useResult.gains.hp > 0) {
+        events.push({
+          id: `evt_sup_hp_${uidSuffix}`,
+          round: battle.round,
+          turn: battle.turnCounter,
+          actorId: unitId,
+          targetId: unitId,
+          type: 'heal',
+          amount: useResult.gains.hp,
+        });
+      }
+      if (useResult.gains.shield > 0) {
+        events.push({
+          id: `evt_sup_shd_${uidSuffix}`,
+          round: battle.round,
+          turn: battle.turnCounter,
+          actorId: unitId,
+          targetId: unitId,
+          type: 'shield_grant',
+          amount: useResult.gains.shield,
+        });
+      }
+    }
+
+    if (stockChanged) {
+      if (Object.keys(actorStock).length > 0) {
+        workingStockByUnit[unitId] = actorStock;
+      } else {
+        delete workingStockByUnit[unitId];
+      }
+    }
+  }
+
+  const supplyStateChanged = workingSupplyByUnit !== battle.supplyByUnit;
+  if (!supplyStateChanged && !stockChanged && !emergencyTriggered) {
+    return { battle, events: [] };
+  }
+
+  const nextBattle: BattleState = {
+    ...battle,
+    units: workingUnits,
+    ...(workingSupplyByUnit !== undefined
+      ? { supplyByUnit: workingSupplyByUnit }
+      : {}),
+    npcSupply: stockChanged || emergencyTriggered
+      ? {
+          ...battle.npcSupply,
+          stockByUnit: workingStockByUnit,
+          emergencyUsed: workingEmergencyUsed,
+        }
+      : battle.npcSupply,
+    log: newLogs.length > 0 ? [...battle.log, ...newLogs] : battle.log,
+    popups:
+      newPopups.length > 0
+        ? [...battle.popups, ...newPopups].slice(-18)
+        : battle.popups,
+    fxEvents:
+      newFxEvents.length > 0
+        ? [...battle.fxEvents, ...newFxEvents].slice(-12)
+        : battle.fxEvents,
+  };
+
+  return {
+    battle: nextBattle,
+    events,
   };
 }
