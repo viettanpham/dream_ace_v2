@@ -57,6 +57,7 @@ import {
   pickFluxAutoCount,
   sanitizeFluxAutoConfig,
 } from '../engine/fluxAuto';
+import { buildEnrageActivationLogs } from '../engine/enrage';
 import {
   equipItemOnGear,
   generateItemInstance,
@@ -3576,7 +3577,7 @@ export const useGameStore = create<GameStoreState>()(
           ...stampTurnEvents(resolution.events, nextTurnCounter),
         ].slice(-5000);
         const enrichedLogs = enrichLogEntries(resolution.logEntries, activeUnit);
-        const nextLog = [...battle.log, ...enrichedLogs];
+        let nextLog = [...battle.log, ...enrichedLogs];
         const nextPopups = skipVisualFx
           ? []
           : [...battle.popups, ...resolution.popups].slice(-18);
@@ -3704,6 +3705,14 @@ export const useGameStore = create<GameStoreState>()(
             nextRound,
             finalUnits
           );
+          const enrageLogs = buildEnrageActivationLogs(
+            nextRound,
+            get().adminConfig,
+            nextLog
+          );
+          if (enrageLogs.length > 0) {
+            nextLog = [...nextLog, ...enrageLogs];
+          }
         }
 
         const nextSupplyByUnit = tickBattleSupplyForUnit(
@@ -4053,7 +4062,7 @@ export const useGameStore = create<GameStoreState>()(
           activeUnit,
           autoRuleNumber
         );
-        const nextLog = [...battle.log, ...enrichedLogs];
+        let nextLog = [...battle.log, ...enrichedLogs];
         const nextPopups = skipVisualFx
           ? []
           : [...battle.popups, ...resolution.popups].slice(-18);
@@ -4120,6 +4129,14 @@ export const useGameStore = create<GameStoreState>()(
             nextRound,
             finalUnits
           );
+          const enrageLogs = buildEnrageActivationLogs(
+            nextRound,
+            get().adminConfig,
+            nextLog
+          );
+          if (enrageLogs.length > 0) {
+            nextLog = [...nextLog, ...enrageLogs];
+          }
         }
 
         const currentTargetStillAlive = aliveEnemies.some(
@@ -4288,7 +4305,7 @@ export const useGameStore = create<GameStoreState>()(
           resolution.logEntries,
           workingActor
         );
-        const nextLog = [...workingBattle.log, ...enrichedLogs];
+        let nextLog = [...workingBattle.log, ...enrichedLogs];
         const nextPopups = skipVisualFx
           ? []
           : [...workingBattle.popups, ...resolution.popups].slice(-18);
@@ -4358,6 +4375,14 @@ export const useGameStore = create<GameStoreState>()(
             nextRound,
             finalUnits
           );
+          const enrageLogs = buildEnrageActivationLogs(
+            nextRound,
+            get().adminConfig,
+            nextLog
+          );
+          if (enrageLogs.length > 0) {
+            nextLog = [...nextLog, ...enrageLogs];
+          }
         }
 
         // Occasional AI wingman radio callout (~28% chance when animations are enabled)

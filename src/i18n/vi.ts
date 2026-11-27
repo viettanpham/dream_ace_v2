@@ -726,6 +726,7 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'log.battleStart':
     'Bắt đầu giao tranh tại {sector} ({difficulty}). Thứ tự lượt xếp theo Tốc độ.',
   'log.sectorSupply': 'Quân nhu khu vực: {n}%',
+  'log.enragePhaseActivated': 'Vòng {round}: {phase} kích hoạt',
   'log.defend':
     '{actor} bật Khiên năng lượng (-50% sát thương{shieldPart}{spPart}).',
   'log.healSquad':
@@ -1092,8 +1093,28 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
     'Chỉ dùng vật tư trong Túi vật tư. Thiết bị quét không tự dùng.',
 
   // Admin CP Cuồng nộ chống kéo dài
-  'admin.softEnrage': 'Cuồng nộ chống kéo dài (Vòng 20+)',
-  'admin.softEnrageDesc': 'Địch tăng +10% ST mỗi vòng sau Vòng 20 (tối đa +200%)',
+  'admin.softEnrage': 'Cuồng nộ chống kéo dài (3 pha)',
+  'admin.softEnrageDesc':
+    'Áp dụng cho cả 2 phe theo từng tầng: Cuồng nộ (-DEF), Frenzy (+ST), Berserker (+Crit)',
+  'admin.enragePreviewRound': 'Vòng xem thử',
+  'admin.enrageReset': 'Mặc định',
+  'admin.enragePhaseRage': 'Pha 1: Cuồng nộ',
+  'admin.enragePhaseFrenzy': 'Pha 2: Frenzy',
+  'admin.enragePhaseBerserker': 'Pha 3: Berserker',
+  'admin.enrageStartRound': 'Vòng bắt đầu (>= 1)',
+  'admin.enrageEveryRounds': 'Chu kỳ tăng tầng (vòng)',
+  'admin.enrageMaxStacks': 'Tầng tối đa (1–1000)',
+  'admin.enrageRageValue': 'Giảm thủ / tầng (%)',
+  'admin.enrageFrenzyValue': 'Tăng sát thương / tầng (%)',
+  'admin.enrageBerserkerCritRate': 'Tỉ lệ crit / tầng (%)',
+  'admin.enrageBerserkerCritDmg': 'Sát thương crit / tầng (%)',
+  'admin.enrageExStart': 'Kích hoạt tầng 1 tại vòng {start}',
+  'admin.enrageExEvery': 'Tầng 2 tại vòng {next}; mỗi +{every} vòng +1 tầng',
+  'admin.enrageExMax': 'Đạt tối đa {max} tầng tại vòng {round}',
+  'admin.enrageExRageVal': '5 tầng = -{at5}% thủ (tối đa -{atMax}%)',
+  'admin.enrageExFrenzyVal': '5 tầng = +{at5}% ST (tối đa +{atMax}%)',
+  'admin.enrageExCritRate': '5 tầng = +{at5}% tỉ lệ crit (tối đa +{atMax}%)',
+  'admin.enrageExCritDmg': '5 tầng = +{at5}% ST crit (tối đa +{atMax}%)',
 
   // Bổ sung Bản đồ (Căn cứ, Đồn trú, NPC, Hư hại/Sửa chữa, Đếm ngược tấn công, Chú giải)
   'sector.aegis_relay.name': 'Trạm Tiếp Sóng Aegis',
@@ -1441,8 +1462,6 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'admin.skillsUnlockAllLv1': 'Mở mọi Kỹ năng (Lv1)',
   'admin.skillsGrantCards': 'Nhận đủ Thẻ Mở Khóa',
   'admin.skillsResetCd': 'Hồi ngay Cooldown & SP trận',
-  'admin.battleEnrageStart': 'Vòng bắt đầu Cuồng nộ',
-  'admin.battleEnrageStep': 'Tăng Cuồng nộ (% / vòng)',
   'admin.skillMaxLevel': 'Cấp tối đa kỹ năng (1–20)',
   'admin.skillMaxLevelExample': 'Skill tăng tối đa tới Lv{max}; nâng Lv{max} tốn {cost} Credits',
   'admin.passiveScaleAfter5': 'Hệ số bị động sau Lv5 (0–1)',

@@ -9,7 +9,14 @@ import {
   X,
 } from 'lucide-react';
 import { buildTurnQueue } from '../engine/combat';
+import {
+  formatEnrageTooltip,
+  getEnragePhaseDisplayName,
+  getEnrageState,
+  type EnrageState,
+} from '../engine/enrage';
 import { getClassName, getTeamTagLabel, useI18n } from '../i18n';
+import { useGameStore } from '../store/useGameStore';
 import type {
   BattleSpeed,
   BattleState,
@@ -36,7 +43,8 @@ interface TurnQueueBarProps {
   battle: BattleState;
   battleSpeed: BattleSpeed;
   skipAnimations: boolean;
-  enrageBonusPct: number;
+  enrageState?: EnrageState;
+  enrageBonusPct?: number;
   variant?: TurnQueueVariant;
   targetName?: string | null;
   onSelectUnit?: (unitId: string) => void;
@@ -257,7 +265,8 @@ export function TurnQueueBar({
   battle,
   battleSpeed,
   skipAnimations,
-  enrageBonusPct,
+  enrageState,
+  enrageBonusPct: _legacyEnrageBonusPct,
   variant = 'default',
   targetName = null,
   onSelectUnit,
@@ -266,6 +275,7 @@ export function TurnQueueBar({
   hideActingRow = false,
 }: TurnQueueBarProps) {
   const { lang, t } = useI18n();
+  const adminConfig = useGameStore((s) => s.adminConfig);
   const trackRef = useRef<HTMLDivElement | null>(null);
   const popoverAnchorRef = useRef<HTMLDivElement | null>(null);
   const [trackWidth, setTrackWidth] = useState<number>(() =>
@@ -486,8 +496,14 @@ export function TurnQueueBar({
     };
   }, [currentRoundChips, nextRoundChips, trackWidth, isPhone]);
 
-  const enragePct = Math.round(enrageBonusPct * 100);
-  const enrageMult = (1 + enrageBonusPct).toFixed(1);
+  const resolvedEnrage =
+    enrageState ?? getEnrageState(battle.round, adminConfig);
+  const highestPhaseLabel = resolvedEnrage.highestPhase
+    ? getEnragePhaseDisplayName(resolvedEnrage.highestPhase, lang)
+    : null;
+  const enrageTooltip = highestPhaseLabel
+    ? formatEnrageTooltip(resolvedEnrage, lang)
+    : undefined;
 
   const renderFullQueuePopover = () => (
     <div
@@ -609,25 +625,22 @@ export function TurnQueueBar({
         {/* Compact Round Badge */}
         <span
           data-testid="turn-queue-round-chip"
-          title={
-            enragePct > 0
-              ? t('queue.enrageChipTooltip', { pct: enragePct })
-              : t('battle.round', { round: queue.round })
-          }
+          title={enrageTooltip ?? t('battle.round', { round: queue.round })}
           className={`shrink-0 inline-flex items-center gap-1 px-1.5 h-8 rounded font-mono-nums text-[12px] font-bold whitespace-nowrap ${
-            enragePct > 0
+            highestPhaseLabel
               ? 'bg-red-950/75 border border-red-500/65 text-slate-100'
               : 'bg-slate-900 border border-slate-700 text-slate-200'
           }`}
         >
           <span>R{queue.round}</span>
-          {enragePct > 0 && (
+          {highestPhaseLabel && (
             <span
               data-testid="turn-queue-enrage-badge"
+              title={enrageTooltip}
               className="inline-flex items-center gap-0.5 text-orange-300"
             >
               <Flame className="w-3 h-3 text-orange-400" />
-              <span>x{enrageMult}</span>
+              <span>{highestPhaseLabel}</span>
             </span>
           )}
         </span>
@@ -758,26 +771,22 @@ export function TurnQueueBar({
             )}
             <span
               data-testid="turn-queue-round-chip"
-              title={
-                enragePct > 0
-                  ? t('queue.enrageChipTooltip', { pct: enragePct })
-                  : undefined
-              }
+              title={enrageTooltip}
               className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded font-mono-nums text-[12px] font-bold whitespace-nowrap ${
-                enragePct > 0
+                highestPhaseLabel
                   ? 'bg-red-950/70 border border-red-500/65 text-slate-100'
                   : 'bg-slate-900 border border-slate-700 text-slate-100'
               }`}
             >
               <span>{t('battle.round', { round: queue.round })}</span>
-              {enragePct > 0 && (
+              {highestPhaseLabel && (
                 <span
                   data-testid="turn-queue-enrage-badge"
-                  title={t('queue.enrageChipTooltip', { pct: enragePct })}
+                  title={enrageTooltip}
                   className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded bg-red-500/25 text-orange-300 text-[12px] font-bold leading-none"
                 >
                   <Flame className="w-3 h-3 text-orange-400 shrink-0" />
-                  <span>x{enrageMult}</span>
+                  <span>{highestPhaseLabel}</span>
                 </span>
               )}
             </span>
@@ -1024,26 +1033,22 @@ export function TurnQueueBar({
 
         <span
           data-testid="turn-queue-round-chip"
-          title={
-            enragePct > 0
-              ? t('queue.enrageChipTooltip', { pct: enragePct })
-              : undefined
-          }
+          title={enrageTooltip}
           className={`inline-flex items-center gap-1.5 px-2 py-1 rounded font-mono-nums text-[12px] font-bold whitespace-nowrap ${
-            enragePct > 0
+            highestPhaseLabel
               ? 'bg-red-950/70 border border-red-500/65 text-slate-100'
               : 'bg-slate-900 border border-slate-700 text-slate-100'
           }`}
         >
           <span>{t('battle.round', { round: queue.round })}</span>
-          {enragePct > 0 && (
+          {highestPhaseLabel && (
             <span
               data-testid="turn-queue-enrage-badge"
-              title={t('queue.enrageChipTooltip', { pct: enragePct })}
+              title={enrageTooltip}
               className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded bg-red-500/25 text-orange-300 text-[11px] font-bold leading-none"
             >
               <Flame className="w-3 h-3 text-orange-400 shrink-0" aria-hidden="true" />
-              <span>x{enrageMult}</span>
+              <span>{highestPhaseLabel}</span>
             </span>
           )}
         </span>

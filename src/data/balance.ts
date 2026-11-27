@@ -166,12 +166,48 @@ export const BALANCE_CONFIG = {
     20: 16,
     30: 10,
   } as Record<BattleSpeed, number>,
-  // Anti-Stalemate (Soft Enrage): after round 20, enemies deal +10% damage per round, capped at +200%
-  enrageStartRound: 20,
-  enrageStepPct: 0.1,
-  enrageMaxBonusPct: 2.0,
   maxAccuracyPct: 30,
 } as const;
+
+export const DEFAULT_ENRAGE_CONFIG = {
+  rage: {
+    startRound: 20,
+    everyRounds: 5,
+    maxStacks: 10,
+    value: 5,
+  },
+  frenzy: {
+    startRound: 50,
+    everyRounds: 5,
+    maxStacks: 20,
+    value: 10,
+  },
+  berserker: {
+    startRound: 100,
+    everyRounds: 10,
+    maxStacks: 10,
+    critRatePct: 3,
+    critDamagePct: 10,
+  },
+} as const;
+
+export function cloneEnrageConfig(cfg: {
+  rage: { startRound: number; everyRounds: number; maxStacks: number; value: number };
+  frenzy: { startRound: number; everyRounds: number; maxStacks: number; value: number };
+  berserker: {
+    startRound: number;
+    everyRounds: number;
+    maxStacks: number;
+    critRatePct: number;
+    critDamagePct: number;
+  };
+} = DEFAULT_ENRAGE_CONFIG) {
+  return {
+    rage: { ...cfg.rage },
+    frenzy: { ...cfg.frenzy },
+    berserker: { ...cfg.berserker },
+  };
+}
 
 export const COMBAT_FORMULAS = {
   hpPerDefense: 8,

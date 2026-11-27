@@ -3,6 +3,7 @@ import { AFFIX_SUFFIX_MAP, getItemTemplate } from '../data/items';
 import { getSkillById } from '../data/skills';
 import { getStatusEntry } from '../data/statusEffects';
 import { formatStatusChipShortValue } from '../data/statusIconMap';
+import { getEnragePhaseDisplayName } from '../engine/enrage';
 import { useGameStore } from '../store/useGameStore';
 import type {
   ActiveStatusEffect,
@@ -12,6 +13,7 @@ import type {
   CombatLogTag,
   CombatUnit,
   EnemyArchetype,
+  EnragePhaseKey,
   EquipmentSlot,
   EquipValidationResult,
   ItemInstance,
@@ -808,6 +810,15 @@ function formatCombatLogBody(
     case 'log.sectorSupply': {
       const n = Math.max(0, Math.min(100, Math.round(Number(p.n ?? 100))));
       return translate(lang, 'log.sectorSupply', { n });
+    }
+
+    case 'log.enragePhaseActivated': {
+      const phase = String(p.phase ?? 'rage') as EnragePhaseKey;
+      const round = Math.max(1, Math.floor(Number(p.round ?? entry.round ?? 1)));
+      return translate(lang, 'log.enragePhaseActivated', {
+        round,
+        phase: getEnragePhaseDisplayName(phase, lang),
+      });
     }
 
     case 'log.prestageConfirm':

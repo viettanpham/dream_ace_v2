@@ -32,6 +32,7 @@ import {
   processRegistryTickEffects,
   tickStatusDurations,
 } from './statusEngine';
+import { buildEnrageActivationLogs, getEnrageState } from './enrage';
 import { resolveSkillSpecs } from './skillSpecs';
 import type {
   ActionType,
@@ -522,26 +523,6 @@ export function sortTurnOrder(units: CombatUnit[]): string[] {
     .map((u) => u.id);
 }
 
-/**
- * Anti-Stalemate (Soft Enrage): after round 20, enemies deal +10% damage per round,
- * capped at +200% (3.0x total enemy damage). Returns fractional bonus (0..2.0).
- */
-export function getEnemyEnrageBonusPct(
-  round: number,
-  enabled = true,
-  startRound: number = BALANCE_CONFIG.enrageStartRound,
-  stepPct: number = BALANCE_CONFIG.enrageStepPct
-): number {
-  const safeStart = Math.max(1, Math.floor(startRound));
-  const safeStep = Math.max(0, stepPct);
-  if (!enabled || round <= safeStart) return 0;
-  const extraRounds = round - safeStart;
-  return Math.min(
-    BALANCE_CONFIG.enrageMaxBonusPct,
-    Math.round(extraRounds * safeStep * 1000) / 1000
-  );
-}
-
 export function createRoundHpSnapshot(
   round: number,
   units: CombatUnit[]
@@ -1026,6 +1007,15 @@ export function createInitialBattleState(
         }
       : null;
 
+  const baseInitialLog = sectorSupplyLog
+    ? [sectorSupplyLog, openingLog]
+    : [openingLog];
+  const initialEnrageLogs = buildEnrageActivationLogs(
+    1,
+    adminConfig,
+    baseInitialLog
+  );
+
   return {
     sectorId: sector.id,
     kind: resolvedKind,
@@ -1043,7 +1033,7 @@ export function createInitialBattleState(
     lastPlayerTargetId: null,
     autoStopNotice: null,
     wingmanChat: null,
-    log: sectorSupplyLog ? [sectorSupplyLog, openingLog] : [openingLog],
+    log: [...baseInitialLog, ...initialEnrageLogs],
     events: [],
     roundSnapshots: [createRoundHpSnapshot(1, units)],
     popups: [],
@@ -1535,9 +1525,15 @@ function applyDamageToUnit(
     };
   }
 
-  const totalCritChance = Math.min(
+  const enrageState = getEnrageState(options.round, options.adminConfig);
+
+  const basePlusBonusCrit = Math.min(
     75,
     curAttacker.derived.critChance + (options.bonusCrit ?? 0)
+  );
+  const totalCritChance = Math.min(
+    100,
+    basePlusBonusCrit + enrageState.critRateUpPct
   );
   const isCrit = isOneHit || rng() * 100 < totalCritChance;
 
@@ -1550,9 +1546,13 @@ function applyDamageToUnit(
         0.85,
         (options.defensePierce ?? 0) + curAttacker.derived.armorPiercePct / 100
       );
-  const effectiveDefense = Math.max(
+  const effectiveDefenseAfterPierce = Math.max(
     0,
     getEffectiveUnitDefense(curTarget, formationConfig) * (1 - totalPierce)
+  );
+  const effectiveDefense = Math.max(
+    0,
+    effectiveDefenseAfterPierce * (1 - enrageState.defDownPct / 100)
   );
   const mitigation = ignoreDef
     ? 1.0
@@ -1577,17 +1577,8 @@ function applyDamageToUnit(
   const vulnSt = getStatus(curTarget, 'vulnerable');
   const vulnMult = vulnSt ? 1 + (vulnSt.magnitude ?? 0.15) : 1.0;
 
-  // Anti-Stalemate (Soft Enrage): enemy outgoing damage scales after startRound (cap +200%)
-  const enrageBonus =
-    curAttacker.side === 'enemy'
-      ? getEnemyEnrageBonusPct(
-          options.round,
-          options.adminConfig?.softEnrageEnabled ?? true,
-          options.adminConfig?.enrageStartRound ?? BALANCE_CONFIG.enrageStartRound,
-          options.adminConfig?.enrageStepPct ?? BALANCE_CONFIG.enrageStepPct
-        )
-      : 0;
-  const enrageMult = 1 + enrageBonus;
+  // Anti-Stalemate (3-phase Enrage): applies to ALL attackers and defenders
+  const enrageMult = 1 + enrageState.damageUpPct / 100;
 
   let finalDamage = isOneHit
     ? 99999
@@ -1602,7 +1593,8 @@ function applyDamageToUnit(
   if (!isOneHit && isCrit) {
     const critMult =
       COMBAT_FORMULAS.critDamageMultiplier +
-      (curAttacker.derived.critDamagePct ?? 0) / 100;
+      (curAttacker.derived.critDamagePct ?? 0) / 100 +
+      enrageState.critDamageUpPct / 100;
     finalDamage = Math.round(finalDamage * critMult);
   }
   if (

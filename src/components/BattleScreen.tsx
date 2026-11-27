@@ -25,12 +25,12 @@ import { BALANCE_CONFIG } from '../data/balance';
 import { getScaledSkillStats, getSkillById } from '../data/skills';
 import {
   getEffectiveUnitSpeed,
-  getEnemyEnrageBonusPct,
   getTeamColorRole,
   getValidEnemyTargets,
   hasStatus,
   isLongRangeAction,
 } from '../engine/combat';
+import { getEnrageState } from '../engine/enrage';
 import { canUnitUseSkill } from '../engine/skills';
 import { getBattleSupplyRows } from '../engine/supplies';
 import { sanitizeTurnPhaseConfig } from '../engine/turnPhase';
@@ -1106,9 +1106,9 @@ export function BattleScreen() {
     : null;
 
   const sectorLabel = getSectorName(lang, battle.sectorId);
-  const enrageBonusPct = getEnemyEnrageBonusPct(
-    battle.round,
-    adminConfig.softEnrageEnabled
+  const enrageState = useMemo(
+    () => getEnrageState(battle.round, adminConfig),
+    [battle.round, adminConfig]
   );
 
   const inspectedSkill = inspectedSkillId
@@ -2463,7 +2463,7 @@ export function BattleScreen() {
             battle={battle}
             battleSpeed={battleSpeed}
             skipAnimations={skipAnimations}
-            enrageBonusPct={enrageBonusPct}
+            enrageState={enrageState}
             variant="phone"
             targetName={actingTargetName}
             onSelectUnit={(id) => {
@@ -3321,7 +3321,7 @@ export function BattleScreen() {
               battle={battle}
               battleSpeed={battleSpeed}
               skipAnimations={skipAnimations}
-              enrageBonusPct={enrageBonusPct}
+              enrageState={enrageState}
               variant="sidebar"
               targetName={actingTargetName}
               hideActingRow={showActionStage}
@@ -3629,7 +3629,7 @@ export function BattleScreen() {
           open={statsModalOpen}
           onClose={() => setStatsModalOpen(false)}
           battle={battle}
-          enrageBonusPct={enrageBonusPct}
+          enrageState={enrageState}
           onOpenLog={handleOpenCombatLogPopup}
         />
       </ErrorBoundary>

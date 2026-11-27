@@ -20,7 +20,14 @@ import { getMaxLevel } from '../data/balance';
 import { STAT_KEYS } from '../data/classes';
 import { RARITY_META } from '../data/items';
 import { aggregateBattleStats } from '../engine/battleStats';
+import {
+  ENRAGE_PHASE_ORDER,
+  formatEnragePhaseSummaryPart,
+  getEnrageState,
+  type EnrageState,
+} from '../engine/enrage';
 import { getEffectiveItemStats } from '../engine/equipment';
+import { useGameStore } from '../store/useGameStore';
 import {
   getClassName,
   getItemInstanceName,
@@ -44,7 +51,8 @@ interface BattleStatsModalProps {
   open: boolean;
   onClose: () => void;
   battle: BattleState;
-  enrageBonusPct: number;
+  enrageState?: EnrageState;
+  enrageBonusPct?: number;
   initialTab?: StatsTab;
   onOpenLog?: () => void;
 }
@@ -101,11 +109,13 @@ export function BattleStatsModal({
   open,
   onClose,
   battle,
-  enrageBonusPct,
+  enrageState,
+  enrageBonusPct: _legacyEnrageBonusPct,
   initialTab = 'overview',
   onOpenLog,
 }: BattleStatsModalProps) {
   const { lang, t } = useI18n();
+  const adminConfig = useGameStore((s) => s.adminConfig);
   const [activeTab, setActiveTab] = useState<StatsTab>(initialTab);
   const [sortCol, setSortCol] = useState<SortColumn>('damageDealt');
   const [sortDesc, setSortDesc] = useState(true);
@@ -191,11 +201,11 @@ export function BattleStatsModal({
     }
   };
 
-  const safeEnrageBonus = Number.isFinite(enrageBonusPct)
-    ? Math.max(0, enrageBonusPct)
-    : 0;
-  const enragePct = Math.round(safeEnrageBonus * 100);
-  const enrageMult = (1 + safeEnrageBonus).toFixed(1);
+  const resolvedEnrage =
+    enrageState ?? getEnrageState(battle.round, adminConfig);
+  const activeEnragePhases = ENRAGE_PHASE_ORDER.filter(
+    (phase) => resolvedEnrage.stacks[phase] > 0
+  );
 
   const remainingSum = stats.ally.remainingHp + stats.enemy.remainingHp;
   const allyMomentumPct =
@@ -751,10 +761,27 @@ export function BattleStatsModal({
                   <strong className="text-slate-100">{liveProgress.turn}</strong>
                 </span>
                 <span>·</span>
-                {enragePct > 0 ? (
-                  <span className="text-orange-300 font-semibold inline-flex items-center gap-1">
-                    <Flame className="w-3 h-3 text-red-400" />
-                    {t('stats.enrageActive', { pct: enragePct, mult: enrageMult })}
+                {activeEnragePhases.length > 0 ? (
+                  <span
+                    data-testid="stats-enrage-lines"
+                    className="text-orange-300 font-semibold flex flex-col gap-0.5"
+                  >
+                    {activeEnragePhases.map((phase) => (
+                      <span
+                        key={phase}
+                        className="inline-flex items-center gap-1"
+                      >
+                        <Flame className="w-3 h-3 text-red-400 shrink-0" />
+                        <span>
+                          {formatEnragePhaseSummaryPart(
+                            phase,
+                            resolvedEnrage,
+                            lang,
+                            true
+                          )}
+                        </span>
+                      </span>
+                    ))}
                   </span>
                 ) : (
                   <span>{t('stats.enrageInactive')}</span>

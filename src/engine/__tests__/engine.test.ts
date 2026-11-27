@@ -31,7 +31,6 @@ import {
   createRoundHpSnapshot,
   getAdjacentUnits,
   getEffectiveUnitSpeed,
-  getEnemyEnrageBonusPct,
   getValidEnemyTargets,
   hasStatus,
   isLongRangeAction,
@@ -39,6 +38,7 @@ import {
   resolveUnitAction,
   sortTurnOrder,
 } from '../combat';
+import { getEnrageState } from '../enrage';
 import {
   equipItemOnGear,
   generateItemInstance,
@@ -2372,18 +2372,18 @@ describe('20. Simple Auto Tactics Compiler & Presets', () => {
   });
 });
 
-describe('21. Anti-Stalemate Soft Enrage (Round 20+)', () => {
-  it('computes +10%/round after Round 20 capped at +200%, respects Admin toggle, and scales enemy damage in combat', () => {
-    expect(getEnemyEnrageBonusPct(1, true)).toBe(0);
-    expect(getEnemyEnrageBonusPct(20, true)).toBe(0);
-    expect(getEnemyEnrageBonusPct(21, true)).toBeCloseTo(0.1, 5);
-    expect(getEnemyEnrageBonusPct(25, true)).toBeCloseTo(0.5, 5);
-    expect(getEnemyEnrageBonusPct(40, true)).toBeCloseTo(2.0, 5);
-    expect(getEnemyEnrageBonusPct(99, true)).toBeCloseTo(2.0, 5);
-    // Admin disable -> 0 even at Round 50
-    expect(getEnemyEnrageBonusPct(50, false)).toBe(0);
+describe('21. Anti-Stalemate Soft Enrage (3 Phases)', () => {
+  it('computes 3-phase stacks/bonuses, respects Admin toggle, and scales damage for both sides in combat', () => {
+    const defCfg = createDefaultAdminConfig();
+    expect(getEnrageState(1, defCfg).highestPhase).toBeNull();
+    expect(getEnrageState(19, defCfg).stacks.rage).toBe(0);
+    expect(getEnrageState(20, defCfg).stacks.rage).toBe(1);
+    expect(getEnrageState(20, defCfg).defDownPct).toBe(5);
+    expect(getEnrageState(55, defCfg).damageUpPct).toBe(20);
+    expect(getEnrageState(100, defCfg).critRateUpPct).toBe(3);
+    expect(getEnrageState(50, { ...defCfg, softEnrageEnabled: false }).defDownPct).toBe(0);
 
-    // Combat check: enemy attack deals higher damage at Round 35 than Round 1
+    // Combat check: round 55 deals higher damage than round 1 for enemy attacker
     const pilot = createDefaultPilotAccount('Ace', 'siege');
     const battle = createInitialBattleState(pilot, 'border_outpost');
     const enemy = battle.units.find((u) => u.side === 'enemy')!;
@@ -2393,15 +2393,15 @@ describe('21. Anti-Stalemate Soft Enrage (Round 20+)', () => {
             ...u,
             hp: 5000,
             shield: 0,
-            derived: { ...u.derived, maxHp: 5000, dodgeChance: 0, defenseRating: 5 },
+            derived: { ...u.derived, maxHp: 5000, dodgeChance: 0, defenseRating: 50 },
           }
         : u.id === enemy.id
         ? { ...u, derived: { ...u.derived, attackPower: 100, critChance: 0 } }
         : u
     );
 
-    const enrageOnCfg = { ...createDefaultAdminConfig(), softEnrageEnabled: true };
-    const enrageOffCfg = { ...createDefaultAdminConfig(), softEnrageEnabled: false };
+    const enrageOnCfg = { ...defCfg, softEnrageEnabled: true };
+    const enrageOffCfg = { ...defCfg, softEnrageEnabled: false };
 
     const hitR1 = resolveUnitAction(
       baseUnits,
@@ -2412,32 +2412,32 @@ describe('21. Anti-Stalemate Soft Enrage (Round 20+)', () => {
       enrageOnCfg,
       () => 0.99
     );
-    const hitR35 = resolveUnitAction(
+    const hitR55 = resolveUnitAction(
       baseUnits,
       enemy.id,
       'attack',
       'ally_player',
-      35,
+      55,
       enrageOnCfg,
       () => 0.99
     );
-    const hitR35Disabled = resolveUnitAction(
+    const hitR55Disabled = resolveUnitAction(
       baseUnits,
       enemy.id,
       'attack',
       'ally_player',
-      35,
+      55,
       enrageOffCfg,
       () => 0.99
     );
 
     const dmgR1 = 5000 - hitR1.updatedUnits.find((u) => u.isPlayer)!.hp;
-    const dmgR35 = 5000 - hitR35.updatedUnits.find((u) => u.isPlayer)!.hp;
-    const dmgR35Disabled =
-      5000 - hitR35Disabled.updatedUnits.find((u) => u.isPlayer)!.hp;
+    const dmgR55 = 5000 - hitR55.updatedUnits.find((u) => u.isPlayer)!.hp;
+    const dmgR55Disabled =
+      5000 - hitR55Disabled.updatedUnits.find((u) => u.isPlayer)!.hp;
 
-    expect(dmgR35).toBeGreaterThan(dmgR1 * 2); // Round 35 = +150% = 2.5x damage
-    expect(dmgR35Disabled).toBe(dmgR1);
+    expect(dmgR55).toBeGreaterThan(dmgR1);
+    expect(dmgR55Disabled).toBe(dmgR1);
   });
 });
 

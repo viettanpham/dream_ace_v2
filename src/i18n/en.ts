@@ -724,6 +724,7 @@ export const EN_TRANSLATIONS = {
   'log.battleStart':
     'Engagement started at {sector} ({difficulty}). Turn order sorted by Speed.',
   'log.sectorSupply': 'Area supplies: {n}%',
+  'log.enragePhaseActivated': 'Round {round}: {phase} activated',
   'log.defend':
     '{actor} raises an Energy Shield (-50% dmg{shieldPart}{spPart}).',
   'log.healSquad':
@@ -1090,8 +1091,28 @@ export const EN_TRANSLATIONS = {
     'Uses supplies from the Supply Bag only. Scan devices are never auto-used.',
 
   // Admin CP Soft Enrage
-  'admin.softEnrage': 'Soft Enrage (Round 20+)',
-  'admin.softEnrageDesc': 'Enemies gain +10% DMG/round after R20 (cap +200%)',
+  'admin.softEnrage': 'Anti-Stalemate Enrage (3 Phases)',
+  'admin.softEnrageDesc':
+    'Applies to BOTH sides per stack: Rage (-DEF), Frenzy (+DMG), Berserker (+Crit)',
+  'admin.enragePreviewRound': 'Preview Round',
+  'admin.enrageReset': 'Defaults',
+  'admin.enragePhaseRage': 'Phase 1: Rage',
+  'admin.enragePhaseFrenzy': 'Phase 2: Frenzy',
+  'admin.enragePhaseBerserker': 'Phase 3: Berserker',
+  'admin.enrageStartRound': 'Start Round (>= 1)',
+  'admin.enrageEveryRounds': 'Every N Rounds',
+  'admin.enrageMaxStacks': 'Max Stacks (1–1000)',
+  'admin.enrageRageValue': 'DEF Down / Stack (%)',
+  'admin.enrageFrenzyValue': 'DMG Up / Stack (%)',
+  'admin.enrageBerserkerCritRate': 'Crit Rate / Stack (%)',
+  'admin.enrageBerserkerCritDmg': 'Crit DMG / Stack (%)',
+  'admin.enrageExStart': 'Activates stack 1 at round {start}',
+  'admin.enrageExEvery': 'Stack 2 at round {next}; +1 stack every {every} rounds',
+  'admin.enrageExMax': 'Reaches max {max} stacks at round {round}',
+  'admin.enrageExRageVal': '5 stacks = -{at5}% DEF (max -{atMax}%)',
+  'admin.enrageExFrenzyVal': '5 stacks = +{at5}% DMG (max +{atMax}%)',
+  'admin.enrageExCritRate': '5 stacks = +{at5}% crit rate (max +{atMax}%)',
+  'admin.enrageExCritDmg': '5 stacks = +{at5}% crit DMG (max +{atMax}%)',
 
   // Map UI Additions (Bases, Garrison, NPCs, Damaged/Repair, Raid Countdown, Legend)
   'sector.aegis_relay.name': 'Aegis Command Relay',
@@ -1439,8 +1460,6 @@ export const EN_TRANSLATIONS = {
   'admin.skillsUnlockAllLv1': 'Unlock All Skills (Lv1)',
   'admin.skillsGrantCards': 'Grant All Opening Cards',
   'admin.skillsResetCd': 'Reset Battle Cooldowns & SP',
-  'admin.battleEnrageStart': 'Enrage Start Round',
-  'admin.battleEnrageStep': 'Enrage Step (% / rnd)',
   'admin.skillMaxLevel': 'Max Skill Level (1–20)',
   'admin.skillMaxLevelExample': 'Skills scale up to Lv{max}; upgrading to Lv{max} costs {cost} Credits',
   'admin.passiveScaleAfter5': 'Passive Scale > Lv5 (0–1)',

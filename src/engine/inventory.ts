@@ -16,6 +16,7 @@ import {
   getSellPrice,
   validateEquipOnGear,
 } from './equipment';
+import { isEnrageConfigModified } from './enrage';
 import { isFormationConfigDefault } from './formation';
 
 export const RARITY_RANK: Record<ItemRarity, number> = {
@@ -291,9 +292,7 @@ export function isAnyCheatActive(cfg: AdminConfig | undefined | null): boolean {
   if (cfg.godMode || cfg.oneHitKills || cfg.alwaysWin) return true;
   if (cfg.rewardMultiplier !== BALANCE_CONFIG.rewardMultDefault) return true;
   if (cfg.battleSizeOverride !== null) return true;
-  if (!cfg.softEnrageEnabled) return true;
-  if (cfg.enrageStartRound !== BALANCE_CONFIG.enrageStartRound) return true;
-  if (Math.abs(cfg.enrageStepPct - BALANCE_CONFIG.enrageStepPct) > 0.0001) return true;
+  if (isEnrageConfigModified(cfg)) return true;
   if (cfg.forceBoss) return true;
   if (cfg.battleLevelOffsetOverride !== null) return true;
   if (

@@ -1,9 +1,11 @@
 import {
   BALANCE_CONFIG,
+  cloneEnrageConfig,
   cloneFluxTransferConfig,
   clonePassiveSlotsConfig,
   cloneSpEconomyConfig,
   cloneStealthConfig,
+  DEFAULT_ENRAGE_CONFIG,
   DEFAULT_FLUX_TRANSFER_CONFIG,
   DEFAULT_PASSIVE_SCALE_AFTER_5,
   DEFAULT_PASSIVE_SLOTS_CONFIG,
@@ -49,6 +51,7 @@ import {
   DEFAULT_MODULE_DROP_CONFIG,
   sanitizeModuleDropConfig,
 } from './moduleDrop';
+import { sanitizeEnrageConfig } from './enrage';
 import { sanitizeSectorSupply } from './npcSupply';
 import { EMPTY_STAT_BLOCK, MECH_CLASS_LIST } from '../data/classes';
 import {
@@ -391,8 +394,7 @@ export function createDefaultAdminConfig(): AdminConfig {
     rewardMultiplier: BALANCE_CONFIG.rewardMultDefault,
     battleSizeOverride: null,
     softEnrageEnabled: true,
-    enrageStartRound: BALANCE_CONFIG.enrageStartRound,
-    enrageStepPct: BALANCE_CONFIG.enrageStepPct,
+    enrage: cloneEnrageConfig(DEFAULT_ENRAGE_CONFIG),
     forceBoss: false,
     battleLevelOffsetOverride: null,
     maxLevel: BALANCE_CONFIG.maxLevel,
@@ -790,14 +792,7 @@ export function migrateSaveData(
       typeof rawAdmin.softEnrageEnabled === 'boolean'
         ? rawAdmin.softEnrageEnabled
         : true,
-    enrageStartRound: Math.max(
-      1,
-      Math.floor(Number(rawAdmin.enrageStartRound) || defAdmin.enrageStartRound)
-    ),
-    enrageStepPct:
-      typeof rawAdmin.enrageStepPct === 'number' && rawAdmin.enrageStepPct >= 0
-        ? rawAdmin.enrageStepPct
-        : defAdmin.enrageStepPct,
+    enrage: sanitizeEnrageConfig(rawAdmin.enrage, defAdmin.enrage),
     forceBoss: Boolean(rawAdmin.forceBoss),
     battleLevelOffsetOverride:
       typeof rawAdmin.battleLevelOffsetOverride === 'number' &&

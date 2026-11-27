@@ -24,6 +24,7 @@ import {
 import { SupplyEconomyAdminBlock } from './admin/SupplyEconomyAdminBlock';
 import { NpcSupplyAdminBlock } from './admin/NpcSupplyAdminBlock';
 import { EnemyLevelAdminBlock } from './admin/EnemyLevelAdminBlock';
+import { EnrageAdminBlock } from './admin/EnrageAdminBlock';
 import { ModuleDropAdminBlock } from './ModuleDropAdminBlock';
 import {
   BALANCE_CONFIG,
@@ -1579,7 +1580,6 @@ export function AdminPanel() {
                     ['godMode', t('admin.godMode')],
                     ['oneHitKills', t('admin.oneHit')],
                     ['alwaysWin', t('admin.alwaysWin')],
-                    ['softEnrageEnabled', t('admin.softEnrage')],
                     ['forceBoss', t('admin.battleForceBoss')],
                   ] as const
                 ).map(([key, label]) => (
@@ -1601,6 +1601,11 @@ export function AdminPanel() {
                   </label>
                 ))}
               </div>
+
+              <EnrageAdminBlock
+                adminConfig={adminConfig}
+                adminUpdateConfig={adminUpdateConfig}
+              />
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 p-3.5 rounded-lg border border-slate-800 bg-[#0D1422]">
                 {/* Battle Size */}
@@ -1643,48 +1648,6 @@ export function AdminPanel() {
                           e.target.value === ''
                             ? null
                             : Math.floor(Number(e.target.value) || 0),
-                      })
-                    }
-                    className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
-                  />
-                </label>
-
-                {/* Enrage Start Round */}
-                <label className="space-y-1 block">
-                  <span className="text-[11px] text-slate-400 block">
-                    {t('admin.battleEnrageStart')}
-                  </span>
-                  <input
-                    type="number"
-                    min={1}
-                    max={100}
-                    value={adminConfig.enrageStartRound}
-                    onChange={(e) =>
-                      adminUpdateConfig({
-                        enrageStartRound: Math.max(
-                          1,
-                          Number(e.target.value) || 20
-                        ),
-                      })
-                    }
-                    className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
-                  />
-                </label>
-
-                {/* Enrage Step % */}
-                <label className="space-y-1 block">
-                  <span className="text-[11px] text-slate-400 block">
-                    {t('admin.battleEnrageStep')}
-                  </span>
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    value={Math.round(adminConfig.enrageStepPct * 100)}
-                    onChange={(e) =>
-                      adminUpdateConfig({
-                        enrageStepPct:
-                          Math.max(0, Number(e.target.value) || 0) / 100,
                       })
                     }
                     className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"

@@ -1081,6 +1081,7 @@ export type CombatLogTag =
 export type CombatLogTemplateKey =
   | 'log.battleStart'
   | 'log.sectorSupply'
+  | 'log.enragePhaseActivated'
   | 'log.defend'
   | 'log.healSquad'
   | 'log.healSingle'
@@ -1589,6 +1590,29 @@ export interface ModuleDropConfig {
   effectWeights: Record<ModuleDropEffectKey, number>;
 }
 
+export type EnragePhaseKey = 'rage' | 'frenzy' | 'berserker';
+
+export interface EnragePhaseConfig {
+  startRound: number;
+  everyRounds: number;
+  maxStacks: number;
+  value: number;
+}
+
+export interface EnrageBerserkerConfig {
+  startRound: number;
+  everyRounds: number;
+  maxStacks: number;
+  critRatePct: number;
+  critDamagePct: number;
+}
+
+export interface EnrageConfig {
+  rage: EnragePhaseConfig;
+  frenzy: EnragePhaseConfig;
+  berserker: EnrageBerserkerConfig;
+}
+
 export interface AdminConfig {
   godMode: boolean;
   oneHitKills: boolean;
@@ -1596,8 +1620,7 @@ export interface AdminConfig {
   rewardMultiplier: number;
   battleSizeOverride: BattleSize | null;
   softEnrageEnabled: boolean;
-  enrageStartRound: number;
-  enrageStepPct: number;
+  enrage?: EnrageConfig;
   forceBoss: boolean;
   battleLevelOffsetOverride: number | null;
   maxLevel?: number;
