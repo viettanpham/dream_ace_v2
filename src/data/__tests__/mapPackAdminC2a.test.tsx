@@ -154,7 +154,7 @@ describe('TASK MAP-C2a — Admin map pack (store, world reset, export/import UI)
         },
         hiredWingman: {
           callsign: 'Nova Kestrel',
-          classId: 'ranger',
+          classId: 'interceptor',
           bonusLevel: 2,
           sourceSectorId: 'aegis_relay',
         },
