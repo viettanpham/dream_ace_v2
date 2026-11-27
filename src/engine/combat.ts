@@ -22,6 +22,7 @@ import {
   getSkillById,
   SKILLS_LIST,
 } from '../data/skills';
+import { SUPPLY_TEMPLATES } from '../data/consumables';
 import type {
   ActionType,
   ActiveStatusEffect,
@@ -102,6 +103,7 @@ import {
   sanitizePrestageConfig,
 } from './prestage';
 import { LIDAR_SKILL_ID, pickLidarCast } from './lidarAuto';
+import { generateNpcSupplies } from './npcSupply';
 
 export { DEBUFF_TYPES, pickLidarCast };
 
@@ -892,6 +894,21 @@ export function createInitialBattleState(
     },
   };
 
+  const baseRuntime = pilot.baseStates?.[sector.id];
+  const sectorSupply = pilot.sectorSupply?.[sector.id] ?? 100;
+  const npcSupply = generateNpcSupplies(units, {
+    kind: resolvedKind,
+    difficulty: sector.difficulty,
+    cfg: adminConfig?.npcSupply,
+    supplyMaxPerTypePerBattle: adminConfig?.supplyMaxPerTypePerBattle,
+    templates: SUPPLY_TEMPLATES,
+    rng,
+    sectorSupply,
+    ownerFaction: baseRuntime?.faction,
+    baseStatus: baseRuntime?.status,
+    eventSupplyMult: 1,
+  });
+
   return {
     sectorId: sector.id,
     kind: resolvedKind,
@@ -916,6 +933,7 @@ export function createInitialBattleState(
     fxEvents: [],
     explodedUnitIds: [],
     supplyByUnit: {},
+    ...(npcSupply !== undefined ? { npcSupply } : {}),
     turnStep2Used: 0,
     turnLockedSkillIds: [],
     prestage: {

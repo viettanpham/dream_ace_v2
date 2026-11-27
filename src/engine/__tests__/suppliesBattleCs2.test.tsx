@@ -78,7 +78,14 @@ function seedStoreBattle(opts?: {
   enemyTurn?: boolean;
 }) {
   const campaign = createFreshCampaignState();
-  const adminConfig = campaign.adminConfig ?? createDefaultAdminConfig();
+  const baseAdminConfig = campaign.adminConfig ?? createDefaultAdminConfig();
+  const adminConfig = {
+    ...baseAdminConfig,
+    prestage: {
+      ...(baseAdminConfig.prestage ?? { enabled: false, countdownSec: 0 }),
+      enabled: false,
+    },
+  };
   const pilot = {
     ...campaign.pilot,
     gears: {
@@ -99,7 +106,7 @@ function seedStoreBattle(opts?: {
     })),
   };
 
-  const battle = createInitialBattleState(pilot, 'border_outpost');
+  const battle = createInitialBattleState(pilot, 'border_outpost', undefined, undefined, adminConfig);
   const playerIdx = battle.units.findIndex((u) => u.isPlayer);
   const playerUnit = battle.units[playerIdx];
   const enemyIdx = battle.units.findIndex((u) => u.side === 'enemy');

@@ -887,6 +887,7 @@ export interface PilotAccount {
   squadFormation?: SquadFormationUnit[];
   formationCustomized?: boolean;
   pirateIncidents?: PirateIncident[];
+  sectorSupply?: Record<string, number>;
 }
 
 export type EnemyArchetype = 'drone' | 'gunship' | 'sniper' | 'repair_ship';
@@ -1258,11 +1259,21 @@ export interface BattleState {
   fxEvents: CombatFxEvent[];
   explodedUnitIds: string[];
   supplyByUnit?: Record<string, BattleSupplyUnitState>;
+  npcSupply?: BattleNpcSupplyState;
   turnStep2Used?: number;
   turnLockedSkillIds?: string[];
   prestage?: PrestageState;
   isResolving: boolean;
   summary: BattleSummary | null;
+}
+
+export interface BattleNpcSupplyState {
+  stockByUnit: Record<string, Record<string, number>>;
+  sectorSupply: number;
+  emergencyUsed: {
+    ally: boolean;
+    enemy: boolean;
+  };
 }
 
 export type BattleSpeed = 1 | 2 | 3 | 5 | 10 | 12 | 15 | 20 | 30;
@@ -1548,7 +1559,63 @@ export interface AdminConfig {
   turnPhase?: TurnPhaseConfig;
   prestage?: PrestageConfig;
   stealth?: StealthConfig;
+  npcSupply?: Partial<NpcSupplyConfig>;
+  supplyMaxPerTypePerBattle?: number;
   showRawI18nKeys: boolean;
+}
+
+export type NpcSupplyKitFamily = 'hp_kit' | 'shield_kit' | 'sp_kit';
+
+export interface NpcSupplyConfig {
+  enabled: boolean;
+  typesMin: number;
+  typesMax: number;
+  qtyMin: number;
+  qtyMax: number;
+  noSupplyChance: {
+    mob: number;
+    boss: number;
+  };
+  thresholds: {
+    hp: number;
+    shield: number;
+    sp: number;
+  };
+  losingGap: number;
+  losingBonus: number;
+  winningCut: number;
+  emergency: {
+    enabled: boolean;
+    minRound: number;
+    gap: number;
+    minSectorSupply: number;
+  };
+  sector: {
+    drainPerBattle: number;
+    regenPerMonth: number;
+    minQtyFactor: number;
+    maxExtraEmptyChance: number;
+    enemyScarcityWeight: number;
+  };
+  baseStatusMult: Record<BaseStatus, number>;
+  tierOffset: {
+    Standard: number;
+    Hard: number;
+    Elite: number;
+    boss: number;
+    event: number;
+  };
+  kindMult: Record<CombatSide, Record<BattleKind, number>>;
+  diffMult: Record<SectorDifficulty, number>;
+  bossQtyMult: number;
+  underdogRatio: number;
+  familyWeights: {
+    drone: Partial<Record<NpcSupplyKitFamily, number>>;
+    gunship: Partial<Record<NpcSupplyKitFamily, number>>;
+    sniper: Partial<Record<NpcSupplyKitFamily, number>>;
+    repair_ship: Partial<Record<NpcSupplyKitFamily, number>>;
+    ally: Partial<Record<NpcSupplyKitFamily, number>>;
+  };
 }
 
 export interface StealthConfig {

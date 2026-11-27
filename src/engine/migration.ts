@@ -120,6 +120,13 @@ import {
   sanitizeShieldRegenConfig,
 } from './shieldRegen';
 import {
+  cloneNpcSupplyConfig,
+  DEFAULT_NPC_SUPPLY_CONFIG,
+  DEFAULT_SUPPLY_MAX_PER_TYPE_PER_BATTLE,
+  sanitizeNpcSupplyConfig,
+  sanitizeSupplyMaxPerTypePerBattle,
+} from './npcSupply';
+import {
   clonePiratesConfig,
   DEFAULT_PIRATES_CONFIG,
   ensureIdle,
@@ -425,6 +432,8 @@ export function createDefaultAdminConfig(): AdminConfig {
     turnPhase: cloneTurnPhaseConfig(DEFAULT_TURN_PHASE_CONFIG),
     prestage: clonePrestageConfig(DEFAULT_PRESTAGE_CONFIG),
     stealth: cloneStealthConfig(DEFAULT_STEALTH_CONFIG),
+    npcSupply: cloneNpcSupplyConfig(DEFAULT_NPC_SUPPLY_CONFIG),
+    supplyMaxPerTypePerBattle: DEFAULT_SUPPLY_MAX_PER_TYPE_PER_BATTLE,
     showRawI18nKeys: false,
   };
 }
@@ -824,6 +833,10 @@ export function migrateSaveData(
     turnPhase: sanitizeTurnPhaseConfig(rawAdmin.turnPhase),
     prestage: sanitizePrestageConfig(rawAdmin.prestage),
     stealth: sanitizeStealthConfig(rawAdmin.stealth),
+    npcSupply: sanitizeNpcSupplyConfig(rawAdmin.npcSupply),
+    supplyMaxPerTypePerBattle: sanitizeSupplyMaxPerTypePerBattle(
+      rawAdmin.supplyMaxPerTypePerBattle
+    ),
     showRawI18nKeys: Boolean(rawAdmin.showRawI18nKeys),
   };
 

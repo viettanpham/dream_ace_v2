@@ -1,0 +1,74 @@
+{
+  "enabled": true,
+  "typesMin": 1,
+  "typesMax": 2,
+  "qtyMin": 1,
+  "qtyMax": 4,
+  "noSupplyChance": {
+    "mob": 0.15,
+    "boss": 0
+  },
+  "thresholds": {
+    "hp": 40,
+    "shield": 25,
+    "sp": 20
+  },
+  "losingGap": 0.2,
+  "losingBonus": 15,
+  "winningCut": 10,
+  "emergency": {
+    "enabled": true,
+    "minRound": 3,
+    "gap": 0.35,
+    "minSectorSupply": 50
+  },
+  "sector": {
+    "drainPerBattle": 20,
+    "regenPerMonth": 10,
+    "minQtyFactor": 0.4,
+    "maxExtraEmptyChance": 0.3,
+    "enemyScarcityWeight": 1
+  },
+  "baseStatusMult": {
+    "operational": 1,
+    "damaged": 0.7,
+    "repairing": 0.5
+  },
+  "tierOffset": {
+    "Standard": -1,
+    "Hard": 0,
+    "Elite": 1,
+    "boss": 1,
+    "event": 1
+  },
+  "kindMult": {
+    "enemy": {
+      "assault": 1.5,
+      "defend": 1,
+      "patrol": 0.75,
+      "mission": 1,
+      "event": 1.25
+    },
+    "ally": {
+      "assault": 1,
+      "defend": 1.5,
+      "patrol": 0.75,
+      "mission": 1,
+      "event": 1.25
+    }
+  },
+  "diffMult": {
+    "Standard": 1,
+    "Hard": 1.25,
+    "Elite": 1.5
+  },
+  "bossQtyMult": 2,
+  "underdogRatio": 0.8,
+  "familyWeights": {
+    "drone": { "hp_kit": 1 },
+    "gunship": { "hp_kit": 2, "shield_kit": 2, "sp_kit": 1 },
+    "sniper": { "hp_kit": 2, "shield_kit": 1, "sp_kit": 2 },
+    "repair_ship": { "hp_kit": 1, "shield_kit": 2, "sp_kit": 2 },
+    "ally": { "hp_kit": 1, "shield_kit": 1, "sp_kit": 1 }
+  }
+}

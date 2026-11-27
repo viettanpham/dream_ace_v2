@@ -90,6 +90,7 @@ export interface CanUseSupplyInput {
   cfg?: Pick<AdminConfig, 'supplyUsesPerTurn' | 'supplyEconomy'> | null;
   kind?: BattleKind | null;
   units?: readonly CombatUnit[] | null;
+  battleLimitOverride?: number | null;
 }
 
 export interface CanUseSupplyResult {
@@ -506,6 +507,7 @@ export function canUseSupply({
   cfg,
   kind,
   units,
+  battleLimitOverride,
 }: CanUseSupplyInput): CanUseSupplyResult {
   if (!isOwnTurn) {
     return failUse('not_your_turn');
@@ -520,12 +522,13 @@ export function canUseSupply({
     return failUse('turn_limit', { n: usedThisTurn, max: usesPerTurn });
   }
 
-  const effectiveBattleLimit = getEffectiveSupplyBattleLimit(
-    kind,
-    unit,
-    units,
-    cfg
-  );
+  const hasBattleLimitOverride =
+    typeof battleLimitOverride === 'number' &&
+    !Number.isNaN(battleLimitOverride) &&
+    battleLimitOverride >= 0;
+  const effectiveBattleLimit = hasBattleLimitOverride
+    ? Math.floor(battleLimitOverride)
+    : getEffectiveSupplyBattleLimit(kind, unit, units, cfg);
   const usedInBattle = Math.max(
     0,
     supplyState?.usedCountsByTemplate?.[template.id] ?? 0
