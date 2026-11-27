@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 
 export interface AdminCapacityFieldProps {
   label: string;
+  description?: string;
   min: number;
   max: number;
   storedValue: number;
@@ -21,6 +22,7 @@ export interface AdminCapacityFieldProps {
 
 export function AdminCapacityField({
   label,
+  description,
   min,
   max,
   storedValue,
@@ -75,6 +77,9 @@ export function AdminCapacityField({
       <label htmlFor={inputTestId} className="text-[11px] text-slate-400 block">
         {label}
       </label>
+      {description && (
+        <p className="text-[11px] text-slate-400 leading-snug">{description}</p>
+      )}
       <div className="flex flex-wrap items-center gap-1.5 min-w-0">
         <input
           id={inputTestId}

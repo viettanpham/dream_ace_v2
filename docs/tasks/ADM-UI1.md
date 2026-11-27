@@ -1,0 +1,18 @@
+TASK ADM-UI1 — Admin CP "Chiến đấu" tab: titled, collapsible sections + collapse-all / expand-all. Model: Hydrogen. If this prompt looks cut off, STOP and tell me the last words you can see.
+
+STEP A (resume): save this prompt verbatim to docs/tasks/ADM-UI1.md, checklist docs/tasks/ADM-UI1.progress.md, tick items, final report docs/tasks/ADM-UI1.report.md and print it. On retry continue from the first unticked item.
+
+TOKEN SAVING: read docs/CODEMAP.md first; grep by symbol. Open ONLY: src/components/AdminPanel.tsx the `tab === 'battle'` block (~1581-3230) in 3-4 range reads (do not read the rest of the file); src/components/admin/EnrageAdminBlock.tsx first 40 lines (props only); i18n keys admin.* via grep. Related tests only + tsc. Do not enable Firebase. CURRENT_SAVE_VERSION unchanged. New strings in vi.ts AND en.ts.
+
+SCOPE: ONLY the Chiến đấu (battle) tab of Admin CP. No setting is renamed, moved to another tab, removed, or changed in behavior; no store/engine change. Other tabs untouched (they follow in ADM-UI2).
+
+ITEM 1 — Component. New src/components/admin/AdminSection.tsx: props { id, title, description?, defaultOpen?, children }; header row = chevron + title (bold, slate-200) + a one-line description under it (slate-400, 11px), click anywhere on the header toggles; body hidden (not unmounted state loss is fine, but inputs keep their values because they live in the store); same dark card style as the existing blocks (rounded-lg border border-slate-800 bg-[#0D1422]); aria-expanded + keyboard (Enter/Space); data-testid admin-section-<id>. A small context (AdminSectionsProvider with collapseAll(), expandAll(), version counter) so a toolbar can set all sections; each section also remembers its own open state in sessionStorage (try/catch) under admin.section.<id>. Toolbar at the top of the battle tab: two buttons "Thu gọn tất cả" / "Mở rộng tất cả" (data-testid admin-collapse-all / admin-expand-all), sticky below the tab bar if that needs no layout rework, else plain.
+ITEM 2 — Wrap the battle tab. Wrap EACH top-level block of the battle tab in an AdminSection with a clear Vietnamese title and a one-line plain-language description (what it controls and its effect), e.g. cheat toggles -> "Chế độ thử nghiệm" ("Bật để thử nhanh: bất tử, một đòn hạ gục, luôn thắng, ép trùm"); the 4-column block starting with battleSizeOverride -> "Quy mô trận" ("Chọn số tàu hai phe trong một trận; để trống = theo cấp độ"); EnrageAdminBlock -> "Cuồng nộ (chống trận kéo dài)"; EnemyLevelAdminBlock -> "Cấp độ kẻ địch"; the supply/shop, pirate, card-popup, radar-popup, battle-speed and every other top-level block likewise (title + description in vi.ts and en.ts, ids stable). Default: the first section (Quy mô trận) open, all others collapsed. Inside blocks that have 8 or fewer fields, also add a one-line description under each field label (same 11px slate-400 style); for bigger blocks do NOT edit the fields now, just list them in the report as follow-up ADM-UI1b.
+
+HARD LIMITS: every existing field still works and keeps its data-testid; no horizontal overflow at 360px; no nested scroll box; collapsed sections cost no extra height beyond the header; existing admin tests still pass.
+
+TESTS (max 4): AdminSection toggles on click and keyboard; collapse-all closes and expand-all opens every section; open state survives remount via sessionStorage; the battle tab renders its sections with titles and a known field still updates adminConfig.
+
+CHECKS (slim): related admin test files with --reporter=dot + tsc --noEmit / lint_applet. NO full vitest, NO production build.
+
+REPORT (<= 12 lines): items + files; list of section titles; blocks left for ADM-UI1b (name + field count); tests; NOT checked in a real browser.

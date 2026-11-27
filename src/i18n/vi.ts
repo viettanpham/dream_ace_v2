@@ -2249,6 +2249,109 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'popup.siege_off': 'NEO PHÁO',
   'popup.fortress_on': 'GIÁP PHÁO ĐÀI',
   'popup.fortress_off': 'GIÁP PHÁO ĐÀI',
+
+  // Admin CP — Tab Chiến đấu có thể thu gọn (ADM-UI1)
+  'admin.collapseAll': 'Thu gọn tất cả',
+  'admin.expandAll': 'Mở rộng tất cả',
+  'admin.battleSection.battleSize.title': 'Quy mô trận',
+  'admin.battleSection.battleSize.desc':
+    'Chọn số tàu hai phe trong một trận; để trống = theo cấp độ',
+  'admin.battleSection.cheats.title': 'Chế độ thử nghiệm',
+  'admin.battleSection.cheats.desc':
+    'Bật để thử nhanh: bất tử, một đòn hạ gục, luôn thắng, ép trùm',
+  'admin.battleSection.enrage.title': 'Cuồng nộ (chống trận kéo dài)',
+  'admin.battleSection.enrage.desc':
+    'Tăng dồn 3 giai đoạn cuồng nộ cho cả hai phe khi trận kéo dài nhiều vòng',
+  'admin.battleSection.passiveSlots.title': 'Ô kỹ năng nội tại',
+  'admin.battleSection.passiveSlots.desc':
+    'Số ô nội tại mở sẵn, chu kỳ cấp mở thêm và giới hạn tối đa mỗi Gear',
+  'admin.battleSection.enemyLevel.title': 'Cấp độ kẻ địch',
+  'admin.battleSection.enemyLevel.desc':
+    'Chỉnh tỉ lệ địch vượt cấp, trần vượt cấp và khoảng cấp theo từng loại trận',
+  'admin.battleSection.shieldRegen.title': 'Hồi khiên & Phá khiên',
+  'admin.battleSection.shieldRegen.desc':
+    'Tỉ lệ hồi khiên mỗi lượt theo SPIRIT, phạt khi trúng đòn và hệ số khiên nứt',
+  'admin.battleSection.npcSupply.title': 'Vật tư NPC & Quân nhu khu vực',
+  'admin.battleSection.npcSupply.desc':
+    'Cấp phát vật tư cho NPC, ngưỡng tự dùng và mức tiêu hao/hồi kho khu vực',
+  'admin.battleSection.spEconomy.title': 'Kinh tế SP, Flux & Lidar',
+  'admin.battleSection.spEconomy.desc':
+    'Hồi SP theo SPIRIT, hệ số chi phí theo lớp, bảng Flux Transfer và phạm vi Lidar',
+  'admin.battleSection.turnPhase.title': 'Lượt 3 bước & Chuẩn bị trận',
+  'admin.battleSection.turnPhase.desc':
+    'Số kỹ năng buff bước 2 tối đa mỗi lượt và hộp thoại chuẩn bị trước trận',
+  'admin.battleSection.supplyShop.title': 'Cửa hàng vật tư',
+  'admin.battleSection.supplyShop.desc':
+    'Số loại, số lượng bán bằng Credit, giới hạn làm mới và quy đổi giá khu WP',
+  'admin.battleSection.supplyEconomy.title': 'Giới hạn vật tư mỗi trận',
+  'admin.battleSection.supplyEconomy.desc':
+    'Giới hạn lượt dùng vật tư, hệ số giá SP, số mục tiêu quét và bội số theo phe',
+  'admin.battleSection.rewardMult.title': 'Hệ số phần thưởng',
+  'admin.battleSection.rewardMult.desc':
+    'Nhân lượng EXP, Credit và chiến lợi phẩm nhận được sau mỗi trận thắng',
+  'admin.battleSection.statusDefaults.title': 'Mặc định hiển thị trạng thái',
+  'admin.battleSection.statusDefaults.desc':
+    'Kiểu huy hiệu và số hàng trạng thái mặc định cho điện thoại và máy tính',
+  'admin.battleSection.cardPopup.title': 'Popup nổi (Card & Radar)',
+  'admin.battleSection.cardPopup.desc':
+    'Tốc độ bay, vùng đáp tâm thẻ và cỡ chữ popup ở chế độ Card và Radar',
+  'admin.battleSection.liveBattle.title': 'Điều khiển trận đang diễn ra',
+  'admin.battleSection.liveBattle.desc':
+    'Nhảy nhanh tới vòng bất kỳ hoặc ép thắng ngay trong trận chiến hiện tại',
+  'admin.fieldDesc.battleSizeOverride':
+    'Ép số tàu mỗi bên (4v4, 6v6, 8v8); Mặc định = theo khu vực',
+  'admin.fieldDesc.battleLevelOffset':
+    'Cộng hoặc trừ thẳng vào cấp đội hình địch; để trống = theo bảng cấp',
+  'admin.fieldDesc.skillMaxLevel':
+    'Giới hạn cấp nâng tối đa cho mọi kỹ năng chủ động và nội tại',
+  'admin.fieldDesc.passiveScaleAfter5':
+    'Tỉ lệ tăng thêm mỗi cấp sau Lv.5 so với mức tăng của 5 cấp đầu',
+  'admin.fieldDesc.restorePctCap':
+    'Giới hạn phần trăm HP/Khiên tối đa mỗi lần hồi từ kỹ năng',
+  'admin.fieldDesc.noticeDurationSec':
+    'Thời gian tự ẩn banner thông báo; nhập 0 để không tự đóng',
+  'admin.fieldDesc.boxCapacity':
+    'Số ô vật phẩm tối đa mang theo trong Hòm đồ (20–1000)',
+  'admin.fieldDesc.warehouseCapacity':
+    'Số ô lưu trữ tối đa trong Kho đồ căn cứ (100–2000)',
+  'admin.fieldDesc.godMode':
+    'Tàu phe ta không bị mất HP hoặc Khiên khi nhận sát thương',
+  'admin.fieldDesc.oneHitKills':
+    'Mọi đòn đánh của phe ta kết liễu mục tiêu ngay lập tức',
+  'admin.fieldDesc.alwaysWin':
+    'Tự động xử thắng trận ngay khi bắt đầu hoặc kết thúc lượt đầu',
+  'admin.fieldDesc.forceBoss':
+    'Luôn sinh Boss ở trận tiếp theo bất kể loại khu vực',
+  'admin.fieldDesc.passiveSlotsInitial':
+    'Số ô nội tại mở khóa sẵn ngay từ Lv.1',
+  'admin.fieldDesc.passiveSlotsEveryLevels':
+    'Cứ tăng thêm từng này cấp Gear sẽ mở thêm 1 ô nội tại',
+  'admin.fieldDesc.passiveSlotsMax':
+    'Tổng số ô nội tại tối đa một Gear có thể lắp',
+  'admin.fieldDesc.turnPhaseMaxStep2':
+    'Số skill buff (bước 2) được dùng trước khi chuyển sang hành động chính',
+  'admin.fieldDesc.prestageEnabled':
+    'Hiện hộp thoại chuẩn bị và tự áp dụng buff đầu trận trước khi đánh',
+  'admin.fieldDesc.prestageCountdownSec':
+    'Số giây đếm ngược trước khi tự động vào trận ở màn chuẩn bị',
+  'admin.fieldDesc.prestageGroupFromSize':
+    'Tự gom hiển thị theo lớp tàu khi mỗi phe có từ số lượng này trở lên',
+  'admin.fieldDesc.rewardMultiplier':
+    'Chọn hệ số nhân 1x, 2x, 5x hoặc 10x cho phần thưởng chiến thắng',
+  'admin.fieldDesc.statusBadgeLayout':
+    'Vị trí mũi tên tăng/giảm và số lượt còn lại trên icon trạng thái',
+  'admin.fieldDesc.statusPhoneRows':
+    'Số hàng icon trạng thái hiển thị cho đơn vị thường trên điện thoại',
+  'admin.fieldDesc.statusDesktopRows':
+    'Số hàng icon trạng thái hiển thị cho đơn vị thường trên máy tính',
+  'admin.fieldDesc.statusPlayerPhoneRows':
+    'Số hàng icon trạng thái của tàu người chơi trên điện thoại',
+  'admin.fieldDesc.statusPlayerDesktopRows':
+    'Số hàng icon trạng thái của tàu người chơi trên máy tính',
+  'admin.fieldDesc.liveSkipRound':
+    'Đặt trực tiếp số vòng của trận đang mở để kiểm thử hiệu ứng cuối trận',
+  'admin.fieldDesc.liveForceWin':
+    'Kết thúc trận hiện tại với phần thắng thuộc về phe ta ngay lập tức',
 };
 
 

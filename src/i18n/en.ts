@@ -2246,6 +2246,109 @@ export const EN_TRANSLATIONS = {
   'popup.siege_off': 'SIEGE OFF',
   'popup.fortress_on': 'FORTRESS ON',
   'popup.fortress_off': 'FORTRESS OFF',
+
+  // Admin CP — Collapsible Battle tab sections (ADM-UI1)
+  'admin.collapseAll': 'Collapse all',
+  'admin.expandAll': 'Expand all',
+  'admin.battleSection.battleSize.title': 'Battle Scale & Caps',
+  'admin.battleSection.battleSize.desc':
+    'Set ships per side in battle; leave blank to follow sector defaults',
+  'admin.battleSection.cheats.title': 'Test Cheats',
+  'admin.battleSection.cheats.desc':
+    'Quick testing toggles: god mode, one-hit kills, always win, force boss',
+  'admin.battleSection.enrage.title': 'Enrage (anti-stalemate)',
+  'admin.battleSection.enrage.desc':
+    'Three stacking enrage phases for both sides when battles drag on',
+  'admin.battleSection.passiveSlots.title': 'Passive Skill Slots',
+  'admin.battleSection.passiveSlots.desc':
+    'Starting passive slots, unlock cadence by level, and max cap per Gear',
+  'admin.battleSection.enemyLevel.title': 'Enemy Level',
+  'admin.battleSection.enemyLevel.desc':
+    'Peak roll chance, max level cap offset, and min/max/peak per battle kind',
+  'admin.battleSection.shieldRegen.title': 'Shield Regen & Shield Crack',
+  'admin.battleSection.shieldRegen.desc':
+    'Per-turn shield regen from SPIRIT, hit penalties, and shield-cracked multipliers',
+  'admin.battleSection.npcSupply.title': 'NPC & Sector Supplies',
+  'admin.battleSection.npcSupply.desc':
+    'NPC battle supply rolls, auto-use thresholds, and sector drain/regen',
+  'admin.battleSection.spEconomy.title': 'SP Economy, Flux & Lidar',
+  'admin.battleSection.spEconomy.desc':
+    'SP regen per SPIRIT, class cost factors, Flux Transfer table, and Lidar range',
+  'admin.battleSection.turnPhase.title': '3-Step Turn & Pre-stage',
+  'admin.battleSection.turnPhase.desc':
+    'Max step-2 buff skills per turn and pre-battle preparation dialog',
+  'admin.battleSection.supplyShop.title': 'Supply Shop',
+  'admin.battleSection.supplyShop.desc':
+    'Credit slot/qty ranges, refresh caps, and WP supply pricing weights',
+  'admin.battleSection.supplyEconomy.title': 'Battle Supply Limits',
+  'admin.battleSection.supplyEconomy.desc':
+    'Max supply uses per battle, SP price multiplier, scan count, and side caps',
+  'admin.battleSection.rewardMult.title': 'Reward Multiplier',
+  'admin.battleSection.rewardMult.desc':
+    'Multiply EXP, Credits, and loot drops earned from battle victories',
+  'admin.battleSection.statusDefaults.title': 'Status Display Defaults',
+  'admin.battleSection.statusDefaults.desc':
+    'Default badge layout and status row counts on phone and desktop',
+  'admin.battleSection.cardPopup.title': 'Floating Popups (Card & Radar)',
+  'admin.battleSection.cardPopup.desc':
+    'Flight timing, center landing zone, and scale curves for Card & Radar popups',
+  'admin.battleSection.liveBattle.title': 'Live Battle Controls',
+  'admin.battleSection.liveBattle.desc':
+    'Skip to any round or immediately force victory in the active battle',
+  'admin.fieldDesc.battleSizeOverride':
+    'Force fleet size per side (4v4, 6v6, 8v8); Default follows sector rules',
+  'admin.fieldDesc.battleLevelOffset':
+    'Add or subtract directly from enemy levels; leave blank to use range tables',
+  'admin.fieldDesc.skillMaxLevel':
+    'Maximum upgrade cap applied to active and passive skills',
+  'admin.fieldDesc.passiveScaleAfter5':
+    'Per-level growth multiplier after Lv.5 relative to the first 5 levels',
+  'admin.fieldDesc.restorePctCap':
+    'Maximum HP/Shield percent restored per skill cast',
+  'admin.fieldDesc.noticeDurationSec':
+    'Seconds before notice banners auto-dismiss; enter 0 to keep open',
+  'admin.fieldDesc.boxCapacity':
+    'Maximum carried item slots in Cargo box (20–1000)',
+  'admin.fieldDesc.warehouseCapacity':
+    'Maximum stored item slots in base Warehouse (100–2000)',
+  'admin.fieldDesc.godMode':
+    'Allied units take zero HP and Shield damage from enemy hits',
+  'admin.fieldDesc.oneHitKills':
+    'Every allied attack destroys its target in one hit',
+  'admin.fieldDesc.alwaysWin':
+    'Automatically resolves the battle as a win on start or first turn',
+  'admin.fieldDesc.forceBoss':
+    'Always spawns a Boss encounter in the next battle regardless of sector',
+  'admin.fieldDesc.passiveSlotsInitial':
+    'Number of passive skill slots unlocked right at Lv.1',
+  'admin.fieldDesc.passiveSlotsEveryLevels':
+    'Gear levels needed to unlock each additional passive slot',
+  'admin.fieldDesc.passiveSlotsMax':
+    'Maximum total passive skill slots a single Gear can equip',
+  'admin.fieldDesc.turnPhaseMaxStep2':
+    'Maximum step-2 buff skills allowed before a main action is required',
+  'admin.fieldDesc.prestageEnabled':
+    'Show the pre-battle prep dialog and apply start-of-battle buffs',
+  'admin.fieldDesc.prestageCountdownSec':
+    'Auto-engage countdown seconds while waiting in the prep dialog',
+  'admin.fieldDesc.prestageGroupFromSize':
+    'Group unit rows by ship class when either side reaches this size',
+  'admin.fieldDesc.rewardMultiplier':
+    'Choose 1x, 2x, 5x, or 10x multiplier for victory rewards',
+  'admin.fieldDesc.statusBadgeLayout':
+    'Corner placement for buff/debuff arrows and remaining turns on icons',
+  'admin.fieldDesc.statusPhoneRows':
+    'Default status icon rows for regular units on phone viewports',
+  'admin.fieldDesc.statusDesktopRows':
+    'Default status icon rows for regular units on desktop viewports',
+  'admin.fieldDesc.statusPlayerPhoneRows':
+    'Default status icon rows for the player unit on phone viewports',
+  'admin.fieldDesc.statusPlayerDesktopRows':
+    'Default status icon rows for the player unit on desktop viewports',
+  'admin.fieldDesc.liveSkipRound':
+    'Jump the active battle directly to a target round for late-fight testing',
+  'admin.fieldDesc.liveForceWin':
+    'Immediately end the active battle with an allied victory',
 } as const;
 
 export type TranslationKey = keyof typeof EN_TRANSLATIONS;
