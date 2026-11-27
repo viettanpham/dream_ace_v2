@@ -668,6 +668,7 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   // Combat Log Templates
   'log.battleStart':
     'Bắt đầu giao tranh tại {sector} ({difficulty}). Thứ tự lượt xếp theo Tốc độ.',
+  'log.sectorSupply': 'Quân nhu khu vực: {n}%',
   'log.defend':
     '{actor} bật Khiên năng lượng (-50% sát thương{shieldPart}{spPart}).',
   'log.healSquad':
@@ -2107,6 +2108,23 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'prestage.enemyIntelNone': 'Không có tình báo',
   'prestage.confirm': 'Vào trận',
   'prestage.confirmCountdown': 'Vào trận ({sec}s)',
+  'admin.npcSupplyTitle': 'Vật tư NPC & Quân nhu khu vực',
+  'admin.npcSupplyHint': 'Áp dụng từ trận sau',
+  'admin.npcSupplyEnabled': 'Bật vật tư NPC trong trận',
+  'admin.npcSupplyEmergencyEnabled': 'Bật tiếp tế khẩn cấp trong trận',
+  'admin.npcSupplyQtyMin': 'Số lượng tối thiểu / loại',
+  'admin.npcSupplyQtyMax': 'Số lượng tối đa / loại',
+  'admin.npcSupplyTypesMin': 'Số loại tối thiểu / NPC',
+  'admin.npcSupplyTypesMax': 'Số loại tối đa / NPC',
+  'admin.npcSupplyMaxPerType': 'Giới hạn mỗi loại / trận (chung)',
+  'admin.npcSupplyEmptyMobPct': 'Tỉ lệ quái không mang vật tư (%)',
+  'admin.npcSupplyThreshHp': 'Ngưỡng dùng HP (%)',
+  'admin.npcSupplyThreshShield': 'Ngưỡng dùng Khiên (%)',
+  'admin.npcSupplyThreshSp': 'Ngưỡng dùng SP (%)',
+  'admin.npcSupplyDrainPerBattle': 'Tiêu hao quân nhu / trận',
+  'admin.npcSupplyRegenPerMonth': 'Hồi quân nhu / tháng',
+  'admin.npcSupplyRefillAll': 'Nạp đầy quân nhu mọi khu vực',
+  'admin.npcSupplyRefillAllDone': 'Đã nạp đầy 100% quân nhu cho mọi khu vực',
 };
 
 

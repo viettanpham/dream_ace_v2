@@ -909,6 +909,20 @@ export function createInitialBattleState(
     eventSupplyMult: 1,
   });
 
+  const sectorSupplyLog: CombatLogEntry | null =
+    npcSupply !== undefined
+      ? {
+          id: nextId('log'),
+          round: 1,
+          actorName: sector.name,
+          tag: 'SYSTEM',
+          templateKey: 'log.sectorSupply',
+          params: {
+            n: Math.max(0, Math.min(100, Math.round(sectorSupply))),
+          },
+        }
+      : null;
+
   return {
     sectorId: sector.id,
     kind: resolvedKind,
@@ -926,7 +940,7 @@ export function createInitialBattleState(
     lastPlayerTargetId: null,
     autoStopNotice: null,
     wingmanChat: null,
-    log: [openingLog],
+    log: sectorSupplyLog ? [sectorSupplyLog, openingLog] : [openingLog],
     events: [],
     roundSnapshots: [createRoundHpSnapshot(1, units)],
     popups: [],

@@ -1,5 +1,5 @@
 import { SUPPLY_TEMPLATES } from '../data/consumables';
-import { getSectorById } from '../data/maps';
+import { getSectorById, SECTORS_CATALOG } from '../data/maps';
 import rawNpcSupplyData from '../data/npcSupply.json';
 import type {
   AdminConfig,
@@ -18,6 +18,7 @@ import type {
   FloatingPopup,
   NpcSupplyConfig,
   NpcSupplyKitFamily,
+  PilotAccount,
   SectorDifficulty,
   SupplyTemplate,
 } from '../types/game';
@@ -361,6 +362,68 @@ export function sanitizeSupplyMaxPerTypePerBattle(raw: unknown): number {
     MAX_SUPPLY_MAX_PER_TYPE_PER_BATTLE,
     DEFAULT_SUPPLY_MAX_PER_TYPE_PER_BATTLE
   );
+}
+
+const KNOWN_SECTOR_IDS = new Set<string>(SECTORS_CATALOG.map((s) => s.id));
+
+/**
+ * Sanitizes a PilotAccount.sectorSupply map:
+ * - keeps only known sector ids from SECTORS_CATALOG
+ * - clamps values to [0, 100]
+ * - stores only entries < 100 (missing === 100)
+ * Returns undefined when empty so old saves / full sectors stay compact.
+ */
+export function sanitizeSectorSupply(
+  raw: unknown
+): Record<string, number> | undefined {
+  const src = asObj(raw);
+  if (!src) return undefined;
+  const cleaned: Record<string, number> = {};
+  for (const [sectorId, rawVal] of Object.entries(src)) {
+    if (!KNOWN_SECTOR_IDS.has(sectorId)) continue;
+    if (typeof rawVal !== 'number' || !Number.isFinite(rawVal)) continue;
+    const clamped = Math.max(0, Math.min(100, Math.round(rawVal * 100) / 100));
+    if (clamped < 100) {
+      cleaned[sectorId] = clamped;
+    }
+  }
+  return Object.keys(cleaned).length > 0 ? cleaned : undefined;
+}
+
+export function getSectorSupplyPct(
+  pilot: Pick<PilotAccount, 'sectorSupply'>,
+  sectorId: string
+): number {
+  const raw = pilot.sectorSupply?.[sectorId];
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return 100;
+  return Math.max(0, Math.min(100, raw));
+}
+
+export function drainSectorSupply(
+  pilot: PilotAccount,
+  sectorId: string,
+  npcCfg?: Partial<NpcSupplyConfig> | Record<string, unknown> | null
+): PilotAccount {
+  if (!KNOWN_SECTOR_IDS.has(sectorId)) return pilot;
+  const cfg = sanitizeNpcSupplyConfig(npcCfg);
+  const drain = cfg.sector.drainPerBattle;
+  if (drain <= 0) return pilot;
+  const cur = getSectorSupplyPct(pilot, sectorId);
+  const nextVal = Math.max(0, Math.min(100, cur - drain));
+  const merged = {
+    ...(pilot.sectorSupply ?? {}),
+    [sectorId]: nextVal,
+  };
+  const nextMap = sanitizeSectorSupply(merged);
+  if (!nextMap) {
+    if (!pilot.sectorSupply) return pilot;
+    const { sectorSupply: _dropped, ...rest } = pilot;
+    return rest;
+  }
+  return {
+    ...pilot,
+    sectorSupply: nextMap,
+  };
 }
 
 export interface GenerateNpcSuppliesOptions {

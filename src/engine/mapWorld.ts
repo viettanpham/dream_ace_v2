@@ -10,6 +10,7 @@ import {
   mergeVisibleUnlockedSectors,
   neighbours,
 } from './frontline';
+import { sanitizeSectorSupply } from './npcSupply';
 import type {
   BaseRuntimeState,
   BattleKind,
@@ -150,7 +151,10 @@ export interface MonthAdvanceSummary {
  * - Ticks Under Attack countdowns (unanswered raids damage the base).
  * - Schedules a fresh frontier raid warning on a connected Allied base if none is under attack.
  */
-export function advanceCampaignMonth(pilot: PilotAccount): MonthAdvanceSummary {
+export function advanceCampaignMonth(
+  pilot: PilotAccount,
+  regenPerMonth = 10
+): MonthAdvanceSummary {
   const income = getTotalMonthlyIncome(pilot);
   const nextMonth = (pilot.campaignMonth || 1) + 1;
   const nextBaseStates: Record<string, BaseRuntimeState> = {};
@@ -217,13 +221,29 @@ export function advanceCampaignMonth(pilot: PilotAccount): MonthAdvanceSummary {
     }
   }
 
+  const regen =
+    typeof regenPerMonth === 'number' && Number.isFinite(regenPerMonth)
+      ? Math.max(0, Math.min(100, regenPerMonth))
+      : 10;
+  const currentSupply = sanitizeSectorSupply(pilot.sectorSupply);
+  let nextSectorSupply: Record<string, number> | undefined = currentSupply;
+  if (currentSupply && regen > 0) {
+    const bumped: Record<string, number> = {};
+    for (const [secId, val] of Object.entries(currentSupply)) {
+      bumped[secId] = Math.min(100, val + regen);
+    }
+    nextSectorSupply = sanitizeSectorSupply(bumped);
+  }
+  const { sectorSupply: _droppedSupply, ...pilotBase } = pilot;
+
   return {
     pilot: {
-      ...pilot,
+      ...pilotBase,
       campaignMonth: nextMonth,
       credits: pilot.credits + income.credits,
       warPoints: pilot.warPoints + income.warPoints,
       baseStates: nextBaseStates,
+      ...(nextSectorSupply ? { sectorSupply: nextSectorSupply } : {}),
     },
     newMonth: nextMonth,
     creditsEarned: income.credits,

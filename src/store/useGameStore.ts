@@ -132,6 +132,7 @@ import {
   type SupplyLoadoutReject,
 } from '../engine/supplies';
 import {
+  drainSectorSupply,
   runNpcSupplyStep,
   sanitizeNpcSupplyConfig,
 } from '../engine/npcSupply';
@@ -662,6 +663,7 @@ interface GameStoreState {
   adminSpawnPirateIncident: () => boolean;
   adminClearPirateIncidents: () => void;
   adminRemovePirateIncident: (incidentId: string) => void;
+  adminRefillAllSectorSupply: () => void;
   adminUnlockAllGears: () => void;
   adminUnlockAllSectors: () => void;
   adminApplyStarterToEmptySlots: () => number;
@@ -861,12 +863,21 @@ function finalizeBattleOutcome(
     won && battleKind === 'event' && battle.sourceId
       ? clearPirateIncidentById(baseConseq.pilot, battle.sourceId)
       : baseConseq.pilot;
+  const npcSupplyCfg = sanitizeNpcSupplyConfig(state.adminConfig.npcSupply);
+  const pilotAfterSupplyDrain = drainSectorSupply(
+    pilotAfterPirateClear,
+    battle.sectorId,
+    npcSupplyCfg
+  );
   // Advance campaign calendar 1 month after each completed non-retreat sortie
   const monthStep = retreated
-    ? { pilot: pilotAfterPirateClear }
+    ? { pilot: pilotAfterSupplyDrain }
     : {
         pilot: spawnOnMonth(
-          advanceCampaignMonth(pilotAfterPirateClear).pilot,
+          advanceCampaignMonth(
+            pilotAfterSupplyDrain,
+            npcSupplyCfg.sector.regenPerMonth
+          ).pilot,
           state.adminConfig.pirates,
           Math.random
         ),
@@ -2155,7 +2166,13 @@ export const useGameStore = create<GameStoreState>()(
 
       advanceMonth: () => {
         const state = get();
-        const rawSummary = advanceCampaignMonth(state.pilot);
+        const npcSupplyCfg = sanitizeNpcSupplyConfig(
+          state.adminConfig.npcSupply
+        );
+        const rawSummary = advanceCampaignMonth(
+          state.pilot,
+          npcSupplyCfg.sector.regenPerMonth
+        );
         const pilotAfterPirates = ensureIdle(
           spawnOnMonth(
             rawSummary.pilot,
@@ -5030,6 +5047,16 @@ export const useGameStore = create<GameStoreState>()(
           pilot: clearPirateIncidentById(state.pilot, incidentId),
           hasSaveData: true,
         }));
+      },
+
+      adminRefillAllSectorSupply: () => {
+        set((state) => {
+          const { sectorSupply: _dropped, ...pilotRest } = state.pilot;
+          return {
+            pilot: pilotRest,
+            hasSaveData: true,
+          };
+        });
       },
 
       adminUnlockAllGears: () => {

@@ -666,6 +666,7 @@ export const EN_TRANSLATIONS = {
   // Combat Log Templates
   'log.battleStart':
     'Engagement started at {sector} ({difficulty}). Turn order sorted by Speed.',
+  'log.sectorSupply': 'Area supplies: {n}%',
   'log.defend':
     '{actor} raises an Energy Shield (-50% dmg{shieldPart}{spPart}).',
   'log.healSquad':
@@ -2104,6 +2105,23 @@ export const EN_TRANSLATIONS = {
   'prestage.enemyIntelNone': 'No intel',
   'prestage.confirm': 'Engage',
   'prestage.confirmCountdown': 'Engage ({sec}s)',
+  'admin.npcSupplyTitle': 'NPC Supplies & Area Supply',
+  'admin.npcSupplyHint': 'Applies from next battle',
+  'admin.npcSupplyEnabled': 'Enable NPC battle supplies',
+  'admin.npcSupplyEmergencyEnabled': 'Enable emergency resupply in battle',
+  'admin.npcSupplyQtyMin': 'Min qty / type',
+  'admin.npcSupplyQtyMax': 'Max qty / type',
+  'admin.npcSupplyTypesMin': 'Min types / NPC',
+  'admin.npcSupplyTypesMax': 'Max types / NPC',
+  'admin.npcSupplyMaxPerType': 'Max per type / battle (shared)',
+  'admin.npcSupplyEmptyMobPct': 'Mob no-supply chance (%)',
+  'admin.npcSupplyThreshHp': 'HP use threshold (%)',
+  'admin.npcSupplyThreshShield': 'Shield use threshold (%)',
+  'admin.npcSupplyThreshSp': 'SP use threshold (%)',
+  'admin.npcSupplyDrainPerBattle': 'Sector supply drain / battle',
+  'admin.npcSupplyRegenPerMonth': 'Sector supply regen / month',
+  'admin.npcSupplyRefillAll': 'Refill all sector supplies',
+  'admin.npcSupplyRefillAllDone': 'Refilled all sectors to 100% supply',
 } as const;
 
 export type TranslationKey = keyof typeof EN_TRANSLATIONS;

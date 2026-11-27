@@ -38,6 +38,7 @@ import {
   DEFAULT_MODULE_DROP_CONFIG,
   sanitizeModuleDropConfig,
 } from './moduleDrop';
+import { sanitizeSectorSupply } from './npcSupply';
 import { EMPTY_STAT_BLOCK, MECH_CLASS_LIST } from '../data/classes';
 import {
   BUILTIN_ITEM_REGISTRY_TAG,
@@ -1200,6 +1201,8 @@ export function migrateSaveData(
       adminConfig.pirates
     );
 
+    const sanitizedSectorSupply = sanitizeSectorSupply(rawPilot.sectorSupply);
+
     const migratedPilot: PilotAccount = {
       name: pilotNameClean,
       credits: migratedCredits,
@@ -1214,6 +1217,7 @@ export function migrateSaveData(
       capturedSectorIds,
       campaignMonth: migratedCampaignMonth,
       baseStates: cleanBaseStates,
+      ...(sanitizedSectorSupply ? { sectorSupply: sanitizedSectorSupply } : {}),
       hiredWingman: rawPilot.hiredWingman ?? null,
       engineerShieldBoost: Boolean(rawPilot.engineerShieldBoost),
       activeBonusMission: rawPilot.activeBonusMission ?? null,

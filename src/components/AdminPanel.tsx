@@ -22,6 +22,7 @@ import {
   X,
 } from 'lucide-react';
 import { SupplyEconomyAdminBlock } from './admin/SupplyEconomyAdminBlock';
+import { NpcSupplyAdminBlock } from './admin/NpcSupplyAdminBlock';
 import { EnemyLevelAdminBlock } from './admin/EnemyLevelAdminBlock';
 import { ModuleDropAdminBlock } from './ModuleDropAdminBlock';
 import {
@@ -2006,6 +2007,8 @@ export function AdminPanel() {
                   </div>
                 );
               })()}
+
+              <NpcSupplyAdminBlock flash={flash} />
 
               {/* SP Economy ("Kinh tế SP") */}
               {(() => {

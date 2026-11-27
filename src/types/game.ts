@@ -996,6 +996,7 @@ export type CombatLogTag =
 
 export type CombatLogTemplateKey =
   | 'log.battleStart'
+  | 'log.sectorSupply'
   | 'log.defend'
   | 'log.healSquad'
   | 'log.healSingle'

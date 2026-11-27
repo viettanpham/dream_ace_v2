@@ -244,6 +244,7 @@ export function isSystemOrKillLogEntry(entry: CombatLogEntry): boolean {
     entry.tag === 'KO' ||
     entry.templateKey === 'log.destroyed' ||
     entry.templateKey === 'log.battleStart' ||
+    entry.templateKey === 'log.sectorSupply' ||
     entry.templateKey === 'log.prestageConfirm' ||
     entry.templateKey === 'log.retreat' ||
     entry.templateKey === 'log.invalidTarget' ||
@@ -1183,6 +1184,7 @@ export function parseStructuredCombatLogRow(
     }
 
     case 'log.battleStart':
+    case 'log.sectorSupply':
     case 'log.prestageConfirm':
     case 'log.emergencyResupplyAlly':
     case 'log.emergencyResupplyEnemy':
@@ -1196,6 +1198,7 @@ export function parseStructuredCombatLogRow(
         faction,
         actorName:
           entry.templateKey === 'log.battleStart' ||
+          entry.templateKey === 'log.sectorSupply' ||
           entry.templateKey === 'log.prestageConfirm' ||
           entry.templateKey === 'log.emergencyResupplyAlly' ||
           entry.templateKey === 'log.emergencyResupplyEnemy'

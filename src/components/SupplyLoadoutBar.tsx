@@ -1,5 +1,5 @@
 import { Plus, X } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   SUPPLY_TEMPLATE_FAMILIES,
   SUPPLY_TEMPLATES,
@@ -98,7 +98,6 @@ export function SupplyLoadoutBar({ variant, gear }: SupplyLoadoutBarProps) {
 
   const [openSlotIndex, setOpenSlotIndex] = useState<number | null>(null);
   const [lockedFromAction, setLockedFromAction] = useState(false);
-  const containerRef = useRef<HTMLDivElement | null>(null);
 
   const isStoreLocked = isBattleActive({ screen, battle }) || autoRepeatActive;
   const isLocked = isStoreLocked || lockedFromAction;
@@ -115,29 +114,6 @@ export function SupplyLoadoutBar({ variant, gear }: SupplyLoadoutBarProps) {
       setOpenSlotIndex(null);
     }
   }, [isStoreLocked]);
-
-  useEffect(() => {
-    if (variant !== 'desktop' || openSlotIndex === null) return;
-    const onPointerDown = (e: MouseEvent) => {
-      if (
-        containerRef.current &&
-        !containerRef.current.contains(e.target as Node)
-      ) {
-        setOpenSlotIndex(null);
-      }
-    };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setOpenSlotIndex(null);
-      }
-    };
-    document.addEventListener('mousedown', onPointerDown);
-    window.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', onPointerDown);
-      window.removeEventListener('keydown', onKeyDown);
-    };
-  }, [variant, openSlotIndex]);
 
   const slotCount = sanitizeSupplyLoadoutSlots(supplyLoadoutSlots);
   const loadoutIds = useMemo(
@@ -294,7 +270,6 @@ export function SupplyLoadoutBar({ variant, gear }: SupplyLoadoutBarProps) {
 
   return (
     <div
-      ref={containerRef}
       data-testid={`supply-loadout-bar-${variant}`}
       className="w-full relative"
     >
@@ -395,25 +370,16 @@ export function SupplyLoadoutBar({ variant, gear }: SupplyLoadoutBarProps) {
         })}
       </div>
 
-      {variant === 'desktop' && openSlotIndex !== null && !isLocked && (
-        <div
-          data-testid="supply-picker-desktop"
-          className="absolute left-0 right-0 top-full mt-1.5 z-40 rounded-lg border border-slate-700/90 bg-[#0B111C] shadow-2xl p-2 max-h-72 overflow-y-auto"
-        >
-          {pickerContent}
-        </div>
-      )}
-
-      {variant === 'phone' && (
-        <BottomSheet
-          open={openSlotIndex !== null && !isLocked}
-          onClose={() => setOpenSlotIndex(null)}
-          title={t('supply.pickerTitle')}
-          subtitle={t('supply.bagTitle')}
-        >
-          <div data-testid="supply-picker-phone">{pickerContent}</div>
-        </BottomSheet>
-      )}
+      <BottomSheet
+        open={openSlotIndex !== null && !isLocked}
+        onClose={() => setOpenSlotIndex(null)}
+        title={t('supply.pickerTitle')}
+        subtitle={t('supply.bagTitle')}
+        size="default"
+        testId={`supply-picker-sheet-${variant}`}
+      >
+        <div data-testid={`supply-picker-${variant}`}>{pickerContent}</div>
+      </BottomSheet>
     </div>
   );
 }

@@ -707,6 +707,11 @@ function formatCombatLogBody(
       });
     }
 
+    case 'log.sectorSupply': {
+      const n = Math.max(0, Math.min(100, Math.round(Number(p.n ?? 100))));
+      return translate(lang, 'log.sectorSupply', { n });
+    }
+
     case 'log.prestageConfirm':
       return translate(lang, 'log.prestageConfirm');
 
