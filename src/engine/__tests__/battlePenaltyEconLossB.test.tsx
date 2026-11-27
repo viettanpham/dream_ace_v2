@@ -9,7 +9,7 @@ import {
   DEFAULT_BATTLE_PENALTY_CONFIG,
   sanitizeBattlePenaltyConfig,
 } from '../../data/balance';
-import { formatCombatLog, translate } from '../../i18n';
+import { formatCombatLogMessage, translate } from '../../i18n';
 import type { TranslationKey } from '../../i18n/en';
 import { useGameStore } from '../../store/useGameStore';
 import type { BattleSummary, CombatUnit, Language } from '../../types/game';
@@ -212,43 +212,34 @@ describe('TASK ECON-LOSS-b — Retreat penalty & defeat/retreat repair fees', ()
 
     // Log templates
     expect(
-      formatCombatLog(
-        {
-          id: 'l1',
-          round: 1,
-          actorName: 'SYSTEM',
-          tag: 'SYSTEM',
-          templateKey: 'log.repairFreeDefeat',
-          params: {},
-        },
-        'vi'
-      )
+      formatCombatLogMessage('vi', {
+        id: 'l1',
+        round: 1,
+        actorName: 'SYSTEM',
+        tag: 'SYSTEM',
+        templateKey: 'log.repairFreeDefeat',
+        params: {},
+      })
     ).toBe('Quốc gia chi trả phí sửa chữa');
     expect(
-      formatCombatLog(
-        {
-          id: 'l2',
-          round: 1,
-          actorName: 'SYSTEM',
-          tag: 'SYSTEM',
-          templateKey: 'log.repairFreeRetreat',
-          params: {},
-        },
-        'vi'
-      )
+      formatCombatLogMessage('vi', {
+        id: 'l2',
+        round: 1,
+        actorName: 'SYSTEM',
+        tag: 'SYSTEM',
+        templateKey: 'log.repairFreeRetreat',
+        params: {},
+      })
     ).toBe('Quốc gia phải hỗ trợ chi trả phí sửa chữa vì hành động rút lui');
     expect(
-      formatCombatLog(
-        {
-          id: 'l3',
-          round: 1,
-          actorName: 'SYSTEM',
-          tag: 'SYSTEM',
-          templateKey: 'log.repairFee',
-          params: { fee: 20581 },
-        },
-        'vi'
-      )
+      formatCombatLogMessage('vi', {
+        id: 'l3',
+        round: 1,
+        actorName: 'SYSTEM',
+        tag: 'SYSTEM',
+        templateKey: 'log.repairFee',
+        params: { fee: 20581 },
+      })
     ).toBe('Phí sửa chữa: -20.581 CR');
 
     // BattleResultDialog lines
@@ -355,7 +346,7 @@ describe('TASK ECON-LOSS-b — Retreat penalty & defeat/retreat repair fees', ()
           },
         },
       }));
-      useGameStore.getState().startBattle('debris_belt');
+      useGameStore.getState().startBattle('border_outpost');
     });
     act(() => {
       useGameStore.getState().retreatBattle();
