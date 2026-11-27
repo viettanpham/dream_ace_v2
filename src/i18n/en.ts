@@ -717,6 +717,7 @@ export const EN_TRANSLATIONS = {
   'summary.repairFreeLine': 'Repair fee: Free (state-covered)',
   'summary.retreatPenaltyLine':
     'Retreat penalty: -{exp} EXP / -{credit} CR / -{wp} WP',
+  'summary.defeatExpPenaltyLine': 'EXP Penalty: -{exp}',
   'summary.battlesToNext': '~{count} wins to Lv.{next}',
   'summary.maxLevelReached': 'Max Level (Lv.{level})',
   'summary.sectorUnlocked': 'Unlocked Sector: {sector}',
@@ -2409,9 +2410,23 @@ export const EN_TRANSLATIONS = {
   'admin.battlePenalty.reset': 'Reset Defaults',
   'admin.battlePenalty.exRetreat':
     'Level {level}, {expPct}% EXP, max {need}: retreat penalty {creditPen} CR + {wpPen} WP',
+  'admin.battlePenalty.exDefeat':
+    'Defeat: Lv{level}, max EXP {need}, factor {factor} → lose {expPen} EXP',
   'admin.battlePenalty.exRepairSummary':
     'Free repair: Defeat Lv≤{defeatLv} & CR≤{defeatCr} (cap {defeatCap}); Retreat Lv≤{retreatLv} & CR≤{retreatCr} (cap {retreatCap})',
   'admin.battlePenalty.retreatGroupTitle': 'Retreat Penalty',
+  'admin.battlePenalty.defeatGroupTitle': 'Defeat EXP Penalty',
+  'admin.battlePenalty.defeatFreeLevel.title': 'Penalty-Free Defeat Level',
+  'admin.battlePenalty.defeatFreeLevel.desc':
+    'Gears at or below this level lose no EXP on defeat',
+  'admin.battlePenalty.defeatFreeLevel.ex':
+    'Example: Lv{freeLv} → free; Lv{aboveLv} → EXP penalty applies when factor > 0',
+  'admin.battlePenalty.defeatExpPenaltyFactor.title':
+    'Defeat EXP Penalty Factor (0–5)',
+  'admin.battlePenalty.defeatExpPenaltyFactor.desc':
+    'Multiplies retreat EXP penalty %; set 0 to disable defeat EXP penalty (clamped to current EXP, never de-levels)',
+  'admin.battlePenalty.defeatExpPenaltyFactor.ex':
+    'Example: Lv{level}, max EXP {need}, factor {factor} → lose {expPen} EXP',
   'admin.battlePenalty.repairDefeatGroupTitle': 'Repair Fee on Defeat',
   'admin.battlePenalty.repairRetreatGroupTitle': 'Repair Fee on Retreat',
   'admin.battlePenalty.retreatFreeLevel.title': 'Penalty-Free Retreat Level',

@@ -1238,6 +1238,7 @@ export interface BattleSummary {
   retreatPenaltyExp?: number;
   retreatPenaltyCredit?: number;
   retreatPenaltyWp?: number;
+  defeatPenaltyExp?: number;
   expBeforePenalty?: number;
   voucherCreditUsed?: Record<string, number>;
   voucherExpUsed?: Record<string, number>;
@@ -1796,6 +1797,8 @@ export interface BattlePenaltyConfig {
   retreatExpPenaltyPct: number;
   retreatShortfallExtraCreditPct: number;
   retreatWpPenaltyPct: number;
+  defeatFreeLevel: number;
+  defeatExpPenaltyFactor: number;
   repairDefeat: RepairFeeTierConfig;
   repairRetreat: RepairFeeTierConfig;
 }

@@ -62,6 +62,7 @@ import {
 } from '../engine/autoEquip';
 import {
   applyVoucherRefund,
+  computeDefeatExpPenalty,
   computeRepairFee,
   computeRetreatPenalty,
   getBattleSummaryCharges,
@@ -892,7 +893,7 @@ function finalizeBattleOutcome(
   const postRewardCredits = state.pilot.credits + rewards.creditsGained;
   const postRewardWp = state.pilot.warPoints + rewards.warPointsGained;
 
-  // Order in finalizeBattleOutcome: rewards -> retreat penalty (retreat only) -> repair fee (defeat or retreat; victory never)
+  // Order in finalizeBattleOutcome: rewards -> retreat/defeat penalty -> repair fee (defeat or retreat; victory never)
   const retreatPenalty =
     !won && retreated
       ? computeRetreatPenalty(
@@ -910,9 +911,21 @@ function finalizeBattleOutcome(
           nextCredits: postRewardCredits,
           nextWarPoints: postRewardWp,
         };
+  const defeatPenalty =
+    !won && !retreated
+      ? computeDefeatExpPenalty(
+          levelResult.updatedGear.level,
+          levelResult.updatedGear.exp,
+          state.adminConfig?.battlePenalty
+        )
+      : {
+          expPenalty: 0,
+          nextExp: retreatPenalty.nextExp,
+          free: true,
+        };
   const gearAfterPenalty = {
     ...levelResult.updatedGear,
-    exp: retreatPenalty.nextExp,
+    exp: !won && !retreated ? defeatPenalty.nextExp : retreatPenalty.nextExp,
   };
 
   const repairCheck = !won
@@ -1220,6 +1233,7 @@ function finalizeBattleOutcome(
         retreatPenaltyExp: retreatPenalty.expPenalty,
         retreatPenaltyCredit: retreatPenalty.creditPenalty,
         retreatPenaltyWp: retreatPenalty.wpPenalty,
+        defeatPenaltyExp: defeatPenalty.expPenalty,
         expBeforePenalty: levelResult.updatedGear.exp,
         leveledUp: levelResult.leveledUp,
         previousLevel: levelResult.previousLevel,

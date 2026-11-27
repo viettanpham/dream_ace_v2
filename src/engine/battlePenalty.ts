@@ -105,6 +105,49 @@ export function computeRetreatPenalty(
   };
 }
 
+export interface DefeatExpPenaltyResult {
+  expPenalty: number;
+  nextExp: number;
+  free: boolean;
+}
+
+/**
+ * Computes defeat penalty on deployed Gear EXP only (no credit/WP penalty).
+ * Free when level <= defeatFreeLevel or defeatExpPenaltyFactor <= 0.
+ * Never negative, never de-levels; short EXP clamps to what is left.
+ */
+export function computeDefeatExpPenalty(
+  level: number,
+  currentExp: number,
+  cfgOrAdmin?: BattlePenaltyConfig | AdminConfig | null
+): DefeatExpPenaltyResult {
+  const cfg = resolveBattlePenaltyConfig(cfgOrAdmin);
+  const safeLevel = Number.isFinite(level) ? Math.max(1, Math.floor(level)) : 1;
+  const safeExp = Math.max(0, Math.floor(currentExp || 0));
+
+  if (safeLevel <= cfg.defeatFreeLevel || cfg.defeatExpPenaltyFactor <= 0) {
+    return {
+      expPenalty: 0,
+      nextExp: safeExp,
+      free: true,
+    };
+  }
+
+  const need = getExpForNextLevel(safeLevel);
+  const rawPen = Math.max(
+    0,
+    Math.round(need * (cfg.retreatExpPenaltyPct / 100) * cfg.defeatExpPenaltyFactor)
+  );
+  const expPenalty = Math.min(safeExp, rawPen);
+  const nextExp = Math.max(0, safeExp - expPenalty);
+
+  return {
+    expPenalty,
+    nextExp,
+    free: false,
+  };
+}
+
 /**
  * Pure repair fee calculation for defeat or retreat.
  * Free when level <= freeLevel AND credits <= freeCredits.
@@ -164,7 +207,7 @@ export interface VoucherRefundResult {
 export function getBattleSummaryCharges(
   summary?: Pick<
     BattleSummary,
-    'repairFee' | 'retreatPenaltyCredit' | 'retreatPenaltyExp'
+    'repairFee' | 'retreatPenaltyCredit' | 'retreatPenaltyExp' | 'defeatPenaltyExp'
   > | null
 ): { creditCharged: number; expCharged: number } {
   if (!summary) return { creditCharged: 0, expCharged: 0 };
@@ -177,9 +220,13 @@ export function getBattleSummaryCharges(
     0,
     Math.round(Number(summary.retreatPenaltyExp) || 0)
   );
+  const defExp = Math.max(
+    0,
+    Math.round(Number(summary.defeatPenaltyExp) || 0)
+  );
   return {
     creditCharged: repair + retCr,
-    expCharged: retExp,
+    expCharged: retExp + defExp,
   };
 }
 

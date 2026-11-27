@@ -760,6 +760,8 @@ export const DEFAULT_BATTLE_PENALTY_CONFIG: BattlePenaltyConfig = {
   retreatExpPenaltyPct: 10,
   retreatShortfallExtraCreditPct: 20,
   retreatWpPenaltyPct: 10,
+  defeatFreeLevel: 10,
+  defeatExpPenaltyFactor: 0.5,
   repairDefeat: {
     freeLevel: 20,
     freeCredits: 100000,
@@ -831,6 +833,19 @@ export function sanitizeBattlePenaltyConfig(raw: unknown): BattlePenaltyConfig {
     retreatWpPenaltyPct: clampNonNegativeNum(
       obj.retreatWpPenaltyPct,
       DEFAULT_BATTLE_PENALTY_CONFIG.retreatWpPenaltyPct
+    ),
+    defeatFreeLevel: Math.round(
+      clampNonNegativeNum(
+        obj.defeatFreeLevel,
+        DEFAULT_BATTLE_PENALTY_CONFIG.defeatFreeLevel
+      )
+    ),
+    defeatExpPenaltyFactor: Math.min(
+      5,
+      clampNonNegativeNum(
+        obj.defeatExpPenaltyFactor,
+        DEFAULT_BATTLE_PENALTY_CONFIG.defeatExpPenaltyFactor
+      )
     ),
     repairDefeat: sanitizeRepairTier(
       obj.repairDefeat,

@@ -719,6 +719,7 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'summary.repairFreeLine': 'Phí sửa chữa: Miễn phí (quốc gia chi trả)',
   'summary.retreatPenaltyLine':
     'Phạt rút lui: -{exp} EXP / -{credit} CR / -{wp} WP',
+  'summary.defeatExpPenaltyLine': 'Phạt EXP: -{exp}',
   'summary.battlesToNext': 'Còn ~{count} trận thắng để lên Lv.{next}',
   'summary.maxLevelReached': 'Đã đạt Cấp tối đa (Lv.{level})',
   'summary.sectorUnlocked': 'Đã mở khu vực mới: {sector}',
@@ -2411,9 +2412,23 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'admin.battlePenalty.reset': 'Khôi phục mặc định',
   'admin.battlePenalty.exRetreat':
     'Level {level}, {expPct}% EXP, tối đa {need}: rút lui phạt {creditPen} CR + {wpPen} WP',
+  'admin.battlePenalty.exDefeat':
+    'Thua: Lv{level}, max EXP {need}, hệ số {factor} → trừ {expPen} EXP',
   'admin.battlePenalty.exRepairSummary':
     'Miễn phí sửa chữa: Thua Lv≤{defeatLv} & CR≤{defeatCr} (trần {defeatCap}); Rút lui Lv≤{retreatLv} & CR≤{retreatCr} (trần {retreatCap})',
   'admin.battlePenalty.retreatGroupTitle': 'Phạt rút lui',
+  'admin.battlePenalty.defeatGroupTitle': 'Phạt khi thua',
+  'admin.battlePenalty.defeatFreeLevel.title': 'Cấp miễn phạt EXP khi thua',
+  'admin.battlePenalty.defeatFreeLevel.desc':
+    'Gear từ cấp này trở xuống khi thua không bị trừ EXP (với mức 0 hoặc thấp hơn hệ số vẫn miễn)',
+  'admin.battlePenalty.defeatFreeLevel.ex':
+    'Ví dụ: Lv{freeLv} → miễn phạt EXP; Lv{aboveLv} → bắt đầu trừ EXP nếu hệ số > 0',
+  'admin.battlePenalty.defeatExpPenaltyFactor.title':
+    'Hệ số phạt EXP khi thua (0–5)',
+  'admin.battlePenalty.defeatExpPenaltyFactor.desc':
+    'Nhân với % EXP phạt rút lui; đặt 0 để tắt phạt EXP khi thua (chỉ trừ EXP hiện có, không âm/tụt cấp)',
+  'admin.battlePenalty.defeatExpPenaltyFactor.ex':
+    'Ví dụ: Lv{level}, max EXP {need}, hệ số {factor} → trừ {expPen} EXP',
   'admin.battlePenalty.repairDefeatGroupTitle': 'Phí sửa chữa khi thua',
   'admin.battlePenalty.repairRetreatGroupTitle': 'Phí sửa chữa khi rút lui',
   'admin.battlePenalty.retreatFreeLevel.title': 'Cấp miễn phạt rút lui',

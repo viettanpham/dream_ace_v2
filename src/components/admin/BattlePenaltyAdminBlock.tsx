@@ -60,6 +60,27 @@ export function BattlePenaltyAdminBlock({
     ? 0
     : Math.round(sampleCreditPen * (cfg.retreatWpPenaltyPct / 100));
 
+  // Defeat live example: Lv30, max EXP 100.000
+  const defeatSampleLevel = 30;
+  const defeatSampleNeed = 100000;
+  const defeatSampleFree =
+    defeatSampleLevel <= cfg.defeatFreeLevel || cfg.defeatExpPenaltyFactor <= 0;
+  const defeatSampleExpPen = defeatSampleFree
+    ? 0
+    : Math.round(
+        defeatSampleNeed *
+          (cfg.retreatExpPenaltyPct / 100) *
+          cfg.defeatExpPenaltyFactor
+      );
+  const defeatFactorOnlyExpPen =
+    cfg.defeatExpPenaltyFactor <= 0
+      ? 0
+      : Math.round(
+          defeatSampleNeed *
+            (cfg.retreatExpPenaltyPct / 100) *
+            cfg.defeatExpPenaltyFactor
+        );
+
   const topFields: Array<{
     key: TopPenaltyKey;
     titleKey:
@@ -178,6 +199,14 @@ export function BattlePenaltyAdminBlock({
             wpPen: fmtLocale(sampleWpPen, lang),
           })}
         </p>
+        <p data-testid="admin-battle-penalty-example-defeat">
+          {t('admin.battlePenalty.exDefeat', {
+            level: defeatSampleLevel,
+            need: fmtLocale(defeatSampleNeed, lang),
+            factor: Number(cfg.defeatExpPenaltyFactor.toFixed(2)),
+            expPen: fmtLocale(defeatSampleExpPen, lang),
+          })}
+        </p>
         <p data-testid="admin-battle-penalty-example-repair">
           {t('admin.battlePenalty.exRepairSummary', {
             defeatLv: cfg.repairDefeat.freeLevel,
@@ -221,6 +250,78 @@ export function BattlePenaltyAdminBlock({
               />
             </label>
           ))}
+        </div>
+      </div>
+
+      {/* Defeat EXP penalty fields */}
+      <div className="space-y-2">
+        <div className="text-xs font-bold text-rose-300">
+          {t('admin.battlePenalty.defeatGroupTitle')}
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <label className="p-2.5 rounded border border-slate-800 bg-slate-950/60 space-y-1 block">
+            <span className="text-xs font-semibold text-slate-200 block">
+              {t('admin.battlePenalty.defeatFreeLevel.title')}
+            </span>
+            <span className="text-[11px] text-slate-400 leading-snug block">
+              {t('admin.battlePenalty.defeatFreeLevel.desc')}
+            </span>
+            <input
+              type="number"
+              min={0}
+              data-testid="admin-battle-penalty-defeatFreeLevel"
+              value={cfg.defeatFreeLevel}
+              onChange={(e) => {
+                const raw = Number(e.target.value);
+                if (!Number.isFinite(raw)) return;
+                updatePenalty({ ...cfg, defeatFreeLevel: raw });
+              }}
+              className="w-full h-9 px-2 mt-1 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums text-slate-100"
+            />
+            <span
+              data-testid="admin-battle-penalty-example-defeatFreeLevel"
+              className="text-[11px] font-mono-nums text-rose-200/90 leading-snug block pt-0.5"
+            >
+              {t('admin.battlePenalty.defeatFreeLevel.ex', {
+                freeLv: cfg.defeatFreeLevel,
+                aboveLv: cfg.defeatFreeLevel + 1,
+              })}
+            </span>
+          </label>
+
+          <label className="p-2.5 rounded border border-slate-800 bg-slate-950/60 space-y-1 block">
+            <span className="text-xs font-semibold text-slate-200 block">
+              {t('admin.battlePenalty.defeatExpPenaltyFactor.title')}
+            </span>
+            <span className="text-[11px] text-slate-400 leading-snug block">
+              {t('admin.battlePenalty.defeatExpPenaltyFactor.desc')}
+            </span>
+            <input
+              type="number"
+              min={0}
+              max={5}
+              step={0.1}
+              data-testid="admin-battle-penalty-defeatExpPenaltyFactor"
+              value={cfg.defeatExpPenaltyFactor}
+              onChange={(e) => {
+                const raw = Number(e.target.value);
+                if (!Number.isFinite(raw)) return;
+                updatePenalty({ ...cfg, defeatExpPenaltyFactor: raw });
+              }}
+              className="w-full h-9 px-2 mt-1 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums text-slate-100"
+            />
+            <span
+              data-testid="admin-battle-penalty-example-defeatExpPenaltyFactor"
+              className="text-[11px] font-mono-nums text-rose-200/90 leading-snug block pt-0.5"
+            >
+              {t('admin.battlePenalty.defeatExpPenaltyFactor.ex', {
+                level: defeatSampleLevel,
+                need: fmtLocale(defeatSampleNeed, lang),
+                factor: Number(cfg.defeatExpPenaltyFactor.toFixed(2)),
+                expPen: fmtLocale(defeatFactorOnlyExpPen, lang),
+              })}
+            </span>
+          </label>
         </div>
       </div>
 

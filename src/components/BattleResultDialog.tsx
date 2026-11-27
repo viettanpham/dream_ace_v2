@@ -242,6 +242,21 @@ export function BattleResultDialog({
                   </div>
                 )}
 
+                {!summary.retreated &&
+                  summary.outcome === 'defeat' &&
+                  (summary.defeatPenaltyExp ?? 0) > 0 && (
+                    <div
+                      data-testid="battle-result-defeat-exp-penalty"
+                      className="col-span-2 rounded border border-rose-500/30 bg-rose-500/10 px-2.5 py-1.5 text-[12px] font-mono-nums text-rose-300"
+                    >
+                      {t('summary.defeatExpPenaltyLine', {
+                        exp: Math.round(
+                          summary.defeatPenaltyExp ?? 0
+                        ).toLocaleString(lang === 'vi' ? 'vi-VN' : 'en-US'),
+                      })}
+                    </div>
+                  )}
+
                 {((summary.voucherCreditRefund ?? 0) > 0 ||
                   (summary.voucherExpRefund ?? 0) > 0) && (
                   <div
