@@ -12,9 +12,13 @@ import {
   X,
 } from 'lucide-react';
 import {
+  ACTIVE_SLOTS_HARD_MAX,
+  getActiveSlotUnlockGearLevel,
   getEffectiveSkillMaxLevel,
   getPassiveSlotUnlockGearLevel,
+  getUnlockedActiveSlots,
   getUnlockedPassiveSlots,
+  sanitizeActiveSlotsConfig,
   sanitizePassiveSlotsConfig,
 } from '../data/balance';
 import { getCatalogRow } from '../data/iconCatalog';
@@ -24,7 +28,6 @@ import {
   getRequiredGearLevelForSkillLevel,
   getSkillLearnOrUpgradeCost,
   getSkillsForClass,
-  MAX_ACTIVE_SKILL_BAR,
   validateEquipPassiveSkill,
   validateEquipSkillOnBar,
   validateLearnOrUpgradeSkill,
@@ -325,60 +328,80 @@ export function SkillView() {
         </div>
       )}
 
-      {/* 1. ACTIVE SKILL BAR (6 SLOTS) */}
-      <section className="rounded-lg border border-amber-500/40 bg-[#0C121D]/95 p-3.5 sm:p-4 space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h2 className="font-display text-lg font-bold tracking-wide text-slate-100">
-              {t('skill.barTitle', {
-                used: activeGear.equippedSkillBar.length,
-                max: MAX_ACTIVE_SKILL_BAR,
-              })}
-            </h2>
-            <p className="text-xs text-slate-400">{t('skill.barHint')}</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setTacticsModalOpen(true)}
-              className="min-h-[44px] md:min-h-0 md:h-8 px-3 inline-flex items-center gap-1.5 rounded-lg md:rounded border border-emerald-500/50 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-200 text-xs font-semibold transition-colors cursor-pointer"
-            >
-              <SlidersHorizontal className="w-3.5 h-3.5" />
-              <span>
-                {t('auto.tacticsBtn')} ({activeGear.tactics.rules.length})
-              </span>
-            </button>
-            <button
-              type="button"
-              onClick={openWarPointShop}
-              className="min-h-[44px] md:min-h-0 md:h-8 px-3 inline-flex items-center gap-1.5 rounded-lg md:rounded border border-purple-500/50 bg-purple-500/15 hover:bg-purple-500/25 text-purple-200 text-xs font-semibold transition-colors cursor-pointer"
-            >
-              <KeyRound className="w-3.5 h-3.5" />
-              <span>{t('skill.getCardInWpShop')}</span>
-            </button>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-          {Array.from({ length: MAX_ACTIVE_SKILL_BAR }).map((_, idx) => {
-            const skillId = activeGear.equippedSkillBar[idx];
-            const skill = skillId ? getSkillById(skillId, adminConfig) : undefined;
-            const rawLv = skill ? activeGear.skillLevels[skill.id] ?? 1 : 0;
-            const lv = skill ? Math.min(skillMaxLevel, rawLv) : 0;
-
-            if (!skill) {
-              return (
-                <div
-                  key={`empty-${idx}`}
-                  className="min-h-[76px] md:min-h-[88px] rounded-md border border-dashed border-slate-800 bg-[#080C14]/70 p-2.5 flex flex-col items-center justify-center text-slate-600 text-xs"
+      {/* 1. ACTIVE SKILL BAR (unlocked by gear level, hard max 9) */}
+      {(() => {
+        const activeSlotsCfg = sanitizeActiveSlotsConfig(adminConfig.activeSlots);
+        const unlockedActiveSlots = getUnlockedActiveSlots(
+          activeGear.level,
+          activeSlotsCfg
+        );
+        const visibleActiveSlotCount = Math.min(
+          ACTIVE_SLOTS_HARD_MAX,
+          Math.max(unlockedActiveSlots, activeGear.equippedSkillBar.length)
+        );
+        const nextActiveUnlockGearLv =
+          unlockedActiveSlots < activeSlotsCfg.max &&
+          visibleActiveSlotCount < ACTIVE_SLOTS_HARD_MAX
+            ? getActiveSlotUnlockGearLevel(unlockedActiveSlots, activeSlotsCfg)
+            : null;
+        return (
+          <section className="rounded-lg border border-amber-500/40 bg-[#0C121D]/95 p-3.5 sm:p-4 space-y-3 min-w-0">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h2 className="font-display text-lg font-bold tracking-wide text-slate-100">
+                  {t('skill.barTitle', {
+                    used: activeGear.equippedSkillBar.length,
+                    max: unlockedActiveSlots,
+                  })}
+                </h2>
+                <p className="text-xs text-slate-400">{t('skill.barHint')}</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setTacticsModalOpen(true)}
+                  className="min-h-[44px] md:min-h-0 md:h-8 px-3 inline-flex items-center gap-1.5 rounded-lg md:rounded border border-emerald-500/50 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-200 text-xs font-semibold transition-colors cursor-pointer"
                 >
-                  <span className="font-mono-nums text-[10px] mb-1">
-                    #{idx + 1}
+                  <SlidersHorizontal className="w-3.5 h-3.5" />
+                  <span>
+                    {t('auto.tacticsBtn')} ({activeGear.tactics.rules.length})
                   </span>
-                  <span>{t('skill.emptySlot')}</span>
-                </div>
-              );
-            }
+                </button>
+                <button
+                  type="button"
+                  onClick={openWarPointShop}
+                  className="min-h-[44px] md:min-h-0 md:h-8 px-3 inline-flex items-center gap-1.5 rounded-lg md:rounded border border-purple-500/50 bg-purple-500/15 hover:bg-purple-500/25 text-purple-200 text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  <KeyRound className="w-3.5 h-3.5" />
+                  <span>{t('skill.getCardInWpShop')}</span>
+                </button>
+              </div>
+            </div>
+
+            <div
+              data-testid="active-slots-row"
+              className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2"
+            >
+              {Array.from({ length: visibleActiveSlotCount }).map((_, idx) => {
+                const skillId = activeGear.equippedSkillBar[idx];
+                const skill = skillId ? getSkillById(skillId, adminConfig) : undefined;
+                const rawLv = skill ? activeGear.skillLevels[skill.id] ?? 1 : 0;
+                const lv = skill ? Math.min(skillMaxLevel, rawLv) : 0;
+
+                if (!skill) {
+                  return (
+                    <div
+                      key={`empty-${idx}`}
+                      data-testid={`active-slot-${idx}`}
+                      className="min-w-0 min-h-[76px] md:min-h-[88px] rounded-md border border-dashed border-slate-800 bg-[#080C14]/70 p-2.5 flex flex-col items-center justify-center text-slate-600 text-xs"
+                    >
+                      <span className="font-mono-nums text-[10px] mb-1">
+                        #{idx + 1}
+                      </span>
+                      <span>{t('skill.emptySlot')}</span>
+                    </div>
+                  );
+                }
 
             const slotSp = getEffectiveSpCost(skill, activeGear, adminConfig);
             const slotSummary = formatSkillRealSummary(
@@ -448,8 +471,22 @@ export function SkillView() {
               </div>
             );
           })}
+          {nextActiveUnlockGearLv !== null && (
+            <div
+              key="active-next-locked"
+              data-testid="active-slot-next-locked"
+              className="min-w-0 min-h-[76px] md:min-h-[88px] rounded-md border border-dashed border-slate-800/80 bg-[#070B12]/70 p-2.5 flex flex-col items-center justify-center text-slate-500 text-[11px] font-mono-nums text-center gap-1"
+            >
+              <Lock className="w-3.5 h-3.5 text-slate-600" />
+              <span>
+                {t('skill.activeSlotLocked', { level: nextActiveUnlockGearLv })}
+              </span>
+            </div>
+          )}
         </div>
       </section>
+        );
+      })()}
 
       {/* 2. PASSIVE MODULES */}
       {passiveSkills.length > 0 && (
@@ -1126,7 +1163,13 @@ export function SkillView() {
                         <Plus className="w-3.5 h-3.5" />
                         <span>
                           {equipVal.reason === 'bar_full'
-                            ? t('skill.barFull')
+                            ? t('skill.barFull', {
+                                used: activeGear.equippedSkillBar.length,
+                                max: getUnlockedActiveSlots(
+                                  activeGear.level,
+                                  adminConfig.activeSlots
+                                ),
+                              })
                             : t('skill.equipBtn')}
                         </span>
                       </button>
@@ -1300,7 +1343,13 @@ export function SkillView() {
                         className="w-full min-h-[48px] px-4 rounded-lg border border-sky-500/50 bg-sky-500/15 disabled:bg-slate-900 disabled:text-slate-500 text-sky-200 font-semibold text-sm cursor-pointer"
                       >
                         {equipVal.reason === 'bar_full'
-                          ? t('skill.barFull')
+                          ? t('skill.barFull', {
+                              used: activeGear.equippedSkillBar.length,
+                              max: getUnlockedActiveSlots(
+                                activeGear.level,
+                                adminConfig.activeSlots
+                              ),
+                            })
                           : t('skill.equipBtn')}
                       </button>
                     ))}

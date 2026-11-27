@@ -1768,6 +1768,7 @@ export interface AdminConfig {
   passiveScaleAfter5?: number;
   restorePctCap?: number;
   passiveSlots?: PassiveSlotsConfig;
+  activeSlots?: ActiveSlotsConfig;
   skillMods?: SkillModDefinition[];
   vouchers?: VoucherConfig;
   showRawI18nKeys: boolean;
@@ -1804,6 +1805,12 @@ export interface BattlePenaltyConfig {
 }
 
 export interface PassiveSlotsConfig {
+  initial: number;
+  everyLevels: number;
+  max: number;
+}
+
+export interface ActiveSlotsConfig {
   initial: number;
   everyLevels: number;
   max: number;

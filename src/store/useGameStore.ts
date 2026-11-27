@@ -5,7 +5,9 @@ import {
   getEffectiveSkillMaxLevel,
   getGarageUnlockCost,
   getMaxLevel,
+  getUnlockedActiveSlots,
   getUnlockedPassiveSlots,
+  sanitizeActiveSlotsConfig,
   sanitizeFluxTransferConfig,
   sanitizeMaxLevel,
   sanitizePassiveScaleAfter5,
@@ -1959,9 +1961,17 @@ export const useGameStore = create<GameStoreState>()(
         const state = get();
         const id = state.pilot.activeGearId;
         const gear = state.pilot.gears[id];
+        const unlockedActive = getUnlockedActiveSlots(
+          gear.level,
+          state.adminConfig?.activeSlots
+        );
         const currentSimple =
           gear.tactics.simple ??
-          createDefaultSimpleTactics(gear.classId, gear.equippedSkillBar);
+          createDefaultSimpleTactics(
+            gear.classId,
+            gear.equippedSkillBar,
+            unlockedActive
+          );
         const nextSimple: SimpleTacticsConfig = {
           ...currentSimple,
           ...patch,
@@ -1970,7 +1980,8 @@ export const useGameStore = create<GameStoreState>()(
           gear.classId,
           nextSimple,
           gear.equippedSkillBar,
-          gear.tactics.safety
+          gear.tactics.safety,
+          unlockedActive
         );
         soundFx.playClick();
         get().setActiveGearTactics(generated);
@@ -1980,16 +1991,22 @@ export const useGameStore = create<GameStoreState>()(
         const state = get();
         const id = state.pilot.activeGearId;
         const gear = state.pilot.gears[id];
+        const unlockedActive = getUnlockedActiveSlots(
+          gear.level,
+          state.adminConfig?.activeSlots
+        );
         const presetSimple = createSimplePresetConfig(
           presetId,
           gear.classId,
-          gear.equippedSkillBar
+          gear.equippedSkillBar,
+          unlockedActive
         );
         const generated = generateTacticsFromSimple(
           gear.classId,
           presetSimple,
           gear.equippedSkillBar,
-          gear.tactics.safety
+          gear.tactics.safety,
+          unlockedActive
         );
         soundFx.playConfirm();
         get().setActiveGearTactics(generated);
@@ -1999,14 +2016,23 @@ export const useGameStore = create<GameStoreState>()(
         const state = get();
         const id = state.pilot.activeGearId;
         const gear = state.pilot.gears[id];
+        const unlockedActive = getUnlockedActiveSlots(
+          gear.level,
+          state.adminConfig?.activeSlots
+        );
         const baseSimple =
           gear.tactics.simple ??
-          createDefaultSimpleTactics(gear.classId, gear.equippedSkillBar);
+          createDefaultSimpleTactics(
+            gear.classId,
+            gear.equippedSkillBar,
+            unlockedActive
+          );
         const generated = generateTacticsFromSimple(
           gear.classId,
           baseSimple,
           gear.equippedSkillBar,
-          gear.tactics.safety
+          gear.tactics.safety,
+          unlockedActive
         );
         soundFx.playConfirm();
         get().setActiveGearTactics(generated);
@@ -2016,6 +2042,10 @@ export const useGameStore = create<GameStoreState>()(
         const state = get();
         const id = state.pilot.activeGearId;
         const gear = state.pilot.gears[id];
+        const unlockedActive = getUnlockedActiveSlots(
+          gear.level,
+          state.adminConfig?.activeSlots
+        );
         soundFx.playConfirm();
         const preset = createPresetTactics(
           gear.classId,
@@ -2027,7 +2057,11 @@ export const useGameStore = create<GameStoreState>()(
           mode: 'custom',
           simple:
             gear.tactics.simple ??
-            createDefaultSimpleTactics(gear.classId, gear.equippedSkillBar),
+            createDefaultSimpleTactics(
+              gear.classId,
+              gear.equippedSkillBar,
+              unlockedActive
+            ),
         });
       },
 
@@ -5803,6 +5837,11 @@ export const useGameStore = create<GameStoreState>()(
                 ? patch.passiveSlots
                 : state.adminConfig.passiveSlots
             ),
+            activeSlots: sanitizeActiveSlotsConfig(
+              patch.activeSlots !== undefined
+                ? patch.activeSlots
+                : state.adminConfig.activeSlots
+            ),
             skillMods: sanitizeSkillMods(
               patch.skillMods !== undefined
                 ? patch.skillMods
@@ -6246,6 +6285,7 @@ export const useGameStore = create<GameStoreState>()(
               ),
               restorePctCap: sanitizeRestorePctCap(rawAdmin.restorePctCap),
               passiveSlots: sanitizePassiveSlotsConfig(rawAdmin.passiveSlots),
+              activeSlots: sanitizeActiveSlotsConfig(rawAdmin.activeSlots),
               rewardMultiplier:
                 typeof state.adminConfig.rewardMultiplier === 'number' &&
                 Number.isFinite(state.adminConfig.rewardMultiplier) &&

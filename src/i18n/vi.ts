@@ -176,6 +176,7 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'skill.barTitle': 'Thanh Kỹ Năng Chủ Động ({used}/{max} Ô)',
   'skill.barHint': 'Nhấn vào kỹ năng trên thanh để tháo, hoặc chọn kỹ năng đã học bên dưới để lắp.',
   'skill.emptySlot': 'Ô trống',
+  'skill.activeSlotLocked': 'Mở ở Lv{level}',
   'skill.passivesTitle': 'Kỹ Năng Bị Động ({used}/{max} Ô mở)',
   'skill.passiveAlwaysOn': 'ĐANG BẬT',
   'skill.passiveSlotsTitle': 'Slot Passive ({used}/{unlocked} mở · tối đa {max})',
@@ -212,7 +213,7 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'skill.equipBtn': 'Lắp lên thanh',
   'skill.equippedBtn': 'Đã lắp',
   'skill.unequipBtn': 'Tháo',
-  'skill.barFull': 'Đầy thanh (6/6)',
+  'skill.barFull': 'Đầy thanh ({used}/{max})',
   'skill.reqGearLv': 'Gear Lv.{level}',
   'skill.needOpeningCard': 'Cần Thẻ Mở Khóa',
   'skill.cardOwned': 'Đã có Thẻ Mở Khóa',
@@ -1490,6 +1491,14 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'admin.passiveSlotsEveryLevels': 'Mỗi N cấp mở +1 slot',
   'admin.passiveSlotsMax': 'Số slot tối đa (≤12)',
   'admin.passiveSlotsPreview': 'GEAR Lv 1 / 10 / 30 / 50 -> {lv1} / {lv10} / {lv30} / {lv50} slot',
+  'admin.activeSlotsSection': 'Slot chủ động',
+  'admin.activeSlotsInitial': 'Số slot ban đầu (1–9)',
+  'admin.activeSlotsEveryLevels': 'Mỗi N cấp mở +1 slot',
+  'admin.activeSlotsMax': 'Số slot tối đa (≤9)',
+  'admin.activeSlotsPreview': 'GEAR Lv 1 / 10 / 30 / 50 → {lv1} / {lv10} / {lv30} / {lv50} slot',
+  'admin.activeSlotsExample.initial': 'Ví dụ: ban đầu {initial} → Gear Lv.1 có {lv1} ô',
+  'admin.activeSlotsExample.everyLevels': 'Ví dụ: mỗi {every} cấp → mở ô kế ở Lv.{nextLv}',
+  'admin.activeSlotsExample.max': 'Ví dụ: tối đa {max} → đạt trần {cap} ô ở Lv.{capLv}',
   'admin.noticeDurationSec': 'Thời gian tự đóng banner (giây, 0 = không tự đóng)',
   'admin.boxCapacity': 'Sức chứa Hòm đồ',
   'admin.boxCapacityHint': 'Giới hạn 20–1000',
@@ -2273,6 +2282,9 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'admin.battleSection.enrage.title': 'Cuồng nộ (chống trận kéo dài)',
   'admin.battleSection.enrage.desc':
     'Tăng dồn 3 giai đoạn cuồng nộ cho cả hai phe khi trận kéo dài nhiều vòng',
+  'admin.battleSection.activeSlots.title': 'Ô kỹ năng chủ động',
+  'admin.battleSection.activeSlots.desc':
+    'Số ô chủ động mở sẵn, chu kỳ cấp mở thêm và trần tối đa mỗi Gear',
   'admin.battleSection.passiveSlots.title': 'Ô kỹ năng nội tại',
   'admin.battleSection.passiveSlots.desc':
     'Số ô nội tại mở sẵn, chu kỳ cấp mở thêm và giới hạn tối đa mỗi Gear',
@@ -2339,6 +2351,12 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
     'Cứ tăng thêm từng này cấp Gear sẽ mở thêm 1 ô nội tại',
   'admin.fieldDesc.passiveSlotsMax':
     'Tổng số ô nội tại tối đa một Gear có thể lắp',
+  'admin.fieldDesc.activeSlotsInitial':
+    'Số ô chủ động mở khóa sẵn ngay từ Lv.1',
+  'admin.fieldDesc.activeSlotsEveryLevels':
+    'Cứ tăng thêm từng này cấp Gear sẽ mở thêm 1 ô chủ động',
+  'admin.fieldDesc.activeSlotsMax':
+    'Tổng số ô chủ động tối đa một Gear có thể lắp (trần 9)',
   'admin.fieldDesc.turnPhaseMaxStep2':
     'Số skill buff (bước 2) được dùng trước khi chuyển sang hành động chính',
   'admin.fieldDesc.prestageEnabled':

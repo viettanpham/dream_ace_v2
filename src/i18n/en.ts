@@ -174,6 +174,7 @@ export const EN_TRANSLATIONS = {
   'skill.barTitle': 'Active Skill Bar ({used}/{max} Slots)',
   'skill.barHint': 'Click a slotted skill to unequip, or equip learned active skills below.',
   'skill.emptySlot': 'Empty Slot',
+  'skill.activeSlotLocked': 'Unlocks at Lv{level}',
   'skill.passivesTitle': 'Passive Modules ({used}/{max} Open Slots)',
   'skill.passiveAlwaysOn': 'ACTIVE',
   'skill.passiveSlotsTitle': 'Passive Slots ({used}/{unlocked} open · max {max})',
@@ -210,7 +211,7 @@ export const EN_TRANSLATIONS = {
   'skill.equipBtn': 'Equip to Bar',
   'skill.equippedBtn': 'Slotted',
   'skill.unequipBtn': 'Unequip',
-  'skill.barFull': 'Bar Full (6/6)',
+  'skill.barFull': 'Bar Full ({used}/{max})',
   'skill.reqGearLv': 'Gear Lv.{level}',
   'skill.needOpeningCard': 'Needs Opening Card',
   'skill.cardOwned': 'Opening Card Owned',
@@ -1488,6 +1489,14 @@ export const EN_TRANSLATIONS = {
   'admin.passiveSlotsEveryLevels': 'Unlock +1 Slot Every N Lv',
   'admin.passiveSlotsMax': 'Max Slots (≤12)',
   'admin.passiveSlotsPreview': 'GEAR Lv 1 / 10 / 30 / 50 -> {lv1} / {lv10} / {lv30} / {lv50} slots',
+  'admin.activeSlotsSection': 'Active Slots',
+  'admin.activeSlotsInitial': 'Initial Slots (1–9)',
+  'admin.activeSlotsEveryLevels': 'Unlock +1 Slot Every N Lv',
+  'admin.activeSlotsMax': 'Max Slots (≤9)',
+  'admin.activeSlotsPreview': 'GEAR Lv 1 / 10 / 30 / 50 → {lv1} / {lv10} / {lv30} / {lv50} slots',
+  'admin.activeSlotsExample.initial': 'Example: initial {initial} → Gear Lv.1 has {lv1} slots',
+  'admin.activeSlotsExample.everyLevels': 'Example: every {every} Lv → next slot unlocks at Lv.{nextLv}',
+  'admin.activeSlotsExample.max': 'Example: max {max} → reaches {cap} slots at Lv.{capLv}',
   'admin.noticeDurationSec': 'Banner auto-close duration (sec, 0 = stay open)',
   'admin.boxCapacity': 'Cargo Box Capacity',
   'admin.boxCapacityHint': 'Clamp 20–1000',
@@ -2270,6 +2279,9 @@ export const EN_TRANSLATIONS = {
   'admin.battleSection.enrage.title': 'Enrage (anti-stalemate)',
   'admin.battleSection.enrage.desc':
     'Three stacking enrage phases for both sides when battles drag on',
+  'admin.battleSection.activeSlots.title': 'Active Skill Slots',
+  'admin.battleSection.activeSlots.desc':
+    'Starting active slots, unlock cadence by level, and max cap per Gear',
   'admin.battleSection.passiveSlots.title': 'Passive Skill Slots',
   'admin.battleSection.passiveSlots.desc':
     'Starting passive slots, unlock cadence by level, and max cap per Gear',
@@ -2336,6 +2348,12 @@ export const EN_TRANSLATIONS = {
     'Gear levels needed to unlock each additional passive slot',
   'admin.fieldDesc.passiveSlotsMax':
     'Maximum total passive skill slots a single Gear can equip',
+  'admin.fieldDesc.activeSlotsInitial':
+    'Number of active skill slots unlocked right at Lv.1',
+  'admin.fieldDesc.activeSlotsEveryLevels':
+    'Gear levels needed to unlock each additional active slot',
+  'admin.fieldDesc.activeSlotsMax':
+    'Maximum total active skill slots a single Gear can equip (cap 9)',
   'admin.fieldDesc.turnPhaseMaxStep2':
     'Maximum step-2 buff skills allowed before a main action is required',
   'admin.fieldDesc.prestageEnabled':

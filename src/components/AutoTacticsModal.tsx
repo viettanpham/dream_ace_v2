@@ -12,7 +12,10 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { BALANCE_CONFIG } from '../data/balance';
+import {
+  BALANCE_CONFIG,
+  getUnlockedActiveSlots,
+} from '../data/balance';
 import { getSkillById } from '../data/skills';
 import { getSkillsForClass } from '../engine/skills';
 import {
@@ -152,6 +155,7 @@ export function AutoTacticsModal() {
   const open = useGameStore((s) => s.tacticsModalOpen);
   const pilot = useGameStore((s) => s.pilot);
   const skillMods = useGameStore((s) => s.adminConfig.skillMods);
+  const activeSlotsConfig = useGameStore((s) => s.adminConfig.activeSlots);
   const setTacticsModalOpen = useGameStore((s) => s.setTacticsModalOpen);
   const loadTacticsPreset = useGameStore((s) => s.loadTacticsPreset);
   const addTacticsRule = useGameStore((s) => s.addTacticsRule);
@@ -191,11 +195,16 @@ export function AutoTacticsModal() {
       .filter((s): s is NonNullable<typeof s> => Boolean(s));
   }, [activeGear.equippedSkillBar, skillMods]);
 
+  const maxPrioritySlots = getUnlockedActiveSlots(
+    activeGear.level,
+    activeSlotsConfig
+  );
   const simpleConfig =
     activeGear.tactics.simple ??
     createDefaultSimpleTactics(
       activeGear.classId,
-      activeGear.equippedSkillBar
+      activeGear.equippedSkillBar,
+      maxPrioritySlots
     );
   const lidarCfg = sanitizeLidarAutoConfig(simpleConfig.lidarAuto);
   const fluxCfg = sanitizeFluxAutoConfig(simpleConfig.fluxAuto);
@@ -312,7 +321,7 @@ export function AutoTacticsModal() {
     const existingIdx = cur.indexOf(skillId);
     if (existingIdx >= 0) {
       cur.splice(existingIdx, 1);
-    } else if (cur.length < MAX_PRIORITY_SKILLS) {
+    } else if (cur.length < maxPrioritySlots) {
       cur.push(skillId);
     } else {
       cur[cur.length - 1] = skillId;
@@ -402,7 +411,7 @@ export function AutoTacticsModal() {
   };
 
   const priorityRankLabels = Array.from(
-    { length: MAX_PRIORITY_SKILLS },
+    { length: Math.max(maxPrioritySlots, simpleConfig.prioritySkillIds.length) },
     (_, i) => String.fromCharCode(65 + i)
   );
 
@@ -700,7 +709,7 @@ export function AutoTacticsModal() {
             <div className="rounded-lg border border-slate-800 bg-[#090E18] p-3.5 space-y-2.5">
               <div>
                 <div className="text-sm font-semibold text-slate-100">
-                  {t('auto.simple.priorityLabel', { max: MAX_PRIORITY_SKILLS })}
+                  {t('auto.simple.priorityLabel', { max: maxPrioritySlots })}
                 </div>
                 <p className="text-xs text-slate-400 mt-0.5">
                   {t('auto.simple.priorityHelp')}

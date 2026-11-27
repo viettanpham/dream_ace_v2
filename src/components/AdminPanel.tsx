@@ -37,15 +37,19 @@ import {
 } from './admin/AdminSection';
 import { ModuleDropAdminBlock } from './ModuleDropAdminBlock';
 import {
+  ACTIVE_SLOTS_HARD_MAX,
   BALANCE_CONFIG,
+  getActiveSlotUnlockGearLevel,
   getEffectiveSkillMaxLevel,
   getMaxLevel,
   getSkillUpgradeBaseCostForTargetLevel,
+  getUnlockedActiveSlots,
   getUnlockedPassiveSlots,
   MAX_RESTORE_PCT_CAP,
   MAX_SKILL_MAX_LEVEL,
   MIN_RESTORE_PCT_CAP,
   MIN_SKILL_MAX_LEVEL,
+  sanitizeActiveSlotsConfig,
   sanitizeFluxTransferConfig,
   sanitizeMaxLevel,
   sanitizePassiveScaleAfter5,
@@ -1943,6 +1947,158 @@ export function AdminPanel() {
                     adminConfig={adminConfig}
                     adminUpdateConfig={adminUpdateConfig}
                   />
+                </AdminSection>
+
+                {/* 3b. Active Skill Slots */}
+                <AdminSection
+                  id="active-slots"
+                  title={t('admin.battleSection.activeSlots.title')}
+                  description={t('admin.battleSection.activeSlots.desc')}
+                >
+                  {(() => {
+                    const aSlots = sanitizeActiveSlotsConfig(
+                      adminConfig.activeSlots
+                    );
+                    const nextUnlockLv =
+                      aSlots.max <= aSlots.initial
+                        ? 1
+                        : getActiveSlotUnlockGearLevel(aSlots.initial, aSlots);
+                    const capGearLv =
+                      aSlots.max <= aSlots.initial
+                        ? 1
+                        : (aSlots.max - aSlots.initial) * aSlots.everyLevels;
+                    return (
+                      <div
+                        data-testid="admin-active-slots-section"
+                        className="rounded-lg border border-amber-500/30 bg-[#120F08]/70 p-3 space-y-2 min-w-0"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
+                          <span className="text-xs font-bold text-amber-300">
+                            {t('admin.activeSlotsSection')}
+                          </span>
+                          <span
+                            data-testid="admin-active-slots-preview"
+                            className="text-[11px] font-mono-nums text-slate-300 break-words"
+                          >
+                            {t('admin.activeSlotsPreview', {
+                              lv1: getUnlockedActiveSlots(1, aSlots),
+                              lv10: getUnlockedActiveSlots(10, aSlots),
+                              lv30: getUnlockedActiveSlots(30, aSlots),
+                              lv50: getUnlockedActiveSlots(50, aSlots),
+                            })}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 min-w-0">
+                          <label className="space-y-1 block min-w-0">
+                            <span className="text-[11px] text-slate-300 font-medium block">
+                              {t('admin.activeSlotsInitial')}
+                            </span>
+                            <span className="text-[11px] text-slate-400 leading-snug block">
+                              {t('admin.fieldDesc.activeSlotsInitial')}
+                            </span>
+                            <input
+                              type="number"
+                              min={1}
+                              max={ACTIVE_SLOTS_HARD_MAX}
+                              data-testid="admin-active-slots-initial"
+                              value={aSlots.initial}
+                              onChange={(e) => {
+                                const raw = Number(e.target.value);
+                                if (!Number.isFinite(raw)) return;
+                                adminUpdateConfig({
+                                  activeSlots: sanitizeActiveSlotsConfig({
+                                    ...aSlots,
+                                    initial: raw,
+                                  }),
+                                });
+                              }}
+                              className="w-full min-w-0 h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                            />
+                            <span
+                              data-testid="admin-active-slots-initial-example"
+                              className="text-[11px] font-mono-nums text-amber-300/90 leading-snug block break-words"
+                            >
+                              {t('admin.activeSlotsExample.initial', {
+                                initial: aSlots.initial,
+                                lv1: getUnlockedActiveSlots(1, aSlots),
+                              })}
+                            </span>
+                          </label>
+                          <label className="space-y-1 block min-w-0">
+                            <span className="text-[11px] text-slate-300 font-medium block">
+                              {t('admin.activeSlotsEveryLevels')}
+                            </span>
+                            <span className="text-[11px] text-slate-400 leading-snug block">
+                              {t('admin.fieldDesc.activeSlotsEveryLevels')}
+                            </span>
+                            <input
+                              type="number"
+                              min={1}
+                              max={50}
+                              data-testid="admin-active-slots-every"
+                              value={aSlots.everyLevels}
+                              onChange={(e) => {
+                                const raw = Number(e.target.value);
+                                if (!Number.isFinite(raw)) return;
+                                adminUpdateConfig({
+                                  activeSlots: sanitizeActiveSlotsConfig({
+                                    ...aSlots,
+                                    everyLevels: raw,
+                                  }),
+                                });
+                              }}
+                              className="w-full min-w-0 h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                            />
+                            <span
+                              data-testid="admin-active-slots-every-example"
+                              className="text-[11px] font-mono-nums text-amber-300/90 leading-snug block break-words"
+                            >
+                              {t('admin.activeSlotsExample.everyLevels', {
+                                every: aSlots.everyLevels,
+                                nextLv: nextUnlockLv,
+                              })}
+                            </span>
+                          </label>
+                          <label className="space-y-1 block min-w-0">
+                            <span className="text-[11px] text-slate-300 font-medium block">
+                              {t('admin.activeSlotsMax')}
+                            </span>
+                            <span className="text-[11px] text-slate-400 leading-snug block">
+                              {t('admin.fieldDesc.activeSlotsMax')}
+                            </span>
+                            <input
+                              type="number"
+                              min={aSlots.initial}
+                              max={ACTIVE_SLOTS_HARD_MAX}
+                              data-testid="admin-active-slots-max"
+                              value={aSlots.max}
+                              onChange={(e) => {
+                                const raw = Number(e.target.value);
+                                if (!Number.isFinite(raw)) return;
+                                adminUpdateConfig({
+                                  activeSlots: sanitizeActiveSlotsConfig({
+                                    ...aSlots,
+                                    max: raw,
+                                  }),
+                                });
+                              }}
+                              className="w-full min-w-0 h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                            />
+                            <span
+                              data-testid="admin-active-slots-max-example"
+                              className="text-[11px] font-mono-nums text-amber-300/90 leading-snug block break-words"
+                            >
+                              {t('admin.activeSlotsExample.max', {
+                                max: aSlots.max,
+                                cap: getUnlockedActiveSlots(100, aSlots),
+                                capLv: capGearLv,
+                              })}
+                            </span>
+                          </label>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </AdminSection>
 
                 {/* 4. Passive Skill Slots */}

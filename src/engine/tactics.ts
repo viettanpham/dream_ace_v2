@@ -1,4 +1,4 @@
-import { BALANCE_CONFIG } from '../data/balance';
+import { ACTIVE_SLOTS_HARD_MAX, BALANCE_CONFIG } from '../data/balance';
 import { getSkillById } from '../data/skills';
 import type {
   ActionType,
@@ -52,7 +52,7 @@ import {
 } from './fluxAuto';
 import { canUnitUseSkill, isSkillAllowedForClass } from './skills';
 
-export const MAX_PRIORITY_SKILLS = BALANCE_CONFIG.maxEquippedActiveSkills;
+export const MAX_PRIORITY_SKILLS = ACTIVE_SLOTS_HARD_MAX;
 
 export const TACTICS_CONDITION_KINDS: TacticsConditionKind[] = [
   'always',
@@ -710,8 +710,13 @@ export function mapSimpleTargetToSelector(
 export function createSimplePresetConfig(
   presetId: SimpleTacticsPresetId,
   classId: MechClassId,
-  equippedSkillBar: string[] = []
+  equippedSkillBar: string[] = [],
+  maxPrioritySlots: number = MAX_PRIORITY_SKILLS
 ): SimpleTacticsConfig {
+  const priorityLimit = Math.max(
+    1,
+    Math.min(MAX_PRIORITY_SKILLS, Math.floor(maxPrioritySlots || MAX_PRIORITY_SKILLS))
+  );
   const allowedBar = equippedSkillBar.filter((id) => {
     const sk = getSkillById(id);
     return Boolean(
@@ -728,7 +733,7 @@ export function createSimplePresetConfig(
 
   const defaultPriority = (nonEliteBar.length > 0 ? nonEliteBar : allowedBar).slice(
     0,
-    MAX_PRIORITY_SKILLS
+    priorityLimit
   );
 
   const defaultLidarAuto = { ...DEFAULT_LIDAR_AUTO_CONFIG };
@@ -812,7 +817,8 @@ export function createSimplePresetConfig(
 
 export function createDefaultSimpleTactics(
   classId: MechClassId,
-  equippedSkillBar: string[] = []
+  equippedSkillBar: string[] = [],
+  maxPrioritySlots: number = MAX_PRIORITY_SKILLS
 ): SimpleTacticsConfig {
   const defaultPreset: SimpleTacticsPresetId =
     classId === 'support'
@@ -820,15 +826,29 @@ export function createDefaultSimpleTactics(
       : classId === 'siege'
       ? 'defensive'
       : 'balanced';
-  return createSimplePresetConfig(defaultPreset, classId, equippedSkillBar);
+  return createSimplePresetConfig(
+    defaultPreset,
+    classId,
+    equippedSkillBar,
+    maxPrioritySlots
+  );
 }
 
 export function sanitizeSimpleTacticsConfig(
   classId: MechClassId,
   raw: unknown,
-  equippedSkillBar?: string[]
+  equippedSkillBar?: string[],
+  maxPrioritySlots: number = MAX_PRIORITY_SKILLS
 ): SimpleTacticsConfig {
-  const fallback = createDefaultSimpleTactics(classId, equippedSkillBar ?? []);
+  const priorityLimit = Math.max(
+    1,
+    Math.min(MAX_PRIORITY_SKILLS, Math.floor(maxPrioritySlots || MAX_PRIORITY_SKILLS))
+  );
+  const fallback = createDefaultSimpleTactics(
+    classId,
+    equippedSkillBar ?? [],
+    priorityLimit
+  );
   if (!raw || typeof raw !== 'object') return fallback;
   const obj = raw as Partial<SimpleTacticsConfig>;
 
@@ -875,7 +895,7 @@ export function sanitizeSimpleTacticsConfig(
       ) {
         prioritySkillIds.push(sid);
       }
-      if (prioritySkillIds.length >= MAX_PRIORITY_SKILLS) break;
+      if (prioritySkillIds.length >= priorityLimit) break;
     }
   }
 
@@ -949,9 +969,15 @@ export function generateTacticsFromSimple(
   classId: MechClassId,
   rawSimple: SimpleTacticsConfig,
   equippedSkillBar: string[],
-  baseSafety?: AutoSafetyConfig
+  baseSafety?: AutoSafetyConfig,
+  maxPrioritySlots: number = MAX_PRIORITY_SKILLS
 ): GearTacticsProfile {
-  const simple = sanitizeSimpleTacticsConfig(classId, rawSimple, equippedSkillBar);
+  const simple = sanitizeSimpleTacticsConfig(
+    classId,
+    rawSimple,
+    equippedSkillBar,
+    maxPrioritySlots
+  );
   const enemySelector = mapSimpleTargetToSelector(simple.preferredTarget);
   const rules: TacticsRule[] = [];
   const addedSkillIds = new Set<string>();

@@ -1,8 +1,10 @@
 import {
+  ACTIVE_SLOTS_HARD_MAX,
   BALANCE_CONFIG,
   getEffectiveSkillMaxLevel,
   getFluxMinCastCost,
   getSkillPurchaseCost,
+  getUnlockedActiveSlots,
   getUnlockedPassiveSlots,
   sanitizeSpEconomyConfig,
 } from '../data/balance';
@@ -14,6 +16,7 @@ import {
   type SkillModsSource,
 } from '../data/skills';
 import type {
+  ActiveSlotsConfig,
   AdminConfig,
   BattleSkillUsability,
   CombatUnit,
@@ -24,7 +27,18 @@ import type {
   SkillValidationResult,
 } from '../types/game';
 
-export const MAX_ACTIVE_SKILL_BAR = BALANCE_CONFIG.maxEquippedActiveSkills;
+export const MAX_ACTIVE_SKILL_BAR = ACTIVE_SLOTS_HARD_MAX;
+
+function extractActiveSlotsConfig(
+  source?: SkillModsSource
+): Partial<ActiveSlotsConfig> | null | undefined {
+  if (!source || Array.isArray(source) || typeof source !== 'object') {
+    return undefined;
+  }
+  return 'activeSlots' in source
+    ? (source as { activeSlots?: Partial<ActiveSlotsConfig> | null }).activeSlots
+    : undefined;
+}
 
 export interface GearPassiveBonuses {
   skillDmgPct: number; // e.g., 0.15 for +15%
@@ -315,7 +329,7 @@ export function learnOrUpgradeSkillOnGear(
   pilot: PilotAccount,
   gearId: MechClassId,
   skillId: string,
-  admin?: Pick<AdminConfig, 'skillMaxLevel' | 'passiveSlots' | 'skillMods'> | null
+  admin?: Pick<AdminConfig, 'skillMaxLevel' | 'passiveSlots' | 'activeSlots' | 'skillMods'> | null
 ): { pilot: PilotAccount; validation: SkillValidationResult; newLevel: number } {
   const validation = validateLearnOrUpgradeSkill(pilot, gearId, skillId, admin);
   const gear = pilot.gears[gearId];
@@ -329,12 +343,16 @@ export function learnOrUpgradeSkillOnGear(
   const nextLv = currentLv + 1;
   const cost = validation.cost ?? 0;
 
+  const unlockedActiveSlots = getUnlockedActiveSlots(
+    gear.level,
+    admin?.activeSlots
+  );
   let nextBar = gear.equippedSkillBar;
   if (
     currentLv === 0 &&
     skill.category !== 'passive' &&
     !nextBar.includes(skillId) &&
-    nextBar.length < MAX_ACTIVE_SKILL_BAR
+    nextBar.length < unlockedActiveSlots
   ) {
     nextBar = [...nextBar, skillId];
   }
@@ -411,7 +429,11 @@ export function validateEquipSkillOnBar(
     return { ok: false, reason: 'already_equipped' };
   }
 
-  if (gear.equippedSkillBar.length >= MAX_ACTIVE_SKILL_BAR) {
+  const unlockedActiveSlots = getUnlockedActiveSlots(
+    gear.level,
+    extractActiveSlotsConfig(skillModsOrAdmin)
+  );
+  if (gear.equippedSkillBar.length >= unlockedActiveSlots) {
     return { ok: false, reason: 'bar_full' };
   }
 

@@ -1,4 +1,5 @@
 import type {
+  ActiveSlotsConfig,
   BattlePenaltyConfig,
   BattleRewardsConfig,
   BattleSpeed,
@@ -12,6 +13,9 @@ import type {
   SkillCategory,
   SpEconomyConfig,
 } from '../types/game';
+
+/** Hard ceiling for active skill bars & priority lists (replacing legacy 6-slot constant). */
+export const ACTIVE_SLOTS_HARD_MAX = 9;
 
 /**
  * Single centralized balance & economy configuration file for DREAM ACE.
@@ -72,8 +76,9 @@ export const BALANCE_CONFIG = {
   enchantPriceCostFactor: 0.14,
   enchantLevelCostStep: 0.45,
 
-  // ---- Gear Skill System (Default cap 5, configurable 1-20, +10% effect/level, 6-slot active bar) ----
-  maxEquippedActiveSkills: 6,
+  // ---- Gear Skill System (Default cap 5, configurable 1-20, +10% effect/level, hard max 9-slot active bar) ----
+  /** @deprecated Use ACTIVE_SLOTS_HARD_MAX (9) as ceiling and getUnlockedActiveSlots() per Gear. */
+  maxEquippedActiveSkills: ACTIVE_SLOTS_HARD_MAX,
   skillMaxLevel: 5,
   skillMaxLevelHardCap: 20,
   skillEffectScalePerLevel: 0.1, // +10% effect per level above Lv1
@@ -462,6 +467,11 @@ export const DEFAULT_PASSIVE_SLOTS_CONFIG: PassiveSlotsConfig = {
   everyLevels: 5,
   max: 12,
 };
+export const DEFAULT_ACTIVE_SLOTS_CONFIG: ActiveSlotsConfig = {
+  initial: 3,
+  everyLevels: 5,
+  max: ACTIVE_SLOTS_HARD_MAX,
+};
 
 export function sanitizeSkillMaxLevel(raw: unknown): number {
   if (typeof raw !== 'number' || !Number.isFinite(raw)) {
@@ -539,6 +549,53 @@ export function getPassiveSlotUnlockGearLevel(
   cfg?: Partial<PassiveSlotsConfig> | null
 ): number {
   const clean = sanitizePassiveSlotsConfig(cfg);
+  if (slotIndex < clean.initial) return 1;
+  return Math.max(1, (slotIndex + 1 - clean.initial) * clean.everyLevels);
+}
+
+export function sanitizeActiveSlotsConfig(raw: unknown): ActiveSlotsConfig {
+  const obj =
+    raw && typeof raw === 'object' && !Array.isArray(raw)
+      ? (raw as Record<string, unknown>)
+      : {};
+  const initialRaw =
+    typeof obj.initial === 'number' && Number.isFinite(obj.initial)
+      ? Math.round(obj.initial)
+      : DEFAULT_ACTIVE_SLOTS_CONFIG.initial;
+  const initial = Math.max(1, Math.min(ACTIVE_SLOTS_HARD_MAX, initialRaw));
+  const everyRaw =
+    typeof obj.everyLevels === 'number' && Number.isFinite(obj.everyLevels)
+      ? Math.round(obj.everyLevels)
+      : DEFAULT_ACTIVE_SLOTS_CONFIG.everyLevels;
+  const everyLevels = Math.max(1, Math.min(50, everyRaw));
+  const maxRaw =
+    typeof obj.max === 'number' && Number.isFinite(obj.max)
+      ? Math.round(obj.max)
+      : DEFAULT_ACTIVE_SLOTS_CONFIG.max;
+  const max = Math.max(initial, Math.min(ACTIVE_SLOTS_HARD_MAX, maxRaw));
+  return { initial, everyLevels, max };
+}
+
+export function cloneActiveSlotsConfig(
+  cfg?: Partial<ActiveSlotsConfig> | null
+): ActiveSlotsConfig {
+  return { ...sanitizeActiveSlotsConfig(cfg) };
+}
+
+export function getUnlockedActiveSlots(
+  level: number,
+  cfg?: Partial<ActiveSlotsConfig> | null
+): number {
+  const clean = sanitizeActiveSlotsConfig(cfg);
+  const lv = Number.isFinite(level) ? Math.max(0, Math.floor(level)) : 0;
+  return Math.min(clean.max, clean.initial + Math.floor(lv / clean.everyLevels));
+}
+
+export function getActiveSlotUnlockGearLevel(
+  slotIndex: number,
+  cfg?: Partial<ActiveSlotsConfig> | null
+): number {
+  const clean = sanitizeActiveSlotsConfig(cfg);
   if (slotIndex < clean.initial) return 1;
   return Math.max(1, (slotIndex + 1 - clean.initial) * clean.everyLevels);
 }
