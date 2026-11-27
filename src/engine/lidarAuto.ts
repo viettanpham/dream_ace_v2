@@ -70,7 +70,7 @@ export function pickLidarCast(
 
   if (!actor.equippedSkillIds.includes(LIDAR_SKILL_ID)) return false;
 
-  const skill = getSkillById(LIDAR_SKILL_ID);
+  const skill = getSkillById(LIDAR_SKILL_ID, params.adminConfig);
   if (!skill) return false;
 
   const usability = canUnitUseSkill(
@@ -114,7 +114,7 @@ export function pickLidarCast(
   const spAfterCast = actor.sp - usability.spCost;
   for (const sid of actor.equippedSkillIds) {
     if (sid === LIDAR_SKILL_ID) continue;
-    const sk = getSkillById(sid);
+    const sk = getSkillById(sid, params.adminConfig);
     if (!sk || !SUPPORT_HEAL_SHIELD_REVIVE_EFFECTS.has(sk.effectKind)) continue;
     const skUsability = canUnitUseSkill(
       actor,

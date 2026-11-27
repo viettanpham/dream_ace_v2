@@ -93,6 +93,7 @@ export function UnitDetailSheet({
   );
   const iconMods = useGameStore((s) => s.adminConfig.iconCatalogMods);
   const spEconomy = useGameStore((s) => s.adminConfig.spEconomy);
+  const skillMods = useGameStore((s) => s.adminConfig.skillMods);
   const { settings: statusSettings } =
     useStatusDisplaySettings(adminStatusDefaults);
 
@@ -403,7 +404,7 @@ export function UnitDetailSheet({
             </div>
             <div className="space-y-1.5">
               {unit.equippedSkillIds.map((skillId) => {
-                const skill = getSkillById(skillId);
+                const skill = getSkillById(skillId, skillMods);
                 if (!skill) return null;
                 const lv = unit.skillLevels[skillId] ?? 1;
                 const cdRem = unit.skillCooldowns[skillId] ?? 0;
@@ -421,7 +422,7 @@ export function UnitDetailSheet({
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-xs font-bold text-slate-100 truncate">
-                          {getSkillName(lang, skill.id)} · Lv.{lv}
+                          {getSkillName(skill, lang)} · Lv.{lv}
                         </span>
                         <span className="text-[11px] font-mono-nums text-amber-300 shrink-0">
                           {effectiveCost} SP
@@ -429,7 +430,7 @@ export function UnitDetailSheet({
                         </span>
                       </div>
                       <div className="text-[11px] text-slate-400 mt-0.5 leading-snug">
-                        {getSkillDesc(lang, skill.id)}
+                        {getSkillDesc(skill, lang)}
                       </div>
                       <div className="text-[10px] font-mono-nums text-sky-400/90 mt-1 flex items-center gap-1.5">
                         <Shield className="w-3 h-3" />

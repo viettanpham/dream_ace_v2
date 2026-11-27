@@ -910,7 +910,7 @@ export function BattleScreen() {
       ) {
         return;
       }
-      const def = getSkillById(skillId);
+      const def = getSkillById(skillId, adminConfig);
       if (def?.effectKind === 'sp_transfer') {
         setFluxPickerOpen((prev) => !prev);
         return;
@@ -923,6 +923,7 @@ export function BattleScreen() {
       autoBattleEnabled,
       battle?.summary,
       battle?.prestage?.active,
+      adminConfig,
       performPlayerAction,
     ]
   );
@@ -1044,7 +1045,7 @@ export function BattleScreen() {
   const playerUnit = playerUnitForTargets;
   const playerSkillIds = playerUnit?.equippedSkillIds ?? [];
   const hasSingleAllySkill = playerSkillIds.some(
-    (id) => getSkillById(id)?.targetType === 'single_ally'
+    (id) => getSkillById(id, adminConfig)?.targetType === 'single_ally'
   );
   const playerHasLongRangeBasic = playerUnit
     ? isLongRangeAction(playerUnit, 'attack')
@@ -1111,7 +1112,7 @@ export function BattleScreen() {
   );
 
   const inspectedSkill = inspectedSkillId
-    ? getSkillById(inspectedSkillId)
+    ? getSkillById(inspectedSkillId, adminConfig)
     : undefined;
   const inspectedUsability =
     playerUnit && inspectedSkill
@@ -3194,7 +3195,7 @@ export function BattleScreen() {
                         </div>
                       ) : (
                         playerSkillIds.slice(0, 6).map((skillId, idx) => {
-                          const skill = getSkillById(skillId);
+                          const skill = getSkillById(skillId, adminConfig);
                           if (!skill || !playerUnit) return null;
                           const usability = canUnitUseSkill(
                             playerUnit,
@@ -3237,9 +3238,9 @@ export function BattleScreen() {
                               }}
                               onMouseEnter={() => setInspectedSkillId(skill.id)}
                               onFocus={() => setInspectedSkillId(skill.id)}
-                              title={`${getSkillName(lang, skill.id)} (Lv.${lv}) — ${getSkillDesc(
-                                lang,
-                                skill.id
+                              title={`${getSkillName(skill, lang)} (Lv.${lv}) — ${getSkillDesc(
+                                skill,
+                                lang
                               )}${reasonText ? ` [${reasonText}]` : ''}`}
                               className={`min-w-0 min-h-[44px] px-2 py-1 rounded-lg border text-left transition-colors flex flex-col justify-between gap-0.5 overflow-hidden ${borderClass} ${
                                 clickable
@@ -3271,7 +3272,7 @@ export function BattleScreen() {
                                 </span>
                               </div>
                               <div className="text-[12px] font-semibold leading-tight truncate">
-                                {getSkillName(lang, skill.id)}
+                                {getSkillName(skill, lang)}
                               </div>
                               {usability.reason === 'used_this_turn' && reasonText && (
                                 <div
@@ -3294,10 +3295,10 @@ export function BattleScreen() {
                       <div className="flex items-center gap-1.5 min-w-0 flex-1">
                         <Info className="w-3.5 h-3.5 text-sky-400 shrink-0" />
                         <span className="font-semibold text-slate-100 shrink-0">
-                          {getSkillName(lang, inspectedSkill.id)} (Lv.{inspectedLv})
+                          {getSkillName(inspectedSkill, lang)} (Lv.{inspectedLv})
                         </span>
                         <span className="text-slate-400 truncate">
-                          {getSkillDesc(lang, inspectedSkill.id)}
+                          {getSkillDesc(inspectedSkill, lang)}
                         </span>
                       </div>
                       <span className="font-mono-nums text-sky-300 shrink-0">

@@ -614,7 +614,7 @@ export const BattleUnitCard = memo(function BattleUnitCard({
                       maxWidth: 'calc(100% - 16px)',
                       animationDuration: '600ms',
                     }}
-                    className={`pointer-events-none absolute inline-flex items-center gap-0.5 truncate font-display font-bold tracking-wide drop-shadow-[0_1px_3px_rgba(0,0,0,0.95)] anim-card-popup-reduced ${sizeClass} ${colorClass}`}
+                    className={`pointer-events-none absolute inline-flex items-center gap-0.5 whitespace-nowrap overflow-visible font-display font-bold tracking-wide drop-shadow-[0_1px_3px_rgba(0,0,0,0.95)] anim-card-popup-reduced ${sizeClass} ${colorClass}`}
                   >
                     {innerContent}
                   </div>
@@ -644,7 +644,7 @@ export const BattleUnitCard = memo(function BattleUnitCard({
                   data-popup-end-x={Math.round(ep.x)}
                   data-popup-end-y={Math.round(ep.y)}
                   style={flightStyle}
-                  className={`pointer-events-none absolute truncate font-display font-bold tracking-wide drop-shadow-[0_1px_3px_rgba(0,0,0,0.95)] anim-card-popup-flight ${sizeClass} ${colorClass}`}
+                  className={`pointer-events-none absolute whitespace-nowrap overflow-visible font-display font-bold tracking-wide drop-shadow-[0_1px_3px_rgba(0,0,0,0.95)] anim-card-popup-flight ${sizeClass} ${colorClass}`}
                 >
                   <span
                     style={{

@@ -570,16 +570,19 @@ export function pickCardPopupEndPoint(
   return best;
 }
 
-function estimatePopupBoxSize(popup: Pick<FloatingPopup, 'tone' | 'text'>): {
+export function estimatePopupBoxSize(
+  popup: Pick<FloatingPopup, 'tone' | 'text'>
+): {
   width: number;
   height: number;
 } {
   const isSmall =
     (popup.tone === 'buff' || popup.tone === 'status') &&
     !isSpPopupText(popup.text);
-  const charW = isSmall ? 7 : 8.5;
-  const width = Math.max(36, Math.round(popup.text.trim().length * charW + 20));
-  const height = isSmall ? 18 : 22;
+  const charW = isSmall ? 8 : 10;
+  const chars = popup.text.trim().length;
+  const width = Math.max(36, Math.ceil((chars * charW + 28) * 1.2));
+  const height = (isSmall ? 18 : 22) + 4;
   return { width, height };
 }
 

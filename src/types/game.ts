@@ -165,6 +165,8 @@ export type SkillEffectKind =
   | 'passive_eva_spd'
   | 'passive_sp_regen';
 
+export type SkillRegistryTag = 'sys' | 'mod';
+
 export interface SkillDefinition {
   id: string;
   classScope: SkillClassScope;
@@ -188,6 +190,18 @@ export interface SkillDefinition {
   isToggle?: boolean;
   phaseOverride?: 'step2' | 'step3';
   openingCardId?: string;
+  registryTag?: SkillRegistryTag;
+}
+
+export interface SkillModDefinition extends SkillDefinition {
+  category: 'normal' | 'passive';
+  nameVi: string;
+  nameEn: string;
+  descVi: string;
+  descEn: string;
+  iconId: string;
+  disabled?: boolean;
+  registryTag: 'mod';
 }
 
 export interface OpeningCardDefinition {
@@ -1577,6 +1591,7 @@ export interface AdminConfig {
   passiveScaleAfter5?: number;
   restorePctCap?: number;
   passiveSlots?: PassiveSlotsConfig;
+  skillMods?: SkillModDefinition[];
   showRawI18nKeys: boolean;
 }
 

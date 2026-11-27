@@ -25,7 +25,7 @@ import { WINGMAN_CHAT_KEYS } from '../data/pilots';
 import { SHOP_STOCK_CONFIG } from '../data/shopConfig';
 import { sanitizeStarterSetConfig } from '../data/starterConfig';
 import { getSupplyTemplateById, SUPPLY_TEMPLATES } from '../data/consumables';
-import { getSkillById, OPENING_CARDS_LIST } from '../data/skills';
+import { getSkillById, OPENING_CARDS_LIST, sanitizeSkillMods } from '../data/skills';
 import {
   calculateBattleRewards,
   chooseAiDecision,
@@ -1691,7 +1691,8 @@ export const useGameStore = create<GameStoreState>()(
         const res = equipSkillToGearBar(
           state.pilot,
           state.pilot.activeGearId,
-          skillId
+          skillId,
+          state.adminConfig
         );
         if (res.validation.ok) {
           soundFx.playConfirm();
@@ -3515,7 +3516,7 @@ export const useGameStore = create<GameStoreState>()(
         const muteSound = state.skipAnimations || state.battleSpeed >= 10;
 
         // Route single_ally skills to selectedAllyTargetId; offensive actions to selectedTargetId
-        const skillDef = skillId ? getSkillById(skillId) : undefined;
+        const skillDef = skillId ? getSkillById(skillId, state.adminConfig) : undefined;
         let clampedTransferCount = transferCount;
         if (action === 'skill' && skillDef?.effectKind === 'sp_transfer') {
           const fluxLv =
@@ -3969,7 +3970,7 @@ export const useGameStore = create<GameStoreState>()(
             let autoTransferCount: number | undefined;
             const chosenSkillDef =
               choice.action === 'skill' && choice.skillId
-                ? getSkillById(choice.skillId)
+                ? getSkillById(choice.skillId, state.adminConfig)
                 : undefined;
             if (chosenSkillDef?.effectKind === 'sp_transfer') {
               const fluxCfg = sanitizeFluxTransferConfig(
@@ -4908,7 +4909,7 @@ export const useGameStore = create<GameStoreState>()(
         const id = gearId ?? state.pilot.activeGearId;
         const gear = state.pilot.gears[id];
         if (!gear) return;
-        const allowed = getSkillsForClass(id);
+        const allowed = getSkillsForClass(id, state.adminConfig);
         const nextLevels: Record<string, number> = { ...gear.skillLevels };
         const effectiveCap = getEffectiveSkillMaxLevel(state.adminConfig);
         const targetLv = maxLevel ? effectiveCap : 1;
@@ -5270,6 +5271,14 @@ export const useGameStore = create<GameStoreState>()(
               patch.passiveSlots !== undefined
                 ? patch.passiveSlots
                 : state.adminConfig.passiveSlots
+            ),
+            skillMods: sanitizeSkillMods(
+              patch.skillMods !== undefined
+                ? patch.skillMods
+                : state.adminConfig.skillMods,
+              Array.isArray(patch.iconCatalogMods)
+                ? patch.iconCatalogMods
+                : state.adminConfig.iconCatalogMods
             ),
             formation: nextFormation,
             autoEquip: nextAutoEquip,

@@ -445,7 +445,7 @@ function buildCombatUnit(params: {
 
   const equippedSkillIds = (params.equippedSkillIds ?? npcFallback.equippedSkillIds)
     .filter((id) => {
-      const sk = getSkillById(id);
+      const sk = getSkillById(id, params.adminConfig);
       return sk && sk.category !== 'passive' && isSkillAllowedForClass(sk, params.classId);
     })
     .slice(0, MAX_ACTIVE_SKILL_BAR);
@@ -1118,11 +1118,12 @@ export function isRangedUnit(unit: CombatUnit): boolean {
 export function isLongRangeAction(
   actor: CombatUnit,
   action: ActionType,
-  skillId?: string
+  skillId?: string,
+  adminConfig?: Pick<AdminConfig, 'skillMods'> | null
 ): boolean {
   if (isRangedUnit(actor)) return true;
   if (action === 'skill' && skillId) {
-    const sk = getSkillById(skillId);
+    const sk = getSkillById(skillId, adminConfig);
     if (!sk) return false;
     if (sk.targetType === 'multi_enemy' || sk.targetType === 'all_enemies') {
       return true;
@@ -1144,10 +1145,11 @@ export function getValidEnemyTargets(
   units: CombatUnit[],
   actor: CombatUnit,
   action: ActionType = 'attack',
-  skillId?: string
+  skillId?: string,
+  adminConfig?: Pick<AdminConfig, 'skillMods'> | null
 ): CombatUnit[] {
   const basePool = getTargetableOpponents(units, actor.side, actor.detectsStealth);
-  if (isLongRangeAction(actor, action, skillId)) {
+  if (isLongRangeAction(actor, action, skillId, adminConfig)) {
     return basePool;
   }
   for (const row of FORMATION_ROWS) {
@@ -1602,7 +1604,7 @@ function applyDamageToUnit(
   let effectiveShieldMult = 1;
   if (isSkillHit) {
     const skillId = options.actionMeta.skillId;
-    const skillDef = skillId ? getSkillById(skillId) : undefined;
+    const skillDef = skillId ? getSkillById(skillId, options.adminConfig) : undefined;
     const overrideRaw = skillId
       ? options.adminConfig?.shieldDamageOverrides?.[skillId]
       : undefined;
@@ -2485,7 +2487,8 @@ function resolveUnitActionCore(
   // ---- AUTO-RELEASE CHARGED SHOT ON NEXT TURN ----
   if (chargingSt) {
     const chargedSkill = getSkillById(
-      chargingSt.sourceSkillId ?? 'str_solar_capacitor'
+      chargingSt.sourceSkillId ?? 'str_solar_capacitor',
+      adminConfig
     );
     const skillLv =
       actor.skillLevels[chargedSkill?.id ?? 'str_solar_capacitor'] ?? 1;
@@ -2642,7 +2645,7 @@ function resolveUnitActionCore(
         )
       : null;
     const skill: SkillDefinition | undefined = requestedSkillId
-      ? getSkillById(requestedSkillId)
+      ? getSkillById(requestedSkillId, adminConfig)
       : undefined;
 
     if (skill && usability && usability.canUse) {
@@ -4763,7 +4766,7 @@ export function chooseAiDecision(
 
   // Evaluate usable skills strictly on actor's equipped skill bar
   const usableSkills = actor.equippedSkillIds
-    .map((id) => getSkillById(id))
+    .map((id) => getSkillById(id, adminConfig))
     .filter(
       (s): s is SkillDefinition =>
         Boolean(s) &&
@@ -4844,7 +4847,7 @@ export function chooseAiDecision(
   );
   if (tacticalSkills.length > 0 && rng() < 0.55) {
     const pick = randomItem(tacticalSkills, rng);
-    const skillEnemies = getValidEnemyTargets(units, actor, 'skill', pick.id);
+    const skillEnemies = getValidEnemyTargets(units, actor, 'skill', pick.id, adminConfig);
     const skillEnemyTarget =
       actor.archetype === 'sniper'
         ? [...skillEnemies].sort((a, b) => a.hp - b.hp)[0]
@@ -4965,7 +4968,7 @@ export function resolveMultiStepTurn(params: {
 
     const skillDef =
       decision.action === 'skill' && decision.skillId
-        ? getSkillById(decision.skillId)
+        ? getSkillById(decision.skillId, adminConfig)
         : undefined;
 
     const res = resolveUnitAction(

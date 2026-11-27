@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { AFFIX_SUFFIX_MAP, getItemTemplate } from '../data/items';
+import { getSkillById } from '../data/skills';
 import { getStatusEntry } from '../data/statusEffects';
 import { formatStatusChipShortValue } from '../data/statusIconMap';
 import { useGameStore } from '../store/useGameStore';
@@ -20,6 +21,8 @@ import type {
   SectorDifficulty,
   SimpleTacticsConfig,
   SkillCategory,
+  SkillDefinition,
+  SkillModDefinition,
   SkillTargetType,
   StatKey,
   StatusEffectType,
@@ -111,11 +114,79 @@ export function getStatDesc(lang: Language, key: StatKey): string {
   return translate(lang, `stat.${key}.desc` as TranslationKey);
 }
 
-export function getSkillName(lang: Language, skillId: string): string {
+export function getSkillName(
+  lang: Language,
+  skillId: string,
+  skillMods?: readonly SkillModDefinition[] | null
+): string;
+export function getSkillName(skill: SkillDefinition, lang: Language): string;
+export function getSkillName(
+  langOrSkill: Language | SkillDefinition,
+  skillOrLang: string | Language,
+  skillMods?: readonly SkillModDefinition[] | null
+): string {
+  if (typeof langOrSkill !== 'string') {
+    const skill = langOrSkill;
+    const lang = skillOrLang as Language;
+    if (skill.registryTag === 'mod') {
+      const mod = skill as Partial<SkillModDefinition>;
+      const inline = lang === 'vi' ? mod.nameVi : mod.nameEn;
+      if (typeof inline === 'string' && inline.trim().length > 0) {
+        return inline;
+      }
+    }
+    return translate(lang, `skill.${skill.id}.name` as TranslationKey);
+  }
+  const lang = langOrSkill;
+  const skillId = skillOrLang;
+  const modSkill = getSkillById(skillId, skillMods);
+  if (modSkill && modSkill.registryTag === 'mod') {
+    const inline =
+      lang === 'vi'
+        ? (modSkill as SkillModDefinition).nameVi
+        : (modSkill as SkillModDefinition).nameEn;
+    if (typeof inline === 'string' && inline.trim().length > 0) {
+      return inline;
+    }
+  }
   return translate(lang, `skill.${skillId}.name` as TranslationKey);
 }
 
-export function getSkillDesc(lang: Language, skillId: string): string {
+export function getSkillDesc(
+  lang: Language,
+  skillId: string,
+  skillMods?: readonly SkillModDefinition[] | null
+): string;
+export function getSkillDesc(skill: SkillDefinition, lang: Language): string;
+export function getSkillDesc(
+  langOrSkill: Language | SkillDefinition,
+  skillOrLang: string | Language,
+  skillMods?: readonly SkillModDefinition[] | null
+): string {
+  if (typeof langOrSkill !== 'string') {
+    const skill = langOrSkill;
+    const lang = skillOrLang as Language;
+    if (skill.registryTag === 'mod') {
+      const mod = skill as Partial<SkillModDefinition>;
+      const inline = lang === 'vi' ? mod.descVi : mod.descEn;
+      if (typeof inline === 'string' && inline.trim().length > 0) {
+        return inline;
+      }
+    }
+    return translate(lang, `skill.${skill.id}.desc` as TranslationKey);
+  }
+  const lang = langOrSkill;
+  const skillId = skillOrLang;
+  const modSkill = getSkillById(skillId, skillMods);
+  if (modSkill && modSkill.registryTag === 'mod') {
+    const inline =
+      lang === 'vi'
+        ? (modSkill as SkillModDefinition).descVi
+        : (modSkill as SkillModDefinition).descEn;
+    if (typeof inline === 'string' && inline.trim().length > 0) {
+      return inline;
+    }
+  }
   return translate(lang, `skill.${skillId}.desc` as TranslationKey);
 }
 

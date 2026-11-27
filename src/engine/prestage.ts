@@ -129,7 +129,7 @@ export function applyPrestageBuffs(
     if (!caster.alive) continue;
 
     for (const skillId of caster.equippedSkillIds) {
-      const skill = getSkillById(skillId);
+      const skill = getSkillById(skillId, adminConfig);
       if (!skill || skill.category === 'passive') continue;
       if (getSkillStep(skill) !== 2) continue;
 

@@ -17,7 +17,7 @@ export interface PhoneSkillsSheetProps {
   playerUnit: CombatUnit | null | undefined;
   playerSkillIds: string[];
   canPlayerManualAct: boolean;
-  adminConfig?: Pick<AdminConfig, 'spEconomy' | 'fluxTransfer'> | null;
+  adminConfig?: Pick<AdminConfig, 'spEconomy' | 'fluxTransfer' | 'skillMods'> | null;
   turnLockedSkillIds?: readonly string[];
   lang: Language;
   t: TranslateFn;
@@ -55,7 +55,7 @@ export function PhoneSkillsSheet({
       ) : (
         <div className="space-y-2">
           {playerSkillIds.slice(0, 6).map((skillId) => {
-            const skill = getSkillById(skillId);
+            const skill = getSkillById(skillId, adminConfig);
             if (!skill || !playerUnit) return null;
             const usability = canUnitUseSkill(
               playerUnit,
@@ -99,10 +99,10 @@ export function PhoneSkillsSheet({
                   </span>
                   <div className="min-w-0">
                     <div className="text-[15px] font-bold leading-tight truncate">
-                      {getSkillName(lang, skill.id)}
+                      {getSkillName(skill, lang)}
                     </div>
                     <div className="text-[12px] text-slate-300 mt-0.5 leading-snug">
-                      {getSkillDesc(lang, skill.id)}
+                      {getSkillDesc(skill, lang)}
                     </div>
                     {!usability.canUse && reasonText && (
                       <div className="text-[12px] text-red-400 font-semibold mt-0.5">

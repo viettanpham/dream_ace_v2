@@ -78,7 +78,7 @@ export function pickFluxAutoCount(
 
   if (!actor.equippedSkillIds.includes(FLUX_SKILL_ID)) return 0;
 
-  const skill = getSkillById(FLUX_SKILL_ID);
+  const skill = getSkillById(FLUX_SKILL_ID, params.adminConfig);
   if (!skill) return 0;
 
   const usability = canUnitUseSkill(

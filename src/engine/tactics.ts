@@ -1370,7 +1370,7 @@ function evaluateCondition(
   rule: TacticsRule,
   resolvedTarget: CombatUnit | null,
   rng: () => number,
-  adminConfig?: Pick<AdminConfig, 'spEconomy'> | null
+  adminConfig?: Pick<AdminConfig, 'spEconomy' | 'skillMods'> | null
 ): boolean {
   const { condition } = rule;
   const allies = state.units.filter((u) => u.side === actor.side && u.alive);
@@ -1455,7 +1455,7 @@ function evaluateCondition(
         condition.skillId ??
         (rule.action.type === 'skill' ? rule.action.skillId : undefined);
       if (!checkSkillId) return false;
-      const sk = getSkillById(checkSkillId);
+      const sk = getSkillById(checkSkillId, adminConfig);
       if (!sk || !isSkillAllowedForClass(sk, actor.classId)) return false;
       return canUnitUseSkill(
         actor,
@@ -1489,7 +1489,7 @@ export function chooseAction(
   actor: CombatUnit,
   tactics: GearTacticsProfile,
   rng: () => number = Math.random,
-  adminConfig?: Pick<AdminConfig, 'spEconomy' | 'fluxTransfer'> | null
+  adminConfig?: Pick<AdminConfig, 'spEconomy' | 'fluxTransfer' | 'skillMods'> | null
 ): TacticsChoiceResult {
   const rules = (tactics?.rules ?? []).slice(0, BALANCE_CONFIG.maxTacticsRules);
 
@@ -1501,7 +1501,7 @@ export function chooseAction(
     if (rule.action.type === 'skill') {
       const sid = rule.action.skillId;
       if (!sid) continue;
-      skillDef = getSkillById(sid);
+      skillDef = getSkillById(sid, adminConfig);
       // Engine-enforced class lock & active-bar/SP/CD/Silence validation
       if (!skillDef || !isSkillAllowedForClass(skillDef, actor.classId)) {
         continue;

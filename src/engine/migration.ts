@@ -65,6 +65,7 @@ import {
   getOpeningCardById,
   getSkillById,
   LEGACY_SKILL_ID_MAP,
+  sanitizeSkillMods,
   SKILLS_LIST,
 } from '../data/skills';
 import { SUPPLY_TEMPLATES } from '../data/consumables';
@@ -451,6 +452,7 @@ export function createDefaultAdminConfig(): AdminConfig {
     passiveScaleAfter5: DEFAULT_PASSIVE_SCALE_AFTER_5,
     restorePctCap: DEFAULT_RESTORE_PCT_CAP,
     passiveSlots: clonePassiveSlotsConfig(DEFAULT_PASSIVE_SLOTS_CONFIG),
+    skillMods: [],
     showRawI18nKeys: false,
   };
 }
@@ -525,7 +527,8 @@ function sanitizeGearSkills(
   rawEquippedPassives?: unknown,
   gearLevel: number = 1,
   passiveSlotsCfg?: AdminConfig['passiveSlots'],
-  forceBackfillPassives: boolean = false
+  forceBackfillPassives: boolean = false,
+  skillMods?: AdminConfig['skillMods']
 ): {
   skillLevels: Record<string, number>;
   equippedSkillBar: string[];
@@ -538,10 +541,11 @@ function sanitizeGearSkills(
       rawSkillLevels as Record<string, unknown>
     )) {
       const mappedId = LEGACY_SKILL_ID_MAP[rawId] ?? rawId;
-      const skill = getSkillById(mappedId);
-      if (!skill) continue;
-      // Strictly strip any cross-class skill!
-      if (!isSkillAllowedForClass(skill, classId)) continue;
+      const isModId = mappedId.startsWith('mod_');
+      const skill = getSkillById(mappedId, skillMods);
+      if (!skill && !isModId) continue;
+      // Strictly strip any cross-class skill when definition is active!
+      if (skill && !isSkillAllowedForClass(skill, classId)) continue;
       // Sanity clamp 1..20 only; never lower stored levels when admin cap drops.
       const lv = Math.max(
         1,
@@ -563,11 +567,13 @@ function sanitizeGearSkills(
     for (const rawId of rawEquippedBar) {
       if (typeof rawId !== 'string') continue;
       const mappedId = LEGACY_SKILL_ID_MAP[rawId] ?? rawId;
-      const skill = getSkillById(mappedId);
+      const isModId = mappedId.startsWith('mod_');
+      const skill = getSkillById(mappedId, skillMods);
       if (
-        skill &&
-        skill.category !== 'passive' &&
-        isSkillAllowedForClass(skill, classId) &&
+        ((skill &&
+          skill.category !== 'passive' &&
+          isSkillAllowedForClass(skill, classId)) ||
+          (!skill && isModId)) &&
         (cleanLevels[mappedId] ?? 0) >= 1 &&
         !cleanBar.includes(mappedId) &&
         cleanBar.length < MAX_ACTIVE_SKILL_BAR
@@ -579,7 +585,7 @@ function sanitizeGearSkills(
 
   if (cleanBar.length === 0) {
     for (const starterId of CLASS_STARTER_SKILLS[classId]) {
-      const sk = getSkillById(starterId);
+      const sk = getSkillById(starterId, skillMods);
       if (sk && sk.category !== 'passive' && cleanBar.length < MAX_ACTIVE_SKILL_BAR) {
         cleanBar.push(starterId);
       }
@@ -591,11 +597,13 @@ function sanitizeGearSkills(
     for (const rawId of rawEquippedPassives) {
       if (typeof rawId !== 'string') continue;
       const mappedId = LEGACY_SKILL_ID_MAP[rawId] ?? rawId;
-      const skill = getSkillById(mappedId);
+      const isModId = mappedId.startsWith('mod_');
+      const skill = getSkillById(mappedId, skillMods);
       if (
-        skill &&
-        skill.category === 'passive' &&
-        isSkillAllowedForClass(skill, classId) &&
+        ((skill &&
+          skill.category === 'passive' &&
+          isSkillAllowedForClass(skill, classId)) ||
+          (!skill && isModId)) &&
         (cleanLevels[mappedId] ?? 0) >= 1 &&
         !cleanPassives.includes(mappedId)
       ) {
@@ -902,6 +910,10 @@ export function migrateSaveData(
     passiveScaleAfter5: sanitizePassiveScaleAfter5(rawAdmin.passiveScaleAfter5),
     restorePctCap: sanitizeRestorePctCap(rawAdmin.restorePctCap),
     passiveSlots: sanitizePassiveSlotsConfig(rawAdmin.passiveSlots),
+    skillMods: sanitizeSkillMods(
+      rawAdmin.skillMods,
+      Array.isArray(rawAdmin.iconCatalogMods) ? rawAdmin.iconCatalogMods : []
+    ),
     showRawI18nKeys: Boolean(rawAdmin.showRawI18nKeys),
   };
 
@@ -999,7 +1011,8 @@ export function migrateSaveData(
             rawGear.equippedPassives,
             cleanLevel,
             adminConfig.passiveSlots,
-            version < 14
+            version < 14,
+            adminConfig.skillMods
           );
         gears[cls.id] = {
           classId: cls.id,

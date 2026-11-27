@@ -137,14 +137,17 @@ export function SkillView() {
     activeGear.level,
     passiveSlotsCfg
   );
-  const equippedPassives = Array.isArray(activeGear.equippedPassives)
+  const rawEquippedPassives = Array.isArray(activeGear.equippedPassives)
     ? activeGear.equippedPassives
     : [];
+  const equippedPassives = rawEquippedPassives.filter(
+    (id) => !(typeof id === 'string' && id.startsWith('mod_') && !getSkillById(id, adminConfig))
+  );
   const activeEquippedPassives = equippedPassives.slice(0, unlockedPassiveSlots);
 
   const classAndGeneralSkills = useMemo(
-    () => getSkillsForClass(activeGear.classId),
-    [activeGear.classId]
+    () => getSkillsForClass(activeGear.classId, adminConfig.skillMods),
+    [activeGear.classId, adminConfig.skillMods]
   );
 
   const passiveSkills = useMemo(
@@ -194,7 +197,7 @@ export function SkillView() {
         t(
           prevLv === 0 ? 'skill.learnedFeedback' : 'skill.upgradedFeedback',
           {
-            skill: getSkillName(lang, skill.id),
+            skill: getSkillName(skill, lang),
             level: res.newLevel,
             gear: activeGearName,
           }
@@ -208,7 +211,7 @@ export function SkillView() {
     if (res.ok) {
       setFeedback(
         t('skill.equippedFeedback', {
-          skill: getSkillName(lang, skill.id),
+          skill: getSkillName(skill, lang),
           gear: activeGearName,
         })
       );
@@ -219,7 +222,7 @@ export function SkillView() {
     unequipSkillFromBar(skillId);
     setFeedback(
       t('skill.unequippedFeedback', {
-        skill: getSkillName(lang, skillId),
+        skill: getSkillName(lang, skillId, adminConfig.skillMods),
         gear: activeGearName,
       })
     );
@@ -230,7 +233,7 @@ export function SkillView() {
     if (res.ok) {
       setFeedback(
         t('skill.passiveEquippedFeedback', {
-          skill: getSkillName(lang, skill.id),
+          skill: getSkillName(skill, lang),
           gear: activeGearName,
         })
       );
@@ -241,14 +244,14 @@ export function SkillView() {
     unequipPassiveSkill(skillId);
     setFeedback(
       t('skill.passiveUnequippedFeedback', {
-        skill: getSkillName(lang, skillId),
+        skill: getSkillName(lang, skillId, adminConfig.skillMods),
         gear: activeGearName,
       })
     );
   };
 
   const mobileSelectedSkill = mobileSkillId
-    ? getSkillById(mobileSkillId) ?? null
+    ? getSkillById(mobileSkillId, adminConfig) ?? null
     : null;
 
   return (
@@ -359,7 +362,7 @@ export function SkillView() {
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
           {Array.from({ length: MAX_ACTIVE_SKILL_BAR }).map((_, idx) => {
             const skillId = activeGear.equippedSkillBar[idx];
-            const skill = skillId ? getSkillById(skillId) : undefined;
+            const skill = skillId ? getSkillById(skillId, adminConfig) : undefined;
             const rawLv = skill ? activeGear.skillLevels[skill.id] ?? 1 : 0;
             const lv = skill ? Math.min(skillMaxLevel, rawLv) : 0;
 
@@ -410,7 +413,7 @@ export function SkillView() {
                     </span>
                     <div className="min-w-0">
                       <div className="text-xs font-bold text-slate-100 leading-tight truncate">
-                        {getSkillName(lang, skill.id)}
+                        {getSkillName(skill, lang)}
                       </div>
                       <div className="text-[11px] font-mono-nums text-sky-300">
                         Lv.{lv} · {slotSp} SP
@@ -483,7 +486,7 @@ export function SkillView() {
             {Array.from({ length: passiveSlotsCfg.max }).map((_, idx) => {
               const isUnlocked = idx < unlockedPassiveSlots;
               const slotSkillId = isUnlocked ? equippedPassives[idx] : undefined;
-              const slotSkill = slotSkillId ? getSkillById(slotSkillId) : undefined;
+              const slotSkill = slotSkillId ? getSkillById(slotSkillId, adminConfig) : undefined;
               const unlockGearLv = getPassiveSlotUnlockGearLevel(
                 idx,
                 passiveSlotsCfg
@@ -543,7 +546,7 @@ export function SkillView() {
                       </span>
                       <div className="min-w-0">
                         <div className="text-[11px] font-bold text-slate-100 leading-tight truncate">
-                          {getSkillName(lang, slotSkill.id)}
+                          {getSkillName(slotSkill, lang)}
                         </div>
                         <div className="text-[10px] font-mono-nums text-emerald-300">
                           Lv.{slotEffLv}
@@ -631,7 +634,7 @@ export function SkillView() {
                         <div>
                           <div className="flex flex-wrap items-center gap-2">
                             <h3 className="font-display text-lg font-bold text-slate-100 leading-tight">
-                              {getSkillName(lang, skill.id)}
+                              {getSkillName(skill, lang)}
                             </h3>
                             {isEquippedInActiveSlot && (
                               <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
@@ -652,7 +655,7 @@ export function SkillView() {
                               )}
                           </div>
                           <p className="text-sm md:text-xs text-slate-400 mt-1">
-                            {getSkillDesc(lang, skill.id)}
+                            {getSkillDesc(skill, lang)}
                           </p>
                         </div>
                       </div>
@@ -885,7 +888,7 @@ export function SkillView() {
                   <div className="min-w-0 space-y-0.5">
                     <div className="flex items-center gap-1.5">
                       <span className="text-sm font-bold text-slate-100 truncate">
-                        {getSkillName(lang, skill.id)}
+                        {getSkillName(skill, lang)}
                       </span>
                       {isEquipped && (
                         <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] font-bold shrink-0">
@@ -933,7 +936,7 @@ export function SkillView() {
               adminConfig
             );
             const isEquipped = activeGear.equippedSkillBar.includes(skill.id);
-            const equipVal = validateEquipSkillOnBar(activeGear, skill.id);
+            const equipVal = validateEquipSkillOnBar(activeGear, skill.id, adminConfig);
             const needsCard =
               !isLearned &&
               Boolean(skill.openingCardId) &&
@@ -1001,7 +1004,7 @@ export function SkillView() {
                           </span>
                         </div>
                         <h3 className="font-display text-lg font-bold text-slate-100 leading-tight mt-0.5">
-                          {getSkillName(lang, skill.id)}
+                          {getSkillName(skill, lang)}
                         </h3>
                       </div>
                     </div>
@@ -1031,7 +1034,7 @@ export function SkillView() {
                   </div>
 
                   <p className="text-xs text-slate-300 leading-relaxed">
-                    {getSkillDesc(lang, skill.id)}
+                    {getSkillDesc(skill, lang)}
                   </p>
 
                   <SkillSummaryInline
@@ -1142,7 +1145,7 @@ export function SkillView() {
           onClose={() => setMobileSkillId(null)}
           title={
             mobileSelectedSkill
-              ? getSkillName(lang, mobileSelectedSkill.id)
+              ? getSkillName(mobileSelectedSkill, lang)
               : ''
           }
           subtitle={
@@ -1179,7 +1182,7 @@ export function SkillView() {
               adminConfig
             );
             const isEquipped = activeGear.equippedSkillBar.includes(skill.id);
-            const equipVal = validateEquipSkillOnBar(activeGear, skill.id);
+            const equipVal = validateEquipSkillOnBar(activeGear, skill.id, adminConfig);
             const isPassiveEquipped = equippedPassives.includes(skill.id);
             const passiveEquipVal = validateEquipPassiveSkill(
               activeGear,
@@ -1203,7 +1206,7 @@ export function SkillView() {
             return (
               <div className="space-y-4">
                 <p className="text-sm text-slate-200 leading-relaxed">
-                  {getSkillDesc(lang, skill.id)}
+                  {getSkillDesc(skill, lang)}
                 </p>
 
                 <SkillSummaryInline

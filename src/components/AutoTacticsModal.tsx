@@ -129,8 +129,11 @@ function defaultNumberForCondition(kind: TacticsConditionKind): number {
   }
 }
 
-function defaultTargetForSkill(skillId: string): TacticsTargetSelector {
-  const sk = getSkillById(skillId);
+function defaultTargetForSkill(
+  skillId: string,
+  skillMods?: Parameters<typeof getSkillById>[1]
+): TacticsTargetSelector {
+  const sk = getSkillById(skillId, skillMods);
   if (!sk) return 'lowest_hp_enemy';
   switch (sk.targetType) {
     case 'self':
@@ -148,6 +151,7 @@ export function AutoTacticsModal() {
   const { lang, t } = useI18n();
   const open = useGameStore((s) => s.tacticsModalOpen);
   const pilot = useGameStore((s) => s.pilot);
+  const skillMods = useGameStore((s) => s.adminConfig.skillMods);
   const setTacticsModalOpen = useGameStore((s) => s.setTacticsModalOpen);
   const loadTacticsPreset = useGameStore((s) => s.loadTacticsPreset);
   const addTacticsRule = useGameStore((s) => s.addTacticsRule);
@@ -170,22 +174,22 @@ export function AutoTacticsModal() {
 
   // Strictly class-allowed active skills (bar skills listed first)
   const allowedActiveSkills = useMemo(() => {
-    const all = getSkillsForClass(activeGear.classId).filter(
+    const all = getSkillsForClass(activeGear.classId, skillMods).filter(
       (s) => s.category !== 'passive'
     );
     const barSet = new Set(activeGear.equippedSkillBar);
     const onBar = activeGear.equippedSkillBar
-      .map((id) => getSkillById(id))
+      .map((id) => getSkillById(id, skillMods))
       .filter((s): s is NonNullable<typeof s> => Boolean(s));
     const others = all.filter((s) => !barSet.has(s.id));
     return [...onBar, ...others];
-  }, [activeGear.classId, activeGear.equippedSkillBar]);
+  }, [activeGear.classId, activeGear.equippedSkillBar, skillMods]);
 
   const equippedBarSkills = useMemo(() => {
     return activeGear.equippedSkillBar
-      .map((id) => getSkillById(id))
+      .map((id) => getSkillById(id, skillMods))
       .filter((s): s is NonNullable<typeof s> => Boolean(s));
-  }, [activeGear.equippedSkillBar]);
+  }, [activeGear.equippedSkillBar, skillMods]);
 
   const simpleConfig =
     activeGear.tactics.simple ??
@@ -365,7 +369,7 @@ export function AutoTacticsModal() {
       const skillId = rawVal.slice('skill:'.length);
       updateTacticsRule(rule.id, {
         action: { type: 'skill', skillId },
-        targetSelector: defaultTargetForSkill(skillId),
+        targetSelector: defaultTargetForSkill(skillId, skillMods),
       });
     }
   };
@@ -711,7 +715,7 @@ export function AutoTacticsModal() {
               ) : (
                 <div className="flex flex-wrap items-center gap-2">
                   {simpleConfig.prioritySkillIds.map((sid, idx) => {
-                    const sk = getSkillById(sid);
+                    const sk = getSkillById(sid, skillMods);
                     if (!sk) return null;
                     return (
                       <div
@@ -726,7 +730,7 @@ export function AutoTacticsModal() {
                           className="w-3.5 h-3.5 text-emerald-300 shrink-0"
                         />
                         <span className="font-semibold text-slate-100">
-                          {getSkillName(lang, sid)}
+                          {getSkillName(sk, lang)}
                         </span>
                         {idx > 0 && (
                           <button
@@ -789,7 +793,7 @@ export function AutoTacticsModal() {
                             className="w-3.5 h-3.5 shrink-0"
                           />
                           <span className="text-xs font-medium truncate">
-                            {getSkillName(lang, sk.id)}
+                            {getSkillName(sk, lang)}
                           </span>
                         </div>
                         {picked ? (
@@ -1382,7 +1386,7 @@ export function AutoTacticsModal() {
                               >
                                 {allowedActiveSkills.map((sk) => (
                                   <option key={sk.id} value={sk.id}>
-                                    {getSkillName(lang, sk.id)}
+                                    {getSkillName(sk, lang)}
                                   </option>
                                 ))}
                               </select>
@@ -1412,7 +1416,7 @@ export function AutoTacticsModal() {
                                   activeGear.equippedSkillBar.includes(sk.id);
                                 return (
                                   <option key={sk.id} value={`skill:${sk.id}`}>
-                                    {getSkillName(lang, sk.id)} ({sk.spCost} SP)
+                                    {getSkillName(sk, lang)} ({sk.spCost} SP)
                                     {onBar ? '' : ` ${t('auto.notOnBar')}`}
                                   </option>
                                 );

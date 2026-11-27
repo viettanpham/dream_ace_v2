@@ -29,6 +29,7 @@ import {
   BALANCE_CONFIG,
   getEffectiveSkillMaxLevel,
   getMaxLevel,
+  getSkillUpgradeBaseCostForTargetLevel,
   getUnlockedPassiveSlots,
   MAX_RESTORE_PCT_CAP,
   MAX_SKILL_MAX_LEVEL,
@@ -1691,74 +1692,114 @@ export function AdminPanel() {
                 </label>
 
                 {/* Skill Max Level (1..20) */}
-                <label className="space-y-1 block">
-                  <span className="text-[11px] text-slate-400 block">
-                    {t('admin.skillMaxLevel')}
-                  </span>
-                  <input
-                    type="number"
-                    min={MIN_SKILL_MAX_LEVEL}
-                    max={MAX_SKILL_MAX_LEVEL}
-                    data-testid="admin-skill-max-level"
-                    value={getEffectiveSkillMaxLevel(adminConfig)}
-                    onChange={(e) => {
-                      const raw = Number(e.target.value);
-                      if (!Number.isFinite(raw)) return;
-                      adminUpdateConfig({
-                        skillMaxLevel: sanitizeSkillMaxLevel(raw),
-                      });
-                    }}
-                    className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
-                  />
-                </label>
+                {(() => {
+                  const effMax = getEffectiveSkillMaxLevel(adminConfig);
+                  const maxLvCost =
+                    effMax >= 2 ? getSkillUpgradeBaseCostForTargetLevel(effMax) : 0;
+                  const factor = sanitizePassiveScaleAfter5(
+                    adminConfig.passiveScaleAfter5
+                  );
+                  const lv10PassiveValue = Number((25 + 5 * factor * 5).toFixed(2));
+                  const restoreCap = sanitizeRestorePctCap(
+                    adminConfig.restorePctCap
+                  );
+                  const restoreCapPct = Math.round(restoreCap * 100);
+                  return (
+                    <>
+                      <label className="space-y-1 block">
+                        <span className="text-[11px] text-slate-400 block">
+                          {t('admin.skillMaxLevel')}
+                        </span>
+                        <input
+                          type="number"
+                          min={MIN_SKILL_MAX_LEVEL}
+                          max={MAX_SKILL_MAX_LEVEL}
+                          data-testid="admin-skill-max-level"
+                          value={effMax}
+                          onChange={(e) => {
+                            const raw = Number(e.target.value);
+                            if (!Number.isFinite(raw)) return;
+                            adminUpdateConfig({
+                              skillMaxLevel: sanitizeSkillMaxLevel(raw),
+                            });
+                          }}
+                          className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                        />
+                        <p
+                          data-testid="admin-skill-max-level-example"
+                          className="text-[11px] font-mono-nums text-sky-300/90"
+                        >
+                          {t('admin.skillMaxLevelExample', {
+                            max: effMax,
+                            cost: maxLvCost.toLocaleString(),
+                          })}
+                        </p>
+                      </label>
 
-                {/* Passive Scale After Lv5 (0..1) */}
-                <label className="space-y-1 block">
-                  <span className="text-[11px] text-slate-400 block">
-                    {t('admin.passiveScaleAfter5')}
-                  </span>
-                  <input
-                    type="number"
-                    min={0}
-                    max={1}
-                    step={0.05}
-                    data-testid="admin-passive-scale-after5"
-                    value={sanitizePassiveScaleAfter5(
-                      adminConfig.passiveScaleAfter5
-                    )}
-                    onChange={(e) => {
-                      const raw = Number(e.target.value);
-                      if (!Number.isFinite(raw)) return;
-                      adminUpdateConfig({
-                        passiveScaleAfter5: sanitizePassiveScaleAfter5(raw),
-                      });
-                    }}
-                    className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
-                  />
-                </label>
+                      {/* Passive Scale After Lv5 (0..1) */}
+                      <label className="space-y-1 block">
+                        <span className="text-[11px] text-slate-400 block">
+                          {t('admin.passiveScaleAfter5')}
+                        </span>
+                        <input
+                          type="number"
+                          min={0}
+                          max={1}
+                          step={0.05}
+                          data-testid="admin-passive-scale-after5"
+                          value={factor}
+                          onChange={(e) => {
+                            const raw = Number(e.target.value);
+                            if (!Number.isFinite(raw)) return;
+                            adminUpdateConfig({
+                              passiveScaleAfter5: sanitizePassiveScaleAfter5(raw),
+                            });
+                          }}
+                          className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                        />
+                        <p
+                          data-testid="admin-passive-scale-after5-example"
+                          className="text-[11px] font-mono-nums text-sky-300/90"
+                        >
+                          {t('admin.passiveScaleAfter5Example', {
+                            value: lv10PassiveValue,
+                          })}
+                        </p>
+                      </label>
 
-                {/* Restore Pct Cap (0.1..1) */}
-                <label className="space-y-1 block">
-                  <span className="text-[11px] text-slate-400 block">
-                    {t('admin.restorePctCap')}
-                  </span>
-                  <input
-                    type="number"
-                    min={MIN_RESTORE_PCT_CAP}
-                    max={MAX_RESTORE_PCT_CAP}
-                    step={0.05}
-                    data-testid="admin-restore-pct-cap"
-                    value={sanitizeRestorePctCap(adminConfig.restorePctCap)}
-                    onChange={(e) => {
-                      const raw = Number(e.target.value);
-                      if (!Number.isFinite(raw)) return;
-                      adminUpdateConfig({
-                        restorePctCap: sanitizeRestorePctCap(raw),
-                      });
-                    }}
-                    className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
-                  />
-                </label>
+                      {/* Restore Pct Cap (0.1..1) */}
+                      <label className="space-y-1 block">
+                        <span className="text-[11px] text-slate-400 block">
+                          {t('admin.restorePctCap')}
+                        </span>
+                        <input
+                          type="number"
+                          min={MIN_RESTORE_PCT_CAP}
+                          max={MAX_RESTORE_PCT_CAP}
+                          step={0.05}
+                          data-testid="admin-restore-pct-cap"
+                          value={restoreCap}
+                          onChange={(e) => {
+                            const raw = Number(e.target.value);
+                            if (!Number.isFinite(raw)) return;
+                            adminUpdateConfig({
+                              restorePctCap: sanitizeRestorePctCap(raw),
+                            });
+                          }}
+                          className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                        />
+                        <p
+                          data-testid="admin-restore-pct-cap-example"
+                          className="text-[11px] font-mono-nums text-sky-300/90"
+                        >
+                          {t('admin.restorePctCapExample', {
+                            pct: restoreCapPct,
+                          })}
+                        </p>
+                      </label>
+                    </>
+                  );
+                })()}
 
                 {/* Notice Banner Auto-Close Duration */}
                 <label className="space-y-1 block sm:col-span-2 lg:col-span-1">
