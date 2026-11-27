@@ -51,6 +51,7 @@ import {
   RADAR_STATUS_MAX_VISIBLE,
   readRadarLegendOpen,
   shouldSkipRadarFloatingLabels,
+  SP_COLOR_TOKENS,
   SPEECH_BUBBLE_DURATION_MS,
   SPEECH_BUBBLE_MAX_CHARS,
   useBattleLayoutMode,
@@ -61,6 +62,11 @@ import {
   type TargetInvalidReason,
   type TargetValidityResult,
 } from '../utils/battleDisplay';
+import {
+  getCardPopupSymbol,
+  isSpPopupText,
+  parseCardPopupDisplay,
+} from '../utils/cardPopupQueue';
 import {
   advanceRadarFloatingLabel,
   createRadarFloatingLabelQueue,
@@ -170,7 +176,13 @@ function getMarkerShape(unit: CombatUnit): MarkerShapeKind {
   return unit.isBoss || unit.isStructure ? 'boss-fortress' : 'enemy-diamond';
 }
 
-function getPopupColorClass(tone: FloatingPopup['tone']): string {
+function getPopupColorClass(
+  tone: FloatingPopup['tone'],
+  text: string = ''
+): string {
+  if (isSpPopupText(text) && (tone === 'buff' || tone === 'heal')) {
+    return SP_COLOR_TOKENS.textClass;
+  }
   switch (tone) {
     case 'crit':
       return 'text-amber-300';
@@ -2596,7 +2608,15 @@ export function BattleRadarView({
           className="pointer-events-none absolute inset-0 overflow-hidden z-30"
         >
           {activeFloatingLabels.map((item) => {
-            const isSmall = isCompactPopupTone(item.popup.tone);
+            const isSmall =
+              isCompactPopupTone(item.popup.tone) &&
+              !isSpPopupText(item.popup.text);
+            const display = parseCardPopupDisplay(item.popup);
+            const iconPx = isSmall
+              ? 11
+              : item.popup.tone === 'crit'
+              ? 13
+              : 12;
             const animClass = vfxConfig.reducedMotion
               ? 'anim-radar-popup-reduced'
               : 'anim-radar-popup-flight';
@@ -2624,15 +2644,37 @@ export function BattleRadarView({
                       : `${radarPopupCfg.flightMs}ms`,
                   } as CSSProperties
                 }
-                className={`absolute h-[18px] leading-[18px] px-1.5 rounded bg-[#050a12]/90 inline-flex items-center justify-center font-display font-bold tracking-wide drop-shadow-[0_1px_3px_rgba(0,0,0,0.95)] whitespace-nowrap ${animClass} ${
+                className={`absolute h-[18px] leading-[18px] px-1.5 rounded bg-[#050a12]/90 inline-flex items-center justify-center gap-0.5 font-display font-bold tracking-wide drop-shadow-[0_1px_3px_rgba(0,0,0,0.95)] whitespace-nowrap ${animClass} ${
                   isSmall
                     ? 'text-[11px]'
                     : item.popup.tone === 'crit'
                     ? 'text-[13px]'
                     : 'text-[12px]'
-                } ${getPopupColorClass(item.popup.tone)}`}
+                } ${getPopupColorClass(item.popup.tone, item.popup.text)}`}
               >
-                {item.popup.text}
+                {display.arrow === 'up' && <span aria-hidden="true">↑</span>}
+                {display.arrow === 'down' && <span aria-hidden="true">↓</span>}
+                {display.segments.map((seg, idx) => (
+                  <span
+                    key={idx}
+                    className={`inline-flex items-center gap-0.5 ${
+                      seg.colorClass ?? ''
+                    }`}
+                  >
+                    {seg.iconKind && (
+                      <span
+                        data-testid="card-popup-icon"
+                        data-popup-icon-kind={seg.iconKind}
+                        className="material-symbols-outlined leading-none select-none shrink-0"
+                        style={{ fontSize: `${iconPx}px` }}
+                        aria-hidden="true"
+                      >
+                        {getCardPopupSymbol(seg.iconKind, iconMods)}
+                      </span>
+                    )}
+                    <span>{seg.text}</span>
+                  </span>
+                ))}
               </div>
             );
           })}

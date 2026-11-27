@@ -484,7 +484,10 @@ describe('FX-fix: Fallback proportional coordinates when measurement is 0 or NaN
       const popups = popupsLayer!.querySelectorAll('[data-testid="damage-popup"]');
       expect(popups.length).toBe(2);
       expect(popupsLayer!.textContent).toContain('-120');
-      expect(popupsLayer!.textContent).toContain('WPN +30%');
+      expect(popupsLayer!.textContent).toContain('+30%');
+      expect(
+        popupsLayer!.querySelector('[data-popup-icon-kind="wpn"]')?.textContent
+      ).toBe('swords');
     } finally {
       rectSpy.mockRestore();
     }

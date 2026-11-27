@@ -26,7 +26,6 @@ import {
   CARD_POPUP_FALLBACK_WIDTH_PX,
   CARD_POPUP_SETTLE_MS,
   createCardPopupQueueState,
-  getCardPopupArrow,
   getCardPopupSymbol,
   getNextCardPopupQueueWakeupMs,
   isSpPopupText,
@@ -569,27 +568,36 @@ export const BattleUnitCard = memo(function BattleUnitCard({
               const sp = item.startPoint;
               const isSmall =
                 isCompactPopupTone(pop.tone) && !isSpPopupText(pop.text);
-              const arrow = getCardPopupArrow(pop);
               const display = parseCardPopupDisplay(pop);
-              const iconPx = isSmall ? 12 : 14;
+              const arrow = display.arrow;
+              const iconPx = isSmall ? 12 : pop.tone === 'crit' ? 15 : 14;
               const colorClass = getPopupColor(pop.tone, pop.text);
               const sizeClass = isSmall ? 'text-[12px]' : 'text-[15px]';
               const innerContent = (
                 <>
                   {arrow === 'up' && <span aria-hidden="true">↑</span>}
                   {arrow === 'down' && <span aria-hidden="true">↓</span>}
-                  {display.iconKind && (
+                  {display.segments.map((seg, idx) => (
                     <span
-                      data-testid="card-popup-icon"
-                      data-popup-icon-kind={display.iconKind}
-                      className="material-symbols-outlined leading-none select-none shrink-0"
-                      style={{ fontSize: `${iconPx}px` }}
-                      aria-hidden="true"
+                      key={idx}
+                      className={`inline-flex items-center gap-0.5 ${
+                        seg.colorClass ?? ''
+                      }`}
                     >
-                      {getCardPopupSymbol(display.iconKind, iconMods)}
+                      {seg.iconKind && (
+                        <span
+                          data-testid="card-popup-icon"
+                          data-popup-icon-kind={seg.iconKind}
+                          className="material-symbols-outlined leading-none select-none shrink-0"
+                          style={{ fontSize: `${iconPx}px` }}
+                          aria-hidden="true"
+                        >
+                          {getCardPopupSymbol(seg.iconKind, iconMods)}
+                        </span>
+                      )}
+                      <span>{seg.text}</span>
                     </span>
-                  )}
-                  <span>{display.displayText}</span>
+                  ))}
                 </>
               );
 

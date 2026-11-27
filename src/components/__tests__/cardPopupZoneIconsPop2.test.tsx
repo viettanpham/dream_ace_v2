@@ -191,8 +191,9 @@ describe('CARD-POP2 zone & icons', () => {
     expect(nodes[3].textContent).toContain('+25');
     expect(nodes[3].textContent).not.toContain('SP');
 
-    expect(nodes[4].querySelector('[data-testid="card-popup-icon"]')?.getAttribute('data-popup-icon-kind')).toBe('hp');
-    expect(nodes[4].textContent).toContain('SPLASH -30');
+    expect(nodes[4].querySelector('[data-testid="card-popup-icon"]')?.getAttribute('data-popup-icon-kind')).toBe('splash');
+    expect(nodes[4].textContent).toContain('-30');
+    expect(nodes[4].textContent).not.toContain('SPLASH');
 
     const furyNode = nodes[5];
     expect(furyNode.querySelector('[data-testid="card-popup-icon"]')).toBeNull();

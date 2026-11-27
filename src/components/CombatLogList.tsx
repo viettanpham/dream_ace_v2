@@ -23,6 +23,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { useI18n } from '../i18n';
+import { useGameStore } from '../store/useGameStore';
 import type { CombatLogEntry, CombatUnit, MechClassId } from '../types/game';
 import { SP_COLOR_TOKENS } from '../utils/battleDisplay';
 import {
@@ -33,6 +34,7 @@ import {
   POPUP_LOG_PAGE_SIZE,
   readCombatLogExpandAll,
   readCombatLogOrder,
+  splitLogSentenceWithIcons,
   writeCombatLogOrder,
   type CombatLogActionKind,
   type CombatLogChannel,
@@ -325,6 +327,7 @@ export function CombatLogList({
   className = '',
 }: CombatLogListProps) {
   const { lang, t } = useI18n();
+  const iconMods = useGameStore((s) => s.adminConfig.iconCatalogMods);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const isAtTopRef = useRef<boolean>(true);
   const isAtBottomRef = useRef<boolean>(true);
@@ -921,7 +924,28 @@ export function CombatLogList({
                               row.valueTone
                             )}`}
                           >
-                            {row.sentence}
+                            {splitLogSentenceWithIcons(
+                              entry,
+                              row,
+                              iconMods
+                            ).map((part, partIdx) => (
+                              <span key={partIdx} className="inline">
+                                {part.iconKind && part.symbol && (
+                                  <span
+                                    data-testid="combat-log-inline-icon"
+                                    data-popup-icon-kind={part.iconKind}
+                                    className={`material-symbols-outlined select-none align-text-bottom mr-0.5 leading-none ${
+                                      part.colorClass ?? ''
+                                    }`}
+                                    style={{ fontSize: '1em' }}
+                                    aria-hidden="true"
+                                  >
+                                    {part.symbol}
+                                  </span>
+                                )}
+                                {part.text}
+                              </span>
+                            ))}
                           </span>
 
                           {/* [separate dim skill SP cost] */}

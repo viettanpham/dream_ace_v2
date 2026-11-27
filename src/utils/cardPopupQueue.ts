@@ -4,7 +4,10 @@ import type {
   FloatingPopup,
   IconCatalogModRow,
 } from '../types/game';
-import { shouldSkipRadarFloatingLabels } from './battleDisplay';
+import {
+  shouldSkipRadarFloatingLabels,
+  SP_COLOR_TOKENS,
+} from './battleDisplay';
 import type { BattleEffectsMode } from './battleVfx';
 
 export const DEFAULT_CARD_POPUP_STAGGER_MS = 100;
@@ -160,6 +163,13 @@ export function getCardPopupCategory(
 export function getCardPopupArrow(
   popup: Pick<FloatingPopup, 'tone' | 'text'>
 ): 'up' | 'down' | null {
+  const trimmed = popup.text.trim();
+  if (/^BURN\s+-\d+$/i.test(trimmed)) {
+    return null;
+  }
+  if (/^REGEN\s+[+-]?\d+%$/i.test(trimmed)) {
+    return 'up';
+  }
   if (popup.tone === 'buff' && !isSpPopupText(popup.text)) {
     return 'up';
   }
@@ -169,63 +179,213 @@ export function getCardPopupArrow(
   return null;
 }
 
-export type CardPopupIconKind = 'hp' | 'hp_plus' | 'shield' | 'sp';
+export type CardPopupIconKind =
+  | 'hp'
+  | 'crit'
+  | 'splash'
+  | 'burn'
+  | 'hp_plus'
+  | 'shield'
+  | 'sp'
+  | 'def'
+  | 'eva'
+  | 'wpn'
+  | 'skl'
+  | 'spd'
+  | 'vuln'
+  | 'regen'
+  | 'lock';
+
+export interface CardPopupSegment {
+  iconKind: CardPopupIconKind | null;
+  text: string;
+  colorClass?: string;
+}
 
 export interface CardPopupDisplayInfo {
   iconKind: CardPopupIconKind | null;
   displayText: string;
+  segments: CardPopupSegment[];
+  arrow: 'up' | 'down' | null;
 }
+
+const STAT_POPUP_PATTERNS: readonly {
+  regex: RegExp;
+  kind: CardPopupIconKind;
+}[] = [
+  { regex: /^DEF\s+([+-]?\d+%)$/i, kind: 'def' },
+  { regex: /^EVA\s+([+-]?\d+%)$/i, kind: 'eva' },
+  { regex: /^WPN\s+([+-]?\d+%)$/i, kind: 'wpn' },
+  { regex: /^SKL\s+([+-]?\d+%)$/i, kind: 'skl' },
+  { regex: /^SPD\s+([+-]?\d+%)$/i, kind: 'spd' },
+  { regex: /^VULN\s+([+-]?\d+%)$/i, kind: 'vuln' },
+  { regex: /^REGEN\s+([+-]?\d+%)$/i, kind: 'regen' },
+  { regex: /^LOCK\s+(x\d+)$/i, kind: 'lock' },
+];
 
 export function parseCardPopupDisplay(
   popup: Pick<FloatingPopup, 'tone' | 'text'>
 ): CardPopupDisplayInfo {
   const trimmed = popup.text.trim();
-  const spMatch = isSpPopupText(trimmed)
-    ? /^\+(\d+)\s*SP$/i.exec(trimmed)
-    : null;
-  if (spMatch) {
-    return { iconKind: 'sp', displayText: `+${spMatch[1]}` };
+  const arrow = getCardPopupArrow(popup);
+
+  const build = (segments: CardPopupSegment[]): CardPopupDisplayInfo => {
+    const firstIcon =
+      segments.find((seg) => seg.iconKind !== null)?.iconKind ?? null;
+    return {
+      iconKind: firstIcon,
+      displayText: segments.map((s) => s.text).join(' '),
+      segments,
+      arrow,
+    };
+  };
+
+  // Combined "+N SP +M SHD" or "+N SHD +M SP"
+  const spShdMatch = /^\+(\d+)\s*SP\s+\+(\d+)\s*SHD$/i.exec(trimmed);
+  if (spShdMatch) {
+    return build([
+      {
+        iconKind: 'sp',
+        text: `+${spShdMatch[1]}`,
+        colorClass: SP_COLOR_TOKENS.textClass,
+      },
+      {
+        iconKind: 'shield',
+        text: `+${spShdMatch[2]}`,
+        colorClass: 'text-sky-300',
+      },
+    ]);
+  }
+  const shdSpMatch = /^\+(\d+)\s*SHD\s+\+(\d+)\s*SP$/i.exec(trimmed);
+  if (shdSpMatch) {
+    return build([
+      {
+        iconKind: 'shield',
+        text: `+${shdSpMatch[1]}`,
+        colorClass: 'text-sky-300',
+      },
+      {
+        iconKind: 'sp',
+        text: `+${shdSpMatch[2]}`,
+        colorClass: SP_COLOR_TOKENS.textClass,
+      },
+    ]);
   }
 
+  // Single "+N SP"
+  const spMatch = /^\+(\d+)\s*SP$/i.exec(trimmed);
+  if (spMatch) {
+    return build([
+      {
+        iconKind: 'sp',
+        text: `+${spMatch[1]}`,
+        colorClass: SP_COLOR_TOKENS.textClass,
+      },
+    ]);
+  }
+
+  // Burn "-N"
+  const burnMatch = /^BURN\s+(-\d+)$/i.exec(trimmed);
+  if (burnMatch) {
+    return build([{ iconKind: 'burn', text: burnMatch[1] }]);
+  }
+
+  // Splash "-N" (drop the word SPLASH)
+  const splashMatch = /^SPLASH\s+(-\d+)$/i.exec(trimmed);
+  if (splashMatch) {
+    return build([{ iconKind: 'splash', text: splashMatch[1] }]);
+  }
+
+  // Plain damage / crit "-N"
   if (popup.tone === 'damage' || popup.tone === 'crit') {
     const dmgMatch = /^(-\d+)$/.exec(trimmed);
     if (dmgMatch) {
-      return { iconKind: 'hp', displayText: dmgMatch[1] };
+      return build([
+        {
+          iconKind: popup.tone === 'crit' ? 'crit' : 'hp',
+          text: dmgMatch[1],
+        },
+      ]);
     }
-    const splashMatch = /^SPLASH\s+(-\d+)$/i.exec(trimmed);
-    if (splashMatch) {
-      return { iconKind: 'hp', displayText: `SPLASH ${splashMatch[1]}` };
-    }
-    return { iconKind: null, displayText: popup.text };
+    return build([{ iconKind: null, text: popup.text }]);
   }
 
-  if (popup.tone === 'heal') {
-    const healMatch = /^\+(\d+)\s*HP$/i.exec(trimmed);
-    if (healMatch) {
-      return { iconKind: 'hp_plus', displayText: `+${healMatch[1]}` };
-    }
-    return { iconKind: null, displayText: popup.text };
+  // Heal "+N HP"
+  const healMatch = /^\+(\d+)\s*HP$/i.exec(trimmed);
+  if (healMatch) {
+    return build([{ iconKind: 'hp_plus', text: `+${healMatch[1]}` }]);
   }
 
-  if (popup.tone === 'shield') {
-    const shdMatch = /^\+(\d+)\s*SHD$/i.exec(trimmed);
-    if (shdMatch) {
-      return { iconKind: 'shield', displayText: `+${shdMatch[1]}` };
-    }
-    return { iconKind: null, displayText: popup.text };
+  // Shield "+N SHD" or "SHD +N"
+  const shdPrefixMatch = /^SHD\s+\+(\d+)$/i.exec(trimmed);
+  const shdSuffixMatch = /^\+(\d+)\s*SHD$/i.exec(trimmed);
+  const shdVal = shdPrefixMatch?.[1] ?? shdSuffixMatch?.[1];
+  if (shdVal !== undefined) {
+    return build([
+      {
+        iconKind: 'shield',
+        text: `+${shdVal}`,
+        colorClass: 'text-sky-300',
+      },
+    ]);
   }
 
-  return { iconKind: null, displayText: popup.text };
+  // Back Row "+N% EVA" (replace EVA word with EVA icon, keep BACK ROW + number)
+  const backRowMatch = /^BACK ROW\s+([+-]?\d+%)\s*EVA$/i.exec(trimmed);
+  if (backRowMatch) {
+    return build([
+      { iconKind: null, text: 'BACK ROW' },
+      { iconKind: 'eva', text: backRowMatch[1] },
+    ]);
+  }
+
+  // Stat buff / debuff labels
+  for (const rule of STAT_POPUP_PATTERNS) {
+    const m = rule.regex.exec(trimmed);
+    if (m) {
+      return build([{ iconKind: rule.kind, text: m[1] }]);
+    }
+  }
+
+  return build([{ iconKind: null, text: popup.text }]);
 }
 
 export function getCardPopupSymbol(
   kind: CardPopupIconKind,
   iconMods?: readonly IconCatalogModRow[] | null
 ): string {
-  if (kind === 'hp') return getCatalogRow('SS01', iconMods)?.symbol ?? 'health_cross';
-  if (kind === 'hp_plus') return 'heart_plus';
-  if (kind === 'shield') return getCatalogRow('BS05', iconMods)?.symbol ?? 'security';
-  return getCatalogRow('SS02', iconMods)?.symbol ?? 'bolt';
+  switch (kind) {
+    case 'hp':
+      return 'swords';
+    case 'crit':
+      return getCatalogRow('SS04', iconMods)?.symbol ?? 'flare';
+    case 'splash':
+      return getCatalogRow('SS05', iconMods)?.symbol ?? 'explosion';
+    case 'burn':
+      return getCatalogRow('DT01', iconMods)?.symbol ?? 'local_fire_department';
+    case 'hp_plus':
+      return 'heart_plus';
+    case 'shield':
+      return getCatalogRow('BS05', iconMods)?.symbol ?? 'security';
+    case 'sp':
+      return 'water_drop';
+    case 'def':
+      return getCatalogRow('BF03', iconMods)?.symbol ?? 'shield';
+    case 'eva':
+      return getCatalogRow('BF04', iconMods)?.symbol ?? 'air';
+    case 'wpn':
+      return getCatalogRow('BF02', iconMods)?.symbol ?? 'swords';
+    case 'skl':
+      return getCatalogRow('BF02', iconMods)?.symbol ?? 'swords';
+    case 'spd':
+      return getCatalogRow('BF07', iconMods)?.symbol ?? 'speed';
+    case 'vuln':
+      return getCatalogRow('DB09', iconMods)?.symbol ?? 'crisis_alert';
+    case 'regen':
+      return getCatalogRow('BF09', iconMods)?.symbol ?? 'health_cross';
+    case 'lock':
+      return getCatalogRow('CC02', iconMods)?.symbol ?? 'lock';
+  }
 }
 
 export function shouldShowCardPopup(

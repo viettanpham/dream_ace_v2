@@ -251,7 +251,10 @@ describe('Task FX-fix2: Firefox reduced-motion resilience, dreamAce.fx.v2 storag
     const popups = container!.querySelectorAll('[data-testid="damage-popup"]');
     expect(popups.length).toBe(2);
     expect(container!.textContent).toContain('-190');
-    expect(container!.textContent).toContain('WPN +30%');
+    expect(container!.textContent).toContain('+30%');
+    expect(
+      container!.querySelector('[data-popup-icon-kind="wpn"]')?.textContent
+    ).toBe('swords');
 
     const fxEl = container!.querySelector(
       '[data-testid="radar-fx-fx_os_reduce_default"]'

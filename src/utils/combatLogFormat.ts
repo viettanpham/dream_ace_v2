@@ -14,16 +14,22 @@ import type {
   CombatLogEntry,
   CombatSide,
   CombatUnit,
+  IconCatalogModRow,
   Language,
   MechClassId,
   StatusEffectType,
   UnitBattleStats,
 } from '../types/game';
+import { SP_COLOR_TOKENS } from './battleDisplay';
 import {
   FX_SETTINGS_STORAGE_KEY,
   readFxSettings,
   updateFxSettings,
 } from './battleVfx';
+import {
+  getCardPopupSymbol,
+  type CardPopupIconKind,
+} from './cardPopupQueue';
 
 export type CombatLogChannel = 'all' | 'ally' | 'enemy' | 'system';
 export type CombatLogDisplayMode = 'docked' | 'popup';
@@ -1304,3 +1310,183 @@ export function buildLiveBattleProgress(
     killTimeline,
   };
 }
+
+export interface CombatLogSentencePart {
+  text: string;
+  iconKind?: CardPopupIconKind;
+  symbol?: string;
+  colorClass?: string;
+}
+
+function insertSingleIconBeforeMatch(
+  sentence: string,
+  regex: RegExp,
+  prefixGroupIndex: number,
+  iconKind: CardPopupIconKind,
+  colorClass: string,
+  iconMods?: readonly IconCatalogModRow[] | null
+): CombatLogSentencePart[] | null {
+  const m = regex.exec(sentence);
+  if (!m) return null;
+  const prefixLen = m[prefixGroupIndex]?.length ?? 0;
+  const splitAt = m.index + prefixLen;
+  return [
+    { text: sentence.slice(0, splitAt) },
+    {
+      iconKind,
+      symbol: getCardPopupSymbol(iconKind, iconMods),
+      colorClass,
+      text: sentence.slice(splitAt),
+    },
+  ];
+}
+
+export function splitLogSentenceWithIcons(
+  entry: Pick<CombatLogEntry, 'templateKey'>,
+  row: Pick<StructuredCombatLogRow, 'sentence' | 'strongTone'>,
+  iconMods?: readonly IconCatalogModRow[] | null
+): CombatLogSentencePart[] {
+  const { sentence } = row;
+  if (!sentence) return [{ text: '' }];
+
+  switch (entry.templateKey) {
+    case 'log.damage': {
+      const isCrit = row.strongTone === 'crit';
+      return (
+        insertSingleIconBeforeMatch(
+          sentence,
+          /(gây\s+|for\s+)(\d+)/,
+          1,
+          isCrit ? 'crit' : 'hp',
+          isCrit ? 'text-amber-300' : 'text-red-400',
+          iconMods
+        ) ?? [{ text: sentence }]
+      );
+    }
+
+    case 'log.splashDamage':
+      return (
+        insertSingleIconBeforeMatch(
+          sentence,
+          /(gây\s+|for\s+)(\d+)/,
+          1,
+          'splash',
+          'text-red-400',
+          iconMods
+        ) ?? [{ text: sentence }]
+      );
+
+    case 'log.burnTick':
+      return (
+        insertSingleIconBeforeMatch(
+          sentence,
+          /(chịu\s+|suffers\s+)(\d+)/,
+          1,
+          'burn',
+          'text-orange-300',
+          iconMods
+        ) ?? [{ text: sentence }]
+      );
+
+    case 'log.healSingle':
+    case 'log.healSquad':
+    case 'log.regenTick':
+      return (
+        insertSingleIconBeforeMatch(
+          sentence,
+          /(hồi\s+|healing\s+|self-repairs\s+)(\+?\d+)/,
+          1,
+          'hp_plus',
+          'text-emerald-300',
+          iconMods
+        ) ?? [{ text: sentence }]
+      );
+
+    case 'log.shieldRegen':
+      return (
+        insertSingleIconBeforeMatch(
+          sentence,
+          /()(\+\d+)/,
+          1,
+          'shield',
+          'text-sky-300',
+          iconMods
+        ) ?? [{ text: sentence }]
+      );
+
+    case 'log.energize':
+    case 'log.spTransfer':
+      return (
+        insertSingleIconBeforeMatch(
+          sentence,
+          /()(\+?\d+\s*SP)/,
+          1,
+          'sp',
+          SP_COLOR_TOKENS.textClass,
+          iconMods
+        ) ?? [{ text: sentence }]
+      );
+
+    case 'log.defend': {
+      const parts: CombatLogSentencePart[] = [];
+      const tokenRe = /(\+\d+)\s*(Khiên|Shield|SHD|SP)/g;
+      let cursor = 0;
+      let match: RegExpExecArray | null;
+      while ((match = tokenRe.exec(sentence)) !== null) {
+        if (match.index > cursor) {
+          parts.push({ text: sentence.slice(cursor, match.index) });
+        }
+        const isSp = match[2] === 'SP';
+        const kind: CardPopupIconKind = isSp ? 'sp' : 'shield';
+        parts.push({
+          iconKind: kind,
+          symbol: getCardPopupSymbol(kind, iconMods),
+          colorClass: isSp ? SP_COLOR_TOKENS.textClass : 'text-sky-300',
+          text: match[0],
+        });
+        cursor = match.index + match[0].length;
+      }
+      if (parts.length === 0) return [{ text: sentence }];
+      if (cursor < sentence.length) {
+        parts.push({ text: sentence.slice(cursor) });
+      }
+      return parts;
+    }
+
+    case 'log.useSupply': {
+      const parts: CombatLogSentencePart[] = [];
+      const tokenRe = /(HP|SHD|SP)\s+(\+\d+)/g;
+      let cursor = 0;
+      let match: RegExpExecArray | null;
+      while ((match = tokenRe.exec(sentence)) !== null) {
+        if (match.index > cursor) {
+          parts.push({ text: sentence.slice(cursor, match.index) });
+        }
+        const kind: CardPopupIconKind =
+          match[1] === 'HP' ? 'hp_plus' : match[1] === 'SHD' ? 'shield' : 'sp';
+        const colorClass =
+          kind === 'hp_plus'
+            ? 'text-emerald-300'
+            : kind === 'shield'
+            ? 'text-sky-300'
+            : SP_COLOR_TOKENS.textClass;
+        parts.push({
+          iconKind: kind,
+          symbol: getCardPopupSymbol(kind, iconMods),
+          colorClass,
+          text: match[2],
+        });
+        cursor = match.index + match[0].length;
+      }
+      if (parts.length === 0) return [{ text: sentence }];
+      if (cursor < sentence.length) {
+        parts.push({ text: sentence.slice(cursor) });
+      }
+      return parts;
+    }
+
+    default:
+      return [{ text: sentence }];
+  }
+}
+
