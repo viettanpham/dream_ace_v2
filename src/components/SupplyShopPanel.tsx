@@ -1,4 +1,4 @@
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, Ticket } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import {
   getSupplyTemplateById,
@@ -6,6 +6,7 @@ import {
 } from '../data/consumables';
 import { getCatalogRow } from '../data/iconCatalog';
 import { SHOP_CONFIG } from '../data/items';
+import { getVoucherById, getVoucherPriceWp } from '../data/vouchers';
 import { computeSupplyPrice } from '../engine/itemPrice';
 import {
   getSupplyWpPrice,
@@ -22,16 +23,22 @@ import type {
   SupplyShopListing,
   SupplyShopWpListing,
   SupplyTemplate,
+  VoucherDef,
+  VoucherShopListing,
 } from '../types/game';
 import { CatalogIcon } from './CatalogIcon';
 import { formatSupplyEffectSummary, getSupplyName } from './SupplyLoadoutBar';
-import { SupplyTradeConfirm } from './SupplyTradeConfirm';
+import {
+  SupplyTradeConfirm,
+  type SupplyTradeConfirmVoucher,
+} from './SupplyTradeConfirm';
 
 export interface SupplyShopPanelProps {
   onNotice?: (message: string) => void;
 }
 
 const BUY_QUANTITIES = [1, 5, 10] as const;
+const VOUCHER_BUY_QUANTITIES = [1, 5] as const;
 const SELL_QUANTITIES = [1, 5] as const;
 
 interface ResolvedListingRow {
@@ -50,13 +57,24 @@ interface OwnedSupplyRow {
   unitSellPrice: number;
 }
 
+interface VoucherListingRow {
+  def: VoucherDef;
+  name: string;
+  desc: string;
+  remaining: number;
+  owned: number;
+  unitPrice: number;
+}
+
 export function SupplyShopPanel({ onNotice }: SupplyShopPanelProps) {
-  const { t } = useI18n();
+  const { lang, t } = useI18n();
   const credits = useGameStore((s) => s.pilot.credits);
   const warPoints = useGameStore((s) => s.pilot.warPoints ?? 0);
   const consumables = useGameStore((s) => s.pilot.consumables);
+  const ownedVouchers = useGameStore((s) => s.pilot.vouchers);
   const supplyShopStock = useGameStore((s) => s.supplyShopStock);
   const supplyShopStockWp = useGameStore((s) => s.supplyShopStockWp);
+  const voucherShopStockWp = useGameStore((s) => s.voucherShopStockWp);
   const supplyShopRefresh = useGameStore((s) => s.supplyShopRefresh);
   const battlesUntilRestock = useGameStore((s) => s.battlesUntilRestock);
   const adminConfig = useGameStore((s) => s.adminConfig);
@@ -68,6 +86,7 @@ export function SupplyShopPanel({ onNotice }: SupplyShopPanelProps) {
   );
   const buySupply = useGameStore((s) => s.buySupply);
   const buySupplyWp = useGameStore((s) => s.buySupplyWp);
+  const buyVoucher = useGameStore((s) => s.buyVoucher);
   const refreshSupplyShop = useGameStore((s) => s.refreshSupplyShop);
   const sellSupply = useGameStore((s) => s.sellSupply);
 
@@ -75,7 +94,8 @@ export function SupplyShopPanel({ onNotice }: SupplyShopPanelProps) {
   const [pendingTrade, setPendingTrade] = useState<{
     mode: 'buy' | 'sell';
     currency: 'CR' | 'WP';
-    template: SupplyTemplate;
+    template?: SupplyTemplate;
+    voucher?: SupplyTradeConfirmVoucher;
     qty: number;
     unitPrice: number;
     wpSlotId?: string;
@@ -130,6 +150,33 @@ export function SupplyShopPanel({ onNotice }: SupplyShopPanelProps) {
     }
     return rows;
   }, [supplyShopStockWp, consumables, adminConfig]);
+
+  const voucherRows = useMemo<VoucherListingRow[]>(() => {
+    const numberLocale = lang === 'vi' ? 'vi-VN' : 'en-US';
+    const rows: VoucherListingRow[] = [];
+    for (const listing of (voucherShopStockWp ?? []) as VoucherShopListing[]) {
+      const def = getVoucherById(listing.voucherId, adminConfig);
+      if (!def) continue;
+      const valueFormatted = def.value.toLocaleString(numberLocale);
+      const name =
+        def.kind === 'credit'
+          ? t('shop.voucherNameCredit', { value: valueFormatted })
+          : t('shop.voucherNameExp', { value: valueFormatted });
+      const desc =
+        def.kind === 'credit'
+          ? t('shop.voucherCreditDesc')
+          : t('shop.voucherExpDesc');
+      rows.push({
+        def,
+        name,
+        desc,
+        remaining: Math.max(0, Math.floor(listing.remaining)),
+        owned: Math.max(0, Math.floor(ownedVouchers?.[def.id] ?? 0)),
+        unitPrice: getVoucherPriceWp(def, adminConfig),
+      });
+    }
+    return rows;
+  }, [voucherShopStockWp, ownedVouchers, adminConfig, lang, t]);
 
   const creditCount = useMemo(
     () => groupedFamilies.reduce((sum, g) => sum + g.rows.length, 0),
@@ -334,10 +381,34 @@ export function SupplyShopPanel({ onNotice }: SupplyShopPanelProps) {
     }
   };
 
+  const handleBuyVoucher = (
+    voucher: SupplyTradeConfirmVoucher,
+    qty: number,
+    unitPrice: number
+  ) => {
+    const res = buyVoucher(voucher.def.id, qty);
+    if (res.ok && res.bought > 0) {
+      onNotice?.(
+        t('shop.voucherBuyNotice', {
+          qty: res.bought,
+          name: voucher.name,
+          cost: (res.bought * unitPrice).toLocaleString(),
+        })
+      );
+    } else {
+      onNotice?.(t('shop.voucherBuyFailed'));
+    }
+  };
+
   const handleConfirmTrade = () => {
     if (!pendingTrade) return;
     const trade = pendingTrade;
     setPendingTrade(null);
+    if (trade.voucher) {
+      handleBuyVoucher(trade.voucher, trade.qty, trade.unitPrice);
+      return;
+    }
+    if (!trade.template) return;
     if (trade.mode === 'buy') {
       handleBuy(
         trade.template,
@@ -594,6 +665,179 @@ export function SupplyShopPanel({ onNotice }: SupplyShopPanelProps) {
         )}
       </section>
 
+      {/* Voucher WP Area */}
+      <section
+        data-testid="voucher-wp-section"
+        className="rounded-lg border border-purple-500/35 bg-[#0D131D]/95 p-3 space-y-2 min-w-0"
+      >
+        <h2 className="text-xs font-display font-bold uppercase tracking-wider text-purple-300">
+          {t('shop.voucherSection', { count: voucherRows.length })}
+        </h2>
+
+        {voucherRows.length === 0 ? (
+          <p
+            data-testid="voucher-wp-empty"
+            className="text-sm text-slate-400 py-1 px-0.5"
+          >
+            {t('shop.voucherEmpty')}
+          </p>
+        ) : (
+          <div className="divide-y divide-slate-800/80">
+            {voucherRows.map((row) => {
+              const { def, name, desc, remaining, owned, unitPrice } = row;
+              const isSoldOut = remaining <= 0;
+              const maxQty = Math.max(
+                0,
+                Math.min(
+                  remaining,
+                  unitPrice > 0
+                    ? Math.floor(Math.max(0, warPoints) / unitPrice)
+                    : remaining
+                )
+              );
+              const maxDisabledReason = isLocked
+                ? t('supply.lockedHint')
+                : maxQty > 0
+                  ? null
+                  : isSoldOut
+                    ? t('shop.supplySoldOut')
+                    : t('shop.supplyShortWp');
+              const rowReason = isSoldOut
+                ? t('shop.supplySoldOut')
+                : isLocked
+                  ? t('supply.lockedHint')
+                  : warPoints < unitPrice
+                    ? t('shop.supplyShortWp')
+                    : null;
+
+              return (
+                <div
+                  key={def.id}
+                  data-testid={`voucher-wp-row-${def.id}`}
+                  data-sold-out={isSoldOut ? 'true' : 'false'}
+                  className={`py-2.5 first:pt-1 last:pb-1 flex flex-col sm:flex-row sm:items-center justify-between gap-2 min-w-0 ${
+                    isSoldOut ? 'opacity-50' : ''
+                  }`}
+                >
+                  <div className="flex items-start sm:items-center gap-2.5 min-w-0">
+                    <div className="shrink-0 w-9 h-9 rounded border border-purple-500/40 bg-[#080B14] flex items-center justify-center text-purple-300">
+                      <Ticket className="w-4 h-4" aria-hidden="true" />
+                    </div>
+
+                    <div className="min-w-0 flex-1 space-y-0.5">
+                      <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                        <span className="text-sm md:text-xs font-semibold text-slate-100 truncate">
+                          {name}
+                        </span>
+                        <span className="text-[10px] font-mono-nums px-1.5 py-0.5 rounded bg-purple-950/60 border border-purple-500/30 text-purple-200 shrink-0">
+                          {def.kind === 'credit'
+                            ? t('shop.voucherKindCredit')
+                            : t('shop.voucherKindExp')}
+                        </span>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[11px] font-mono-nums">
+                        <span className="font-semibold text-purple-300">
+                          {unitPrice.toLocaleString()} WP
+                        </span>
+                        <span
+                          data-testid={`voucher-wp-remaining-${def.id}`}
+                          className={
+                            isSoldOut ? 'text-rose-300' : 'text-sky-300'
+                          }
+                        >
+                          {t('shop.supplyRemaining', { count: remaining })}
+                        </span>
+                        <span
+                          data-testid={`voucher-wp-owned-${def.id}`}
+                          className="text-slate-400"
+                        >
+                          {t('shop.supplyOwned', { count: owned })}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col sm:items-end gap-1 min-w-0 max-w-full shrink-0">
+                    <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                      {VOUCHER_BUY_QUANTITIES.map((qty) => {
+                        const disabledReason = isSoldOut
+                          ? t('shop.supplySoldOut')
+                          : isLocked
+                            ? t('supply.lockedHint')
+                            : qty > remaining
+                              ? t('shop.supplyOverRemaining', {
+                                  count: remaining,
+                                })
+                              : unitPrice * qty > warPoints
+                                ? t('shop.supplyShortWp')
+                                : null;
+                        const totalPrice = unitPrice * qty;
+                        return (
+                          <button
+                            key={qty}
+                            type="button"
+                            data-testid={`voucher-wp-buy-${def.id}-${qty}`}
+                            disabled={Boolean(disabledReason)}
+                            title={disabledReason ?? undefined}
+                            onClick={() =>
+                              setPendingTrade({
+                                mode: 'buy',
+                                currency: 'WP',
+                                voucher: { def, name, desc },
+                                qty,
+                                unitPrice,
+                              })
+                            }
+                            className="min-h-[38px] md:min-h-[32px] px-2.5 py-1 rounded border border-purple-500/50 bg-purple-500/15 hover:bg-purple-500/25 text-purple-200 disabled:border-slate-700 disabled:bg-slate-900 disabled:text-slate-500 disabled:cursor-not-allowed text-xs font-mono-nums font-semibold transition-colors cursor-pointer flex flex-col items-center justify-center leading-tight"
+                          >
+                            <span>x{qty}</span>
+                            <span className="text-[10px] font-normal opacity-85">
+                              {totalPrice.toLocaleString()} WP
+                            </span>
+                          </button>
+                        );
+                      })}
+                      <button
+                        type="button"
+                        data-testid={`voucher-wp-buy-${def.id}-max`}
+                        disabled={Boolean(maxDisabledReason)}
+                        title={maxDisabledReason ?? undefined}
+                        onClick={() =>
+                          setPendingTrade({
+                            mode: 'buy',
+                            currency: 'WP',
+                            voucher: { def, name, desc },
+                            qty: maxQty,
+                            unitPrice,
+                          })
+                        }
+                        className="min-h-[38px] md:min-h-[32px] px-2.5 py-1 rounded border border-purple-500/50 bg-purple-500/15 hover:bg-purple-500/25 text-purple-200 disabled:border-slate-700 disabled:bg-slate-900 disabled:text-slate-500 disabled:cursor-not-allowed text-xs font-mono-nums font-semibold transition-colors cursor-pointer flex flex-col items-center justify-center leading-tight"
+                      >
+                        <span>{t('shop.supplyMaxBtn', { qty: maxQty })}</span>
+                        <span className="text-[10px] font-normal opacity-85">
+                          {(maxQty * unitPrice).toLocaleString()} WP
+                        </span>
+                      </button>
+                    </div>
+                    {rowReason && (
+                      <span
+                        data-testid={`voucher-wp-reason-${def.id}`}
+                        className={`text-[11px] ${
+                          isSoldOut ? 'text-rose-300' : 'text-slate-400'
+                        }`}
+                      >
+                        {rowReason}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
       {/* Sell Back */}
       {ownedRows.length > 0 && (
         <section
@@ -666,6 +910,7 @@ export function SupplyShopPanel({ onNotice }: SupplyShopPanelProps) {
         mode={pendingTrade?.mode ?? 'buy'}
         currency={pendingTrade?.currency ?? 'CR'}
         template={pendingTrade?.template ?? null}
+        voucher={pendingTrade?.voucher ?? null}
         qty={pendingTrade?.qty ?? 1}
         unitPrice={pendingTrade?.unitPrice ?? 0}
         credits={pendingTrade?.currency === 'WP' ? warPoints : credits}

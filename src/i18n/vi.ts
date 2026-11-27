@@ -2444,6 +2444,81 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'admin.battlePenalty.repair.cap.title': 'Trần phí sửa chữa (CR)',
   'admin.battlePenalty.repair.cap.desc':
     'Giới hạn Credit tối đa phải trả cho một lần sửa chữa sau trận',
+
+  // Voucher WP shop (VOUCHER-a)
+  'shop.voucherSection': 'Voucher ({count})',
+  'shop.voucherEmpty': 'Chưa có voucher trong đợt hàng này.',
+  'shop.voucherNameCredit': 'Voucher sửa chữa {value} CR',
+  'shop.voucherNameExp': 'Voucher EXP {value}',
+  'shop.voucherKindCredit': 'Sửa chữa (CR)',
+  'shop.voucherKindExp': 'EXP',
+  'shop.voucherCreditDesc':
+    'Dùng để giảm phí sửa chữa sau trận thua hoặc rút lui',
+  'shop.voucherExpDesc':
+    'Dùng để bù hoặc cộng thêm EXP sau trận',
+  'shop.voucherConfirmBuyTitle': 'Xác nhận mua Voucher',
+  'shop.voucherBuyNotice': 'Đã mua {qty}× {name} (-{cost} WP).',
+  'shop.voucherBuyFailed': 'Không thể mua voucher.',
+
+  // Admin CP — Voucher (VOUCHER-a)
+  'admin.voucher.sectionTitle': 'Voucher',
+  'admin.voucher.sectionDesc':
+    'Tỉ lệ quy đổi WP, trọng số xuất hiện, giới hạn kho và tạo voucher tùy chỉnh',
+  'admin.voucher.headerNote':
+    'Cấu hình giá WP, cơ chế chọn loại và tỉ lệ xuất hiện của toàn bộ voucher',
+  'admin.voucher.reset': 'Khôi phục mặc định',
+  'admin.voucher.creditPerWp.title': 'Tỉ lệ Credit : WP',
+  'admin.voucher.creditPerWp.desc':
+    'Số Credit quy đổi trên 1 WP khi định giá voucher sửa chữa',
+  'admin.voucher.creditPerWp.example':
+    'Ví dụ: Voucher 10.000 credit = {wp} WP',
+  'admin.voucher.expPerWp.title': 'Tỉ lệ EXP : WP',
+  'admin.voucher.expPerWp.desc':
+    'Số EXP quy đổi trên 1 WP khi định giá voucher EXP',
+  'admin.voucher.expPerWp.example':
+    'Ví dụ: Voucher 10.000 EXP = {wp} WP',
+  'admin.voucher.mode.title': 'Chế độ tính trọng số',
+  'admin.voucher.mode.tierDecay': 'Giảm dần theo bậc (tierDecay)',
+  'admin.voucher.mode.perType': 'Theo từng loại (perType)',
+  'admin.voucher.modeTierDecayDesc':
+    'tierDecay: trong mỗi loại xếp theo giá trị tăng dần, bậc thấp nhất = baseWeight, mỗi bậc cao hơn nhân (1 - tierDecayPct%).',
+  'admin.voucher.modePerTypeDesc':
+    'perType: dùng trọng số riêng của từng voucher (mặc định 100); giá trị ghi đè luôn được ưu tiên ở cả hai chế độ.',
+  'admin.voucher.baseWeight.title': 'Trọng số gốc (baseWeight)',
+  'admin.voucher.baseWeight.desc':
+    'Trọng số của voucher giá trị thấp nhất trong chế độ giảm dần theo bậc',
+  'admin.voucher.baseWeight.example':
+    'Ví dụ bậc 1 → 3: {r0} / {r1} / {r2}',
+  'admin.voucher.tierDecayPct.title': 'Giảm trọng số mỗi bậc (%)',
+  'admin.voucher.tierDecayPct.desc':
+    'Phần trăm giảm trọng số cho mỗi bậc giá trị cao hơn kế tiếp (0–100)',
+  'admin.voucher.tierDecayPct.example':
+    'Ví dụ: giảm {decay}%/bậc → bậc 2 còn {r1} (từ {r0})',
+  'admin.voucher.typesPerRoll.title': 'Số loại mỗi đợt bán (typesPerRoll)',
+  'admin.voucher.typesPerRoll.desc':
+    'Số loại voucher tối đa được rút không lặp vào khu WP mỗi lần làm mới',
+  'admin.voucher.typesPerRoll.example':
+    'Ví dụ: mỗi đợt chọn tối đa {picked}/{eligible} loại hợp lệ (trên {total} loại)',
+  'admin.voucher.tableTitle': 'Danh sách Voucher ({count})',
+  'admin.voucher.colKind': 'Loại',
+  'admin.voucher.colValue': 'Giá trị',
+  'admin.voucher.colPriceWp': 'Giá WP',
+  'admin.voucher.colWeight': 'Trọng số',
+  'admin.voucher.colMaxStock': 'Kho tối đa',
+  'admin.voucher.colChance': 'Tỉ lệ %',
+  'admin.voucher.colAction': 'Xóa',
+  'admin.voucher.systemTag': 'Hệ thống',
+  'admin.voucher.customTag': 'Tùy chỉnh',
+  'admin.voucher.deleteCustom': 'Xóa',
+  'admin.voucher.createTitle': 'Tạo voucher mới',
+  'admin.voucher.createKind': 'Loại voucher',
+  'admin.voucher.createValue': 'Giá trị (CR / EXP)',
+  'admin.voucher.createValueExample': 'Ví dụ giá WP: {wp} WP',
+  'admin.voucher.createWeight': 'Trọng số',
+  'admin.voucher.createWeightExample': 'Ví dụ tỉ lệ dự kiến: ~{pct}%',
+  'admin.voucher.createMaxStock': 'Kho tối đa mỗi đợt',
+  'admin.voucher.createMaxStockExample': 'Ví dụ số lượng bán mỗi đợt: 1–{max} vé',
+  'admin.voucher.createSubmit': 'Tạo voucher',
 };
 
 

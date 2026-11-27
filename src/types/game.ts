@@ -518,6 +518,40 @@ export interface SupplyShopRefreshState {
   used: number;
 }
 
+export type VoucherKind = 'credit' | 'exp';
+
+export type VoucherWeightMode = 'perType' | 'tierDecay';
+
+export interface VoucherDef {
+  id: string;
+  kind: VoucherKind;
+  value: number;
+  system?: boolean;
+  weight?: number;
+  maxStock?: number;
+}
+
+export interface VoucherOverride {
+  weight?: number;
+  maxStock?: number;
+}
+
+export interface VoucherConfig {
+  creditPerWp: number;
+  expPerWp: number;
+  mode: VoucherWeightMode;
+  baseWeight: number;
+  tierDecayPct: number;
+  typesPerRoll: number;
+  overrides: Record<string, VoucherOverride>;
+  custom: VoucherDef[];
+}
+
+export interface VoucherShopListing {
+  voucherId: string;
+  remaining: number;
+}
+
 export type ConsumableKind =
   | 'equipment_crate'
   | 'enchant_stone'
@@ -972,6 +1006,7 @@ export interface PilotAccount {
   formationCustomized?: boolean;
   pirateIncidents?: PirateIncident[];
   sectorSupply?: Record<string, number>;
+  vouchers?: Record<string, number>;
 }
 
 export type EnemyArchetype = 'drone' | 'gunship' | 'sniper' | 'repair_ship';
@@ -1697,6 +1732,7 @@ export interface AdminConfig {
   restorePctCap?: number;
   passiveSlots?: PassiveSlotsConfig;
   skillMods?: SkillModDefinition[];
+  vouchers?: VoucherConfig;
   showRawI18nKeys: boolean;
 }
 

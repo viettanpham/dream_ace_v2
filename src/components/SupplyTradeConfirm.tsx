@@ -1,14 +1,26 @@
+import { Ticket } from 'lucide-react';
 import { getCatalogRow } from '../data/iconCatalog';
 import { useI18n } from '../i18n';
-import type { IconCatalogModRow, SupplyTemplate } from '../types/game';
+import type {
+  IconCatalogModRow,
+  SupplyTemplate,
+  VoucherDef,
+} from '../types/game';
 import { BottomSheet } from './BottomSheet';
 import { CatalogIcon } from './CatalogIcon';
 import { formatSupplyEffectSummary, getSupplyName } from './SupplyLoadoutBar';
 
+export interface SupplyTradeConfirmVoucher {
+  def: VoucherDef;
+  name: string;
+  desc: string;
+}
+
 export interface SupplyTradeConfirmProps {
   mode: 'buy' | 'sell';
   currency?: 'CR' | 'WP';
-  template: SupplyTemplate | null;
+  template?: SupplyTemplate | null;
+  voucher?: SupplyTradeConfirmVoucher | null;
   qty: number;
   unitPrice: number;
   credits: number;
@@ -20,7 +32,8 @@ export interface SupplyTradeConfirmProps {
 export function SupplyTradeConfirm({
   mode,
   currency = 'CR',
-  template,
+  template = null,
+  voucher = null,
   qty,
   unitPrice,
   credits,
@@ -29,7 +42,7 @@ export function SupplyTradeConfirm({
   onCancel,
 }: SupplyTradeConfirmProps) {
   const { t } = useI18n();
-  if (!template) return null;
+  if (!template && !voucher) return null;
 
   const isBuy = mode === 'buy';
   const isWp = isBuy && currency === 'WP';
@@ -37,7 +50,9 @@ export function SupplyTradeConfirm({
   const total = Math.max(0, Math.round(unitPrice * qty));
   const afterBalance = isBuy ? credits - total : credits + total;
   const isInsufficient = isBuy && afterBalance < 0;
-  const iconRow = getCatalogRow(template.iconId, iconCatalogMods) ?? null;
+  const iconRow = template
+    ? (getCatalogRow(template.iconId, iconCatalogMods) ?? null)
+    : null;
 
   const footer = (
     <div className="space-y-2">
@@ -83,41 +98,64 @@ export function SupplyTradeConfirm({
 
   return (
     <BottomSheet
-      open={Boolean(template)}
+      open={Boolean(template || voucher)}
       onClose={onCancel}
       size="default"
       testId="supply-confirm-dialog"
       title={
-        isBuy
-          ? t('shop.supplyConfirmBuyTitle')
-          : t('shop.supplyConfirmSellTitle')
+        voucher
+          ? t('shop.voucherConfirmBuyTitle')
+          : isBuy
+            ? t('shop.supplyConfirmBuyTitle')
+            : t('shop.supplyConfirmSellTitle')
       }
       footer={footer}
     >
       <div className="space-y-3 min-w-0">
-        <div className="flex items-start gap-3 rounded-lg border border-slate-800 bg-[#080C15] p-3 min-w-0">
-          <div className="shrink-0 w-10 h-10 rounded border border-slate-700/80 bg-[#0B111C] flex items-center justify-center">
-            <CatalogIcon
-              row={iconRow}
-              size="sm"
-              showBadges={false}
-              showArrowBadge={false}
-            />
-          </div>
-          <div className="min-w-0 flex-1 space-y-1">
-            <div className="flex flex-wrap items-center gap-1.5 min-w-0">
-              <span className="text-sm font-semibold text-slate-100 truncate">
-                {getSupplyName(template.id, t)}
-              </span>
-              <span className="text-[10px] font-mono-nums px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 shrink-0">
-                T{template.tier}
-              </span>
+        {template ? (
+          <div className="flex items-start gap-3 rounded-lg border border-slate-800 bg-[#080C15] p-3 min-w-0">
+            <div className="shrink-0 w-10 h-10 rounded border border-slate-700/80 bg-[#0B111C] flex items-center justify-center">
+              <CatalogIcon
+                row={iconRow}
+                size="sm"
+                showBadges={false}
+                showArrowBadge={false}
+              />
             </div>
-            <p className="text-xs text-emerald-300">
-              {formatSupplyEffectSummary(template, t)}
-            </p>
+            <div className="min-w-0 flex-1 space-y-1">
+              <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                <span className="text-sm font-semibold text-slate-100 truncate">
+                  {getSupplyName(template.id, t)}
+                </span>
+                <span className="text-[10px] font-mono-nums px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 shrink-0">
+                  T{template.tier}
+                </span>
+              </div>
+              <p className="text-xs text-emerald-300">
+                {formatSupplyEffectSummary(template, t)}
+              </p>
+            </div>
           </div>
-        </div>
+        ) : voucher ? (
+          <div className="flex items-start gap-3 rounded-lg border border-slate-800 bg-[#080C15] p-3 min-w-0">
+            <div className="shrink-0 w-10 h-10 rounded border border-purple-500/40 bg-[#0B111C] flex items-center justify-center text-purple-300">
+              <Ticket className="w-5 h-5" aria-hidden="true" />
+            </div>
+            <div className="min-w-0 flex-1 space-y-1">
+              <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                <span className="text-sm font-semibold text-slate-100 truncate">
+                  {voucher.name}
+                </span>
+                <span className="text-[10px] font-mono-nums px-1.5 py-0.5 rounded bg-purple-950/60 border border-purple-500/30 text-purple-200 shrink-0">
+                  {voucher.def.kind === 'credit'
+                    ? t('shop.voucherKindCredit')
+                    : t('shop.voucherKindExp')}
+                </span>
+              </div>
+              <p className="text-xs text-slate-300">{voucher.desc}</p>
+            </div>
+          </div>
+        ) : null}
 
         <div className="rounded-lg border border-slate-800/90 bg-[#080C15]/80 p-3 space-y-2 text-xs">
           <div className="flex items-center justify-between gap-2">

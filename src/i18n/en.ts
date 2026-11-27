@@ -2442,6 +2442,81 @@ export const EN_TRANSLATIONS = {
   'admin.battlePenalty.repair.cap.title': 'Repair Fee Cap (CR)',
   'admin.battlePenalty.repair.cap.desc':
     'Maximum Credits charged for a single post-battle repair',
+
+  // Voucher WP shop (VOUCHER-a)
+  'shop.voucherSection': 'Voucher ({count})',
+  'shop.voucherEmpty': 'No vouchers in this stock rotation.',
+  'shop.voucherNameCredit': 'Repair Voucher {value} CR',
+  'shop.voucherNameExp': 'EXP Voucher {value}',
+  'shop.voucherKindCredit': 'Repair (CR)',
+  'shop.voucherKindExp': 'EXP',
+  'shop.voucherCreditDesc':
+    'Offsets repair fees after defeat or retreat',
+  'shop.voucherExpDesc':
+    'Restores or grants EXP after battle',
+  'shop.voucherConfirmBuyTitle': 'Confirm Voucher Purchase',
+  'shop.voucherBuyNotice': 'Purchased {qty}× {name} (-{cost} WP).',
+  'shop.voucherBuyFailed': 'Could not purchase voucher.',
+
+  // Admin CP — Vouchers (VOUCHER-a)
+  'admin.voucher.sectionTitle': 'Voucher',
+  'admin.voucher.sectionDesc':
+    'WP pricing ratios, roll weights, max stock per restock, and custom vouchers',
+  'admin.voucher.headerNote':
+    'Configure WP exchange ratios, weighting mode, and drop probabilities for all vouchers',
+  'admin.voucher.reset': 'Reset Defaults',
+  'admin.voucher.creditPerWp.title': 'Credit : WP Ratio',
+  'admin.voucher.creditPerWp.desc':
+    'Credits per 1 WP when pricing repair vouchers',
+  'admin.voucher.creditPerWp.example':
+    'Example: 10,000 credit voucher = {wp} WP',
+  'admin.voucher.expPerWp.title': 'EXP : WP Ratio',
+  'admin.voucher.expPerWp.desc':
+    'EXP per 1 WP when pricing EXP vouchers',
+  'admin.voucher.expPerWp.example':
+    'Example: 10,000 EXP voucher = {wp} WP',
+  'admin.voucher.mode.title': 'Weighting Mode',
+  'admin.voucher.mode.tierDecay': 'Tier decay (tierDecay)',
+  'admin.voucher.mode.perType': 'Per voucher (perType)',
+  'admin.voucher.modeTierDecayDesc':
+    'tierDecay: ranks vouchers by value ascending within each kind; lowest = baseWeight, each higher tier *= (1 - tierDecayPct%).',
+  'admin.voucher.modePerTypeDesc':
+    'perType: uses each voucher’s own weight (default 100); per-voucher weight overrides win in both modes.',
+  'admin.voucher.baseWeight.title': 'Base Weight (baseWeight)',
+  'admin.voucher.baseWeight.desc':
+    'Starting weight for the lowest-value tier in tierDecay mode',
+  'admin.voucher.baseWeight.example':
+    'Example tiers 1 → 3: {r0} / {r1} / {r2}',
+  'admin.voucher.tierDecayPct.title': 'Tier Decay per Step (%)',
+  'admin.voucher.tierDecayPct.desc':
+    'Weight reduction percent per higher value rank (0–100)',
+  'admin.voucher.tierDecayPct.example':
+    'Example: {decay}% decay/tier → tier 2 = {r1} (from {r0})',
+  'admin.voucher.typesPerRoll.title': 'Types per Restock (typesPerRoll)',
+  'admin.voucher.typesPerRoll.desc':
+    'Distinct vouchers picked weighted without replacement for the WP shop',
+  'admin.voucher.typesPerRoll.example':
+    'Example: picks up to {picked}/{eligible} eligible types (out of {total})',
+  'admin.voucher.tableTitle': 'All Vouchers ({count})',
+  'admin.voucher.colKind': 'Kind',
+  'admin.voucher.colValue': 'Value',
+  'admin.voucher.colPriceWp': 'Price WP',
+  'admin.voucher.colWeight': 'Weight',
+  'admin.voucher.colMaxStock': 'Max Stock',
+  'admin.voucher.colChance': 'Chance %',
+  'admin.voucher.colAction': 'Action',
+  'admin.voucher.systemTag': 'System',
+  'admin.voucher.customTag': 'Custom',
+  'admin.voucher.deleteCustom': 'Delete',
+  'admin.voucher.createTitle': 'Create Voucher',
+  'admin.voucher.createKind': 'Voucher kind',
+  'admin.voucher.createValue': 'Value (CR / EXP)',
+  'admin.voucher.createValueExample': 'Example WP price: {wp} WP',
+  'admin.voucher.createWeight': 'Weight',
+  'admin.voucher.createWeightExample': 'Example est. chance: ~{pct}%',
+  'admin.voucher.createMaxStock': 'Max stock per roll',
+  'admin.voucher.createMaxStockExample': 'Example rolled stock: 1–{max} vouchers',
+  'admin.voucher.createSubmit': 'Create voucher',
 } as const;
 
 export type TranslationKey = keyof typeof EN_TRANSLATIONS;

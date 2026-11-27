@@ -27,6 +27,7 @@ import { EnemyLevelAdminBlock } from './admin/EnemyLevelAdminBlock';
 import { EnrageAdminBlock } from './admin/EnrageAdminBlock';
 import { BattleRewardsAdminBlock } from './admin/BattleRewardsAdminBlock';
 import { BattlePenaltyAdminBlock } from './admin/BattlePenaltyAdminBlock';
+import { VoucherAdminBlock } from './admin/VoucherAdminBlock';
 import {
   AdminSection,
   AdminSectionsProvider,
@@ -1510,6 +1511,17 @@ export function AdminPanel() {
               </div>
 
               <ModuleDropAdminBlock />
+
+              <AdminSection
+                id="vouchers"
+                title={t('admin.voucher.sectionTitle')}
+                description={t('admin.voucher.sectionDesc')}
+              >
+                <VoucherAdminBlock
+                  adminConfig={adminConfig}
+                  adminUpdateConfig={adminUpdateConfig}
+                />
+              </AdminSection>
             </div>
           )}
 

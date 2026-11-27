@@ -21,8 +21,17 @@ import type {
   SupplyShopRefreshState,
   SupplyShopWpListing,
   SupplyTemplate,
+  VoucherConfig,
+  VoucherDef,
+  VoucherShopListing,
   WpMarketOffer,
 } from '../types/game';
+import {
+  getAllVouchers,
+  getVoucherMaxStock,
+  getVoucherWeights,
+  resolveVoucherConfig,
+} from '../data/vouchers';
 import { generateItemInstance, pickWeightedRarity } from './equipment';
 import { computeSupplyPrice } from './itemPrice';
 import {
@@ -881,4 +890,55 @@ export function generateSupplyShopStockWp(
     templateId: tpl.id,
     remaining: rollIntInclusive(supplyShopMinQty, supplyShopMaxQty, rng),
   }));
+}
+
+/**
+ * Picks up to typesPerRoll distinct vouchers by weight (weighted without replacement)
+ * and rolls stock qty = random 1..maxStock for each picked voucher.
+ */
+export function rollVoucherShopStockWp(
+  cfgOrAdmin?: VoucherConfig | AdminConfig | null,
+  rng: () => number = Math.random
+): VoucherShopListing[] {
+  const cfg = resolveVoucherConfig(cfgOrAdmin);
+  if (cfg.typesPerRoll <= 0) return [];
+
+  const allVouchers = getAllVouchers(cfg);
+  if (allVouchers.length === 0) return [];
+
+  const weights = getVoucherWeights(cfg);
+  const pool: VoucherDef[] = [...allVouchers];
+  const targetCount = Math.min(cfg.typesPerRoll, pool.length);
+  const picked: VoucherDef[] = [];
+
+  for (let step = 0; step < targetCount && pool.length > 0; step++) {
+    let totalWeight = 0;
+    for (const item of pool) {
+      totalWeight += Math.max(0, weights[item.id] ?? 0);
+    }
+    if (totalWeight <= 0) break;
+
+    let roll = rng() * totalWeight;
+    let chosenIdx = pool.length - 1;
+    for (let i = 0; i < pool.length; i++) {
+      const w = Math.max(0, weights[pool[i].id] ?? 0);
+      if (w <= 0) continue;
+      roll -= w;
+      if (roll <= 0) {
+        chosenIdx = i;
+        break;
+      }
+    }
+
+    const [chosen] = pool.splice(chosenIdx, 1);
+    if (chosen) picked.push(chosen);
+  }
+
+  return picked.map((def) => {
+    const maxStock = Math.max(1, getVoucherMaxStock(def, cfg));
+    return {
+      voucherId: def.id,
+      remaining: rollIntInclusive(1, maxStock, rng),
+    };
+  });
 }

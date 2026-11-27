@@ -197,12 +197,20 @@ import {
   getMaxGearLevel,
   hasOperationalShipyard,
   migrateLegacySupplyShopAdminFields,
+  rollVoucherShopStockWp,
   sanitizeSupplyShopConfig,
   sanitizeSupplyShopExtraConfig,
   sanitizeSupplyShopRefresh,
   sanitizeSupplyShopStock,
   sanitizeSupplyShopStockWp,
 } from './shop';
+import {
+  cloneVoucherConfig,
+  DEFAULT_VOUCHER_CONFIG,
+  sanitizeOwnedVouchers,
+  sanitizeVoucherConfig,
+  sanitizeVoucherShopStockWp,
+} from '../data/vouchers';
 import { isSkillAllowedForClass, MAX_ACTIVE_SKILL_BAR } from './skills';
 import {
   fillEmptyStarterSlotsForPilot,
@@ -242,7 +250,7 @@ import {
 
 export { createDefaultWorldClock };
 
-export const CURRENT_SAVE_VERSION = 14;
+export const CURRENT_SAVE_VERSION = 15;
 
 export {
   DEFAULT_EXTENDER_LEVELS_PER_SOCKET,
@@ -362,6 +370,7 @@ export interface PersistedCampaignState {
   shopStock: ShopItemListing[];
   supplyShopStock?: SupplyShopListing[];
   supplyShopStockWp?: SupplyShopWpListing[];
+  voucherShopStockWp?: import('../types/game').VoucherShopListing[];
   supplyShopRefresh?: SupplyShopRefreshState;
   wpMarketOffers: WpMarketOffer[];
   battlesUntilRestock: number;
@@ -407,6 +416,7 @@ export function createDefaultAdminConfig(): AdminConfig {
     enrage: cloneEnrageConfig(DEFAULT_ENRAGE_CONFIG),
     battleRewards: cloneBattleRewardsConfig(DEFAULT_BATTLE_REWARDS_CONFIG),
     battlePenalty: cloneBattlePenaltyConfig(DEFAULT_BATTLE_PENALTY_CONFIG),
+    vouchers: cloneVoucherConfig(DEFAULT_VOUCHER_CONFIG),
     forceBoss: false,
     battleLevelOffsetOverride: null,
     maxLevel: BALANCE_CONFIG.maxLevel,
@@ -486,6 +496,7 @@ export function createFreshCampaignState(
   const basePilot: PilotAccount = {
     ...createDefaultPilotAccount(name, starterClassId, []),
     consumables: [],
+    vouchers: {},
     activeExpBoostBattles: 0,
     activeEnchantBonusPct: 0,
   };
@@ -517,6 +528,7 @@ export function createFreshCampaignState(
     ),
     supplyShopStock: freshSupplyShopStock,
     supplyShopStockWp: freshSupplyShopStockWp,
+    voucherShopStockWp: rollVoucherShopStockWp(adminConfig.vouchers, rng),
     supplyShopRefresh: { used: 0 },
     wpMarketOffers: generateWpMarketOffers(
       { shipyardBonus: hasOperationalShipyard(pilot) },
@@ -746,8 +758,49 @@ function convertLegacyItemInstance(
   return null;
 }
 
+export function migrateV14ToV15(
+  state: PersistedCampaignState,
+  raw: Record<string, unknown>,
+  rng: () => number = Math.random
+): PersistedCampaignState {
+  const rawAdmin =
+    raw.adminConfig && typeof raw.adminConfig === 'object'
+      ? (raw.adminConfig as Record<string, unknown>)
+      : {};
+  const nextVouchersCfg = sanitizeVoucherConfig(
+    rawAdmin.vouchers ?? state.adminConfig.vouchers
+  );
+  const rawPilot =
+    raw.pilot && typeof raw.pilot === 'object'
+      ? (raw.pilot as Record<string, unknown>)
+      : {};
+  const nextOwnedVouchers = sanitizeOwnedVouchers(
+    rawPilot.vouchers ?? state.pilot.vouchers,
+    nextVouchersCfg
+  );
+  const sanitizedVoucherStock = Array.isArray(raw.voucherShopStockWp)
+    ? sanitizeVoucherShopStockWp(raw.voucherShopStockWp, nextVouchersCfg)
+    : [];
+  const nextVoucherStock =
+    sanitizedVoucherStock.length > 0
+      ? sanitizedVoucherStock
+      : rollVoucherShopStockWp(nextVouchersCfg, rng);
+  return {
+    ...state,
+    pilot: {
+      ...state.pilot,
+      vouchers: nextOwnedVouchers,
+    },
+    voucherShopStockWp: nextVoucherStock,
+    adminConfig: {
+      ...state.adminConfig,
+      vouchers: nextVouchersCfg,
+    },
+  };
+}
+
 /**
- * Pure, crash-proof save migration from v1/v2/v3/v4 into canonical v5 (full Gear Skill System + War Points).
+ * Pure, crash-proof save migration from v1/v2/v3/v4 into canonical v15 (chained through each save version).
  */
 export function migrateSaveData(
   persistedState: unknown,
@@ -927,6 +980,7 @@ export function migrateSaveData(
     passiveSlots: sanitizePassiveSlotsConfig(rawAdmin.passiveSlots),
     battleRewards: sanitizeBattleRewardsConfig(rawAdmin.battleRewards),
     battlePenalty: sanitizeBattlePenaltyConfig(rawAdmin.battlePenalty),
+    vouchers: sanitizeVoucherConfig(rawAdmin.vouchers),
     skillMods: sanitizeSkillMods(
       rawAdmin.skillMods,
       Array.isArray(rawAdmin.iconCatalogMods) ? rawAdmin.iconCatalogMods : []
@@ -1323,6 +1377,7 @@ export function migrateSaveData(
       engineerShieldBoost: Boolean(rawPilot.engineerShieldBoost),
       activeBonusMission: rawPilot.activeBonusMission ?? null,
       consumables: rawConsumables,
+      vouchers: sanitizeOwnedVouchers(rawPilot.vouchers, adminConfig.vouchers),
       activeExpBoostBattles: Math.max(
         0,
         Number(rawPilot.activeExpBoostBattles) || 0
@@ -1381,7 +1436,18 @@ export function migrateSaveData(
             rng
           );
 
-    return {
+    const sanitizedVoucherShopStockWp =
+      version >= 15 && Array.isArray(raw.voucherShopStockWp)
+        ? sanitizeVoucherShopStockWp(raw.voucherShopStockWp, adminConfig.vouchers)
+        : [];
+    const migratedVoucherShopStockWp =
+      version < 15
+        ? []
+        : sanitizedVoucherShopStockWp.length > 0
+          ? sanitizedVoucherShopStockWp
+          : rollVoucherShopStockWp(adminConfig.vouchers, rng);
+
+    const v14State: PersistedCampaignState = {
       pilot: finalMigratedPilot,
       shopStock:
         rawShop.length > 0 && hasAvailableShopStock
@@ -1393,6 +1459,7 @@ export function migrateSaveData(
             ),
       supplyShopStock: migratedSupplyShopStock,
       supplyShopStockWp: migratedSupplyShopStockWp,
+      voucherShopStockWp: migratedVoucherShopStockWp,
       supplyShopRefresh: sanitizeSupplyShopRefresh(raw.supplyShopRefresh),
       wpMarketOffers:
         rawWpOffers.length > 0
@@ -1413,6 +1480,7 @@ export function migrateSaveData(
       language,
       adminConfig,
     };
+    return version < 15 ? migrateV14ToV15(v14State, raw, rng) : v14State;
   }
 
   // Case B: Legacy v1 / v2 / v3 save (`raw.player`) -> migrate into v5 per-Gear model!
@@ -1542,6 +1610,7 @@ export function migrateSaveData(
     engineerShieldBoost: false,
     activeBonusMission: null,
     consumables: [],
+    vouchers: {},
     activeExpBoostBattles: 0,
     activeEnchantBonusPct: 0,
     squadFormation: createDefaultSquadFormation(
@@ -1579,7 +1648,7 @@ export function migrateSaveData(
     rng
   );
 
-  return {
+  const legacyV14State: PersistedCampaignState = {
     pilot: finalLegacyPilot,
     shopStock: generateCategorizedShopStock(
       migratedLevel,
@@ -1588,6 +1657,7 @@ export function migrateSaveData(
     ),
     supplyShopStock: legacySupplyShopStock,
     supplyShopStockWp: legacySupplyShopStockWp,
+    voucherShopStockWp: rollVoucherShopStockWp(adminConfig.vouchers, rng),
     supplyShopRefresh: sanitizeSupplyShopRefresh(raw.supplyShopRefresh),
     wpMarketOffers: generateWpMarketOffers(
       { shipyardBonus: hasOperationalShipyard(finalLegacyPilot) },
@@ -1605,4 +1675,5 @@ export function migrateSaveData(
     language,
     adminConfig,
   };
+  return migrateV14ToV15(legacyV14State, raw, rng);
 }
