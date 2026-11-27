@@ -779,6 +779,11 @@ export const EN_TRANSLATIONS = {
   'log.repairFreeRetreat':
     'State forced to cover repair costs due to tactical retreat',
   'log.repairFee': 'Repair fee: -{fee} CR',
+  'log.baseSiegeDamaged':
+    'Base {sector}: Shield {shieldBefore} -> {shieldAfter}, HP {hpAfter}',
+  'log.baseSiegeHpDamaged':
+    'Base {sector}: Shield 0, HP {hpBefore} -> {hpAfter}',
+  'log.baseSiegeCaptured': 'Base captured: {sector}!',
   'log.buffApplied': '{actor} activated {skill} (-{spCost} SP).',
   'log.stanceToggle': '{actor} switched {skill} {state}.',
   'log.charging': '{actor} begins charging {skill} — impact imminent next turn!',
@@ -1170,6 +1175,11 @@ export const EN_TRANSLATIONS = {
   'map.status.damaged': 'Damaged',
   'map.status.repairing': 'Repairing ({months}m)',
   'map.underAttack': 'Under Attack ({months}m)',
+  'map.raidNoticeDamaged':
+    'Raid struck {sector}: Shield {shieldBefore} -> {shieldAfter}, HP {hpBefore} -> {hpAfter}',
+  'map.raidNoticeFlipped': 'Enemy retook {sector} in a raid!',
+  'map.raidNoticeCapitalHeld':
+    'Capital {sector} was raided and held at 1 HP!',
   'map.legendTitle': 'Map Legend',
   'map.legendRound': 'Round: Outpost / Colony / Relay (4v4)',
   'map.legendSquare': 'Square: Fortress / Shipyard (6v6) · Capital (8v8)',
@@ -2680,6 +2690,83 @@ export const EN_TRANSLATIONS = {
   'admin.supplyGive.confirm': 'Granted {name} x{qty}',
   'admin.supplyGive.confirmOverflow': ' (bag full, lost {lost})',
   'admin.supplyGive.failed': 'No eligible supply available to grant.',
+
+  // BASE-SIEGE-a
+  'summary.siegeCaptured': 'Base captured!',
+  'summary.siegeShieldLine':
+    'Base: Shield {shieldBefore} -> {shieldAfter}, HP {hpAfter}',
+  'summary.siegeHpLine': 'Base: Shield 0, HP {hpBefore} -> {hpAfter}',
+  'admin.campaignSection.baseSiege.title': 'Bases - Siege & Capture',
+  'admin.campaignSection.baseSiege.desc':
+    'Base Shield & Capture HP pools, per-win damage, monthly regen, repairs, and raid damage',
+  'admin.baseSiege.resetDefaults': 'Reset Defaults',
+  'admin.baseSiege.resetAllPoolsBtn': 'Reset All Bases to Full Pool',
+  'admin.baseSiege.resetAllPoolsConfirm':
+    'Confirm resetting Shield & HP on all bases to full?',
+  'admin.baseSiege.resetAllPoolsDone': 'Reset all base siege pools to full',
+  'admin.baseSiege.confirmYes': 'Confirm',
+  'admin.baseSiege.confirmCancel': 'Cancel',
+  'admin.baseSiege.byTypeGroup': 'Max Pools by Base Type',
+  'admin.baseSiege.type.outpost': 'Outpost (small base)',
+  'admin.baseSiege.type.colony': 'Colony',
+  'admin.baseSiege.type.relay': 'Relay',
+  'admin.baseSiege.type.fortress': 'Fortress',
+  'admin.baseSiege.type.shipyard': 'Shipyard',
+  'admin.baseSiege.type.capital': 'Capital',
+  'admin.baseSiege.maxShield': 'Max Shield (1–100,000)',
+  'admin.baseSiege.maxHp': 'Max HP (1–100,000)',
+  'admin.baseSiege.typeRowEx':
+    '{name}: Shield {shield} / HP {hp} -> needs {sWins} + {hWins} = {total} wins to capture',
+  'admin.baseSiege.maxShieldEx':
+    'Example: {sWins} wins to break Shield ({dmg}/win)',
+  'admin.baseSiege.maxHpEx':
+    'Example: {hWins} wins to break HP -> {total} total wins to capture',
+  'admin.baseSiege.winDamageGroup': 'Damage per Won Assault',
+  'admin.baseSiege.shieldDamagePerWin': 'Shield damage per win (1–100,000)',
+  'admin.baseSiege.shieldDamagePerWinEx':
+    'Example Outpost ({sMax} Shield): {sWins} wins; Capital ({cMax}): {cWins} wins',
+  'admin.baseSiege.hpDamagePerWin': 'HP damage per win (1–100,000)',
+  'admin.baseSiege.hpDamagePerWinEx':
+    'Example Outpost: Shield {sMax} / HP {hMax} -> needs {sWins} + {hWins} = {total} wins',
+  'admin.baseSiege.regenGroup': 'Monthly Regen',
+  'admin.baseSiege.regenIdleMonths': 'Idle months without attack before regen (0–12)',
+  'admin.baseSiege.regenIdleMonthsEx':
+    'Regen: after {months} idle months, +{sPct}% shield, +{hPct}% HP per month',
+  'admin.baseSiege.regenShieldPct': 'Shield regen % per month (0–100)',
+  'admin.baseSiege.regenShieldPctEx':
+    'Example: Outpost +{outpostGain} Shield/mo · Fortress +{fortressGain} Shield/mo',
+  'admin.baseSiege.regenHpPct': 'HP regen % per month (0–100)',
+  'admin.baseSiege.regenHpPctEx':
+    'Example: Outpost +{outpostGain} HP/mo · Fortress +{fortressGain} HP/mo',
+  'admin.baseSiege.repairGroup': 'Credit Repairs',
+  'admin.baseSiege.repairCooldown': 'Repair cooldown (months, 0–12)',
+  'admin.baseSiege.repairCooldownEx':
+    'Example: repair in month 1 -> next available in month {nextMonth}',
+  'admin.baseSiege.repairHpPct': 'Repair HP: % of max per action (1–100)',
+  'admin.baseSiege.repairHpPctEx':
+    'Repair HP: +{pct}% ({amount} HP) costs {base} + {perLv} x GEAR level = {cost} CR (Lv.{lv})',
+  'admin.baseSiege.repairHpCostBase': 'Repair HP: Base cost (credits)',
+  'admin.baseSiege.repairHpCostBaseEx':
+    'Example Lv.{lv}: {base} + {perLv} x {lv} = {cost} credits',
+  'admin.baseSiege.repairHpCostPerLv': 'Repair HP: Cost per GEAR level',
+  'admin.baseSiege.repairHpCostPerLvEx':
+    'Example: Lv.1 costs {c1} CR · Lv.10 costs {c10} CR',
+  'admin.baseSiege.repairShieldPct': 'Repair Shield: % of max per action (1–100)',
+  'admin.baseSiege.repairShieldPctEx':
+    'Repair Shield: +{pct}% ({amount} Shield) costs {base} + {perLv} x GEAR level = {cost} CR (Lv.{lv})',
+  'admin.baseSiege.repairShieldCostBase': 'Repair Shield: Base cost (credits)',
+  'admin.baseSiege.repairShieldCostBaseEx':
+    'Example Lv.{lv}: {base} + {perLv} x {lv} = {cost} credits',
+  'admin.baseSiege.repairShieldCostPerLv': 'Repair Shield: Cost per GEAR level',
+  'admin.baseSiege.repairShieldCostPerLvEx':
+    'Example: Lv.1 costs {c1} CR · Lv.10 costs {c10} CR',
+  'admin.baseSiege.raidGroup': 'Enemy Raid Damage',
+  'admin.baseSiege.raidShieldDamage': 'Shield damage on raid (0–100,000)',
+  'admin.baseSiege.raidShieldDamageEx':
+    'Example Outpost ({max} Shield): 1 raid leaves {after} Shield',
+  'admin.baseSiege.raidHpDamage': 'HP damage on raid (0–100,000)',
+  'admin.baseSiege.raidHpDamageEx':
+    'Example at 0 Shield ({max} HP): 1 raid leaves {after} HP (~{hits} raids to lose base)',
 } as const;
 
 export type TranslationKey = keyof typeof EN_TRANSLATIONS;

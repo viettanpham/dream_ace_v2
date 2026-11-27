@@ -2479,6 +2479,17 @@ describe('22. Map UI World Rules (Base Shapes, Battle Sizes, Damaged Capture, Re
     expect(allies.some((a) => a.id === 'ally_hired_merc')).toBe(true);
 
     // Freshly capture hostile Fortress (debris_belt, 2 months repair)
+    pilot = {
+      ...pilot,
+      baseStates: {
+        ...pilot.baseStates,
+        debris_belt: {
+          ...getBaseState(pilot, 'debris_belt'),
+          siegeShield: 0,
+          siegeHp: 1,
+        },
+      },
+    };
     const capture = applyBattleBaseConsequences(pilot, 'debris_belt', true);
     pilot = capture.pilot;
     expect(capture.capturedFreshly).toBe(true);

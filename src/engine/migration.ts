@@ -60,6 +60,12 @@ import {
   sanitizePrestageConfig,
 } from './prestage';
 import {
+  cloneBaseSiegeConfig,
+  DEFAULT_BASE_SIEGE_CONFIG,
+  getBaseSiegeMax,
+  sanitizeBaseSiegeConfig,
+} from './baseSiege';
+import {
   cloneModuleDropConfig,
   DEFAULT_MODULE_DROP_CONFIG,
   sanitizeModuleDropConfig,
@@ -496,6 +502,7 @@ export function createDefaultAdminConfig(): AdminConfig {
     passiveSlots: clonePassiveSlotsConfig(DEFAULT_PASSIVE_SLOTS_CONFIG),
     activeSlots: cloneActiveSlotsConfig(DEFAULT_ACTIVE_SLOTS_CONFIG),
     supplyRewards: cloneSupplyRewardsConfig(DEFAULT_SUPPLY_REWARDS_CONFIG),
+    baseSiege: cloneBaseSiegeConfig(DEFAULT_BASE_SIEGE_CONFIG),
     skillMods: [],
     mapPack: null,
     showRawI18nKeys: false,
@@ -1005,6 +1012,7 @@ export function migrateSaveData(
     battlePenalty: sanitizeBattlePenaltyConfig(rawAdmin.battlePenalty),
     vouchers: sanitizeVoucherConfig(rawAdmin.vouchers),
     supplyRewards: sanitizeSupplyRewardsConfig(rawAdmin.supplyRewards),
+    baseSiege: sanitizeBaseSiegeConfig(rawAdmin.baseSiege),
     skillMods: sanitizeSkillMods(
       rawAdmin.skillMods,
       Array.isArray(rawAdmin.iconCatalogMods) ? rawAdmin.iconCatalogMods : []
@@ -1211,6 +1219,37 @@ export function migrateSaveData(
       const rawB = rawPilot.baseStates?.[sec.id];
       const defB = defaultBases[sec.id];
       if (rawB && typeof rawB === 'object') {
+        const { maxShield, maxHp } = getBaseSiegeMax(
+          sec.baseType,
+          adminConfig.baseSiege
+        );
+        const cleanSiegeShield =
+          typeof rawB.siegeShield === 'number' && Number.isFinite(rawB.siegeShield)
+            ? Math.max(0, Math.min(maxShield, Math.round(rawB.siegeShield)))
+            : undefined;
+        const cleanSiegeHp =
+          typeof rawB.siegeHp === 'number' && Number.isFinite(rawB.siegeHp)
+            ? Math.max(0, Math.min(maxHp, Math.round(rawB.siegeHp)))
+            : undefined;
+        const cleanLastAttacked =
+          typeof rawB.lastAttackedMonth === 'number' &&
+          Number.isFinite(rawB.lastAttackedMonth) &&
+          rawB.lastAttackedMonth >= 1
+            ? Math.floor(rawB.lastAttackedMonth)
+            : undefined;
+        const cleanLastRepairHp =
+          typeof rawB.lastRepairHpMonth === 'number' &&
+          Number.isFinite(rawB.lastRepairHpMonth) &&
+          rawB.lastRepairHpMonth >= 1
+            ? Math.floor(rawB.lastRepairHpMonth)
+            : undefined;
+        const cleanLastRepairShield =
+          typeof rawB.lastRepairShieldMonth === 'number' &&
+          Number.isFinite(rawB.lastRepairShieldMonth) &&
+          rawB.lastRepairShieldMonth >= 1
+            ? Math.floor(rawB.lastRepairShieldMonth)
+            : undefined;
+
         cleanBaseStates[sec.id] = {
           faction:
             rawB.faction === 'allied' ||
@@ -1238,6 +1277,17 @@ export function migrateSaveData(
             Boolean(getMapNodeById(rawB.attackFromSectorId))
               ? rawB.attackFromSectorId
               : null,
+          ...(cleanSiegeShield !== undefined ? { siegeShield: cleanSiegeShield } : {}),
+          ...(cleanSiegeHp !== undefined ? { siegeHp: cleanSiegeHp } : {}),
+          ...(cleanLastAttacked !== undefined
+            ? { lastAttackedMonth: cleanLastAttacked }
+            : {}),
+          ...(cleanLastRepairHp !== undefined
+            ? { lastRepairHpMonth: cleanLastRepairHp }
+            : {}),
+          ...(cleanLastRepairShield !== undefined
+            ? { lastRepairShieldMonth: cleanLastRepairShield }
+            : {}),
         };
       } else {
         cleanBaseStates[sec.id] = {

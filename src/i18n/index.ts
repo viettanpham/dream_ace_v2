@@ -1167,6 +1167,26 @@ function formatCombatLogBody(
         ),
       });
 
+    case 'log.baseSiegeDamaged':
+      return translate(lang, 'log.baseSiegeDamaged', {
+        sector: getSectorName(lang, String(p.sectorId ?? '')),
+        shieldBefore: Number(p.shieldBefore ?? 0),
+        shieldAfter: Number(p.shieldAfter ?? 0),
+        hpAfter: Number(p.hpAfter ?? 0),
+      });
+
+    case 'log.baseSiegeHpDamaged':
+      return translate(lang, 'log.baseSiegeHpDamaged', {
+        sector: getSectorName(lang, String(p.sectorId ?? '')),
+        hpBefore: Number(p.hpBefore ?? 0),
+        hpAfter: Number(p.hpAfter ?? 0),
+      });
+
+    case 'log.baseSiegeCaptured':
+      return translate(lang, 'log.baseSiegeCaptured', {
+        sector: getSectorName(lang, String(p.sectorId ?? '')),
+      });
+
     case 'log.buffApplied': {
       const skillId = String(p.skillId ?? 'gen_hull_brace');
       return translate(lang, 'log.buffApplied', {

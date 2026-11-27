@@ -781,6 +781,11 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'log.repairFreeRetreat':
     'Quốc gia phải hỗ trợ chi trả phí sửa chữa vì hành động rút lui',
   'log.repairFee': 'Phí sửa chữa: -{fee} CR',
+  'log.baseSiegeDamaged':
+    'Căn cứ {sector}: Shield {shieldBefore} -> {shieldAfter}, HP {hpAfter}',
+  'log.baseSiegeHpDamaged':
+    'Căn cứ {sector}: Shield 0, HP {hpBefore} -> {hpAfter}',
+  'log.baseSiegeCaptured': 'Đã chiếm căn cứ {sector}!',
   'log.buffApplied': '{actor} kích hoạt {skill} (-{spCost} SP).',
   'log.stanceToggle': '{actor} chuyển trạng thái {skill}: {state}.',
   'log.charging': '{actor} bắt đầu tụ năng {skill} — sẽ tự khai hỏa vào lượt sau!',
@@ -1172,6 +1177,11 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'map.status.damaged': 'Hư hại',
   'map.status.repairing': 'Đang sửa ({months} tháng)',
   'map.underAttack': 'Đang bị tấn công ({months} tháng)',
+  'map.raidNoticeDamaged':
+    'Địch tập kích {sector}: Shield {shieldBefore} -> {shieldAfter}, HP {hpBefore} -> {hpAfter}',
+  'map.raidNoticeFlipped': 'Địch đã chiếm lại {sector} sau đợt tập kích!',
+  'map.raidNoticeCapitalHeld':
+    'Thủ phủ {sector} bị tập kích và trụ vững ở 1 HP!',
   'map.legendTitle': 'Chú giải bản đồ',
   'map.legendRound': 'Tròn: Tiền đồn / Thuộc địa / Tiếp sóng (4v4)',
   'map.legendSquare': 'Vuông: Pháo đài / Xưởng tàu (6v6) · Thủ phủ (8v8)',
@@ -2682,6 +2692,83 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'admin.supplyGive.confirm': 'Đã tặng {name} x{qty}',
   'admin.supplyGive.confirmOverflow': ' (kho đầy, mất {lost})',
   'admin.supplyGive.failed': 'Không có vật tư hợp lệ để tặng.',
+
+  // BASE-SIEGE-a
+  'summary.siegeCaptured': 'Đã chiếm căn cứ!',
+  'summary.siegeShieldLine':
+    'Căn cứ: Shield {shieldBefore} -> {shieldAfter}, HP {hpAfter}',
+  'summary.siegeHpLine': 'Căn cứ: Shield 0, HP {hpBefore} -> {hpAfter}',
+  'admin.campaignSection.baseSiege.title': 'Căn cứ - Chiếm giữ',
+  'admin.campaignSection.baseSiege.desc':
+    'Shield căn cứ, HP chiếm giữ, sát thương mỗi trận thắng, tự hồi, sửa chữa và tập kích',
+  'admin.baseSiege.resetDefaults': 'Khôi phục mặc định',
+  'admin.baseSiege.resetAllPoolsBtn': 'Đặt lại máu mọi căn cứ về đầy',
+  'admin.baseSiege.resetAllPoolsConfirm':
+    'Xác nhận đặt lại Shield & HP toàn bộ căn cứ về mức tối đa?',
+  'admin.baseSiege.resetAllPoolsDone': 'Đã đặt lại máu mọi căn cứ về đầy',
+  'admin.baseSiege.confirmYes': 'Xác nhận',
+  'admin.baseSiege.confirmCancel': 'Hủy',
+  'admin.baseSiege.byTypeGroup': 'Máu tối đa theo loại căn cứ',
+  'admin.baseSiege.type.outpost': 'Tiền đồn (căn cứ nhỏ)',
+  'admin.baseSiege.type.colony': 'Thuộc địa',
+  'admin.baseSiege.type.relay': 'Trạm tiếp sóng',
+  'admin.baseSiege.type.fortress': 'Pháo đài',
+  'admin.baseSiege.type.shipyard': 'Xưởng tàu',
+  'admin.baseSiege.type.capital': 'Thủ phủ',
+  'admin.baseSiege.maxShield': 'Shield tối đa (1–100.000)',
+  'admin.baseSiege.maxHp': 'HP tối đa (1–100.000)',
+  'admin.baseSiege.typeRowEx':
+    '{name}: Shield {shield} / HP {hp} -> cần {sWins} + {hWins} = {total} trận thắng để chiếm',
+  'admin.baseSiege.maxShieldEx':
+    'Ví dụ: {sWins} trận thắng để phá Shield ({dmg}/trận)',
+  'admin.baseSiege.maxHpEx':
+    'Ví dụ: {hWins} trận thắng phá HP -> tổng {total} trận để chiếm',
+  'admin.baseSiege.winDamageGroup': 'Sát thương chiếm giữ mỗi trận thắng',
+  'admin.baseSiege.shieldDamagePerWin': 'Trừ Shield mỗi trận thắng (1–100.000)',
+  'admin.baseSiege.shieldDamagePerWinEx':
+    'Ví dụ Tiền đồn ({sMax} Shield): cần {sWins} trận phá Shield; Thủ phủ ({cMax}): {cWins} trận',
+  'admin.baseSiege.hpDamagePerWin': 'Trừ HP mỗi trận thắng (1–100.000)',
+  'admin.baseSiege.hpDamagePerWinEx':
+    'Ví dụ Tiền đồn: Shield {sMax} / HP {hMax} -> cần {sWins} + {hWins} = {total} trận thắng để chiếm',
+  'admin.baseSiege.regenGroup': 'Tự hồi phục hàng tháng',
+  'admin.baseSiege.regenIdleMonths': 'Số tháng không bị đánh để bắt đầu hồi (0–12)',
+  'admin.baseSiege.regenIdleMonthsEx':
+    'Hồi: sau {months} tháng không bị đánh, +{sPct}% shield, +{hPct}% HP mỗi tháng',
+  'admin.baseSiege.regenShieldPct': '% Shield hồi mỗi tháng (0–100)',
+  'admin.baseSiege.regenShieldPctEx':
+    'Ví dụ: Tiền đồn +{outpostGain} Shield/tháng · Pháo đài +{fortressGain} Shield/tháng',
+  'admin.baseSiege.regenHpPct': '% HP hồi mỗi tháng (0–100)',
+  'admin.baseSiege.regenHpPctEx':
+    'Ví dụ: Tiền đồn +{outpostGain} HP/tháng · Pháo đài +{fortressGain} HP/tháng',
+  'admin.baseSiege.repairGroup': 'Sửa chữa bằng Credit',
+  'admin.baseSiege.repairCooldown': 'Hồi chiêu sửa chữa (tháng, 0–12)',
+  'admin.baseSiege.repairCooldownEx':
+    'Ví dụ: sửa ở tháng 1 -> lần kế tiếp khả dụng từ tháng {nextMonth}',
+  'admin.baseSiege.repairHpPct': 'Sửa HP: % tối đa mỗi lần (1–100)',
+  'admin.baseSiege.repairHpPctEx':
+    'Sửa HP: +{pct}% ({amount} HP) tốn {base} + {perLv} x cấp GEAR = {cost} credit (Lv.{lv})',
+  'admin.baseSiege.repairHpCostBase': 'Sửa HP: Phí nền (credit)',
+  'admin.baseSiege.repairHpCostBaseEx':
+    'Ví dụ Lv.{lv}: tốn {base} + {perLv} x {lv} = {cost} credit',
+  'admin.baseSiege.repairHpCostPerLv': 'Sửa HP: Phí thêm mỗi cấp GEAR',
+  'admin.baseSiege.repairHpCostPerLvEx':
+    'Ví dụ: Lv.1 tốn {c1} credit · Lv.10 tốn {c10} credit',
+  'admin.baseSiege.repairShieldPct': 'Sửa Shield: % tối đa mỗi lần (1–100)',
+  'admin.baseSiege.repairShieldPctEx':
+    'Sửa Shield: +{pct}% ({amount} Shield) tốn {base} + {perLv} x cấp GEAR = {cost} credit (Lv.{lv})',
+  'admin.baseSiege.repairShieldCostBase': 'Sửa Shield: Phí nền (credit)',
+  'admin.baseSiege.repairShieldCostBaseEx':
+    'Ví dụ Lv.{lv}: tốn {base} + {perLv} x {lv} = {cost} credit',
+  'admin.baseSiege.repairShieldCostPerLv': 'Sửa Shield: Phí thêm mỗi cấp GEAR',
+  'admin.baseSiege.repairShieldCostPerLvEx':
+    'Ví dụ: Lv.1 tốn {c1} credit · Lv.10 tốn {c10} credit',
+  'admin.baseSiege.raidGroup': 'Sát thương khi địch tập kích',
+  'admin.baseSiege.raidShieldDamage': 'Trừ Shield khi tập kích (0–100.000)',
+  'admin.baseSiege.raidShieldDamageEx':
+    'Ví dụ Tiền đồn ({max} Shield): 1 lần tập kích giảm còn {after} Shield',
+  'admin.baseSiege.raidHpDamage': 'Trừ HP khi tập kích (0–100.000)',
+  'admin.baseSiege.raidHpDamageEx':
+    'Ví dụ khi Shield = 0 (HP {max}): 1 lần giảm còn {after} HP (~{hits} lần mất căn cứ)',
 };
 
 

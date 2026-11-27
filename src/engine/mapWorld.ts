@@ -1,10 +1,17 @@
 import {
   createInitialBaseStates,
+  getMapNodeById,
+  getMapNodes,
   getSectorById,
   MAP_LANES,
   SECTORS_CATALOG,
 } from '../data/maps';
 import { BATTLE_KIND_RULES } from '../data/battleKinds';
+import {
+  applySiegeDamage,
+  getBaseSiege,
+  sanitizeBaseSiegeConfig,
+} from './baseSiege';
 import {
   isContested,
   mergeVisibleUnlockedSectors,
@@ -13,6 +20,7 @@ import {
 import { sanitizeSectorSupply } from './npcSupply';
 import type {
   BaseRuntimeState,
+  BaseSiegeConfig,
   BattleKind,
   BonusMissionState,
   MechClassId,
@@ -135,6 +143,18 @@ export function startBaseRepair(
   };
 }
 
+export interface RaidStrikeResult {
+  sectorId: string;
+  shieldBefore: number;
+  shieldAfter: number;
+  hpBefore: number;
+  hpAfter: number;
+  maxShield: number;
+  maxHp: number;
+  flipped: boolean;
+  capitalHeld?: boolean;
+}
+
 export interface MonthAdvanceSummary {
   pilot: PilotAccount;
   newMonth: number;
@@ -142,26 +162,33 @@ export interface MonthAdvanceSummary {
   warPointsEarned: number;
   repairedSectorIds: string[];
   raidedSectorIds: string[];
+  flippedSectorIds: string[];
+  raidResults: RaidStrikeResult[];
 }
 
 /**
  * Advances the campaign calendar by 1 month:
  * - Collects income from all Operational Allied bases.
  * - Progresses repairing bases (1-2 months -> Operational).
- * - Ticks Under Attack countdowns (unanswered raids damage the base).
+ * - Regenerates base siege Shield/HP after idleMonths without an assault.
+ * - Ticks Under Attack countdowns (unanswered raids damage siege pools & can flip bases).
  * - Schedules a fresh frontier raid warning on a connected Allied base if none is under attack.
  */
 export function advanceCampaignMonth(
   pilot: PilotAccount,
-  regenPerMonth = 10
+  regenPerMonth = 10,
+  baseSiegeCfg?: Partial<BaseSiegeConfig> | null
 ): MonthAdvanceSummary {
+  const siegeCfg = sanitizeBaseSiegeConfig(baseSiegeCfg);
   const income = getTotalMonthlyIncome(pilot);
   const nextMonth = (pilot.campaignMonth || 1) + 1;
   const nextBaseStates: Record<string, BaseRuntimeState> = {};
   const repairedSectorIds: string[] = [];
   const raidedSectorIds: string[] = [];
+  const flippedSectorIds: string[] = [];
+  const raidResults: RaidStrikeResult[] = [];
 
-  for (const sector of SECTORS_CATALOG) {
+  for (const sector of getMapNodes()) {
     const cur = { ...getBaseState(pilot, sector.id) };
 
     if (cur.status === 'repairing') {
@@ -175,6 +202,33 @@ export function advanceCampaignMonth(
       }
     }
 
+    // Monthly siege Shield/HP regen when below max and idle for >= regen.idleMonths
+    const siegeBeforeRegen = getBaseSiege(cur, sector.baseType, siegeCfg);
+    if (
+      siegeBeforeRegen.shield < siegeBeforeRegen.maxShield ||
+      siegeBeforeRegen.hp < siegeBeforeRegen.maxHp
+    ) {
+      const isIdleEnough =
+        cur.lastAttackedMonth === undefined ||
+        nextMonth - cur.lastAttackedMonth >= siegeCfg.regen.idleMonths;
+      if (isIdleEnough) {
+        const shieldGain = Math.round(
+          (siegeBeforeRegen.maxShield * siegeCfg.regen.shieldPct) / 100
+        );
+        const hpGain = Math.round(
+          (siegeBeforeRegen.maxHp * siegeCfg.regen.hpPct) / 100
+        );
+        cur.siegeShield = Math.min(
+          siegeBeforeRegen.maxShield,
+          siegeBeforeRegen.shield + shieldGain
+        );
+        cur.siegeHp = Math.min(
+          siegeBeforeRegen.maxHp,
+          siegeBeforeRegen.hp + hpGain
+        );
+      }
+    }
+
     if (cur.underAttack && cur.faction === 'allied') {
       const nextCd = Math.max(0, cur.attackCountdownMonths - 1);
       if (nextCd === 0) {
@@ -183,6 +237,62 @@ export function advanceCampaignMonth(
         cur.attackFromSectorId = null;
         cur.status = 'damaged';
         cur.repairMonthsRemaining = 0;
+
+        const beforeRaid = getBaseSiege(cur, sector.baseType, siegeCfg);
+        const raidDmg = applySiegeDamage(
+          beforeRaid,
+          siegeCfg.raid.shieldDamage,
+          siegeCfg.raid.hpDamage
+        );
+        const isAlliedCapital = sector.baseType === 'capital';
+
+        if (isAlliedCapital) {
+          cur.siegeShield = raidDmg.shield;
+          cur.siegeHp = raidDmg.broken ? 1 : raidDmg.hp;
+          raidResults.push({
+            sectorId: sector.id,
+            shieldBefore: beforeRaid.shield,
+            shieldAfter: cur.siegeShield,
+            hpBefore: beforeRaid.hp,
+            hpAfter: cur.siegeHp,
+            maxShield: beforeRaid.maxShield,
+            maxHp: beforeRaid.maxHp,
+            flipped: false,
+            capitalHeld: raidDmg.broken,
+          });
+        } else if (raidDmg.broken) {
+          cur.faction = 'hostile';
+          cur.status = 'damaged';
+          cur.repairMonthsRemaining = 0;
+          cur.siegeShield = beforeRaid.maxShield;
+          cur.siegeHp = beforeRaid.maxHp;
+          delete cur.lastRepairHpMonth;
+          delete cur.lastRepairShieldMonth;
+          flippedSectorIds.push(sector.id);
+          raidResults.push({
+            sectorId: sector.id,
+            shieldBefore: beforeRaid.shield,
+            shieldAfter: 0,
+            hpBefore: beforeRaid.hp,
+            hpAfter: 0,
+            maxShield: beforeRaid.maxShield,
+            maxHp: beforeRaid.maxHp,
+            flipped: true,
+          });
+        } else {
+          cur.siegeShield = raidDmg.shield;
+          cur.siegeHp = raidDmg.hp;
+          raidResults.push({
+            sectorId: sector.id,
+            shieldBefore: beforeRaid.shield,
+            shieldAfter: raidDmg.shield,
+            hpBefore: beforeRaid.hp,
+            hpAfter: raidDmg.hp,
+            maxShield: beforeRaid.maxShield,
+            maxHp: beforeRaid.maxHp,
+            flipped: false,
+          });
+        }
         raidedSectorIds.push(sector.id);
       } else {
         cur.attackCountdownMonths = nextCd;
@@ -235,6 +345,11 @@ export function advanceCampaignMonth(
     nextSectorSupply = sanitizeSectorSupply(bumped);
   }
   const { sectorSupply: _droppedSupply, ...pilotBase } = pilot;
+  const flippedSet = new Set(flippedSectorIds);
+  const nextCapturedSectorIds =
+    flippedSet.size > 0
+      ? pilot.capturedSectorIds.filter((id) => !flippedSet.has(id))
+      : pilot.capturedSectorIds;
 
   return {
     pilot: {
@@ -242,6 +357,7 @@ export function advanceCampaignMonth(
       campaignMonth: nextMonth,
       credits: pilot.credits + income.credits,
       warPoints: pilot.warPoints + income.warPoints,
+      capturedSectorIds: nextCapturedSectorIds,
       baseStates: nextBaseStates,
       ...(nextSectorSupply ? { sectorSupply: nextSectorSupply } : {}),
     },
@@ -250,6 +366,8 @@ export function advanceCampaignMonth(
     warPointsEarned: income.warPoints,
     repairedSectorIds,
     raidedSectorIds,
+    flippedSectorIds,
+    raidResults,
   };
 }
 
@@ -390,6 +508,17 @@ export function applyBaseEngineerBoost(
   };
 }
 
+export interface SiegeBattleResult {
+  sectorId: string;
+  shieldBefore: number;
+  shieldAfter: number;
+  hpBefore: number;
+  hpAfter: number;
+  maxShield: number;
+  maxHp: number;
+  captured: boolean;
+}
+
 /**
  * Applies post-battle base capture / raid defense / bonus mission completion / hired wingman consumption.
  * Freshly captured bases ALWAYS start in "damaged" status (0 income, no services until repaired over 1-2 months).
@@ -398,41 +527,86 @@ export function applyBattleBaseConsequences(
   pilot: PilotAccount,
   sectorId: string,
   won: boolean,
-  kind: BattleKind = 'assault'
+  kind: BattleKind = 'assault',
+  baseSiegeCfg?: Partial<BaseSiegeConfig> | null
 ): {
   pilot: PilotAccount;
   bonusMissionCredits: number;
   bonusMissionWarPoints: number;
   capturedFreshly: boolean;
+  siegeResult?: SiegeBattleResult;
 } {
   const rule = BATTLE_KIND_RULES[kind];
+  const siegeCfg = sanitizeBaseSiegeConfig(baseSiegeCfg);
+  const sector = getMapNodeById(sectorId) ?? getSectorById(sectorId);
   const curBase = getBaseState(pilot, sectorId);
+  const curMonth = Math.max(1, Math.floor(pilot.campaignMonth || 1));
   const nextBaseStates: Record<string, BaseRuntimeState> = {
     ...(pilot.baseStates ?? createInitialBaseStates()),
   };
   let capturedFreshly = false;
+  let siegeResult: SiegeBattleResult | undefined = undefined;
 
-  if (won) {
-    if (rule.capturesOnWin && curBase.faction !== 'allied') {
-      // Freshly captured base starts DAMAGED!
-      nextBaseStates[sectorId] = {
-        faction: 'allied',
-        status: 'damaged',
-        repairMonthsRemaining: 0,
-        underAttack: false,
-        attackCountdownMonths: 0,
-        attackFromSectorId: null,
+  if (rule.capturesOnWin) {
+    if (won && curBase.faction !== 'allied') {
+      const before = getBaseSiege(curBase, sector.baseType, siegeCfg);
+      const dmg = applySiegeDamage(
+        before,
+        siegeCfg.shieldDamagePerWin,
+        siegeCfg.hpDamagePerWin
+      );
+      siegeResult = {
+        sectorId,
+        shieldBefore: before.shield,
+        shieldAfter: dmg.shield,
+        hpBefore: before.hp,
+        hpAfter: dmg.hp,
+        maxShield: before.maxShield,
+        maxHp: before.maxHp,
+        captured: dmg.broken,
       };
-      capturedFreshly = true;
-    } else if (rule.clearsRaid && curBase.faction === 'allied' && curBase.underAttack) {
-      // Successfully defended Allied base from incoming raid
+      if (dmg.broken) {
+        // Freshly captured base starts DAMAGED with full siege pool for new owner!
+        nextBaseStates[sectorId] = {
+          faction: 'allied',
+          status: 'damaged',
+          repairMonthsRemaining: 0,
+          underAttack: false,
+          attackCountdownMonths: 0,
+          attackFromSectorId: null,
+          siegeShield: before.maxShield,
+          siegeHp: before.maxHp,
+          lastAttackedMonth: curMonth,
+        };
+        capturedFreshly = true;
+      } else {
+        nextBaseStates[sectorId] = {
+          ...curBase,
+          siegeShield: dmg.shield,
+          siegeHp: dmg.hp,
+          lastAttackedMonth: curMonth,
+        };
+      }
+    } else if (!won) {
+      // Defeat or retreat leaves siege pool untouched, but marks lastAttackedMonth
       nextBaseStates[sectorId] = {
         ...curBase,
-        underAttack: false,
-        attackCountdownMonths: 0,
-        attackFromSectorId: null,
+        lastAttackedMonth: curMonth,
       };
     }
+  } else if (
+    won &&
+    rule.clearsRaid &&
+    curBase.faction === 'allied' &&
+    curBase.underAttack
+  ) {
+    // Successfully defended Allied base from incoming raid
+    nextBaseStates[sectorId] = {
+      ...curBase,
+      underAttack: false,
+      attackCountdownMonths: 0,
+      attackFromSectorId: null,
+    };
   }
 
   // Cumulative visibility history: add every visible node, never remove one
@@ -471,5 +645,6 @@ export function applyBattleBaseConsequences(
     bonusMissionCredits,
     bonusMissionWarPoints,
     capturedFreshly,
+    ...(siegeResult ? { siegeResult } : {}),
   };
 }

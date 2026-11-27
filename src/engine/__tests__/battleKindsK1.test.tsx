@@ -216,8 +216,19 @@ describe('TASK MAP-K1 — Battle Kinds, Rule Table, Consequences, Sources & Loop
     }
 
     // Assault win -> captures border_outpost (damaged)
+    const assaultPilot = {
+      ...basePilot,
+      baseStates: {
+        ...basePilot.baseStates,
+        border_outpost: {
+          ...basePilot.baseStates.border_outpost,
+          siegeShield: 0,
+          siegeHp: 1,
+        },
+      },
+    };
     const assaultWin = applyBattleBaseConsequences(
-      basePilot,
+      assaultPilot,
       'border_outpost',
       true,
       'assault'
@@ -227,6 +238,19 @@ describe('TASK MAP-K1 — Battle Kinds, Rule Table, Consequences, Sources & Loop
     expect(assaultWin.pilot.baseStates.border_outpost.status).toBe('damaged');
 
     // Full store assault win updates capturedSectorIds & summary.kind
+    useGameStore.setState((s) => ({
+      pilot: {
+        ...s.pilot,
+        baseStates: {
+          ...s.pilot.baseStates,
+          border_outpost: {
+            ...s.pilot.baseStates.border_outpost,
+            siegeShield: 0,
+            siegeHp: 1,
+          },
+        },
+      },
+    }));
     useGameStore.getState().startBattle('border_outpost');
     useGameStore.getState().forceWinBattle();
     expect(useGameStore.getState().pilot.baseStates.border_outpost.faction).toBe(
@@ -480,6 +504,19 @@ describe('TASK MAP-K1 — Battle Kinds, Rule Table, Consequences, Sources & Loop
     // Also verify assault loop on border_outpost stops with node_not_contested right after Run #1 captures it
     useGameStore.getState().resetCampaign();
     useGameStore.getState().startCampaign('Vance', 'striker');
+    useGameStore.setState((s) => ({
+      pilot: {
+        ...s.pilot,
+        baseStates: {
+          ...s.pilot.baseStates,
+          border_outpost: {
+            ...s.pilot.baseStates.border_outpost,
+            siegeShield: 0,
+            siegeHp: 1,
+          },
+        },
+      },
+    }));
     useGameStore.getState().startAutoRepeat(5, 'border_outpost');
     expect(useGameStore.getState().battle?.kind).toBe('assault');
     useGameStore.getState().forceWinBattle();

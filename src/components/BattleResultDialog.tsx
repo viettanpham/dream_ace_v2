@@ -137,6 +137,31 @@ export function BattleResultDialog({
                   })}
                 </div>
               )}
+
+              {summary.siegeResult && (
+                <div
+                  data-testid="battle-result-siege-line"
+                  className={`rounded border px-3.5 py-2 text-[13px] font-semibold font-mono-nums ${
+                    summary.siegeResult.captured
+                      ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
+                      : 'border-sky-500/40 bg-sky-500/10 text-sky-200'
+                  }`}
+                >
+                  {summary.siegeResult.captured
+                    ? t('summary.siegeCaptured')
+                    : summary.siegeResult.shieldBefore !==
+                        summary.siegeResult.shieldAfter
+                      ? t('summary.siegeShieldLine', {
+                          shieldBefore: summary.siegeResult.shieldBefore,
+                          shieldAfter: summary.siegeResult.shieldAfter,
+                          hpAfter: summary.siegeResult.hpAfter,
+                        })
+                      : t('summary.siegeHpLine', {
+                          hpBefore: summary.siegeResult.hpBefore,
+                          hpAfter: summary.siegeResult.hpAfter,
+                        })}
+                </div>
+              )}
             </div>
 
             {/* RIGHT column (desktop) / Middle-lower sections (phone): rewards, combat tally, drops */}

@@ -379,6 +379,11 @@ export interface BaseRuntimeState {
   underAttack: boolean;
   attackCountdownMonths: number; // >0 when underAttack
   attackFromSectorId: string | null;
+  siegeShield?: number;
+  siegeHp?: number;
+  lastAttackedMonth?: number;
+  lastRepairHpMonth?: number;
+  lastRepairShieldMonth?: number;
 }
 
 export interface HiredWingmanBuff {
@@ -1191,7 +1196,10 @@ export type CombatLogTemplateKey =
   | 'log.repairFreeRetreat'
   | 'log.repairFee'
   | 'log.supplyDrop'
-  | 'log.supplyDropLost';
+  | 'log.supplyDropLost'
+  | 'log.baseSiegeDamaged'
+  | 'log.baseSiegeHpDamaged'
+  | 'log.baseSiegeCaptured';
 
 export interface CombatLogEntry {
   id: string;
@@ -1260,6 +1268,16 @@ export interface BattleSummary {
   droppedItems: ItemInstance[];
   supplyDrop?: { templateId: string; qty: number; lostQty?: number };
   missionSupplyDrop?: { templateId: string; qty: number; lostQty?: number };
+  siegeResult?: {
+    sectorId: string;
+    shieldBefore: number;
+    shieldAfter: number;
+    hpBefore: number;
+    hpAfter: number;
+    maxShield: number;
+    maxHp: number;
+    captured: boolean;
+  };
 }
 
 export interface WingmanChatter {
@@ -1777,7 +1795,45 @@ export interface AdminConfig {
   skillMods?: SkillModDefinition[];
   vouchers?: VoucherConfig;
   supplyRewards?: SupplyRewardsConfig;
+  baseSiege?: BaseSiegeConfig;
   showRawI18nKeys: boolean;
+}
+
+export interface BaseSiegePoolMax {
+  maxShield: number;
+  maxHp: number;
+}
+
+export interface BaseSiegeRegenConfig {
+  idleMonths: number;
+  shieldPct: number;
+  hpPct: number;
+}
+
+export interface BaseSiegeRepairTierConfig {
+  amountPct: number;
+  costBase: number;
+  costPerGearLevel: number;
+}
+
+export interface BaseSiegeRepairConfig {
+  hp: BaseSiegeRepairTierConfig;
+  shield: BaseSiegeRepairTierConfig;
+  cooldownMonths: number;
+}
+
+export interface BaseSiegeRaidConfig {
+  shieldDamage: number;
+  hpDamage: number;
+}
+
+export interface BaseSiegeConfig {
+  byType: Record<BaseType, BaseSiegePoolMax>;
+  shieldDamagePerWin: number;
+  hpDamagePerWin: number;
+  regen: BaseSiegeRegenConfig;
+  repair: BaseSiegeRepairConfig;
+  raid: BaseSiegeRaidConfig;
 }
 
 export interface SupplyRewardSourceConfig {

@@ -31,6 +31,7 @@ import { BattleRewardsAdminBlock } from './admin/BattleRewardsAdminBlock';
 import { BattlePenaltyAdminBlock } from './admin/BattlePenaltyAdminBlock';
 import { MapPackAdminBlock } from './admin/MapPackAdminBlock';
 import { WorldGenAdminBlock } from './admin/WorldGenAdminBlock';
+import { BaseSiegeAdminBlock } from './admin/BaseSiegeAdminBlock';
 import { VoucherAdminBlock } from './admin/VoucherAdminBlock';
 import {
   AdminSection,
@@ -3642,6 +3643,17 @@ export function AdminPanel() {
                 description={t('admin.campaignSection.worldGen.desc')}
               >
                 <WorldGenAdminBlock onFlash={flash} />
+              </AdminSection>
+              <AdminSection
+                id="campaign-base-siege"
+                title={t('admin.campaignSection.baseSiege.title')}
+                description={t('admin.campaignSection.baseSiege.desc')}
+              >
+                <BaseSiegeAdminBlock
+                  adminConfig={adminConfig}
+                  adminUpdateConfig={adminUpdateConfig}
+                  onFlash={flash}
+                />
               </AdminSection>
               <div className="p-3.5 rounded-lg border border-slate-800 bg-[#0D1422] flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-2">

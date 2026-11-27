@@ -91,6 +91,25 @@ describe('TASK MAP-F2 — Map Frontline Nodes, Lanes, Legend, Briefing Options &
 
     // Capture border_outpost -> border_outpost becomes allied-frontline, debris_belt becomes contested
     act(() => {
+      useGameStore.setState((s) => ({
+        pilot: {
+          ...s.pilot,
+          baseStates: {
+            ...s.pilot.baseStates,
+            border_outpost: {
+              ...s.pilot.baseStates.border_outpost,
+              siegeShield: 0,
+              siegeHp: 1,
+            },
+            veridian_colony: {
+              ...s.pilot.baseStates.veridian_colony,
+              siegeShield: 0,
+              siegeHp: 1,
+              lastAttackedMonth: s.pilot.campaignMonth,
+            },
+          },
+        },
+      }));
       useGameStore.getState().startBattle('border_outpost');
       useGameStore.getState().forceWinBattle();
     });
@@ -198,6 +217,25 @@ describe('TASK MAP-F2 — Map Frontline Nodes, Lanes, Legend, Briefing Options &
 
     // After capturing border_outpost & veridian_colony -> lane_aegis_veridian becomes allied-allied, lane_border_caldera becomes allied-to-contested
     act(() => {
+      useGameStore.setState((s) => ({
+        pilot: {
+          ...s.pilot,
+          baseStates: {
+            ...s.pilot.baseStates,
+            border_outpost: {
+              ...s.pilot.baseStates.border_outpost,
+              siegeShield: 0,
+              siegeHp: 1,
+            },
+            veridian_colony: {
+              ...s.pilot.baseStates.veridian_colony,
+              siegeShield: 0,
+              siegeHp: 1,
+              lastAttackedMonth: s.pilot.campaignMonth,
+            },
+          },
+        },
+      }));
       useGameStore.getState().startBattle('border_outpost');
       useGameStore.getState().forceWinBattle();
       useGameStore.getState().startBattle('veridian_colony');
@@ -254,6 +292,19 @@ describe('TASK MAP-F2 — Map Frontline Nodes, Lanes, Legend, Briefing Options &
 
   it('5) shows node battle size in option row (e.g. 6v6 debris_belt) and single muted line + disabled CTA when nothing is allowed', () => {
     // Capture border_outpost so debris_belt (6v6) is contested -> "Tấn công 6v6"
+    useGameStore.setState((s) => ({
+      pilot: {
+        ...s.pilot,
+        baseStates: {
+          ...s.pilot.baseStates,
+          border_outpost: {
+            ...s.pilot.baseStates.border_outpost,
+            siegeShield: 0,
+            siegeHp: 1,
+          },
+        },
+      },
+    }));
     useGameStore.getState().startBattle('border_outpost');
     useGameStore.getState().forceWinBattle();
     useGameStore.getState().selectSector('debris_belt');

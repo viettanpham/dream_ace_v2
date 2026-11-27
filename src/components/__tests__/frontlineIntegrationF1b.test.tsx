@@ -165,6 +165,19 @@ describe('TASK MAP-F1b — Frontline Integration (Store, Engine, Loop, MapView)'
     expect(typeof getNextSectorId).toBe('function');
     expect(getNextSectorId('border_outpost')).toBe('debris_belt');
 
+    useGameStore.setState((s) => ({
+      pilot: {
+        ...s.pilot,
+        baseStates: {
+          ...s.pilot.baseStates,
+          border_outpost: {
+            ...s.pilot.baseStates.border_outpost,
+            siegeShield: 0,
+            siegeHp: 1,
+          },
+        },
+      },
+    }));
     useGameStore.getState().startBattle('border_outpost');
     expect(useGameStore.getState().battle).not.toBeNull();
 

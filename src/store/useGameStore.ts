@@ -120,8 +120,15 @@ import {
   type BaseActionResult,
   hirePilotForNextBattle,
   type MonthAdvanceSummary,
+  type RaidStrikeResult,
   startBaseRepair,
 } from '../engine/mapWorld';
+import {
+  applyBaseRepair,
+  type BaseRepairFailureReason,
+  resetAllBaseSiegePools,
+  sanitizeBaseSiegeConfig,
+} from '../engine/baseSiege';
 import {
   createDefaultAdminConfig,
   createFreshCampaignState,
@@ -486,6 +493,7 @@ interface GameStoreState {
   quickSellUndo: QuickSellUndoState | null;
   autoEquipUndo: AutoEquipUndoSnapshot | null;
   hasImportBackup: boolean;
+  lastRaidNotice: RaidStrikeResult[] | null;
 
   // Language
   setLanguage: (lang: Language) => void;
@@ -507,7 +515,20 @@ interface GameStoreState {
   resetStatAllocations: () => void;
   selectSector: (sectorId: string) => void;
   repairBase: (sectorId: string) => BaseActionResult;
+  repairBaseHp: (sectorId: string) => {
+    ok: boolean;
+    reason?: BaseRepairFailureReason;
+    cost?: number;
+    healed?: number;
+  };
+  repairBaseShield: (sectorId: string) => {
+    ok: boolean;
+    reason?: BaseRepairFailureReason;
+    cost?: number;
+    healed?: number;
+  };
   advanceMonth: () => MonthAdvanceSummary;
+  clearRaidNotice: () => void;
   hireWingmanAtBase: (sectorId: string, classId?: MechClassId) => BaseActionResult;
   acceptMissionAtBase: (sectorId: string) => BaseActionResult;
   useEngineerAtBase: (sectorId: string) => BaseActionResult;
@@ -733,6 +754,7 @@ interface GameStoreState {
   adminClearPirateIncidents: () => void;
   adminRemovePirateIncident: (incidentId: string) => void;
   adminRefillAllSectorSupply: () => void;
+  adminResetAllBaseSiege: () => void;
   adminUnlockAllGears: () => void;
   adminUnlockAllSectors: () => void;
   adminApplyStarterToEmptySlots: () => number;
@@ -885,9 +907,17 @@ function finalizeBattleOutcome(
   const deployedGearId = battle.deployedGearId;
   const deployedGear = state.pilot.gears[deployedGearId];
   const alreadyCaptured = state.pilot.capturedSectorIds.includes(battle.sectorId);
-  const effectiveAlreadyCaptured = kindRule.capturesOnWin
-    ? alreadyCaptured
-    : true;
+  const siegeCapturePreview = applyBattleBaseConsequences(
+    state.pilot,
+    battle.sectorId,
+    won,
+    battleKind,
+    state.adminConfig.baseSiege
+  );
+  const effectiveAlreadyCaptured =
+    kindRule.capturesOnWin && siegeCapturePreview.capturedFreshly
+      ? alreadyCaptured
+      : true;
   const effectiveRewardMult =
     state.adminConfig.rewardMultiplier * (battle.rewardMult ?? 1);
 
@@ -979,9 +1009,9 @@ function finalizeBattleOutcome(
     rewards.fullVictoryExp
   );
 
-  // Record base capture only when kind captures on win; unlockedSectorIds is cumulative visibility history (never shrinks)
+  // Record base capture only when siege pool actually breaks; unlockedSectorIds is cumulative visibility history (never shrinks)
   let nextCapturedSectors = state.pilot.capturedSectorIds;
-  if (won && kindRule.capturesOnWin && !alreadyCaptured) {
+  if (siegeCapturePreview.capturedFreshly && !alreadyCaptured) {
     nextCapturedSectors = [...state.pilot.capturedSectorIds, battle.sectorId];
   }
 
@@ -1003,12 +1033,13 @@ function finalizeBattleOutcome(
   const basePilotBeforeConsequences = pilotWithBaseRewards;
   const totalCreditsGained = rewards.creditsGained;
 
-  // Freshly captured bases start Damaged (assault only); repelled raids clear alert (defend only); bonus missions paid (assault/defend)
+  // Freshly captured bases start Damaged (assault only when siege pool breaks); repelled raids clear alert (defend only); bonus missions paid (assault/defend)
   const baseConseq = applyBattleBaseConsequences(
     basePilotBeforeConsequences,
     battle.sectorId,
     won,
-    battleKind
+    battleKind,
+    state.adminConfig.baseSiege
   );
   const pilotAfterPirateClear =
     won && battleKind === 'event' && battle.sourceId
@@ -1021,18 +1052,22 @@ function finalizeBattleOutcome(
     npcSupplyCfg
   );
   // Advance campaign calendar 1 month after each completed non-retreat sortie
-  const monthStep = retreated
-    ? { pilot: pilotAfterSupplyDrain }
-    : {
+  const monthAdvance = retreated
+    ? null
+    : advanceCampaignMonth(
+        pilotAfterSupplyDrain,
+        npcSupplyCfg.sector.regenPerMonth,
+        state.adminConfig.baseSiege
+      );
+  const monthStep = monthAdvance
+    ? {
         pilot: spawnOnMonth(
-          advanceCampaignMonth(
-            pilotAfterSupplyDrain,
-            npcSupplyCfg.sector.regenPerMonth
-          ).pilot,
+          monthAdvance.pilot,
           state.adminConfig.pirates,
           Math.random
         ),
-      };
+      }
+    : { pilot: pilotAfterSupplyDrain };
   const nextUnlockedSectors = mergeVisibleUnlockedSectors(monthStep.pilot);
   const nextPilotBase: PilotAccount = ensureIdle(
     {
@@ -1200,6 +1235,49 @@ function finalizeBattleOutcome(
   let nextAutoRepeatToast: AutoRepeatRunToast | null = null;
   let finalLog =
     supplyRewardLogs.length > 0 ? [...extraLog, ...supplyRewardLogs] : extraLog;
+  if (baseConseq.siegeResult) {
+    const sr = baseConseq.siegeResult;
+    finalLog = [
+      ...finalLog,
+      sr.captured
+        ? {
+            id: `log_siege_${Date.now()}_${extraTurnCounter}`,
+            round: battle.round,
+            actorName: 'SYSTEM',
+            tag: 'SYSTEM' as const,
+            templateKey: 'log.baseSiegeCaptured' as const,
+            params: {
+              sectorId: sr.sectorId,
+            },
+          }
+        : sr.shieldBefore !== sr.shieldAfter
+        ? {
+            id: `log_siege_${Date.now()}_${extraTurnCounter}`,
+            round: battle.round,
+            actorName: 'SYSTEM',
+            tag: 'SYSTEM' as const,
+            templateKey: 'log.baseSiegeDamaged' as const,
+            params: {
+              sectorId: sr.sectorId,
+              shieldBefore: sr.shieldBefore,
+              shieldAfter: sr.shieldAfter,
+              hpAfter: sr.hpAfter,
+            },
+          }
+        : {
+            id: `log_siege_${Date.now()}_${extraTurnCounter}`,
+            round: battle.round,
+            actorName: 'SYSTEM',
+            tag: 'SYSTEM' as const,
+            templateKey: 'log.baseSiegeHpDamaged' as const,
+            params: {
+              sectorId: sr.sectorId,
+              hpBefore: sr.hpBefore,
+              hpAfter: sr.hpAfter,
+            },
+          },
+    ];
+  }
   if (!won && (repairCheck.free || repairPaid > 0)) {
     finalLog = [
       ...finalLog,
@@ -1338,6 +1416,9 @@ function finalizeBattleOutcome(
     hasSaveData: true,
     autoRepeatSession: nextAutoRepeat,
     autoRepeatToast: nextAutoRepeatToast,
+    ...(monthAdvance && monthAdvance.raidResults.length > 0
+      ? { lastRaidNotice: monthAdvance.raidResults }
+      : {}),
     battle: {
       ...battle,
       units: updatedUnits,
@@ -1386,6 +1467,7 @@ function finalizeBattleOutcome(
         droppedItems,
         ...(supplyDrop ? { supplyDrop } : {}),
         ...(missionSupplyDrop ? { missionSupplyDrop } : {}),
+        ...(baseConseq.siegeResult ? { siegeResult: baseConseq.siegeResult } : {}),
       },
     },
   };
@@ -1621,6 +1703,7 @@ export const useGameStore = create<GameStoreState>()(
       adminPanelOpen: false,
       autoBattleEnabled: false,
       tacticsModalOpen: false,
+      lastRaidNotice: null,
       autoRepeatLimit: 1,
       autoRepeatDefeatRule: initialDeviceLoopPrefs.defeatRule,
       autoRepeatDefeatStreakLimit: initialDeviceLoopPrefs.defeatStreakLimit,
@@ -2529,6 +2612,62 @@ export const useGameStore = create<GameStoreState>()(
         return res;
       },
 
+      repairBaseHp: (sectorId) => {
+        const state = get();
+        if (isBattleActive(state) || state.autoRepeatSession?.active) {
+          return { ok: false, reason: 'busy' };
+        }
+        const res = applyBaseRepair(
+          state.pilot,
+          sectorId,
+          { hp: true },
+          state.adminConfig.baseSiege
+        );
+        if (!res.ok) {
+          return {
+            ok: false,
+            reason: res.reason,
+            ...(res.cost !== undefined ? { cost: res.cost } : {}),
+          };
+        }
+        soundFx.playConfirm();
+        set({ pilot: res.pilot, hasSaveData: true });
+        return {
+          ok: true,
+          cost: res.cost,
+          healed: res.healed?.hp ?? 0,
+        };
+      },
+
+      repairBaseShield: (sectorId) => {
+        const state = get();
+        if (isBattleActive(state) || state.autoRepeatSession?.active) {
+          return { ok: false, reason: 'busy' };
+        }
+        const res = applyBaseRepair(
+          state.pilot,
+          sectorId,
+          { shield: true },
+          state.adminConfig.baseSiege
+        );
+        if (!res.ok) {
+          return {
+            ok: false,
+            reason: res.reason,
+            ...(res.cost !== undefined ? { cost: res.cost } : {}),
+          };
+        }
+        soundFx.playConfirm();
+        set({ pilot: res.pilot, hasSaveData: true });
+        return {
+          ok: true,
+          cost: res.cost,
+          healed: res.healed?.shield ?? 0,
+        };
+      },
+
+      clearRaidNotice: () => set({ lastRaidNotice: null }),
+
       advanceMonth: () => {
         const state = get();
         const npcSupplyCfg = sanitizeNpcSupplyConfig(
@@ -2536,7 +2675,8 @@ export const useGameStore = create<GameStoreState>()(
         );
         const rawSummary = advanceCampaignMonth(
           state.pilot,
-          npcSupplyCfg.sector.regenPerMonth
+          npcSupplyCfg.sector.regenPerMonth,
+          state.adminConfig.baseSiege
         );
         const pilotAfterPirates = ensureIdle(
           spawnOnMonth(
@@ -2597,6 +2737,9 @@ export const useGameStore = create<GameStoreState>()(
           wpMarketOffers: nextWpOffers,
           battlesUntilRestock: SHOP_STOCK_CONFIG.restockEveryNBattles,
           hasSaveData: true,
+          ...(summary.raidResults.length > 0
+            ? { lastRaidNotice: summary.raidResults }
+            : {}),
         });
         return summary;
       },
@@ -5705,6 +5848,13 @@ export const useGameStore = create<GameStoreState>()(
         });
       },
 
+      adminResetAllBaseSiege: () => {
+        set((state) => ({
+          pilot: resetAllBaseSiegePools(state.pilot, state.adminConfig.baseSiege),
+          hasSaveData: true,
+        }));
+      },
+
       adminUnlockAllGears: () => {
         set((state) => {
           const nextGears = { ...state.pilot.gears };
@@ -6061,9 +6211,14 @@ export const useGameStore = create<GameStoreState>()(
               ? sanitizeMaxLevel(patch.maxLevel)
               : sanitizeMaxLevel(state.adminConfig.maxLevel);
           setRuntimeMaxLevel(nextMaxLevel);
+          const nextBaseSiege =
+            patch.baseSiege !== undefined
+              ? sanitizeBaseSiegeConfig(patch.baseSiege)
+              : sanitizeBaseSiegeConfig(state.adminConfig.baseSiege);
           const nextAdminConfig: AdminConfig = {
             ...state.adminConfig,
             ...patch,
+            baseSiege: nextBaseSiege,
             ...sanitizeSupplyShopExtraConfig({
               supplyShopMaxRefreshes:
                 patch.supplyShopMaxRefreshes ??

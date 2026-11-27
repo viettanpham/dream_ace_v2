@@ -261,6 +261,9 @@ export function isSystemOrKillLogEntry(entry: CombatLogEntry): boolean {
     entry.templateKey === 'log.repairFee' ||
     entry.templateKey === 'log.supplyDrop' ||
     entry.templateKey === 'log.supplyDropLost' ||
+    entry.templateKey === 'log.baseSiegeDamaged' ||
+    entry.templateKey === 'log.baseSiegeHpDamaged' ||
+    entry.templateKey === 'log.baseSiegeCaptured' ||
     entry.templateKey === 'log.invalidTarget' ||
     entry.templateKey === 'log.autoRepeatStopped'
   );
@@ -1403,6 +1406,9 @@ export function parseStructuredCombatLogRow(
     case 'log.repairFee':
     case 'log.supplyDrop':
     case 'log.supplyDropLost':
+    case 'log.baseSiegeDamaged':
+    case 'log.baseSiegeHpDamaged':
+    case 'log.baseSiegeCaptured':
     case 'log.retreat':
     case 'log.wingmanChat':
     default: {
@@ -1422,7 +1428,10 @@ export function parseStructuredCombatLogRow(
           entry.templateKey === 'log.repairFreeRetreat' ||
           entry.templateKey === 'log.repairFee' ||
           entry.templateKey === 'log.supplyDrop' ||
-          entry.templateKey === 'log.supplyDropLost'
+          entry.templateKey === 'log.supplyDropLost' ||
+          entry.templateKey === 'log.baseSiegeDamaged' ||
+          entry.templateKey === 'log.baseSiegeHpDamaged' ||
+          entry.templateKey === 'log.baseSiegeCaptured'
             ? translate(lang, 'log.actionSystem')
             : actorFromParams,
         autoBadge,
