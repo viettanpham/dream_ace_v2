@@ -20,7 +20,11 @@ import { BATTLE_KIND_RULES } from '../data/battleKinds';
 import { sanitizeAutoEquipConfig } from '../data/autoEquipConfig';
 import { EMPTY_STAT_BLOCK, MECH_CLASS_LIST } from '../data/classes';
 import { EQUIPMENT_SLOTS, SHOP_CONFIG } from '../data/items';
-import { SECTORS_CATALOG } from '../data/maps';
+import {
+  getDefaultSelectedNodeId,
+  getMapNodeById,
+  getMapNodes,
+} from '../data/maps';
 import { WINGMAN_CHAT_KEYS } from '../data/pilots';
 import { SHOP_STOCK_CONFIG } from '../data/shopConfig';
 import { sanitizeStarterSetConfig } from '../data/starterConfig';
@@ -5374,10 +5378,13 @@ export const useGameStore = create<GameStoreState>()(
         const state = get();
         const existing = state.pilot.baseStates[sectorId];
         if (!existing) return;
+        const mapNodes = getMapNodes();
         const hostileSource =
-          SECTORS_CATALOG.find(
+          mapNodes.find(
             (s) => state.pilot.baseStates[s.id]?.faction === 'hostile'
-          )?.id ?? SECTORS_CATALOG[SECTORS_CATALOG.length - 1].id;
+          )?.id ??
+          mapNodes[mapNodes.length - 1]?.id ??
+          getDefaultSelectedNodeId();
         set({
           pilot: {
             ...state.pilot,
@@ -5481,7 +5488,7 @@ export const useGameStore = create<GameStoreState>()(
         set((state) => ({
           pilot: {
             ...state.pilot,
-            unlockedSectorIds: SECTORS_CATALOG.map((s) => s.id),
+            unlockedSectorIds: getMapNodes().map((s) => s.id),
           },
           hasSaveData: true,
         }));
@@ -5974,9 +5981,9 @@ export const useGameStore = create<GameStoreState>()(
           }
           if (
             typeof state.selectedSectorId !== 'string' ||
-            !SECTORS_CATALOG.some((s) => s.id === state.selectedSectorId)
+            !getMapNodeById(state.selectedSectorId)
           ) {
-            state.selectedSectorId = SECTORS_CATALOG[0].id;
+            state.selectedSectorId = getDefaultSelectedNodeId();
           }
           if (!state.adminConfig || typeof state.adminConfig !== 'object') {
             state.adminConfig = createDefaultAdminConfig();

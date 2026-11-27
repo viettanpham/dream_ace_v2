@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { AFFIX_SUFFIX_MAP, getItemTemplate } from '../data/items';
+import { getDefaultSelectedNodeId } from '../data/maps';
 import { getSkillById } from '../data/skills';
 import { getStatusEntry } from '../data/statusEffects';
 import { formatStatusChipShortValue } from '../data/statusIconMap';
@@ -799,7 +800,7 @@ function formatCombatLogBody(
 
   switch (entry.templateKey) {
     case 'log.battleStart': {
-      const sectorId = String(p.sectorId ?? 'border_outpost');
+      const sectorId = String(p.sectorId ?? getDefaultSelectedNodeId());
       const diff = String(p.difficulty ?? 'Standard') as SectorDifficulty;
       return translate(lang, 'log.battleStart', {
         sector: getSectorName(lang, sectorId),

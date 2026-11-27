@@ -1,5 +1,5 @@
 import { MECH_CLASS_LIST } from '../data/classes';
-import { SECTORS_CATALOG } from '../data/maps';
+import { getMapNodes } from '../data/maps';
 import type { MechClassId } from '../types/game';
 import {
   CURRENT_SAVE_VERSION,
@@ -879,7 +879,7 @@ export function summarizeSaveStateForPreview(
     warPoints: pilot.warPoints ?? 0,
     totalWins,
     capturedSectorsCount: pilot.capturedSectorIds.length,
-    totalSectorsCount: SECTORS_CATALOG.length,
+    totalSectorsCount: getMapNodes().length,
     campaignMonth: pilot.campaignMonth ?? 1,
   };
 }

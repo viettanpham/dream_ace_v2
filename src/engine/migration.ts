@@ -72,7 +72,13 @@ import {
   ITEM_TEMPLATES,
   LEGACY_ITEM_ID_TO_TEMPLATE,
 } from '../data/items';
-import { createInitialBaseStates, SECTORS_CATALOG } from '../data/maps';
+import {
+  createInitialBaseStates,
+  getDefaultSelectedNodeId,
+  getFirstAlliedNodeId,
+  getMapNodeById,
+  getMapNodes,
+} from '../data/maps';
 import {
   CLASS_STARTER_SKILLS,
   getOpeningCardById,
@@ -129,7 +135,7 @@ import {
   sanitizeAutoEquipConfig,
 } from '../data/autoEquipConfig';
 import { cloneFormationConfig, DEFAULT_FORMATION_CONFIG } from '../data/formationConfig';
-import { mergeVisibleUnlockedSectors } from './frontline';
+import { mergeVisibleUnlockedSectors, neighbours } from './frontline';
 import {
   cloneItemLevelsConfig,
   DEFAULT_ITEM_LEVELS_CONFIG,
@@ -537,7 +543,7 @@ export function createFreshCampaignState(
     battlesUntilRestock: SHOP_STOCK_CONFIG.restockEveryNBattles,
     inventoryFilterState: getDefaultInventoryFilterState(),
     quickSellConfig: { ...DEFAULT_QUICK_SELL_CONFIG },
-    selectedSectorId: SECTORS_CATALOG[0].id,
+    selectedSectorId: getDefaultSelectedNodeId(),
     hasSaveData: false,
     muted: true,
     battleSpeed: 1,
@@ -827,9 +833,9 @@ export function migrateSaveData(
   const hasSaveData = Boolean(raw.hasSaveData);
   const selectedSectorId =
     typeof raw.selectedSectorId === 'string' &&
-    SECTORS_CATALOG.some((s) => s.id === raw.selectedSectorId)
+    Boolean(getMapNodeById(raw.selectedSectorId))
       ? raw.selectedSectorId
-      : SECTORS_CATALOG[0].id;
+      : getDefaultSelectedNodeId();
 
   const defAdmin = createDefaultAdminConfig();
   const rawAdmin = (raw.adminConfig ?? {}) as Partial<AdminConfig>;
@@ -1124,19 +1130,29 @@ export function migrateSaveData(
       ? activeGearId
       : MECH_CLASS_LIST.find((c) => gears[c.id].owned)?.id ?? 'striker';
 
-    const unlockedSectorIds =
-      Array.isArray(rawPilot.unlockedSectorIds) &&
-      rawPilot.unlockedSectorIds.length > 0
-        ? Array.from(
-            new Set(
-              rawPilot.unlockedSectorIds.filter((s) => typeof s === 'string')
+    const filteredUnlockedSectorIds = Array.isArray(rawPilot.unlockedSectorIds)
+      ? Array.from(
+          new Set(
+            rawPilot.unlockedSectorIds.filter(
+              (s): s is string =>
+                typeof s === 'string' && Boolean(getMapNodeById(s))
             )
           )
-        : [SECTORS_CATALOG[0].id];
+        )
+      : [];
+    const unlockedSectorIds =
+      filteredUnlockedSectorIds.length > 0
+        ? filteredUnlockedSectorIds
+        : [getDefaultSelectedNodeId()];
 
     const capturedSectorIds = Array.isArray(rawPilot.capturedSectorIds)
       ? Array.from(
-          new Set(rawPilot.capturedSectorIds.filter((s) => typeof s === 'string'))
+          new Set(
+            rawPilot.capturedSectorIds.filter(
+              (s): s is string =>
+                typeof s === 'string' && Boolean(getMapNodeById(s))
+            )
+          )
         )
       : [];
 
@@ -1172,7 +1188,7 @@ export function migrateSaveData(
     // Sanitize per-base runtime state (allied/hostile, operational/damaged/repairing, under attack)
     const defaultBases = createInitialBaseStates();
     const cleanBaseStates: Record<string, BaseRuntimeState> = {};
-    for (const sec of SECTORS_CATALOG) {
+    for (const sec of getMapNodes()) {
       const rawB = rawPilot.baseStates?.[sec.id];
       const defB = defaultBases[sec.id];
       if (rawB && typeof rawB === 'object') {
@@ -1199,7 +1215,8 @@ export function migrateSaveData(
             Number(rawB.attackCountdownMonths) || 0
           ),
           attackFromSectorId:
-            typeof rawB.attackFromSectorId === 'string'
+            typeof rawB.attackFromSectorId === 'string' &&
+            Boolean(getMapNodeById(rawB.attackFromSectorId))
               ? rawB.attackFromSectorId
               : null,
         };
@@ -1211,8 +1228,13 @@ export function migrateSaveData(
       }
     }
 
+    const firstAlliedId = getFirstAlliedNodeId();
     const seededUnlockedSectors = Array.from(
-      new Set([...unlockedSectorIds, 'aegis_relay', 'veridian_colony'])
+      new Set([
+        ...unlockedSectorIds,
+        firstAlliedId,
+        ...neighbours(firstAlliedId),
+      ])
     );
     const finalUnlockedSectors = mergeVisibleUnlockedSectors({
       baseStates: cleanBaseStates,
@@ -1575,12 +1597,18 @@ export function migrateSaveData(
   }
 
   const migratedLevel = gears[legacyClass].level;
-  const unlockedSectorIds = [SECTORS_CATALOG[0].id];
-  if (gears[legacyClass].battlesWon >= 1) {
-    unlockedSectorIds.push(SECTORS_CATALOG[1].id);
+  const mapNodes = getMapNodes();
+  const nonAlliedNodes = mapNodes.filter((n) => n.initialFaction !== 'allied');
+  const alliedNodeIds = mapNodes
+    .filter((n) => n.initialFaction === 'allied')
+    .map((n) => n.id);
+  const firstAlliedId = alliedNodeIds[0] ?? getFirstAlliedNodeId();
+  const unlockedSectorIds = [getDefaultSelectedNodeId()];
+  if (gears[legacyClass].battlesWon >= 1 && (nonAlliedNodes[1] ?? mapNodes[1])) {
+    unlockedSectorIds.push((nonAlliedNodes[1] ?? mapNodes[1]).id);
   }
-  if (gears[legacyClass].battlesWon >= 3) {
-    unlockedSectorIds.push(SECTORS_CATALOG[2].id);
+  if (gears[legacyClass].battlesWon >= 3 && (nonAlliedNodes[2] ?? mapNodes[2])) {
+    unlockedSectorIds.push((nonAlliedNodes[2] ?? mapNodes[2]).id);
   }
 
   const legacyPilot: PilotAccount = {
@@ -1601,9 +1629,14 @@ export function migrateSaveData(
     gears,
     activeGearId: legacyClass,
     unlockedSectorIds: Array.from(
-      new Set([...unlockedSectorIds, 'aegis_relay', 'veridian_colony'])
+      new Set([
+        ...unlockedSectorIds,
+        firstAlliedId,
+        ...neighbours(firstAlliedId),
+      ])
     ),
-    capturedSectorIds: ['aegis_relay'],
+    capturedSectorIds:
+      alliedNodeIds.length > 0 ? alliedNodeIds : [firstAlliedId],
     campaignMonth: 1,
     baseStates: createInitialBaseStates(),
     hiredWingman: null,

@@ -2,7 +2,7 @@ import {
   BATTLE_KIND_RULES,
   checkBattleSource,
 } from '../data/battleKinds';
-import { MAP_LANES, SECTORS_CATALOG } from '../data/maps';
+import { getMapLanes, getMapNodeById, getMapNodes } from '../data/maps';
 import type {
   AdminConfig,
   BaseFaction,
@@ -38,7 +38,7 @@ function getSectorFaction(
 ): BaseFaction {
   const runtime = pilot.baseStates?.[id];
   if (runtime?.faction) return runtime.faction;
-  const def = SECTORS_CATALOG.find((s) => s.id === id);
+  const def = getMapNodeById(id);
   return def?.initialFaction ?? 'hostile';
 }
 
@@ -47,12 +47,12 @@ function isEnemyOrNeutral(faction: BaseFaction): boolean {
 }
 
 /**
- * Returns adjacent sector IDs from MAP_LANES in both directions (deduplicated).
+ * Returns adjacent sector IDs from active map lanes in both directions (deduplicated).
  */
 export function neighbours(id: string): string[] {
   const seen = new Set<string>();
   const result: string[] = [];
-  for (const lane of MAP_LANES) {
+  for (const lane of getMapLanes()) {
     if (lane.from === id && !seen.has(lane.to)) {
       seen.add(lane.to);
       result.push(lane.to);
@@ -108,9 +108,9 @@ export function isVisible(pilot: FrontlinePilotSlice, id: string): boolean {
  * Returns all sector IDs currently visible to the player.
  */
 export function visibleNodeIds(pilot: FrontlinePilotSlice): string[] {
-  return SECTORS_CATALOG.filter((sec) => isVisible(pilot, sec.id)).map(
-    (sec) => sec.id
-  );
+  return getMapNodes()
+    .filter((sec) => isVisible(pilot, sec.id))
+    .map((sec) => sec.id);
 }
 
 /**
@@ -129,7 +129,7 @@ export function mergeVisibleUnlockedSectors(
  * True when no hostile or neutral node remains anywhere on the map.
  */
 export function noEnemyLeft(pilot: Pick<PilotAccount, 'baseStates'>): boolean {
-  return SECTORS_CATALOG.every(
+  return getMapNodes().every(
     (sec) => getSectorFaction(pilot, sec.id) === 'allied'
   );
 }

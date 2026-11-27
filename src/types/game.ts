@@ -423,6 +423,35 @@ export interface SectorDefinition {
   description: string;
 }
 
+export interface MapBounds {
+  width: number;
+  height: number;
+}
+
+export interface MapInitialRaid {
+  target: string;
+  from: string;
+  months: number;
+}
+
+export interface MapBaseTypeMeta {
+  battleSize: BattleSize;
+  tokenShape: BaseTokenShape;
+}
+
+export interface MapPackDefinition {
+  schemaVersion: number;
+  mapId: string;
+  nameVi: string;
+  nameEn: string;
+  bounds: MapBounds;
+  defaultSelectedNodeId: string;
+  initialRaid: MapInitialRaid | null;
+  baseTypes: Record<BaseType, MapBaseTypeMeta>;
+  nodes: SectorDefinition[];
+  lanes: MapLaneDefinition[];
+}
+
 export type EquipmentSlot =
   | 'main_weapon'
   | 'sub_weapon'

@@ -12,7 +12,12 @@ import {
   STAT_KEYS,
 } from '../data/classes';
 import { EMPTY_EQUIPPED_SLOT_IDS } from '../data/items';
-import { createInitialBaseStates, SECTORS_CATALOG } from '../data/maps';
+import {
+  createInitialBaseStates,
+  getDefaultSelectedNodeId,
+  getFirstAlliedNodeId,
+  getMapNodes,
+} from '../data/maps';
 import { CLASS_STARTER_SKILLS } from '../data/skills';
 import type {
   AdminConfig,
@@ -27,6 +32,7 @@ import type {
 } from '../types/game';
 import { sumGearEquipmentStats, sumGearSpecialTraits } from './equipment';
 import { createDefaultSquadFormation } from './formation';
+import { neighbours } from './frontline';
 import { type GearPassiveBonuses, getGearPassiveBonuses } from './skills';
 import { createDefaultTacticsForClass } from './tactics';
 
@@ -312,6 +318,18 @@ export function createDefaultPilotAccount(
     gears[cls.id] = createDefaultGearUnit(cls.id, cls.id === starterClassId);
   }
 
+  const alliedIds = getMapNodes()
+    .filter((n) => n.initialFaction === 'allied')
+    .map((n) => n.id);
+  const firstAlliedId = alliedIds[0] ?? getFirstAlliedNodeId();
+  const initialUnlocked = Array.from(
+    new Set([
+      getDefaultSelectedNodeId(),
+      firstAlliedId,
+      ...neighbours(firstAlliedId),
+    ])
+  );
+
   return {
     name,
     credits: BALANCE_CONFIG.startingCredits,
@@ -322,12 +340,8 @@ export function createDefaultPilotAccount(
     worldClock: createDefaultWorldClock(),
     gears,
     activeGearId: starterClassId,
-    unlockedSectorIds: [
-      SECTORS_CATALOG[0].id,
-      'aegis_relay',
-      'veridian_colony',
-    ],
-    capturedSectorIds: ['aegis_relay'],
+    unlockedSectorIds: initialUnlocked,
+    capturedSectorIds: alliedIds.length > 0 ? alliedIds : [firstAlliedId],
     campaignMonth: 1,
     baseStates: createInitialBaseStates(),
     hiredWingman: null,
