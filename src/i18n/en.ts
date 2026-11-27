@@ -2517,6 +2517,27 @@ export const EN_TRANSLATIONS = {
   'admin.voucher.createMaxStock': 'Max stock per roll',
   'admin.voucher.createMaxStockExample': 'Example rolled stock: 1–{max} vouchers',
   'admin.voucher.createSubmit': 'Create voucher',
+
+  // Voucher redeem dialog & summary (VOUCHER-b)
+  'voucher.redeemTitle': 'Use vouchers?',
+  'voucher.redeemSubtitle':
+    'Select vouchers to offset the Credits or EXP charged after this battle.',
+  'voucher.sectionCredit': 'Credit Charged',
+  'voucher.sectionExp': 'EXP Charged',
+  'voucher.totalCharged': 'Total charged: {amount} {unit}',
+  'voucher.refundAmount': 'Voucher refund: {amount} {unit}',
+  'voucher.remainingAmount': 'Remaining: {amount} {unit}',
+  'voucher.ownedLabel': 'Owned: {qty}',
+  'voucher.confirmBtn': 'Confirm',
+  'voucher.skipBtn': 'Skip',
+  'summary.voucherLine': 'Voucher used: {parts}',
+  'summary.voucherCreditPart': '-{amount} credit',
+  'summary.voucherExpPart': '-{amount} EXP',
+
+  // Warehouse — Vouchers (VOUCHER-b)
+  'warehouse.voucherSectionTitle': 'Voucher ({count})',
+  'warehouse.voucherAutoToggle': 'Auto-use vouchers on defeat / retreat',
+  'warehouse.voucherEmpty': 'No vouchers owned yet.',
 } as const;
 
 export type TranslationKey = keyof typeof EN_TRANSLATIONS;

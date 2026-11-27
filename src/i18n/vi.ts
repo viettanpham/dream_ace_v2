@@ -2519,6 +2519,27 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'admin.voucher.createMaxStock': 'Kho tối đa mỗi đợt',
   'admin.voucher.createMaxStockExample': 'Ví dụ số lượng bán mỗi đợt: 1–{max} vé',
   'admin.voucher.createSubmit': 'Tạo voucher',
+
+  // Voucher redeem dialog & summary (VOUCHER-b)
+  'voucher.redeemTitle': 'Dùng voucher?',
+  'voucher.redeemSubtitle':
+    'Chọn voucher để bù chi phí tín dụng hoặc EXP vừa bị trừ sau trận.',
+  'voucher.sectionCredit': 'Chi phí Credit',
+  'voucher.sectionExp': 'Tổn thất EXP',
+  'voucher.totalCharged': 'Tổng bị trừ: {amount} {unit}',
+  'voucher.refundAmount': 'Voucher giảm: {amount} {unit}',
+  'voucher.remainingAmount': 'Còn lại: {amount} {unit}',
+  'voucher.ownedLabel': 'Hiện có: {qty}',
+  'voucher.confirmBtn': 'Xác nhận',
+  'voucher.skipBtn': 'Không dùng',
+  'summary.voucherLine': 'Dùng voucher: {parts}',
+  'summary.voucherCreditPart': '-{amount} credit',
+  'summary.voucherExpPart': '-{amount} EXP',
+
+  // Kho đồ — Voucher (VOUCHER-b)
+  'warehouse.voucherSectionTitle': 'Voucher ({count})',
+  'warehouse.voucherAutoToggle': 'Tự dùng voucher khi thua / rút lui',
+  'warehouse.voucherEmpty': 'Chưa sở hữu voucher nào.',
 };
 
 

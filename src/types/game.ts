@@ -1209,6 +1209,12 @@ export interface BattleSummary {
   retreatPenaltyExp?: number;
   retreatPenaltyCredit?: number;
   retreatPenaltyWp?: number;
+  expBeforePenalty?: number;
+  voucherCreditUsed?: Record<string, number>;
+  voucherExpUsed?: Record<string, number>;
+  voucherCreditRefund?: number;
+  voucherExpRefund?: number;
+  voucherRedeemed?: boolean;
   leveledUp: boolean;
   previousLevel: number;
   newLevel: number;

@@ -52,8 +52,10 @@ import {
   undoAutoEquipSnapshot,
 } from '../engine/autoEquip';
 import {
+  applyVoucherRefund,
   computeRepairFee,
   computeRetreatPenalty,
+  getBattleSummaryCharges,
 } from '../engine/battlePenalty';
 import {
   evaluateTurnPhaseAfterAction,
@@ -602,6 +604,17 @@ interface GameStoreState {
     id: string,
     qty: number
   ) => { ok: boolean; bought: number; reason?: string };
+  redeemVouchers: (selection: {
+    credit?: Record<string, number>;
+    exp?: Record<string, number>;
+  }) => {
+    ok: boolean;
+    reason?: 'no_summary' | 'already_redeemed' | 'not_chargeable';
+    creditUsed: Record<string, number>;
+    expUsed: Record<string, number>;
+    creditRefund: number;
+    expRefund: number;
+  };
   refreshSupplyShop: () => {
     ok: boolean;
     cost?: number;
@@ -1187,6 +1200,7 @@ function finalizeBattleOutcome(
         retreatPenaltyExp: retreatPenalty.expPenalty,
         retreatPenaltyCredit: retreatPenalty.creditPenalty,
         retreatPenaltyWp: retreatPenalty.wpPenalty,
+        expBeforePenalty: levelResult.updatedGear.exp,
         leveledUp: levelResult.leveledUp,
         previousLevel: levelResult.previousLevel,
         newLevel: levelResult.newLevel,
@@ -3114,6 +3128,128 @@ export const useGameStore = create<GameStoreState>()(
           hasSaveData: true,
         });
         return { ok: true, bought };
+      },
+
+      redeemVouchers: (selection) => {
+        const state = get();
+        const battle = state.battle;
+        const summary = battle?.summary;
+        if (!battle || !summary) {
+          return {
+            ok: false,
+            reason: 'no_summary',
+            creditUsed: {},
+            expUsed: {},
+            creditRefund: 0,
+            expRefund: 0,
+          };
+        }
+        if (summary.voucherRedeemed) {
+          return {
+            ok: false,
+            reason: 'already_redeemed',
+            creditUsed: summary.voucherCreditUsed ?? {},
+            expUsed: summary.voucherExpUsed ?? {},
+            creditRefund: summary.voucherCreditRefund ?? 0,
+            expRefund: summary.voucherExpRefund ?? 0,
+          };
+        }
+        if (summary.outcome !== 'defeat' && !summary.retreated) {
+          return {
+            ok: false,
+            reason: 'not_chargeable',
+            creditUsed: {},
+            expUsed: {},
+            creditRefund: 0,
+            expRefund: 0,
+          };
+        }
+
+        const { creditCharged, expCharged } = getBattleSummaryCharges(summary);
+        const owned = state.pilot.vouchers ?? {};
+
+        const clampSel = (rawSel?: Record<string, number>) => {
+          const clamped: Record<string, number> = {};
+          if (!rawSel) return clamped;
+          for (const [id, rawQty] of Object.entries(rawSel)) {
+            const avail = Math.max(0, Math.floor(Number(owned[id]) || 0));
+            const req = Math.max(0, Math.floor(Number(rawQty) || 0));
+            const qty = Math.min(avail, req);
+            if (qty > 0) clamped[id] = qty;
+          }
+          return clamped;
+        };
+
+        const creditRes = applyVoucherRefund(
+          clampSel(selection?.credit),
+          'credit',
+          creditCharged,
+          state.adminConfig
+        );
+        const expRes = applyVoucherRefund(
+          clampSel(selection?.exp),
+          'exp',
+          expCharged,
+          state.adminConfig
+        );
+
+        const nextVouchers: Record<string, number> = {};
+        for (const [id, rawQty] of Object.entries(owned)) {
+          const cur = Math.max(0, Math.floor(Number(rawQty) || 0));
+          const usedQty =
+            (creditRes.used[id] ?? 0) + (expRes.used[id] ?? 0);
+          const left = Math.max(0, cur - usedQty);
+          if (left > 0) {
+            nextVouchers[id] = left;
+          }
+        }
+
+        const deployedGear = state.pilot.gears[summary.deployedGearId];
+        const maxAllowedExp =
+          summary.expBeforePenalty !== undefined
+            ? summary.expBeforePenalty
+            : (deployedGear?.exp ?? 0) + expCharged;
+        const nextGearExp = deployedGear
+          ? Math.min(maxAllowedExp, deployedGear.exp + expRes.refund)
+          : 0;
+
+        soundFx.playConfirm();
+        set({
+          pilot: {
+            ...state.pilot,
+            credits: state.pilot.credits + creditRes.refund,
+            vouchers: nextVouchers,
+            gears: deployedGear
+              ? {
+                  ...state.pilot.gears,
+                  [summary.deployedGearId]: {
+                    ...deployedGear,
+                    exp: nextGearExp,
+                  },
+                }
+              : state.pilot.gears,
+          },
+          battle: {
+            ...battle,
+            summary: {
+              ...summary,
+              voucherRedeemed: true,
+              voucherCreditUsed: creditRes.used,
+              voucherExpUsed: expRes.used,
+              voucherCreditRefund: creditRes.refund,
+              voucherExpRefund: expRes.refund,
+            },
+          },
+          hasSaveData: true,
+        });
+
+        return {
+          ok: true,
+          creditUsed: creditRes.used,
+          expUsed: expRes.used,
+          creditRefund: creditRes.refund,
+          expRefund: expRes.refund,
+        };
       },
 
       refreshSupplyShop: () => {

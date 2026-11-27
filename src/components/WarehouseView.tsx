@@ -7,10 +7,12 @@ import {
   Lock,
   PackageOpen,
   Star,
+  Ticket,
   X,
 } from 'lucide-react';
 import { STAT_KEYS } from '../data/classes';
 import { ITEM_SLOTS, RARITY_META } from '../data/items';
+import { getAllVouchers } from '../data/vouchers';
 import { getEffectiveItemStats, getItemEquippedByGear } from '../engine/equipment';
 import {
   getBoxCapacity,
@@ -31,6 +33,7 @@ import {
 import type { TranslationKey } from '../i18n/en';
 import { isBattleActive, useGameStore } from '../store/useGameStore';
 import type { ItemInstance, MechClassId } from '../types/game';
+import { useAutoVoucherPref } from '../utils/voucherAutoPrefs';
 import { BottomSheet } from './BottomSheet';
 import { ClassIcon, SlotIcon } from './GameIcons';
 
@@ -239,10 +242,9 @@ function WarehouseItemCell({
 export function WarehouseView() {
   const { lang, t } = useI18n();
   const pilot = useGameStore((s) => s.pilot);
-  const boxCapacityRaw = useGameStore((s) => s.adminConfig.boxCapacity);
-  const warehouseCapacityRaw = useGameStore(
-    (s) => s.adminConfig.warehouseCapacity
-  );
+  const adminConfig = useGameStore((s) => s.adminConfig);
+  const boxCapacityRaw = adminConfig.boxCapacity;
+  const warehouseCapacityRaw = adminConfig.warehouseCapacity;
   const screen = useGameStore((s) => s.screen);
   const battle = useGameStore((s) => s.battle);
   const autoRepeatActive = useGameStore((s) =>
@@ -253,6 +255,7 @@ export function WarehouseView() {
   const moveAllUnusedToWarehouse = useGameStore(
     (s) => s.moveAllUnusedToWarehouse
   );
+  const [autoVoucherEnabled, setAutoVoucherEnabled] = useAutoVoucherPref();
 
   const [mobilePanel, setMobilePanel] = useState<WarehouseContainer>('box');
   const [slotFilter, setSlotFilter] = useState<SlotFilter>('all');
@@ -294,6 +297,29 @@ export function WarehouseView() {
   const selectedTraits = selected
     ? formatItemTraitsList(lang, selected.item)
     : [];
+
+  const ownedVoucherRows = useMemo(() => {
+    const numberLocale = lang === 'vi' ? 'vi-VN' : 'en-US';
+    const ownedMap = pilot.vouchers ?? {};
+    const all = getAllVouchers(adminConfig);
+    return all
+      .map((def) => {
+        const qty = Math.max(0, Math.floor(Number(ownedMap[def.id]) || 0));
+        if (qty <= 0) return null;
+        const valFmt = def.value.toLocaleString(numberLocale);
+        const name =
+          def.kind === 'credit'
+            ? t('shop.voucherNameCredit', { value: valFmt })
+            : t('shop.voucherNameExp', { value: valFmt });
+        return { def, name, qty };
+      })
+      .filter((r): r is NonNullable<typeof r> => r !== null);
+  }, [pilot.vouchers, adminConfig, lang, t]);
+
+  const totalOwnedVouchers = useMemo(
+    () => ownedVoucherRows.reduce((s, r) => s + r.qty, 0),
+    [ownedVoucherRows]
+  );
 
   const handleBulkMoveUnused = () => {
     const res = moveAllUnusedToWarehouse();
@@ -699,6 +725,61 @@ export function WarehouseView() {
             )}
           </section>
         </div>
+
+        {/* Voucher section */}
+        <section
+          data-testid="warehouse-voucher-section"
+          className="rounded-lg border border-purple-500/30 bg-[#0B111C]/90 p-3 space-y-2.5 min-w-0"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2 pb-1.5 border-b border-slate-800/80">
+            <h3 className="text-xs md:text-sm font-bold text-slate-100 inline-flex items-center gap-1.5">
+              <Ticket className="w-4 h-4 text-purple-400 shrink-0" aria-hidden="true" />
+              <span>
+                {t('warehouse.voucherSectionTitle', { count: totalOwnedVouchers })}
+              </span>
+            </h3>
+
+            <label className="inline-flex items-center gap-2 text-xs text-slate-200 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                data-testid="warehouse-voucher-auto-toggle"
+                checked={autoVoucherEnabled}
+                onChange={(e) => setAutoVoucherEnabled(e.target.checked)}
+                className="w-4 h-4 rounded border-slate-600 bg-slate-900 accent-purple-500 cursor-pointer"
+              />
+              <span>{t('warehouse.voucherAutoToggle')}</span>
+            </label>
+          </div>
+
+          {ownedVoucherRows.length === 0 ? (
+            <p
+              data-testid="warehouse-voucher-empty"
+              className="text-xs text-slate-500 py-1"
+            >
+              {t('warehouse.voucherEmpty')}
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {ownedVoucherRows.map(({ def, name, qty }) => (
+                <div
+                  key={def.id}
+                  data-testid={`warehouse-voucher-row-${def.id}`}
+                  className="rounded border border-slate-800 bg-slate-950/70 px-2.5 py-2 flex items-center justify-between gap-2 text-xs min-w-0"
+                >
+                  <span className="font-medium text-slate-100 truncate">
+                    {name}
+                  </span>
+                  <span
+                    data-testid={`warehouse-voucher-qty-${def.id}`}
+                    className="font-mono-nums font-bold text-purple-300 shrink-0"
+                  >
+                    ×{qty}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
       </div>
 
       {/* Item Info & Single-Move Sheet */}

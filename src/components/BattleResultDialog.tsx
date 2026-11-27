@@ -201,7 +201,7 @@ export function BattleResultDialog({
                   </div>
                 )}
 
-                {summary.outcome === 'defeat' &&
+                {(summary.outcome === 'defeat' || summary.retreated) &&
                   (summary.repairFree || (summary.repairFee ?? 0) > 0) && (
                     <div
                       data-testid="battle-result-repair-line"
@@ -238,6 +238,35 @@ export function BattleResultDialog({
                       wp: Math.round(summary.retreatPenaltyWp ?? 0).toLocaleString(
                         lang === 'vi' ? 'vi-VN' : 'en-US'
                       ),
+                    })}
+                  </div>
+                )}
+
+                {((summary.voucherCreditRefund ?? 0) > 0 ||
+                  (summary.voucherExpRefund ?? 0) > 0) && (
+                  <div
+                    data-testid="battle-result-voucher-line"
+                    className="col-span-2 rounded border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1.5 text-[12px] font-mono-nums text-emerald-300"
+                  >
+                    {t('summary.voucherLine', {
+                      parts: [
+                        (summary.voucherCreditRefund ?? 0) > 0
+                          ? t('summary.voucherCreditPart', {
+                              amount: Math.round(
+                                summary.voucherCreditRefund ?? 0
+                              ).toLocaleString(lang === 'vi' ? 'vi-VN' : 'en-US'),
+                            })
+                          : null,
+                        (summary.voucherExpRefund ?? 0) > 0
+                          ? t('summary.voucherExpPart', {
+                              amount: Math.round(
+                                summary.voucherExpRefund ?? 0
+                              ).toLocaleString(lang === 'vi' ? 'vi-VN' : 'en-US'),
+                            })
+                          : null,
+                      ]
+                        .filter(Boolean)
+                        .join(' / '),
                     })}
                   </div>
                 )}

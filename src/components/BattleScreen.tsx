@@ -45,6 +45,10 @@ import {
   getTeamTagLabel,
   useI18n,
 } from '../i18n';
+import {
+  getBattleSummaryCharges,
+  pickVouchersSmallestSufficient,
+} from '../engine/battlePenalty';
 import { useGameStore } from '../store/useGameStore';
 import type {
   AutoRepeatDefeatRule,
@@ -94,6 +98,7 @@ import {
   type SidebarCombatLogMode,
 } from '../utils/combatLogFormat';
 import { useStatusDisplaySettings } from '../utils/statusDisplayPrefs';
+import { useAutoVoucherPref } from '../utils/voucherAutoPrefs';
 import { ActionStage, resolveStageFxActorAndTargets } from './ActionStage';
 import {
   AutoRepeatBatchSummaryModal,
@@ -126,6 +131,10 @@ import { SkillIcon } from './SkillIcon';
 import { StatBar } from './StatBar';
 import { TurnQueueBar } from './TurnQueueBar';
 import { TurnStepLine } from './TurnStepLine';
+import {
+  hasUsableVoucherForSummary,
+  VoucherRedeemDialog,
+} from './VoucherRedeemDialog';
 
 const REPEAT_OPTIONS: AutoRepeatLimit[] = [1, 5, 10, 20, 'infinite'];
 const ROWS_ORDER: CombatRow[] = ['front', 'middle', 'back'];
@@ -190,6 +199,7 @@ export function BattleScreen() {
   const clearAutoRepeatSummary = useGameStore((s) => s.clearAutoRepeatSummary);
   const clearAutoRepeatToast = useGameStore((s) => s.clearAutoRepeatToast);
   const toggleAdminPanel = useGameStore((s) => s.toggleAdminPanel);
+  const redeemVouchers = useGameStore((s) => s.redeemVouchers);
 
   const layoutMode = useBattleLayoutMode();
   const isPhonePortrait = layoutMode === 'phone-portrait';
@@ -256,6 +266,8 @@ export function BattleScreen() {
     readStatusBoardCollapsed()
   );
   const [cardToast, setCardToast] = useState<string | null>(null);
+  const [voucherSkipped, setVoucherSkipped] = useState<boolean>(false);
+  const [autoVoucherEnabled] = useAutoVoucherPref();
   const popupCleanupTimersRef = useRef<Map<string, number>>(new Map());
   const fxCleanupTimersRef = useRef<Map<string, number>>(new Map());
   const explodedCleanupTimersRef = useRef<Map<string, number>>(new Map());
@@ -1548,6 +1560,60 @@ export function BattleScreen() {
       !autoRepeatSession.active &&
       (battle.summary || autoRepeatSession.stopReason === 'inventory_full')
   );
+
+  useEffect(() => {
+    if (!battle?.summary) {
+      setVoucherSkipped(false);
+    }
+  }, [battle?.summary]);
+
+  useEffect(() => {
+    const summary = battle?.summary;
+    if (
+      !summary ||
+      autoRepeatSession?.active ||
+      showRepeatBatchSummary ||
+      !autoVoucherEnabled
+    ) {
+      return;
+    }
+    if (!hasUsableVoucherForSummary(summary, pilot.vouchers, adminConfig)) {
+      return;
+    }
+    const { creditCharged, expCharged } = getBattleSummaryCharges(summary);
+    const creditSel =
+      creditCharged > 0
+        ? pickVouchersSmallestSufficient(
+            pilot.vouchers,
+            'credit',
+            creditCharged,
+            adminConfig
+          )
+        : {};
+    const expSel =
+      expCharged > 0
+        ? pickVouchersSmallestSufficient(
+            pilot.vouchers,
+            'exp',
+            expCharged,
+            adminConfig
+          )
+        : {};
+    if (
+      Object.keys(creditSel).length > 0 ||
+      Object.keys(expSel).length > 0
+    ) {
+      redeemVouchers({ credit: creditSel, exp: expSel });
+    }
+  }, [
+    battle?.summary,
+    autoRepeatSession?.active,
+    showRepeatBatchSummary,
+    autoVoucherEnabled,
+    pilot.vouchers,
+    adminConfig,
+    redeemVouchers,
+  ]);
 
   const allyRemainingHp = allies.reduce(
     (acc, u) => acc + (u.alive ? u.hp : 0),
@@ -3536,7 +3602,24 @@ export function BattleScreen() {
       >
         {battle.summary &&
           !autoRepeatSession?.active &&
-          !showRepeatBatchSummary && (
+          !showRepeatBatchSummary &&
+          (!autoVoucherEnabled &&
+          !voucherSkipped &&
+          hasUsableVoucherForSummary(
+            battle.summary,
+            pilot.vouchers,
+            adminConfig
+          ) ? (
+            <VoucherRedeemDialog
+              summary={battle.summary}
+              ownedVouchers={pilot.vouchers}
+              adminConfig={adminConfig}
+              lang={lang}
+              t={t}
+              onConfirm={(sel) => redeemVouchers(sel)}
+              onSkip={() => setVoucherSkipped(true)}
+            />
+          ) : (
             <BattleResultDialog
               summary={battle.summary}
               squadSize={battle.squadSize}
@@ -3547,7 +3630,7 @@ export function BattleScreen() {
               onReturnHangar={returnToHangar}
               onNextSortie={() => startBattle()}
             />
-          )}
+          ))}
       </ErrorBoundary>
 
       {/* ==================== PHONE UNIT DETAIL SHEET (full name & stats) ==================== */}
