@@ -1941,6 +1941,7 @@ export interface AdminConfig {
   skillTiers?: SkillTiersConfig;
   skillWpCostFactor?: number;
   skillCardPriceMult?: number;
+  cardShop?: CardShopConfig;
   priceOverrides?: Record<string, number>;
   skillMods?: SkillModDefinition[];
   vouchers?: VoucherConfig;
@@ -1956,6 +1957,19 @@ export interface AdminConfig {
   monthlyEconomy?: MonthlyEconomyConfig;
   showMonthReport?: boolean;
   showRawI18nKeys: boolean;
+}
+
+export interface CardShopKindConfig {
+  baseRatePct: number;
+  stepPct: number;
+  stepLevels: number;
+  minRatePct: number;
+}
+
+export interface CardShopConfig {
+  enabled: boolean;
+  active: CardShopKindConfig;
+  passive: CardShopKindConfig;
 }
 
 export interface MonthlyEconomyConfig {

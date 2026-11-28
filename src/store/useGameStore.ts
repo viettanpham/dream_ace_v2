@@ -227,6 +227,11 @@ import {
   sanitizePriceOverrides,
 } from '../engine/itemPrice';
 import {
+  rollCardShopStock,
+  sanitizeCardShopConfig,
+  sanitizeCardShopStock,
+} from '../engine/cardShop';
+import {
   clearModule as clearModuleEngine,
   setModule as setModuleEngine,
 } from '../engine/extenders';
@@ -484,6 +489,7 @@ function buildSaveSnapshotFromState(state: GameStoreState): SaveSnapshotPayload 
     supplyShopStock: state.supplyShopStock,
     supplyShopStockWp: state.supplyShopStockWp,
     voucherShopStockWp: state.voucherShopStockWp,
+    cardShopStockWp: state.cardShopStockWp,
     crateShopStockWp: state.crateShopStockWp,
     crateShopStockCredit: state.crateShopStockCredit,
     blackMarketOffer: state.blackMarketOffer,
@@ -513,6 +519,7 @@ interface GameStoreState {
   supplyShopStock: SupplyShopListing[];
   supplyShopStockWp: SupplyShopWpListing[];
   voucherShopStockWp: VoucherShopListing[];
+  cardShopStockWp: string[];
   crateShopStockWp: CrateShopListing[];
   crateShopStockCredit: CrateShopListing[];
   blackMarketOffer: BlackMarketMedalOffer | null;
@@ -857,6 +864,7 @@ interface GameStoreState {
   ) => number;
   adminFillInventory: (count: number) => number;
   adminRestockShopNow: () => void;
+  adminRerollCardShopNow: () => string[];
   adminForceAddShopItem: (options: {
     templateId?: string;
     slot: EquipmentSlot;
@@ -1354,6 +1362,13 @@ function finalizeBattleOutcome(
   const refreshedVoucherShopStockWp = shouldRestock
     ? rollVoucherShopStockWp(state.adminConfig)
     : state.voucherShopStockWp;
+  const refreshedCardShopStockWp = shouldRestock
+    ? rollCardShopStock(nextPilot.ownedOpeningCards, state.adminConfig)
+    : sanitizeCardShopStock(
+        state.cardShopStockWp,
+        nextPilot.ownedOpeningCards,
+        state.adminConfig
+      );
   const refreshedCrateShopStockWp = shouldRestock
     ? rollCrateShopStockWp(state.adminConfig)
     : (state.crateShopStockWp ?? []);
@@ -1568,6 +1583,7 @@ function finalizeBattleOutcome(
     supplyShopStock: refreshedSupplyShopStock,
     supplyShopStockWp: refreshedSupplyShopStockWp,
     voucherShopStockWp: refreshedVoucherShopStockWp,
+    cardShopStockWp: refreshedCardShopStockWp,
     crateShopStockWp: refreshedCrateShopStockWp,
     crateShopStockCredit: refreshedCrateShopStockCredit,
     blackMarketOffer: refreshedBlackMarketOffer,
@@ -1859,6 +1875,7 @@ export const useGameStore = create<GameStoreState>()(
       supplyShopStock: initialFresh.supplyShopStock ?? [],
       supplyShopStockWp: initialFresh.supplyShopStockWp ?? [],
       voucherShopStockWp: initialFresh.voucherShopStockWp ?? [],
+      cardShopStockWp: initialFresh.cardShopStockWp ?? [],
       crateShopStockWp: initialFresh.crateShopStockWp ?? [],
       crateShopStockCredit: initialFresh.crateShopStockCredit ?? [],
       blackMarketOffer: initialFresh.blackMarketOffer ?? null,
@@ -1951,6 +1968,10 @@ export const useGameStore = create<GameStoreState>()(
             SUPPLY_TEMPLATES
           );
           const startVoucherStockWp = rollVoucherShopStockWp(state.adminConfig);
+          const startCardShopStockWp = rollCardShopStock(
+            fresh.pilot.ownedOpeningCards,
+            state.adminConfig
+          );
           const startCrateStockWp = rollCrateShopStockWp(state.adminConfig);
           const startCrateStockCredit = rollCrateShopStockCredit(state.adminConfig);
           const startBlackMarketOffer = rollBlackMarketMedalOffer(state.adminConfig);
@@ -1959,6 +1980,7 @@ export const useGameStore = create<GameStoreState>()(
             supplyShopStock: startSupplyStock,
             supplyShopStockWp: startSupplyStockWp,
             voucherShopStockWp: startVoucherStockWp,
+            cardShopStockWp: startCardShopStockWp,
             crateShopStockWp: startCrateStockWp,
             crateShopStockCredit: startCrateStockCredit,
             blackMarketOffer: startBlackMarketOffer,
@@ -1999,6 +2021,7 @@ export const useGameStore = create<GameStoreState>()(
           supplyShopStock: fresh.supplyShopStock ?? [],
           supplyShopStockWp: fresh.supplyShopStockWp ?? [],
           voucherShopStockWp: fresh.voucherShopStockWp ?? [],
+          cardShopStockWp: fresh.cardShopStockWp ?? [],
           crateShopStockWp: fresh.crateShopStockWp ?? [],
           crateShopStockCredit: fresh.crateShopStockCredit ?? [],
           blackMarketOffer: fresh.blackMarketOffer ?? null,
@@ -2309,7 +2332,13 @@ export const useGameStore = create<GameStoreState>()(
         const res = buyOpeningCard(state.pilot, cardId, state.adminConfig);
         if (res.ok) {
           soundFx.playVictory();
-          set({ pilot: res.pilot, hasSaveData: true });
+          set({
+            pilot: res.pilot,
+            cardShopStockWp: (state.cardShopStockWp ?? []).filter(
+              (id) => id !== cardId
+            ),
+            hasSaveData: true,
+          });
         }
         return { ok: res.ok, reason: res.reason, cost: res.cost };
       },
@@ -2907,6 +2936,13 @@ export const useGameStore = create<GameStoreState>()(
         const nextVoucherShopStockWp = SHOP_STOCK_CONFIG.restockOnMonthAdvance
           ? rollVoucherShopStockWp(state.adminConfig)
           : state.voucherShopStockWp;
+        const nextCardShopStockWp = SHOP_STOCK_CONFIG.restockOnMonthAdvance
+          ? rollCardShopStock(summary.pilot.ownedOpeningCards, state.adminConfig)
+          : sanitizeCardShopStock(
+              state.cardShopStockWp,
+              summary.pilot.ownedOpeningCards,
+              state.adminConfig
+            );
         const nextCrateShopStockWp = SHOP_STOCK_CONFIG.restockOnMonthAdvance
           ? rollCrateShopStockWp(state.adminConfig)
           : (state.crateShopStockWp ?? []);
@@ -2932,6 +2968,7 @@ export const useGameStore = create<GameStoreState>()(
           supplyShopStock: nextSupplyShopStock,
           supplyShopStockWp: nextSupplyShopStockWp,
           voucherShopStockWp: nextVoucherShopStockWp,
+          cardShopStockWp: nextCardShopStockWp,
           crateShopStockWp: nextCrateShopStockWp,
           crateShopStockCredit: nextCrateShopStockCredit,
           blackMarketOffer: nextBlackMarketOffer,
@@ -4145,6 +4182,10 @@ export const useGameStore = create<GameStoreState>()(
           SUPPLY_TEMPLATES
         );
         const nextVoucherStockWp = rollVoucherShopStockWp(state.adminConfig);
+        const nextCardShopStockWp = rollCardShopStock(
+          state.pilot.ownedOpeningCards,
+          state.adminConfig
+        );
         const nextCrateCreditStock = rollCrateShopStockCredit(state.adminConfig);
         const nextCrateWpStock = rollCrateShopStockWp(state.adminConfig);
 
@@ -4157,6 +4198,7 @@ export const useGameStore = create<GameStoreState>()(
           supplyShopStock: nextCreditStock,
           supplyShopStockWp: nextWpStock,
           voucherShopStockWp: nextVoucherStockWp,
+          cardShopStockWp: nextCardShopStockWp,
           crateShopStockWp: nextCrateWpStock,
           crateShopStockCredit: nextCrateCreditStock,
           supplyShopRefresh: { used: used + 1 },
@@ -6276,6 +6318,10 @@ export const useGameStore = create<GameStoreState>()(
           SUPPLY_TEMPLATES
         );
         const nextVoucherStockWp = rollVoucherShopStockWp(state.adminConfig);
+        const nextCardShopStockWp = rollCardShopStock(
+          state.pilot.ownedOpeningCards,
+          state.adminConfig
+        );
         const nextCrateWpStock = rollCrateShopStockWp(state.adminConfig);
         const nextCrateCreditStock = rollCrateShopStockCredit(state.adminConfig);
         set({
@@ -6286,6 +6332,7 @@ export const useGameStore = create<GameStoreState>()(
           supplyShopStock: nextSupplyStock,
           supplyShopStockWp: nextSupplyStockWp,
           voucherShopStockWp: nextVoucherStockWp,
+          cardShopStockWp: nextCardShopStockWp,
           crateShopStockWp: nextCrateWpStock,
           crateShopStockCredit: nextCrateCreditStock,
           blackMarketOffer: rollBlackMarketMedalOffer(state.adminConfig),
@@ -6297,6 +6344,19 @@ export const useGameStore = create<GameStoreState>()(
           battlesUntilRestock: SHOP_STOCK_CONFIG.restockEveryNBattles,
           hasSaveData: true,
         });
+      },
+
+      adminRerollCardShopNow: () => {
+        const state = get();
+        const next = rollCardShopStock(
+          state.pilot.ownedOpeningCards,
+          state.adminConfig
+        );
+        set({
+          cardShopStockWp: next,
+          hasSaveData: true,
+        });
+        return next;
       },
 
       adminForceAddShopItem: ({ templateId, slot, tier, rarity }) => {
@@ -6380,6 +6440,7 @@ export const useGameStore = create<GameStoreState>()(
               (c) => c.id
             ),
           },
+          cardShopStockWp: [],
           hasSaveData: true,
         }));
       },
@@ -6767,6 +6828,10 @@ export const useGameStore = create<GameStoreState>()(
           supplyShopStock: fresh.supplyShopStock ?? [],
           supplyShopStockWp: fresh.supplyShopStockWp ?? [],
           voucherShopStockWp: fresh.voucherShopStockWp ?? [],
+          cardShopStockWp: rollCardShopStock(
+            fresh.pilot.ownedOpeningCards,
+            nextAdminConfig
+          ),
           crateShopStockWp: fresh.crateShopStockWp ?? [],
           crateShopStockCredit: fresh.crateShopStockCredit ?? [],
           blackMarketOffer: rollBlackMarketMedalOffer(nextAdminConfig),
@@ -7058,6 +7123,11 @@ export const useGameStore = create<GameStoreState>()(
                 ? patch.iconCatalogMods
                 : state.adminConfig.iconCatalogMods
             ),
+            cardShop: sanitizeCardShopConfig(
+              patch.cardShop !== undefined
+                ? patch.cardShop
+                : state.adminConfig.cardShop
+            ),
             formation: nextFormation,
             autoEquip: nextAutoEquip,
             starterSet: nextStarterSet,
@@ -7186,6 +7256,15 @@ export const useGameStore = create<GameStoreState>()(
           return {
             adminConfig: nextAdminConfig,
             pilot: updatedPilot,
+            ...(patch.skillTiers !== undefined || patch.skillMods !== undefined
+              ? {
+                  cardShopStockWp: sanitizeCardShopStock(
+                    state.cardShopStockWp,
+                    updatedPilot.ownedOpeningCards,
+                    nextAdminConfig
+                  ),
+                }
+              : {}),
           };
         });
       },
@@ -7201,6 +7280,7 @@ export const useGameStore = create<GameStoreState>()(
             supplyShopStock: state.supplyShopStock,
             supplyShopStockWp: state.supplyShopStockWp,
             voucherShopStockWp: state.voucherShopStockWp,
+            cardShopStockWp: state.cardShopStockWp,
             crateShopStockWp: state.crateShopStockWp,
             crateShopStockCredit: state.crateShopStockCredit,
             blackMarketOffer: state.blackMarketOffer,
@@ -7401,6 +7481,7 @@ export const useGameStore = create<GameStoreState>()(
         supplyShopStock: state.supplyShopStock,
         supplyShopStockWp: state.supplyShopStockWp,
         voucherShopStockWp: state.voucherShopStockWp,
+        cardShopStockWp: state.cardShopStockWp,
         crateShopStockWp: state.crateShopStockWp,
         crateShopStockCredit: state.crateShopStockCredit,
         blackMarketOffer: state.blackMarketOffer,
@@ -7532,6 +7613,7 @@ export const useGameStore = create<GameStoreState>()(
               npcBuffCards: sanitizeNpcBuffCardsConfig(
                 rawAdmin.npcBuffCards as AdminConfig['npcBuffCards']
               ),
+              cardShop: sanitizeCardShopConfig(rawAdmin.cardShop),
               voice: sanitizeVoiceConfig(
                 rawAdmin.voice as AdminConfig['voice']
               ),
@@ -7669,6 +7751,18 @@ export const useGameStore = create<GameStoreState>()(
             state.voucherShopStockWp = sanitizedVoucherStock;
           } else {
             state.voucherShopStockWp = rollVoucherShopStockWp(state.adminConfig.vouchers);
+          }
+          if (!Array.isArray(state.cardShopStockWp)) {
+            state.cardShopStockWp = rollCardShopStock(
+              state.pilot?.ownedOpeningCards ?? [],
+              state.adminConfig
+            );
+          } else {
+            state.cardShopStockWp = sanitizeCardShopStock(
+              state.cardShopStockWp,
+              state.pilot?.ownedOpeningCards ?? [],
+              state.adminConfig
+            );
           }
           state.crateShopStockWp = Array.isArray(state.crateShopStockWp)
             ? sanitizeCrateShopStock(state.crateShopStockWp)

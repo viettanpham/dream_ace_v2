@@ -24,11 +24,16 @@ import {
 import { getCatalogRow } from '../data/iconCatalog';
 import {
   getOpeningCardById,
+  getOpeningCardsList,
   getSkillById,
   getSkillCardId,
   getSkillCardPrice,
   getSkillTier,
 } from '../data/skills';
+import {
+  isCardInWpShopStock,
+  resolveCardShopConfig,
+} from '../engine/cardShop';
 import {
   getEffectiveSpCost,
   getRequiredGearLevelForSkillLevel,
@@ -142,7 +147,19 @@ export function SkillView() {
   const equipPassiveSkill = useGameStore((s) => s.equipPassiveSkill);
   const unequipPassiveSkill = useGameStore((s) => s.unequipPassiveSkill);
   const openWarPointShop = useGameStore((s) => s.openWarPointShop);
+  const cardShopStockWp = useGameStore((s) => s.cardShopStockWp);
   const setTacticsModalOpen = useGameStore((s) => s.setTacticsModalOpen);
+
+  const hasAnyCardInWpShop = useMemo(() => {
+    const cfg = resolveCardShopConfig(adminConfig);
+    if (!cfg.enabled) return true;
+    const cards = getOpeningCardsList(adminConfig);
+    return cards.some(
+      (c) =>
+        !pilot.ownedOpeningCards.includes(c.id) &&
+        isCardInWpShopStock(c.id, cardShopStockWp, adminConfig)
+    );
+  }, [adminConfig, pilot.ownedOpeningCards, cardShopStockWp]);
 
   const [filter, setFilter] = useState<SkillFilter>('all');
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -468,14 +485,21 @@ export function SkillView() {
                     {t('auto.tacticsBtn')} ({activeGear.tactics.rules.length})
                   </span>
                 </button>
-                <button
-                  type="button"
-                  onClick={openWarPointShop}
-                  className="min-h-[44px] md:min-h-0 md:h-8 px-3 inline-flex items-center gap-1.5 rounded-lg md:rounded border border-purple-500/50 bg-purple-500/15 hover:bg-purple-500/25 text-purple-200 text-xs font-semibold transition-colors cursor-pointer"
-                >
-                  <KeyRound className="w-3.5 h-3.5" />
-                  <span>{t('skill.getCardInWpShop')}</span>
-                </button>
+                {hasAnyCardInWpShop ? (
+                  <button
+                    type="button"
+                    onClick={openWarPointShop}
+                    className="min-h-[44px] md:min-h-0 md:h-8 px-3 inline-flex items-center gap-1.5 rounded-lg md:rounded border border-purple-500/50 bg-purple-500/15 hover:bg-purple-500/25 text-purple-200 text-xs font-semibold transition-colors cursor-pointer"
+                  >
+                    <KeyRound className="w-3.5 h-3.5" />
+                    <span>{t('skill.getCardInWpShop')}</span>
+                  </button>
+                ) : (
+                  <span className="min-h-[44px] md:min-h-0 md:h-8 px-3 inline-flex items-center gap-1.5 rounded-lg md:rounded border border-slate-800 bg-slate-900/50 text-slate-400 text-xs">
+                    <KeyRound className="w-3.5 h-3.5 text-slate-500" />
+                    <span>{t('skill.cardNotInWpShop')}</span>
+                  </span>
+                )}
               </div>
             </div>
 
@@ -879,17 +903,27 @@ export function SkillView() {
                     <div className="flex flex-wrap items-center gap-2">
                       {!isMax &&
                         (needsCard ? (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openWarPointShop();
-                            }}
-                            className="min-h-[44px] md:min-h-0 md:h-8 px-3 inline-flex items-center gap-1 rounded-lg md:rounded border border-purple-500/50 bg-purple-500/15 hover:bg-purple-500/25 text-purple-200 font-semibold text-xs transition-colors cursor-pointer"
-                          >
-                            <KeyRound className="w-3.5 h-3.5" />
-                            <span>{t('skill.getCardInWpShop')}</span>
-                          </button>
+                          isCardInWpShopStock(
+                            requiredCardId,
+                            cardShopStockWp,
+                            adminConfig
+                          ) ? (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openWarPointShop();
+                              }}
+                              className="min-h-[44px] md:min-h-0 md:h-8 px-3 inline-flex items-center gap-1 rounded-lg md:rounded border border-purple-500/50 bg-purple-500/15 hover:bg-purple-500/25 text-purple-200 font-semibold text-xs transition-colors cursor-pointer"
+                            >
+                              <KeyRound className="w-3.5 h-3.5" />
+                              <span>{t('skill.getCardInWpShop')}</span>
+                            </button>
+                          ) : (
+                            <span className="min-h-[44px] md:min-h-0 md:h-8 inline-flex items-center text-xs text-slate-400">
+                              {t('skill.cardNotInWpShop')}
+                            </span>
+                          )
                         ) : (
                           <button
                             type="button"
@@ -1319,14 +1353,24 @@ export function SkillView() {
                       {t('skill.maxLevel', { max: skillMaxLevel })}
                     </span>
                   ) : needsCard ? (
-                    <button
-                      type="button"
-                      onClick={openWarPointShop}
-                      className="h-8 px-3 inline-flex items-center gap-1 rounded border border-purple-500/50 bg-purple-500/15 hover:bg-purple-500/25 text-purple-200 font-semibold text-xs transition-colors cursor-pointer"
-                    >
-                      <KeyRound className="w-3.5 h-3.5" />
-                      <span>{t('skill.getCardInWpShop')}</span>
-                    </button>
+                    isCardInWpShopStock(
+                      requiredCardId,
+                      cardShopStockWp,
+                      adminConfig
+                    ) ? (
+                      <button
+                        type="button"
+                        onClick={openWarPointShop}
+                        className="h-8 px-3 inline-flex items-center gap-1 rounded border border-purple-500/50 bg-purple-500/15 hover:bg-purple-500/25 text-purple-200 font-semibold text-xs transition-colors cursor-pointer"
+                      >
+                        <KeyRound className="w-3.5 h-3.5" />
+                        <span>{t('skill.getCardInWpShop')}</span>
+                      </button>
+                    ) : (
+                      <span className="h-8 inline-flex items-center text-xs text-slate-400">
+                        {t('skill.cardNotInWpShop')}
+                      </span>
+                    )
                   ) : (
                     <button
                       type="button"
@@ -1551,16 +1595,26 @@ export function SkillView() {
                       {t('skill.maxLevel', { max: skillMaxLevel })}
                     </div>
                   ) : needsCard ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setMobileSkillId(null);
-                        openWarPointShop();
-                      }}
-                      className="w-full min-h-[48px] px-4 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-bold text-sm cursor-pointer"
-                    >
-                      {t('skill.getCardInWpShop')}
-                    </button>
+                    isCardInWpShopStock(
+                      requiredCardId,
+                      cardShopStockWp,
+                      adminConfig
+                    ) ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMobileSkillId(null);
+                          openWarPointShop();
+                        }}
+                        className="w-full min-h-[48px] px-4 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-bold text-sm cursor-pointer"
+                      >
+                        {t('skill.getCardInWpShop')}
+                      </button>
+                    ) : (
+                      <div className="text-center py-2 text-xs text-slate-400">
+                        {t('skill.cardNotInWpShop')}
+                      </div>
+                    )
                   ) : (
                     <button
                       type="button"

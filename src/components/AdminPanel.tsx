@@ -39,6 +39,7 @@ import { BaseSiegeAdminBlock } from './admin/BaseSiegeAdminBlock';
 import { StarterEventAdminBlock } from './admin/StarterEventAdminBlock';
 import { VoucherAdminBlock } from './admin/VoucherAdminBlock';
 import { SkillTiersAdminBlock } from './admin/SkillTiersAdminBlock';
+import { CardShopAdminBlock } from './admin/CardShopAdminBlock';
 import { BuffCardsAdminBlock } from './admin/BuffCardsAdminBlock';
 import { CardTiersMedalsAdminBlock } from './admin/CardTiersMedalsAdminBlock';
 import {
@@ -2247,6 +2248,15 @@ export function AdminPanel() {
                   description={t('admin.battleSection.skillTiers.desc')}
                 >
                   <SkillTiersAdminBlock />
+                </AdminSection>
+
+                {/* 4b-2. WP Shop Skill Cards (CARD-2) */}
+                <AdminSection
+                  id="card-shop"
+                  title={t('admin.cardShop.title')}
+                  description={t('admin.cardShop.sectionDesc')}
+                >
+                  <CardShopAdminBlock onFlash={flash} />
                 </AdminSection>
 
                 {/* 4c. Buff Cards (BUFFCARD-1) */}

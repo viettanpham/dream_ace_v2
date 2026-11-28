@@ -37,6 +37,10 @@ import {
   validateEquipOnGear,
 } from '../engine/equipment';
 import { hasOperationalShipyard } from '../engine/shop';
+import {
+  isCardInWpShopStock,
+  resolveCardShopConfig,
+} from '../engine/cardShop';
 import { getMedalLore, getMedalName, MEDAL_ICON_ID } from '../engine/medals';
 import {
   formatEquipValidationReason,
@@ -139,6 +143,7 @@ export function ShopScreen() {
   const shopStock = useGameStore((s) => s.shopStock);
   const blackMarketOffer = useGameStore((s) => s.blackMarketOffer);
   const wpMarketOffers = useGameStore((s) => s.wpMarketOffers);
+  const cardShopStockWp = useGameStore((s) => s.cardShopStockWp);
   const battlesUntilRestock = useGameStore((s) => s.battlesUntilRestock);
   const shopSubTab = useGameStore((s) => s.shopSubTab);
   const setShopSubTab = useGameStore((s) => s.setShopSubTab);
@@ -254,14 +259,32 @@ export function ShopScreen() {
     [adminConfig]
   );
 
+  const cardShopCfg = useMemo(
+    () => resolveCardShopConfig(adminConfig),
+    [adminConfig]
+  );
+
   const filteredOpeningCards = useMemo(() => {
     return openingCardsList.filter((card) => {
+      if (cardShopCfg.enabled) {
+        if (pilot.ownedOpeningCards.includes(card.id)) return false;
+        if (!isCardInWpShopStock(card.id, cardShopStockWp, adminConfig)) {
+          return false;
+        }
+      }
       if (wpClassFilter !== 'all' && card.classId !== wpClassFilter) {
         return false;
       }
       return true;
     });
-  }, [openingCardsList, wpClassFilter]);
+  }, [
+    openingCardsList,
+    wpClassFilter,
+    cardShopCfg.enabled,
+    pilot.ownedOpeningCards,
+    cardShopStockWp,
+    adminConfig,
+  ]);
 
   const handleBuy = (item: ShopItemListing) => {
     if (item.soldOut || isInventoryFull || pilot.credits < item.price) return;
@@ -1087,10 +1110,19 @@ export function ShopScreen() {
                 ))}
               </div>
 
-              {/* Mobile Opening Cards List (< md) */}
-              <div className="md:hidden divide-y divide-slate-800/80 rounded-lg border border-slate-800 bg-[#0D131D]/95 overflow-hidden">
-                {filteredOpeningCards.map((card) => {
-                  const skill = getSkillById(card.skillId);
+              {filteredOpeningCards.length === 0 ? (
+                <p
+                  data-testid="shop-wp-cards-empty"
+                  className="rounded-lg border border-slate-800 bg-[#0D131D]/95 px-4 py-3 text-xs text-slate-400"
+                >
+                  {t('shop.wpOpeningCardsEmpty')}
+                </p>
+              ) : (
+                <>
+                  {/* Mobile Opening Cards List (< md) */}
+                  <div className="md:hidden divide-y divide-slate-800/80 rounded-lg border border-slate-800 bg-[#0D131D]/95 overflow-hidden">
+                    {filteredOpeningCards.map((card) => {
+                      const skill = getSkillById(card.skillId, adminConfig);
                   if (!skill) return null;
                   const isOwned = pilot.ownedOpeningCards.includes(card.id);
                   const isElite = card.category === 'elite';
@@ -1145,7 +1177,7 @@ export function ShopScreen() {
               {/* Desktop Opening Cards Grid (>= md) */}
               <div className="hidden md:grid grid-cols-2 xl:grid-cols-3 gap-3.5">
                 {filteredOpeningCards.map((card) => {
-                  const skill = getSkillById(card.skillId);
+                  const skill = getSkillById(card.skillId, adminConfig);
                   if (!skill) return null;
                   const isOwned = pilot.ownedOpeningCards.includes(card.id);
                   const cardPrice = getSkillCardPrice(card, adminConfig);
@@ -1256,6 +1288,8 @@ export function ShopScreen() {
                   );
                 })}
               </div>
+                </>
+              )}
             </section>
           </div>
         )}

@@ -6,6 +6,7 @@ import { BALANCE_CONFIG } from '../../data/balance';
 import { EQUIPMENT_SLOTS } from '../../data/items';
 import { SHOP_STOCK_CONFIG } from '../../data/shopConfig';
 import { OPENING_CARDS_LIST } from '../../data/skills';
+import { DEFAULT_CARD_SHOP_CONFIG } from '../../engine/cardShop';
 import { generateItemInstance } from '../../engine/equipment';
 import { useGameStore } from '../../store/useGameStore';
 import type { ShopItemListing, WpMarketOffer } from '../../types/game';
@@ -280,6 +281,13 @@ describe('ShopScreen & SkillView — Shop Stock, WP Market, and Wrapped Tab Icon
       ...s,
       shopSubTab: 'warpoints',
       wpMarketOffers: rotatingOffers,
+      adminConfig: {
+        ...s.adminConfig,
+        cardShop: {
+          ...DEFAULT_CARD_SHOP_CONFIG,
+          enabled: false,
+        },
+      },
       pilot: {
         ...s.pilot,
         warPoints: 300,

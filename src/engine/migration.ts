@@ -96,6 +96,13 @@ import {
   sanitizeSupplyRewardsConfig,
 } from './supplyRewards';
 import { sanitizePriceOverrides } from './itemPrice';
+import {
+  cloneCardShopConfig,
+  DEFAULT_CARD_SHOP_CONFIG,
+  rollCardShopStock,
+  sanitizeCardShopConfig,
+  sanitizeCardShopStock,
+} from './cardShop';
 import { cloneVoiceConfig, sanitizeVoiceConfig } from './voice';
 import { EMPTY_STAT_BLOCK, MECH_CLASS_LIST } from '../data/classes';
 import {
@@ -449,6 +456,7 @@ export interface PersistedCampaignState {
   supplyShopStock?: SupplyShopListing[];
   supplyShopStockWp?: SupplyShopWpListing[];
   voucherShopStockWp?: import('../types/game').VoucherShopListing[];
+  cardShopStockWp?: string[];
   crateShopStockWp?: CrateShopListing[];
   crateShopStockCredit?: CrateShopListing[];
   blackMarketOffer?: BlackMarketMedalOffer | null;
@@ -576,6 +584,7 @@ export function createDefaultAdminConfig(): AdminConfig {
     monthlyEconomy: cloneMonthlyEconomyConfig(DEFAULT_MONTHLY_ECONOMY_CONFIG),
     showMonthReport: true,
     skillMods: [],
+    cardShop: cloneCardShopConfig(DEFAULT_CARD_SHOP_CONFIG),
     mapPack: null,
     showRawI18nKeys: false,
   };
@@ -647,6 +656,11 @@ export function createFreshCampaignState(
     supplyShopStock: freshSupplyShopStock,
     supplyShopStockWp: freshSupplyShopStockWp,
     voucherShopStockWp: rollVoucherShopStockWp(adminConfig.vouchers, rng),
+    cardShopStockWp: rollCardShopStock(
+      pilot.ownedOpeningCards,
+      adminConfig,
+      rng
+    ),
     crateShopStockWp: rollCrateShopStockWp(adminConfig.crateShop, rng),
     crateShopStockCredit: rollCrateShopStockCredit(adminConfig.crateShop, rng),
     blackMarketOffer: rollBlackMarketMedalOffer(adminConfig, rng),
@@ -1131,6 +1145,7 @@ export function migrateSaveData(
       rawAdmin.skillMods,
       Array.isArray(rawAdmin.iconCatalogMods) ? rawAdmin.iconCatalogMods : []
     ),
+    cardShop: sanitizeCardShopConfig(rawAdmin.cardShop),
     mapPack: sanitizedMapPack,
     showRawI18nKeys: Boolean(rawAdmin.showRawI18nKeys),
   };
@@ -1672,6 +1687,18 @@ export function migrateSaveData(
           ? sanitizedVoucherShopStockWp
           : rollVoucherShopStockWp(adminConfig.vouchers, rng);
 
+    const migratedCardShopStockWp = Array.isArray(raw.cardShopStockWp)
+      ? sanitizeCardShopStock(
+          raw.cardShopStockWp,
+          finalMigratedPilot.ownedOpeningCards,
+          adminConfig
+        )
+      : rollCardShopStock(
+          finalMigratedPilot.ownedOpeningCards,
+          adminConfig,
+          rng
+        );
+
     const migratedCrateShopStockWp = Array.isArray(raw.crateShopStockWp)
       ? sanitizeCrateShopStock(raw.crateShopStockWp)
       : [];
@@ -1695,6 +1722,7 @@ export function migrateSaveData(
       supplyShopStock: migratedSupplyShopStock,
       supplyShopStockWp: migratedSupplyShopStockWp,
       voucherShopStockWp: migratedVoucherShopStockWp,
+      cardShopStockWp: migratedCardShopStockWp,
       crateShopStockWp: migratedCrateShopStockWp,
       crateShopStockCredit: migratedCrateShopStockCredit,
       blackMarketOffer: migratedBlackMarketOffer,
@@ -1906,6 +1934,11 @@ export function migrateSaveData(
     supplyShopStock: legacySupplyShopStock,
     supplyShopStockWp: legacySupplyShopStockWp,
     voucherShopStockWp: rollVoucherShopStockWp(adminConfig.vouchers, rng),
+    cardShopStockWp: rollCardShopStock(
+      finalLegacyPilot.ownedOpeningCards,
+      adminConfig,
+      rng
+    ),
     crateShopStockWp: [],
     crateShopStockCredit: [],
     blackMarketOffer: null,
