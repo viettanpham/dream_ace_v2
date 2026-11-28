@@ -2797,6 +2797,12 @@ export function GearView() {
                                 <span className="text-[11px] text-emerald-300 truncate">
                                   {effectText}
                                 </span>
+                                <span className="text-[11px] text-slate-400 shrink-0">
+                                  ·{' '}
+                                  {t('supply.perBattleLimit', {
+                                    n: supplyTpl.perBattleLimit,
+                                  })}
+                                </span>
                               </div>
                             </div>
                           </div>

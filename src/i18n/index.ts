@@ -950,10 +950,54 @@ function formatCombatLogBody(
       const hp = Math.max(0, Number(p.hp ?? 0));
       const shield = Math.max(0, Number(p.shield ?? 0));
       const sp = Math.max(0, Number(p.sp ?? 0));
+      const resetIdsRaw = String(p.resetSkillIds ?? '').trim();
+      const cleansed = Math.max(0, Number(p.cleansed ?? 0));
+      const dodge = Math.max(0, Number(p.dodge ?? 0));
+      const dodgeRounds = Math.max(1, Number(p.dodgeRounds ?? 1));
+      const speedPct = Math.max(0, Number(p.speedPct ?? 0));
+      const speedRounds = Math.max(1, Number(p.speedRounds ?? 3));
+
       const parts: string[] = [];
       if (hp > 0) parts.push(`HP +${hp}`);
       if (shield > 0) parts.push(`SHD +${shield}`);
       if (sp > 0) parts.push(`SP +${sp}`);
+      if (resetIdsRaw) {
+        const skillNames = resetIdsRaw
+          .split(',')
+          .map((id) => id.trim())
+          .filter(Boolean)
+          .map((id) => getSkillName(lang, id))
+          .join(', ');
+        if (skillNames) {
+          parts.push(
+            lang === 'vi'
+              ? `Reset hồi chiêu: ${skillNames}`
+              : `Reset cooldown: ${skillNames}`
+          );
+        }
+      }
+      if (cleansed > 0) {
+        parts.push(
+          lang === 'vi'
+            ? `Thanh tẩy ${cleansed} hiệu ứng xấu`
+            : `Cleansed ${cleansed} debuff(s)`
+        );
+      }
+      if (dodge > 0) {
+        parts.push(
+          lang === 'vi'
+            ? `Né +${dodge}% (${dodgeRounds} vòng)`
+            : `Dodge +${dodge}% (${dodgeRounds} ${dodgeRounds === 1 ? 'round' : 'rounds'})`
+        );
+      }
+      if (speedPct > 0) {
+        parts.push(
+          lang === 'vi'
+            ? `Tốc độ +${speedPct}% (${speedRounds} vòng)`
+            : `Speed +${speedPct}% (${speedRounds} ${speedRounds === 1 ? 'round' : 'rounds'})`
+        );
+      }
+
       const gains = parts.length > 0 ? parts.join(', ') : 'HP +0';
       return translate(lang, 'log.useSupply', {
         actor: String(p.actor ?? ''),

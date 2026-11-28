@@ -726,6 +726,9 @@ export function SupplyShopPanel({ onNotice }: SupplyShopPanelProps) {
               <span className="text-[11px] text-emerald-300 shrink-0">
                 {effectText}
               </span>
+              <span className="text-[11px] text-slate-400 shrink-0">
+                · {t('supply.perBattleLimit', { n: tpl.perBattleLimit })}
+              </span>
             </div>
 
             <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[11px] font-mono-nums">

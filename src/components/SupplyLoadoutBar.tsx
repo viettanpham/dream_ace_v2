@@ -64,6 +64,30 @@ export function formatSupplyEffects(
       if (eff.kind === 'reveal_stealth_front') {
         return t('supply.effect.revealStealthFront', { count: eff.value });
       }
+      if (eff.kind === 'reset_cooldowns') {
+        return t('supply.effect.resetCooldowns', { count: eff.value });
+      }
+      if (eff.kind === 'cleanse_debuffs') {
+        return t('supply.effect.cleanseDebuffs', { count: eff.value });
+      }
+      if (eff.kind === 'grant_dodge') {
+        const rounds = Math.max(1, Math.round(eff.durationRounds ?? 1));
+        return t(
+          rounds === 1
+            ? 'supply.effect.grantDodgeOne'
+            : 'supply.effect.grantDodge',
+          { val: eff.value, rounds }
+        );
+      }
+      if (eff.kind === 'grant_speed_pct') {
+        const rounds = Math.max(1, Math.round(eff.durationRounds ?? 3));
+        return t(
+          rounds === 1
+            ? 'supply.effect.grantSpeedPctOne'
+            : 'supply.effect.grantSpeedPct',
+          { val: eff.value, rounds }
+        );
+      }
       return t('supply.effect.restoreSpFlat', { val: eff.value });
     })
     .join(', ');
@@ -240,7 +264,8 @@ export function SupplyLoadoutBar({ variant, gear }: SupplyLoadoutBarProps) {
                       {getSupplyName(tpl.id, t)}
                     </div>
                     <div className="text-[11px] text-slate-400 truncate">
-                      {effectText}
+                      {effectText} ·{' '}
+                      {t('supply.perBattleLimit', { n: tpl.perBattleLimit })}
                     </div>
                   </div>
                 </div>

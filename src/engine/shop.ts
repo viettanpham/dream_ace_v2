@@ -822,6 +822,20 @@ const WP_CORE_FAMILIES: readonly SupplyFamily[] = [
   'shield_kit',
 ];
 
+const WP_EXCLUDED_SUPPLY_EFFECTS: ReadonlySet<string> = new Set([
+  'reset_cooldowns',
+  'cleanse_debuffs',
+  'grant_dodge',
+  'grant_speed_pct',
+]);
+
+function isExcludedFromWpSupplyShop(
+  tpl: Pick<SupplyTemplate, 'family' | 'effects'>
+): boolean {
+  if (tpl.family === 'buff') return true;
+  return tpl.effects.some((e) => WP_EXCLUDED_SUPPLY_EFFECTS.has(e.kind));
+}
+
 export function generateSupplyShopStockWp(
   maxGearLevel: number,
   cfg?: Pick<
@@ -849,7 +863,13 @@ export function generateSupplyShopStockWp(
   const seenIds = new Set<string>();
   const unlockedByFamily = new Map<SupplyFamily, SupplyTemplate[]>();
   for (const tpl of templates) {
-    if (tpl.unlockLevel > levelCap || seenIds.has(tpl.id)) continue;
+    if (
+      tpl.unlockLevel > levelCap ||
+      seenIds.has(tpl.id) ||
+      isExcludedFromWpSupplyShop(tpl)
+    ) {
+      continue;
+    }
     seenIds.add(tpl.id);
     const list = unlockedByFamily.get(tpl.family);
     if (list) list.push(tpl);

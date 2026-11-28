@@ -927,11 +927,65 @@ export function parseStructuredCombatLogRow(
       const hp = Math.max(0, Number(p.hp ?? 0));
       const shield = Math.max(0, Number(p.shield ?? 0));
       const sp = Math.max(0, Number(p.sp ?? 0));
+      const resetIdsRaw = String(p.resetSkillIds ?? '').trim();
+      const cleansed = Math.max(0, Number(p.cleansed ?? 0));
+      const dodge = Math.max(0, Number(p.dodge ?? 0));
+      const dodgeRounds = Math.max(1, Number(p.dodgeRounds ?? 1));
+      const speedPct = Math.max(0, Number(p.speedPct ?? 0));
+      const speedRounds = Math.max(1, Number(p.speedRounds ?? 3));
+
       const parts: string[] = [];
       if (hp > 0) parts.push(`HP +${hp}`);
       if (shield > 0) parts.push(`SHD +${shield}`);
       if (sp > 0) parts.push(`SP +${sp}`);
+      if (resetIdsRaw) {
+        const skillNames = resetIdsRaw
+          .split(',')
+          .map((id) => id.trim())
+          .filter(Boolean)
+          .map((id) => getSkillName(lang, id))
+          .join(', ');
+        if (skillNames) {
+          parts.push(
+            lang === 'vi'
+              ? `Reset hồi chiêu: ${skillNames}`
+              : `Reset cooldown: ${skillNames}`
+          );
+        }
+      }
+      if (cleansed > 0) {
+        parts.push(
+          lang === 'vi' ? `Thanh tẩy x${cleansed}` : `Cleanse x${cleansed}`
+        );
+      }
+      if (dodge > 0) {
+        parts.push(
+          lang === 'vi'
+            ? `+${dodge}% Né (${dodgeRounds} vòng)`
+            : `+${dodge}% Dodge (${dodgeRounds}r)`
+        );
+      }
+      if (speedPct > 0) {
+        parts.push(
+          lang === 'vi'
+            ? `+${speedPct}% Tốc (${speedRounds} vòng)`
+            : `+${speedPct}% SPD (${speedRounds}r)`
+        );
+      }
+
       const valueText = parts.length > 0 ? parts.join(', ') : 'HP +0';
+      const actionKind: CombatLogActionKind =
+        hp > 0 || cleansed > 0
+          ? 'heal'
+          : shield > 0
+          ? 'shield'
+          : 'buff';
+      const valueTone: CombatLogValueTone =
+        hp > 0 || cleansed > 0
+          ? 'heal'
+          : shield > 0
+          ? 'shield'
+          : 'buff';
       return {
         id: entry.id,
         round,
@@ -939,11 +993,11 @@ export function parseStructuredCombatLogRow(
         faction,
         actorName: actorFromParams,
         autoBadge,
-        actionKind: hp > 0 ? 'heal' : 'shield',
+        actionKind,
         actionLabel: supplyName,
         targetName: null,
         valueText,
-        valueTone: hp > 0 ? 'heal' : shield > 0 ? 'shield' : 'buff',
+        valueTone,
         fallbackText,
         sentence: fallbackText,
         spCost: null,

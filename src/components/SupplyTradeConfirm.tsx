@@ -143,7 +143,10 @@ export function SupplyTradeConfirm({
                 </span>
               </div>
               <p className="text-xs text-emerald-300">
-                {formatSupplyEffectSummary(template, t)}
+                {formatSupplyEffectSummary(template, t)}{' '}
+                <span className="text-slate-400">
+                  · {t('supply.perBattleLimit', { n: template.perBattleLimit })}
+                </span>
               </p>
             </div>
           </div>
