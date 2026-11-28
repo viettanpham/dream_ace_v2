@@ -2898,6 +2898,13 @@ export const EN_TRANSLATIONS = {
     'Each hit slot stocks random 1–{max} crates (avg {avg}/slot)',
   'admin.crateShop.exPriceWp': 'Price {price} WP',
   'admin.crateShop.exPriceCredit': 'Price {price} credit',
+  'admin.crateShop.exPriceCreditFactorActive':
+    'Fixed price: {price} credit (overridden by factor pricing below)',
+  'admin.crateShop.priceFactorEnabled':
+    'Scale Credit crate price by factor × expected value (deployed Gear level)',
+  'admin.crateShop.priceFactorPct': 'Credit crate price factor (% of expected value, 10–1000)',
+  'admin.crateShop.exPriceFactor':
+    'Gear Lv.20: expected value ≈ {val} CR × {pct}% = {final} CR / crate',
   'admin.crateShop.valueHeading':
     'Expected value of 1 Supply Crate under current crate loot config:',
   'admin.crateShop.valueLine':

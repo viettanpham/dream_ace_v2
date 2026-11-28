@@ -10,8 +10,11 @@ import {
   CRATE_SHOP_MIN_PER_SLOT,
   CRATE_SHOP_MIN_PRICE,
   CRATE_SHOP_MIN_SLOTS,
+  CRATE_SHOP_PRICE_FACTOR_MAX_PCT,
+  CRATE_SHOP_PRICE_FACTOR_MIN_PCT,
   CRATE_SHOP_WP_MAX_PRICE,
   DEFAULT_CRATE_SHOP_CONFIG,
+  DEFAULT_CRATE_SHOP_PRICE_FACTOR,
   sanitizeCrateShopConfig,
 } from '../../engine/shop';
 import { estimateCrateValue } from '../../engine/supplyRewards';
@@ -19,6 +22,7 @@ import { useI18n } from '../../i18n';
 import type {
   AdminConfig,
   CrateShopConfig,
+  CrateShopPriceFactorConfig,
   CrateShopSideConfig,
 } from '../../types/game';
 
@@ -43,6 +47,9 @@ export function CrateShopAdminBlock({
   const locale = lang === 'vi' ? 'vi-VN' : 'en-US';
   const cfg = sanitizeCrateShopConfig(adminConfig.crateShop);
 
+  const factor: CrateShopPriceFactorConfig =
+    cfg.priceFactor ?? DEFAULT_CRATE_SHOP_PRICE_FACTOR;
+
   const commit = (next: CrateShopConfig) => {
     adminUpdateConfig({
       crateShop: sanitizeCrateShopConfig(next),
@@ -61,6 +68,28 @@ export function CrateShopAdminBlock({
       [side]: {
         ...cfg[side],
         [field]: n,
+      },
+    });
+  };
+
+  const updateFactorEnabled = (enabled: boolean) => {
+    commit({
+      ...cfg,
+      priceFactor: {
+        ...factor,
+        enabled,
+      },
+    });
+  };
+
+  const updateFactorPct = (raw: string) => {
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return;
+    commit({
+      ...cfg,
+      priceFactor: {
+        ...factor,
+        creditPct: n,
       },
     });
   };
@@ -126,9 +155,13 @@ export function CrateShopAdminBlock({
             ? t('admin.crateShop.exPriceWp', {
                 price: side.price.toLocaleString(locale),
               })
-            : t('admin.crateShop.exPriceCredit', {
-                price: side.price.toLocaleString(locale),
-              });
+            : factor.enabled
+              ? t('admin.crateShop.exPriceCreditFactorActive', {
+                  price: side.price.toLocaleString(locale),
+                })
+              : t('admin.crateShop.exPriceCredit', {
+                  price: side.price.toLocaleString(locale),
+                });
 
         return (
           <div
@@ -238,6 +271,55 @@ export function CrateShopAdminBlock({
                 </span>
               </label>
             </div>
+            {key === 'credit' && (() => {
+              const lv20Val = estimateCrateValue(adminConfig, 20);
+              const lv20Final = Math.max(
+                CRATE_SHOP_MIN_PRICE,
+                Math.round((lv20Val * factor.creditPct) / 100)
+              );
+              return (
+                <div className="pt-2 border-t border-slate-800/80 space-y-2 min-w-0">
+                  <label className="inline-flex items-center gap-2 text-xs text-slate-200 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      data-testid="admin-crate-shop-factor-enabled"
+                      checked={factor.enabled}
+                      onChange={(e) => updateFactorEnabled(e.target.checked)}
+                      className="rounded border-slate-600 bg-slate-900 accent-amber-400"
+                    />
+                    <span>{t('admin.crateShop.priceFactorEnabled')}</span>
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 items-end min-w-0">
+                    <label className="space-y-1 block min-w-0">
+                      <span className="text-[11px] text-slate-300 block">
+                        {t('admin.crateShop.priceFactorPct')}
+                      </span>
+                      <input
+                        type="number"
+                        data-testid="admin-crate-shop-factor-pct"
+                        min={CRATE_SHOP_PRICE_FACTOR_MIN_PCT}
+                        max={CRATE_SHOP_PRICE_FACTOR_MAX_PCT}
+                        value={factor.creditPct}
+                        onChange={(e) => updateFactorPct(e.target.value)}
+                        className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums"
+                      />
+                    </label>
+                    <p
+                      data-testid="admin-crate-shop-factor-ex"
+                      className={`text-[11px] font-mono-nums leading-snug break-words ${
+                        factor.enabled ? 'text-amber-200/90' : 'text-slate-400'
+                      }`}
+                    >
+                      {t('admin.crateShop.exPriceFactor', {
+                        val: lv20Val.toLocaleString(locale),
+                        pct: factor.creditPct,
+                        final: lv20Final.toLocaleString(locale),
+                      })}
+                    </p>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         );
       })}
@@ -253,6 +335,12 @@ export function CrateShopAdminBlock({
         {VALUE_CHECK_LEVELS.map((level) => {
           const val = estimateCrateValue(adminConfig, level);
           const sellValue = Math.round(val * SHOP_CONFIG.sellPriceRatio);
+          const effectiveCreditPrice = factor.enabled
+            ? Math.max(
+                CRATE_SHOP_MIN_PRICE,
+                Math.round((val * factor.creditPct) / 100)
+              )
+            : cfg.credit.price;
           return (
             <p
               key={level}
@@ -264,7 +352,7 @@ export function CrateShopAdminBlock({
                 value: val.toLocaleString(locale),
                 sellValue: sellValue.toLocaleString(locale),
                 wpPrice: cfg.wp.price.toLocaleString(locale),
-                creditPrice: cfg.credit.price.toLocaleString(locale),
+                creditPrice: effectiveCreditPrice.toLocaleString(locale),
               })}
             </p>
           );

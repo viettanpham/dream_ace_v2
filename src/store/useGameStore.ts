@@ -246,6 +246,7 @@ import {
   rollCrateShopStockCredit,
   rollCrateShopStockWp,
   rollVoucherShopStockWp,
+  getCrateCreditPrice,
   getMaxGearLevel,
   getSupplyWpPrice,
   hasOperationalShipyard,
@@ -3780,8 +3781,7 @@ export const useGameStore = create<GameStoreState>()(
         const wanted = Math.min(safeQty, listing.remaining);
         const bought = Math.min(wanted, room);
         const cappedByStack = bought < wanted;
-        const unitPrice = sanitizeCrateShopConfig(state.adminConfig?.crateShop)
-          .credit.price;
+        const unitPrice = getCrateCreditPrice(state.pilot, state.adminConfig);
         const totalCost = unitPrice * bought;
         if (state.pilot.credits < totalCost) {
           return { ok: false, bought: 0, cost: 0, reason: 'no_funds' };

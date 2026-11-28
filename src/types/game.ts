@@ -577,9 +577,15 @@ export interface CrateShopSideConfig {
   price: number;
 }
 
+export interface CrateShopPriceFactorConfig {
+  enabled: boolean;
+  creditPct: number;
+}
+
 export interface CrateShopConfig {
   wp: CrateShopSideConfig;
   credit: CrateShopSideConfig;
+  priceFactor?: CrateShopPriceFactorConfig;
 }
 
 export interface CrateShopListing {

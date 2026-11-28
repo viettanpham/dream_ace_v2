@@ -2900,6 +2900,13 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
     'Mỗi ô trúng có ngẫu nhiên 1–{max} hòm (TB {avg} hòm/ô)',
   'admin.crateShop.exPriceWp': 'Giá {price} WP',
   'admin.crateShop.exPriceCredit': 'Giá {price} credit',
+  'admin.crateShop.exPriceCreditFactorActive':
+    'Giá cố định: {price} credit (đang tạm thay bằng giá theo hệ số bên dưới)',
+  'admin.crateShop.priceFactorEnabled':
+    'Tính giá hòm Credit theo hệ số × giá trị kỳ vọng (theo cấp Gear đang xuất kích)',
+  'admin.crateShop.priceFactorPct': 'Hệ số giá hòm Credit (% của giá trị kỳ vọng, 10–1000)',
+  'admin.crateShop.exPriceFactor':
+    'Gear Lv.20: giá trị kỳ vọng ≈ {val} CR × {pct}% = {final} CR / hòm',
   'admin.crateShop.valueHeading':
     'Giá trị kỳ vọng 1 Hòm vật tư theo cấu hình rơi đồ hiện tại:',
   'admin.crateShop.valueLine':

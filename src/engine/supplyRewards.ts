@@ -408,7 +408,9 @@ export function grantSupplyReward(
  * averaging rollSupplyCrateContents across its types, qty, and eligible tier range.
  */
 export function estimateCrateValue(
-  adminConfig?: Pick<AdminConfig, 'supplyRewards' | 'supplyEconomy'> | null,
+  adminConfig?: Partial<
+    Pick<AdminConfig, 'supplyRewards' | 'supplyEconomy' | 'priceOverrides'>
+  > | null,
   maxGearLevel: number = 1,
   templates: readonly SupplyTemplate[] = SUPPLY_TEMPLATES
 ): number {

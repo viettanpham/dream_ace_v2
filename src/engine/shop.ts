@@ -20,6 +20,7 @@ import type {
   ConsumableKind,
   CrateShopConfig,
   CrateShopListing,
+  CrateShopPriceFactorConfig,
   CrateShopSideConfig,
   ItemLevelsConfig,
   ItemRarity,
@@ -61,6 +62,7 @@ import {
 } from './itemLevels';
 import { pickEligibleModuleTemplate, sanitizeModuleDropConfig } from './moduleDrop';
 import { SUPPLY_STACK_CAP } from './supplies';
+import { estimateCrateValue } from './supplyRewards';
 
 let wpOfferSeq = 1;
 
@@ -1032,20 +1034,28 @@ export const CRATE_SHOP_MAX_PER_SLOT = 99;
 export const CRATE_SHOP_MIN_PRICE = 1;
 export const CRATE_SHOP_WP_MAX_PRICE = 1_000_000;
 export const CRATE_SHOP_CREDIT_MAX_PRICE = 100_000_000;
+export const CRATE_SHOP_PRICE_FACTOR_MIN_PCT = 10;
+export const CRATE_SHOP_PRICE_FACTOR_MAX_PCT = 1000;
+
+export const DEFAULT_CRATE_SHOP_PRICE_FACTOR: CrateShopPriceFactorConfig = {
+  enabled: false,
+  creditPct: 100,
+};
 
 export const DEFAULT_CRATE_SHOP_CONFIG: CrateShopConfig = {
   wp: {
     chancePct: 10,
     maxSlots: 2,
     maxPerSlot: 10,
-    price: 100,
+    price: 10,
   },
   credit: {
     chancePct: 5,
     maxSlots: 3,
     maxPerSlot: 5,
-    price: 100_000,
+    price: 1000,
   },
+  priceFactor: { ...DEFAULT_CRATE_SHOP_PRICE_FACTOR },
 };
 
 export function cloneCrateShopConfig(
@@ -1054,6 +1064,7 @@ export function cloneCrateShopConfig(
   return {
     wp: { ...cfg.wp },
     credit: { ...cfg.credit },
+    priceFactor: sanitizeCrateShopPriceFactor(cfg.priceFactor),
   };
 }
 
@@ -1065,6 +1076,22 @@ function clampCrateShopInt(
 ): number {
   if (typeof raw !== 'number' || !Number.isFinite(raw)) return fallback;
   return Math.max(min, Math.min(max, Math.round(raw)));
+}
+
+function sanitizeCrateShopPriceFactor(raw: unknown): CrateShopPriceFactorConfig {
+  const r = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  return {
+    enabled:
+      typeof r.enabled === 'boolean'
+        ? r.enabled
+        : DEFAULT_CRATE_SHOP_PRICE_FACTOR.enabled,
+    creditPct: clampCrateShopInt(
+      r.creditPct,
+      CRATE_SHOP_PRICE_FACTOR_MIN_PCT,
+      CRATE_SHOP_PRICE_FACTOR_MAX_PCT,
+      DEFAULT_CRATE_SHOP_PRICE_FACTOR.creditPct
+    ),
+  };
 }
 
 function sanitizeCrateShopSide(
@@ -1114,7 +1141,43 @@ export function sanitizeCrateShopConfig(raw: unknown): CrateShopConfig {
       DEFAULT_CRATE_SHOP_CONFIG.credit,
       CRATE_SHOP_CREDIT_MAX_PRICE
     ),
+    priceFactor: sanitizeCrateShopPriceFactor(r.priceFactor),
   };
+}
+
+export function getDeployedGearLevel(
+  pilot: Pick<PilotAccount, 'gears' | 'activeGearId'> | null | undefined
+): number {
+  if (!pilot?.gears) return 1;
+  const activeGear = pilot.activeGearId
+    ? pilot.gears[pilot.activeGearId]
+    : undefined;
+  const rawLevel = activeGear?.level;
+  if (typeof rawLevel === 'number' && Number.isFinite(rawLevel)) {
+    return Math.max(1, Math.floor(rawLevel));
+  }
+  return 1;
+}
+
+export function getCrateCreditPrice(
+  pilot: Pick<PilotAccount, 'gears' | 'activeGearId'> | null | undefined,
+  adminConfig?: Partial<
+    Pick<
+      AdminConfig,
+      'crateShop' | 'supplyRewards' | 'supplyEconomy' | 'priceOverrides'
+    >
+  > | null
+): number {
+  const cfg = sanitizeCrateShopConfig(adminConfig?.crateShop);
+  if (!cfg.priceFactor?.enabled) {
+    return cfg.credit.price;
+  }
+  const gearLevel = getDeployedGearLevel(pilot);
+  const expected = estimateCrateValue(adminConfig, gearLevel);
+  return Math.max(
+    CRATE_SHOP_MIN_PRICE,
+    Math.round((expected * cfg.priceFactor.creditPct) / 100)
+  );
 }
 
 export function sanitizeCrateShopStock(rawStock: unknown): CrateShopListing[] {

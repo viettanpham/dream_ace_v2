@@ -9,6 +9,7 @@ import { SHOP_CONFIG } from '../data/items';
 import { getVoucherById, getVoucherPriceWp } from '../data/vouchers';
 import { computeSupplyPrice } from '../engine/itemPrice';
 import {
+  getCrateCreditPrice,
   getSupplyWpPrice,
   sanitizeCrateShopConfig,
   sanitizeSupplyShopMaxRefreshes,
@@ -74,6 +75,8 @@ export function SupplyShopPanel({ onNotice }: SupplyShopPanelProps) {
   const { lang, t } = useI18n();
   const credits = useGameStore((s) => s.pilot.credits);
   const warPoints = useGameStore((s) => s.pilot.warPoints ?? 0);
+  const activeGearId = useGameStore((s) => s.pilot.activeGearId);
+  const gears = useGameStore((s) => s.pilot.gears);
   const consumables = useGameStore((s) => s.pilot.consumables);
   const ownedVouchers = useGameStore((s) => s.pilot.vouchers);
   const supplyShopStock = useGameStore((s) => s.supplyShopStock);
@@ -535,7 +538,9 @@ export function SupplyShopPanel({ onNotice }: SupplyShopPanelProps) {
     const isWp = currency === 'WP';
     const remaining = Math.max(0, Math.floor(listing.remaining));
     const isSoldOut = remaining <= 0;
-    const unitPrice = isWp ? crateCfg.wp.price : crateCfg.credit.price;
+    const unitPrice = isWp
+      ? crateCfg.wp.price
+      : getCrateCreditPrice({ activeGearId, gears }, adminConfig);
     const qty = getCrateQty(listing.slotId, remaining);
     const room = Math.max(0, SUPPLY_STACK_CAP - crateOwned);
     const effectiveQty = room > 0 ? Math.min(qty, room) : qty;

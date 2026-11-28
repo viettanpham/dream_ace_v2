@@ -119,8 +119,8 @@ describe('TASK SUP-GEN-b — Supply Crates in WP & Credit Shops', () => {
       crateShopStockCredit: [{ slotId: 'crate-credit-0', remaining: 6 }],
       pilot: {
         ...s.pilot,
-        warPoints: 500,
-        credits: 250_000,
+        warPoints: 50,
+        credits: 2_500,
         consumables: [],
       },
     }));
@@ -129,15 +129,15 @@ describe('TASK SUP-GEN-b — Supply Crates in WP & Credit Shops', () => {
     expect(wpOk).toEqual({
       ok: true,
       bought: 2,
-      cost: 200,
+      cost: 20,
       cappedByStack: false,
     });
-    expect(useGameStore.getState().pilot.warPoints).toBe(300);
+    expect(useGameStore.getState().pilot.warPoints).toBe(30);
     expect(useGameStore.getState().crateShopStockWp[0].remaining).toBe(2);
 
     useGameStore.setState((s) => ({
       ...s,
-      pilot: { ...s.pilot, warPoints: 150 },
+      pilot: { ...s.pilot, warPoints: 15 },
     }));
     const wpNoFunds = useGameStore.getState().buyCrateWp('crate-wp-0', 4);
     expect(wpNoFunds.ok).toBe(false);
@@ -152,7 +152,7 @@ describe('TASK SUP-GEN-b — Supply Crates in WP & Credit Shops', () => {
       ...s,
       pilot: {
         ...s.pilot,
-        credits: 1_000_000,
+        credits: 10_000,
         consumables: [{ id: 'supply_crate_stack', kind: 'supply_crate', quantity: 97 }],
       },
     }));
@@ -160,7 +160,7 @@ describe('TASK SUP-GEN-b — Supply Crates in WP & Credit Shops', () => {
     expect(crPartial).toEqual({
       ok: true,
       bought: 2,
-      cost: 200_000,
+      cost: 2_000,
       cappedByStack: true,
     });
     expect(
@@ -178,7 +178,7 @@ describe('TASK SUP-GEN-b — Supply Crates in WP & Credit Shops', () => {
       crateShopStockWp: [{ slotId: 'crate-wp-0', remaining: 3 }],
       pilot: {
         ...s.pilot,
-        warPoints: 500,
+        warPoints: 50,
         consumables: [],
       },
     }));
@@ -213,7 +213,7 @@ describe('TASK SUP-GEN-b — Supply Crates in WP & Credit Shops', () => {
     act(() => {
       confirmOk.click();
     });
-    expect(useGameStore.getState().pilot.warPoints).toBe(300);
+    expect(useGameStore.getState().pilot.warPoints).toBe(30);
     expect(notices.length).toBeGreaterThan(0);
   });
 
@@ -276,7 +276,7 @@ describe('TASK SUP-GEN-b — Supply Crates in WP & Credit Shops', () => {
       container.querySelector('[data-testid="admin-crate-shop-value-lv20"]')
         ?.textContent ?? '';
     expect(lv20Text).toContain(v20.toLocaleString('vi-VN'));
-    expect(lv20Text).toContain('100 WP');
-    expect(lv20Text).toContain('100.000');
+    expect(lv20Text).toContain('10 WP');
+    expect(lv20Text).toContain('1.000');
   });
 });
