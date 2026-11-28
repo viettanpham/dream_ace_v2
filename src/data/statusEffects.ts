@@ -709,6 +709,21 @@ const ENGINE_ONLY_STATUS_ENTRIES: readonly StatusEffectEntry[] = [
     stackRule: 'refresh',
     dispellable: false,
   },
+  {
+    id: 'ENG_flare_dodge',
+    nameVi: 'Pháo sáng nhiễu',
+    nameEn: 'Decoy Flare',
+    group: 'ENG',
+    iconId: 'BF04',
+    polarity: 'buff',
+    stat: 'dodge',
+    mode: 'flat',
+    defaultValue: 3,
+    durationTurns: 1,
+    maxStacks: 1,
+    stackRule: 'highest',
+    dispellable: true,
+  },
 ];
 
 const CONTROL_IMMUNITY_ENTRY: StatusEffectEntry = {

@@ -25,6 +25,10 @@ export const SUPPLY_EFFECT_KINDS: readonly SupplyEffectKind[] = [
   'restore_shield',
   'restore_sp',
   'reveal_stealth_front',
+  'reset_cooldowns',
+  'cleanse_debuffs',
+  'grant_dodge',
+  'grant_speed_pct',
 ];
 
 const VALID_FAMILY_SET = new Set<string>(SUPPLY_TEMPLATE_FAMILIES);
@@ -47,12 +51,19 @@ const isNonEmptyStr = (v: unknown): v is string =>
 function isValidSupplyEffect(raw: unknown): raw is SupplyEffect {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return false;
   const obj = raw as Record<string, unknown>;
+  const durationValid =
+    obj.durationRounds === undefined ||
+    (typeof obj.durationRounds === 'number' &&
+      Number.isInteger(obj.durationRounds) &&
+      obj.durationRounds >= 1 &&
+      obj.durationRounds <= 10);
   return (
     typeof obj.kind === 'string' &&
     VALID_EFFECT_SET.has(obj.kind) &&
     typeof obj.value === 'number' &&
     Number.isFinite(obj.value) &&
-    obj.value > 0
+    obj.value > 0 &&
+    durationValid
   );
 }
 
@@ -121,6 +132,9 @@ export function validateSupplyTemplate(raw: unknown): SupplyTemplate | null {
     effects: (r.effects as SupplyEffect[]).map((eff) => ({
       kind: eff.kind,
       value: eff.value,
+      ...(eff.durationRounds !== undefined
+        ? { durationRounds: eff.durationRounds }
+        : {}),
     })),
     cooldownTurns: r.cooldownTurns as number,
     perBattleLimit: r.perBattleLimit as number,

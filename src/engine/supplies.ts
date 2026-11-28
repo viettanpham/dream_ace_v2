@@ -20,6 +20,7 @@ import type {
 } from '../types/game';
 import {
   applySupplyEffects,
+  isSupplyCleanseDebuff,
   type SupplyEffectGains,
 } from './supplyEffects';
 
@@ -83,6 +84,8 @@ export type SupplyUseFailureReason =
   | 'shield_full'
   | 'sp_full'
   | 'shield_broken'
+  | 'no_cooldowns'
+  | 'no_debuffs'
   | 'not_your_turn';
 
 export interface CanUseSupplyInput {
@@ -144,7 +147,9 @@ export function sanitizeSupplyScanCount(raw: unknown): number {
 export function isAutoSupplyAllowed(
   template: Pick<SupplyTemplate, 'family'> | null | undefined
 ): boolean {
-  return Boolean(template && template.family !== 'utility');
+  return Boolean(
+    template && template.family !== 'utility' && template.family !== 'buff'
+  );
 }
 
 export function filterAutoOrNpcSupplies(
@@ -507,7 +512,28 @@ function checkEffectBlockedReason(
   if (eff.kind === 'restore_sp_pct' || eff.kind === 'restore_sp') {
     return unit.sp >= unit.derived.maxSp ? 'sp_full' : null;
   }
+  if (eff.kind === 'reset_cooldowns') {
+    const hasCd = Object.values(unit.skillCooldowns ?? {}).some(
+      (cd) => typeof cd === 'number' && Number.isFinite(cd) && cd > 0
+    );
+    return hasCd ? null : 'no_cooldowns';
+  }
+  if (eff.kind === 'cleanse_debuffs') {
+    const hasDebuff = unit.statuses.some((s) => isSupplyCleanseDebuff(s));
+    return hasDebuff ? null : 'no_debuffs';
+  }
   return null;
+}
+
+function resolveTemplateBattleLimit(
+  template: Pick<SupplyTemplate, 'id' | 'family' | 'perBattleLimit'>,
+  rawEffectiveLimit: number
+): number {
+  const usesPerTemplateCap =
+    template.family === 'buff' ||
+    (template.family === 'utility' && template.id !== 'sup_scan_t1');
+  if (!usesPerTemplateCap) return rawEffectiveLimit;
+  return Math.min(rawEffectiveLimit, Math.max(1, template.perBattleLimit));
 }
 
 function failUse(
@@ -550,9 +576,12 @@ export function canUseSupply({
     typeof battleLimitOverride === 'number' &&
     !Number.isNaN(battleLimitOverride) &&
     battleLimitOverride >= 0;
-  const effectiveBattleLimit = hasBattleLimitOverride
+  const rawEffectiveLimit = hasBattleLimitOverride
     ? Math.floor(battleLimitOverride)
     : getEffectiveSupplyBattleLimit(kind, unit, units, cfg);
+  const effectiveBattleLimit = hasBattleLimitOverride
+    ? rawEffectiveLimit
+    : resolveTemplateBattleLimit(template, rawEffectiveLimit);
   const usedInBattle = Math.max(
     0,
     supplyState?.usedCountsByTemplate?.[template.id] ?? 0
@@ -619,6 +648,12 @@ export type ApplyBattleSupplyUseResult =
       gains: SupplyEffectGains;
       revealedUnitIds?: string[];
       revealedNames?: string[];
+      resetSkillIds?: string[];
+      cleansedCount?: number;
+      dodgePts?: number;
+      dodgeRounds?: number;
+      speedPct?: number;
+      speedRounds?: number;
     };
 
 export function tickSupplyState(
@@ -700,7 +735,16 @@ export function applyBattleSupplyUse({
     };
   }
 
-  const { unit: nextUnit, gains } = applySupplyEffects(unit, template.effects);
+  const {
+    unit: nextUnit,
+    gains,
+    resetSkillIds,
+    cleansedCount,
+    dodgePts,
+    dodgeRounds,
+    speedPct,
+    speedRounds,
+  } = applySupplyEffects(unit, template.effects, { rng });
   let nextUnits = units.map((u, idx) => (idx === unitIdx ? nextUnit : u));
 
   const scanEff = template.effects.find(
@@ -770,6 +814,10 @@ export function applyBattleSupplyUse({
     },
     gains,
     ...(scanEff ? { revealedUnitIds, revealedNames } : {}),
+    ...(resetSkillIds.length > 0 ? { resetSkillIds } : {}),
+    ...(cleansedCount > 0 ? { cleansedCount } : {}),
+    ...(dodgePts > 0 ? { dodgePts, dodgeRounds } : {}),
+    ...(speedPct > 0 ? { speedPct, speedRounds } : {}),
   };
 }
 
@@ -800,6 +848,17 @@ export function buildSupplyUseFeedback({
   const isScan = result.revealedNames !== undefined;
   const revealedIds = result.revealedUnitIds ?? [];
   const revealedNames = result.revealedNames ?? [];
+  const resetSkillIds = result.resetSkillIds ?? [];
+  const cleansedCount = result.cleansedCount ?? 0;
+  const dodgePts = result.dodgePts ?? 0;
+  const dodgeRounds = result.dodgeRounds ?? 0;
+  const speedPct = result.speedPct ?? 0;
+  const speedRounds = result.speedRounds ?? 0;
+  const isTacticalNonPool =
+    resetSkillIds.length > 0 ||
+    cleansedCount > 0 ||
+    dodgePts > 0 ||
+    speedPct > 0;
   const cue: 'heal' | 'shield' =
     result.gains.shield > 0 && result.gains.hp === 0 ? 'shield' : 'heal';
 
@@ -828,6 +887,38 @@ export function buildSupplyUseFeedback({
       tone: 'buff',
     });
   }
+  if (resetSkillIds.length > 0) {
+    popups.push({
+      id: `pop_sup_cd_${uidSuffix}`,
+      unitId: actor.id,
+      text: `CD -${resetSkillIds.length}`,
+      tone: 'buff',
+    });
+  }
+  if (cleansedCount > 0) {
+    popups.push({
+      id: `pop_sup_cln_${uidSuffix}`,
+      unitId: actor.id,
+      text: `CLEANSE x${cleansedCount}`,
+      tone: 'heal',
+    });
+  }
+  if (dodgePts > 0) {
+    popups.push({
+      id: `pop_sup_eva_${uidSuffix}`,
+      unitId: actor.id,
+      text: `+${dodgePts} EVA`,
+      tone: 'buff',
+    });
+  }
+  if (speedPct > 0) {
+    popups.push({
+      id: `pop_sup_spd_${uidSuffix}`,
+      unitId: actor.id,
+      text: `+${speedPct}% SPD`,
+      tone: 'buff',
+    });
+  }
   for (const revId of revealedIds) {
     popups.push({
       id: `pop_sup_rev_${revId}_${uidSuffix}`,
@@ -844,7 +935,7 @@ export function buildSupplyUseFeedback({
   );
   const fxTone: CombatFxTone = isScan
     ? 'sp'
-    : result.gains.hp > 0 || template.family === 'hp_kit'
+    : result.gains.hp > 0 || template.family === 'hp_kit' || cleansedCount > 0
     ? 'heal'
     : result.gains.shield > 0 || template.family === 'shield_kit'
     ? 'shield'
@@ -870,7 +961,12 @@ export function buildSupplyUseFeedback({
     actorSide: actor.side,
     actorIsPlayer: actor.isPlayer,
     actorIsBoss: Boolean(actor.isBoss),
-    tag: isScan ? 'STATUS' : fxTone === 'shield' ? 'SHIELD' : 'HEAL',
+    tag:
+      isScan || isTacticalNonPool
+        ? 'STATUS'
+        : fxTone === 'shield'
+        ? 'SHIELD'
+        : 'HEAL',
     templateKey: isScan
       ? revealedNames.length > 0
         ? 'log.supplyScanReveal'
@@ -891,6 +987,12 @@ export function buildSupplyUseFeedback({
           hp: result.gains.hp,
           shield: result.gains.shield,
           sp: result.gains.sp,
+          ...(resetSkillIds.length > 0
+            ? { resetSkillIds: resetSkillIds.join(',') }
+            : {}),
+          ...(cleansedCount > 0 ? { cleansed: cleansedCount } : {}),
+          ...(dodgePts > 0 ? { dodge: dodgePts, dodgeRounds } : {}),
+          ...(speedPct > 0 ? { speedPct, speedRounds } : {}),
         },
   };
 
@@ -937,6 +1039,14 @@ function formatRawEffects(effects: readonly SupplyEffect[]): string {
       if (eff.kind === 'restore_shield') return `SHD +${eff.value}`;
       if (eff.kind === 'restore_sp_pct') return `SP +${eff.value}%`;
       if (eff.kind === 'reveal_stealth_front') return `Scan x${eff.value}`;
+      if (eff.kind === 'reset_cooldowns') return `Reset CD x${eff.value}`;
+      if (eff.kind === 'cleanse_debuffs') return `Cleanse x${eff.value}`;
+      if (eff.kind === 'grant_dodge') {
+        return `EVA +${eff.value} (${eff.durationRounds ?? 1}t)`;
+      }
+      if (eff.kind === 'grant_speed_pct') {
+        return `SPD +${eff.value}% (${eff.durationRounds ?? 3}t)`;
+      }
       return `SP +${eff.value}`;
     })
     .join(', ');
@@ -1044,9 +1154,10 @@ export function getBattleSupplyRows(
       0,
       supplyState?.usedCountsByTemplate?.[tpl.id] ?? 0
     );
-    const effectiveLimit = playerUnit
+    const rawLimit = playerUnit
       ? getEffectiveSupplyBattleLimit(battle.kind, playerUnit, battle.units, cfg)
       : maxUsesPerBattle;
+    const effectiveLimit = resolveTemplateBattleLimit(tpl, rawLimit);
     const check: CanUseSupplyResult = playerUnit
       ? canUseSupply({
           template: tpl,

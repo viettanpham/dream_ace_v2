@@ -668,11 +668,16 @@ export type SupplyEffectKind =
   | 'heal_hp'
   | 'restore_shield'
   | 'restore_sp'
-  | 'reveal_stealth_front';
+  | 'reveal_stealth_front'
+  | 'reset_cooldowns'
+  | 'cleanse_debuffs'
+  | 'grant_dodge'
+  | 'grant_speed_pct';
 
 export interface SupplyEffect {
   kind: SupplyEffectKind;
   value: number;
+  durationRounds?: number;
 }
 
 export interface SupplyTemplate {

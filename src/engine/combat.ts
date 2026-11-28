@@ -230,7 +230,14 @@ export function getEffectiveUnitDodge(unit: CombatUnit): number {
   if (regMod.pct !== 0 || regMod.flat !== 0) {
     dodge += Math.round(regMod.pct * 100) + regMod.flat;
   }
-  return Math.min(75, Math.max(0, dodge));
+  const hasFlareDodge = unit.statuses.some(
+    (s) =>
+      s.type === 'registry_effect' &&
+      s.registryId === 'ENG_flare_dodge' &&
+      s.turnsRemaining > 0
+  );
+  const maxDodgeCap = hasFlareDodge ? 45 : 75;
+  return Math.min(maxDodgeCap, Math.max(0, dodge));
 }
 
 function getEffectiveAttackDamageMult(
