@@ -14,6 +14,8 @@ export type RepairFeeKind = 'defeat' | 'retreat';
 
 export interface RepairFeeResult {
   fee: number;
+  subsidy: number;
+  payable: number;
   free: boolean;
 }
 
@@ -150,10 +152,11 @@ export function computeDefeatExpPenalty(
 
 /**
  * Pure repair fee calculation for defeat or retreat.
- * Free when level <= freeLevel AND credits <= freeCredits.
- * Else fee = min(cap, sum(HP * hpCoef + Shield * shieldCoef)) across ally units:
+ * Fee follows real damage with NO cap and NO credit check:
  * - defeat: full max HP / max Shield of all ally units
  * - retreat: lost HP / lost Shield (destroyed unit = full max)
+ * Government subsidy applies up to `tier.subsidyMax` when level <= `tier.subsidyLevel`.
+ * Player pays `payable = max(0, fee - subsidy)`.
  */
 export function computeRepairFee(
   kind: RepairFeeKind,
@@ -162,15 +165,11 @@ export function computeRepairFee(
   units: CombatUnit[],
   cfg?: BattlePenaltyConfig | AdminConfig | null
 ): RepairFeeResult {
+  void credits;
   const penaltyCfg = resolveBattlePenaltyConfig(cfg);
   const tier =
     kind === 'defeat' ? penaltyCfg.repairDefeat : penaltyCfg.repairRetreat;
   const safeLevel = Number.isFinite(level) ? Math.max(1, Math.floor(level)) : 1;
-  const safeCredits = Math.max(0, credits || 0);
-
-  if (safeLevel <= tier.freeLevel && safeCredits <= tier.freeCredits) {
-    return { fee: 0, free: true };
-  }
 
   const allies = units.filter((u) => u.side === 'ally');
   let hpSum = 0;
@@ -195,8 +194,12 @@ export function computeRepairFee(
   }
 
   const rawFee = hpSum * tier.hpCoef + shieldSum * tier.shieldCoef;
-  const fee = Math.round(Math.min(tier.cap, Math.max(0, rawFee)));
-  return { fee, free: false };
+  const fee = Math.round(Math.max(0, rawFee));
+  const subsidyCap =
+    safeLevel <= tier.subsidyLevel ? Math.max(0, Math.round(tier.subsidyMax)) : 0;
+  const subsidy = Math.min(fee, subsidyCap);
+  const payable = Math.max(0, fee - subsidy);
+  return { fee, subsidy, payable, free: payable === 0 };
 }
 
 export interface VoucherRefundResult {
@@ -271,6 +274,40 @@ export function pickVouchersSmallestSufficient(
     remaining = Math.max(0, remaining - chosen.value);
   }
 
+  return picked;
+}
+
+export function getVoucherSelectionFaceSum(
+  selection: Record<string, number> | null | undefined,
+  kind: VoucherKind,
+  cfgOrAdmin?: VoucherConfig | AdminConfig | null
+): number {
+  if (!selection) return 0;
+  let faceSum = 0;
+  for (const [id, rawQty] of Object.entries(selection)) {
+    const qty = Math.max(0, Math.floor(Number(rawQty) || 0));
+    if (qty <= 0) continue;
+    const def = getVoucherById(id, cfgOrAdmin);
+    if (!def || def.kind !== kind) continue;
+    faceSum += def.value * qty;
+  }
+  return faceSum;
+}
+
+export function pickDefaultVoucherSelection(
+  owned: Record<string, number> | null | undefined,
+  kind: VoucherKind,
+  charged: number,
+  cfgOrAdmin?: VoucherConfig | AdminConfig | null
+): Record<string, number> {
+  const picked = pickVouchersSmallestSufficient(owned, kind, charged, cfgOrAdmin);
+  const faceSum = getVoucherSelectionFaceSum(picked, kind, cfgOrAdmin);
+  if (faceSum <= 0) return {};
+  const safeCharged = Number.isFinite(charged)
+    ? Math.max(0, Math.floor(charged))
+    : 0;
+  const waste = Math.max(0, faceSum - safeCharged);
+  if (waste > faceSum * 0.5) return {};
   return picked;
 }
 

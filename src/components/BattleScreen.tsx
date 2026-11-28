@@ -3615,6 +3615,7 @@ export function BattleScreen() {
             <VoucherRedeemDialog
               summary={battle.summary}
               ownedVouchers={pilot.vouchers}
+              currentCredits={pilot.credits}
               adminConfig={adminConfig}
               lang={lang}
               t={t}

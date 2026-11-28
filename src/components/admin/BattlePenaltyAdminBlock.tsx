@@ -119,44 +119,67 @@ export function BattlePenaltyAdminBlock({
   const tierFields: Array<{
     key: RepairTierFieldKey;
     titleKey:
-      | 'admin.battlePenalty.repair.freeLevel.title'
-      | 'admin.battlePenalty.repair.freeCredits.title'
+      | 'admin.battlePenalty.repair.subsidyLevel.title'
+      | 'admin.battlePenalty.repair.subsidyMax.title'
       | 'admin.battlePenalty.repair.hpCoef.title'
-      | 'admin.battlePenalty.repair.shieldCoef.title'
-      | 'admin.battlePenalty.repair.cap.title';
+      | 'admin.battlePenalty.repair.shieldCoef.title';
     descKey:
-      | 'admin.battlePenalty.repair.freeLevel.desc'
-      | 'admin.battlePenalty.repair.freeCredits.desc'
+      | 'admin.battlePenalty.repair.subsidyLevel.desc'
+      | 'admin.battlePenalty.repair.subsidyMax.desc'
       | 'admin.battlePenalty.repair.hpCoef.desc'
-      | 'admin.battlePenalty.repair.shieldCoef.desc'
-      | 'admin.battlePenalty.repair.cap.desc';
+      | 'admin.battlePenalty.repair.shieldCoef.desc';
+    exKey:
+      | 'admin.battlePenalty.repair.subsidyLevel.ex'
+      | 'admin.battlePenalty.repair.subsidyMax.ex'
+      | 'admin.battlePenalty.repair.hpCoef.ex'
+      | 'admin.battlePenalty.repair.shieldCoef.ex';
   }> = [
     {
-      key: 'freeLevel',
-      titleKey: 'admin.battlePenalty.repair.freeLevel.title',
-      descKey: 'admin.battlePenalty.repair.freeLevel.desc',
+      key: 'subsidyLevel',
+      titleKey: 'admin.battlePenalty.repair.subsidyLevel.title',
+      descKey: 'admin.battlePenalty.repair.subsidyLevel.desc',
+      exKey: 'admin.battlePenalty.repair.subsidyLevel.ex',
     },
     {
-      key: 'freeCredits',
-      titleKey: 'admin.battlePenalty.repair.freeCredits.title',
-      descKey: 'admin.battlePenalty.repair.freeCredits.desc',
+      key: 'subsidyMax',
+      titleKey: 'admin.battlePenalty.repair.subsidyMax.title',
+      descKey: 'admin.battlePenalty.repair.subsidyMax.desc',
+      exKey: 'admin.battlePenalty.repair.subsidyMax.ex',
     },
     {
       key: 'hpCoef',
       titleKey: 'admin.battlePenalty.repair.hpCoef.title',
       descKey: 'admin.battlePenalty.repair.hpCoef.desc',
+      exKey: 'admin.battlePenalty.repair.hpCoef.ex',
     },
     {
       key: 'shieldCoef',
       titleKey: 'admin.battlePenalty.repair.shieldCoef.title',
       descKey: 'admin.battlePenalty.repair.shieldCoef.desc',
-    },
-    {
-      key: 'cap',
-      titleKey: 'admin.battlePenalty.repair.cap.title',
-      descKey: 'admin.battlePenalty.repair.cap.desc',
+      exKey: 'admin.battlePenalty.repair.shieldCoef.ex',
     },
   ];
+
+  const renderTierFieldExample = (
+    tier: RepairFeeTierConfig,
+    field: (typeof tierFields)[number]
+  ) => {
+    const sampleHpFee = Math.round(12000 * tier.hpCoef);
+    const sampleShFee = Math.round(4000 * tier.shieldCoef);
+    const fee = sampleHpFee + sampleShFee;
+    const subsidy = Math.min(fee, Math.max(0, Math.round(tier.subsidyMax)));
+    const payable = Math.max(0, fee - subsidy);
+    return t(field.exKey, {
+      fee: fmtLocale(fee, lang),
+      subsidy: fmtLocale(subsidy, lang),
+      payable: fmtLocale(payable, lang),
+      lv: tier.subsidyLevel,
+      aboveLv: tier.subsidyLevel + 1,
+      coef: Number(tier[field.key].toFixed(2)),
+      hpFee: fmtLocale(sampleHpFee, lang),
+      shFee: fmtLocale(sampleShFee, lang),
+    });
+  };
 
   return (
     <div
@@ -209,12 +232,10 @@ export function BattlePenaltyAdminBlock({
         </p>
         <p data-testid="admin-battle-penalty-example-repair">
           {t('admin.battlePenalty.exRepairSummary', {
-            defeatLv: cfg.repairDefeat.freeLevel,
-            defeatCr: fmtLocale(cfg.repairDefeat.freeCredits, lang),
-            defeatCap: fmtLocale(cfg.repairDefeat.cap, lang),
-            retreatLv: cfg.repairRetreat.freeLevel,
-            retreatCr: fmtLocale(cfg.repairRetreat.freeCredits, lang),
-            retreatCap: fmtLocale(cfg.repairRetreat.cap, lang),
+            defeatLv: cfg.repairDefeat.subsidyLevel,
+            defeatMax: fmtLocale(cfg.repairDefeat.subsidyMax, lang),
+            retreatLv: cfg.repairRetreat.subsidyLevel,
+            retreatMax: fmtLocale(cfg.repairRetreat.subsidyMax, lang),
           })}
         </p>
       </div>
@@ -332,44 +353,63 @@ export function BattlePenaltyAdminBlock({
             ['repairDefeat', 'admin.battlePenalty.repairDefeatGroupTitle'],
             ['repairRetreat', 'admin.battlePenalty.repairRetreatGroupTitle'],
           ] as const
-        ).map(([tierKey, groupTitleKey]) => (
-          <div
-            key={tierKey}
-            className="p-3 rounded-lg border border-slate-800 bg-slate-950/40 space-y-2.5"
-          >
-            <div className="text-xs font-bold text-amber-300">
-              {t(groupTitleKey)}
+        ).map(([tierKey, groupTitleKey]) => {
+          const tier = cfg[tierKey];
+          return (
+            <div
+              key={tierKey}
+              className="p-3 rounded-lg border border-slate-800 bg-slate-950/40 space-y-2.5"
+            >
+              <div className="space-y-0.5">
+                <div className="text-xs font-bold text-amber-300">
+                  {t(groupTitleKey)}
+                </div>
+                <p
+                  data-testid={`admin-battle-penalty-${tierKey}-desc`}
+                  className="text-[11px] text-slate-400 leading-snug"
+                >
+                  {t('admin.battlePenalty.repairTierDesc', {
+                    subsidyMax: fmtLocale(tier.subsidyMax, lang),
+                  })}
+                </p>
+              </div>
+              {tierFields.map((field) => (
+                <label key={field.key} className="space-y-1 block">
+                  <span className="text-xs font-semibold text-slate-200 block">
+                    {t(field.titleKey)}
+                  </span>
+                  <span className="text-[11px] text-slate-400 leading-snug block">
+                    {t(field.descKey)}
+                  </span>
+                  <input
+                    type="number"
+                    min={0}
+                    data-testid={`admin-battle-penalty-${tierKey}-${field.key}`}
+                    value={tier[field.key]}
+                    onChange={(e) => {
+                      const raw = Number(e.target.value);
+                      if (!Number.isFinite(raw)) return;
+                      updatePenalty({
+                        ...cfg,
+                        [tierKey]: {
+                          ...tier,
+                          [field.key]: raw,
+                        },
+                      });
+                    }}
+                    className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums text-slate-100"
+                  />
+                  <span
+                    data-testid={`admin-battle-penalty-${tierKey}-${field.key}-example`}
+                    className="text-[11px] font-mono-nums text-amber-200/90 leading-snug block pt-0.5"
+                  >
+                    {renderTierFieldExample(tier, field)}
+                  </span>
+                </label>
+              ))}
             </div>
-            {tierFields.map((field) => (
-              <label key={field.key} className="space-y-1 block">
-                <span className="text-xs font-semibold text-slate-200 block">
-                  {t(field.titleKey)}
-                </span>
-                <span className="text-[11px] text-slate-400 leading-snug block">
-                  {t(field.descKey)}
-                </span>
-                <input
-                  type="number"
-                  min={0}
-                  data-testid={`admin-battle-penalty-${tierKey}-${field.key}`}
-                  value={cfg[tierKey][field.key]}
-                  onChange={(e) => {
-                    const raw = Number(e.target.value);
-                    if (!Number.isFinite(raw)) return;
-                    updatePenalty({
-                      ...cfg,
-                      [tierKey]: {
-                        ...cfg[tierKey],
-                        [field.key]: raw,
-                      },
-                    });
-                  }}
-                  className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums text-slate-100"
-                />
-              </label>
-            ))}
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

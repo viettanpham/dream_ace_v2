@@ -152,27 +152,27 @@ describe('TASK ECON-LOSS-b — Retreat penalty & defeat/retreat repair fees', ()
   it('2) enforces free repair window per kind (level <= freeLevel AND credits <= freeCredits)', () => {
     const allies = [makeAlly('player', 1000, 200, 500, 100)];
 
-    // Defeat: free when lv <= 20 AND credits <= 100000
+    // Defeat: subsidy up to 20000 when lv <= 15 regardless of credits
     expect(
-      computeRepairFee('defeat', 20, 100000, allies, DEFAULT_BATTLE_PENALTY_CONFIG)
-    ).toEqual({ fee: 0, free: true });
+      computeRepairFee('defeat', 15, 100000, allies, DEFAULT_BATTLE_PENALTY_CONFIG)
+    ).toEqual({ fee: 15000, subsidy: 15000, payable: 0, free: true });
     expect(
-      computeRepairFee('defeat', 21, 5000, allies, DEFAULT_BATTLE_PENALTY_CONFIG).free
+      computeRepairFee('defeat', 16, 5000, allies, DEFAULT_BATTLE_PENALTY_CONFIG).free
     ).toBe(false);
     expect(
-      computeRepairFee('defeat', 20, 100001, allies, DEFAULT_BATTLE_PENALTY_CONFIG).free
-    ).toBe(false);
+      computeRepairFee('defeat', 15, 100001, allies, DEFAULT_BATTLE_PENALTY_CONFIG).free
+    ).toBe(true);
 
-    // Retreat: free when lv <= 10 AND credits <= 10000
+    // Retreat: subsidy up to 10000 when lv <= 12 regardless of credits (fee = 800*10 + 400*10 = 12000)
     expect(
-      computeRepairFee('retreat', 10, 10000, allies, DEFAULT_BATTLE_PENALTY_CONFIG)
-    ).toEqual({ fee: 0, free: true });
+      computeRepairFee('retreat', 12, 10000, allies, DEFAULT_BATTLE_PENALTY_CONFIG)
+    ).toEqual({ fee: 12000, subsidy: 10000, payable: 2000, free: false });
     expect(
-      computeRepairFee('retreat', 11, 5000, allies, DEFAULT_BATTLE_PENALTY_CONFIG).free
-    ).toBe(false);
+      computeRepairFee('retreat', 13, 5000, allies, DEFAULT_BATTLE_PENALTY_CONFIG)
+    ).toEqual({ fee: 12000, subsidy: 0, payable: 12000, free: false });
     expect(
-      computeRepairFee('retreat', 10, 10001, allies, DEFAULT_BATTLE_PENALTY_CONFIG).free
-    ).toBe(false);
+      computeRepairFee('retreat', 12, 100001, allies, DEFAULT_BATTLE_PENALTY_CONFIG).subsidy
+    ).toBe(10000);
   });
 
   it('3) computes defeat (max) and retreat (lost + full max for destroyed) repair fees with cap, SYSTEM logs, and dialog lines', () => {
@@ -189,9 +189,9 @@ describe('TASK ECON-LOSS-b — Retreat penalty & defeat/retreat repair fees', ()
       allies,
       DEFAULT_BATTLE_PENALTY_CONFIG
     );
-    expect(defeatPaid).toEqual({ fee: 27000, free: false });
+    expect(defeatPaid).toEqual({ fee: 27000, subsidy: 0, payable: 27000, free: false });
 
-    // Retreat: lost = (600+800)*10 + (300+400)*10 = 14000 + 7000 = 21000 (< 50000 cap)
+    // Retreat: lost = (600+800)*10 + (300+400)*10 = 14000 + 7000 = 21000
     const retreatPaid = computeRepairFee(
       'retreat',
       25,
@@ -199,16 +199,16 @@ describe('TASK ECON-LOSS-b — Retreat penalty & defeat/retreat repair fees', ()
       allies,
       DEFAULT_BATTLE_PENALTY_CONFIG
     );
-    expect(retreatPaid).toEqual({ fee: 21000, free: false });
+    expect(retreatPaid).toEqual({ fee: 21000, subsidy: 0, payable: 21000, free: false });
 
-    // Cap check: massive HP/Shield capped at 100000 (defeat) and 50000 (retreat)
+    // Uncapped check: massive HP/Shield has no cap (20000*10 + 20000*10 = 400000)
     const huge = [makeAlly('player', 20000, 0, 20000, 0, false)];
     expect(
       computeRepairFee('defeat', 25, 200000, huge, DEFAULT_BATTLE_PENALTY_CONFIG).fee
-    ).toBe(100000);
+    ).toBe(400000);
     expect(
       computeRepairFee('retreat', 25, 200000, huge, DEFAULT_BATTLE_PENALTY_CONFIG).fee
-    ).toBe(50000);
+    ).toBe(400000);
 
     // Log templates
     expect(
@@ -292,7 +292,7 @@ describe('TASK ECON-LOSS-b — Retreat penalty & defeat/retreat repair fees', ()
     expect(
       container!.querySelector('[data-testid="battle-result-repair-line"]')
         ?.textContent
-    ).toBe('Phí sửa chữa: -20.581 CR');
+    ).toBe('Phí sửa chữa 20.581 · Hỗ trợ quốc gia -0 · Phải trả 20.581');
     expect(
       container!.querySelector('[data-testid="battle-result-retreat-penalty"]')
         ?.textContent
@@ -363,12 +363,12 @@ describe('TASK ECON-LOSS-b — Retreat penalty & defeat/retreat repair fees', ()
   });
 
   it('5) sanitizer enforces >= 0 defaults without bumping save version and Admin block displays live example', () => {
-    expect(CURRENT_SAVE_VERSION).toBe(14);
+    expect(CURRENT_SAVE_VERSION).toBe(15);
     expect(
       sanitizeBattlePenaltyConfig({
         retreatFreeLevel: -5,
         retreatExpPenaltyPct: -2,
-        repairDefeat: { cap: -100, hpCoef: -1 },
+        repairDefeat: { subsidyMax: -100, hpCoef: -1 },
       })
     ).toEqual({
       ...DEFAULT_BATTLE_PENALTY_CONFIG,
@@ -376,7 +376,7 @@ describe('TASK ECON-LOSS-b — Retreat penalty & defeat/retreat repair fees', ()
       retreatExpPenaltyPct: 0,
       repairDefeat: {
         ...DEFAULT_BATTLE_PENALTY_CONFIG.repairDefeat,
-        cap: 0,
+        subsidyMax: 0,
         hpCoef: 0,
       },
     });

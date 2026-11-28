@@ -732,6 +732,8 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'summary.nationalSupportNote':
     'Hỗ trợ quốc gia: +{expPct}% EXP, +{creditPct}% Credit/WP',
   'summary.repairFeeLine': 'Phí sửa chữa: -{fee} CR',
+  'summary.repairBreakdownLine':
+    'Phí sửa chữa {fee} · Hỗ trợ quốc gia -{subsidy} · Phải trả {payable}',
   'summary.repairFreeLine': 'Phí sửa chữa: Miễn phí (quốc gia chi trả)',
   'summary.retreatPenaltyLine':
     'Phạt rút lui: -{exp} EXP / -{credit} CR / -{wp} WP',
@@ -2554,7 +2556,7 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'admin.battlePenalty.exDefeat':
     'Thua: Lv{level}, max EXP {need}, hệ số {factor} → trừ {expPen} EXP',
   'admin.battlePenalty.exRepairSummary':
-    'Miễn phí sửa chữa: Thua Lv≤{defeatLv} & CR≤{defeatCr} (trần {defeatCap}); Rút lui Lv≤{retreatLv} & CR≤{retreatCr} (trần {retreatCap})',
+    'Hỗ trợ sửa chữa: Thua Lv≤{defeatLv} tối đa {defeatMax} CR; Rút lui Lv≤{retreatLv} tối đa {retreatMax} CR (không trần)',
   'admin.battlePenalty.retreatGroupTitle': 'Phạt rút lui',
   'admin.battlePenalty.defeatGroupTitle': 'Phạt khi thua',
   'admin.battlePenalty.defeatFreeLevel.title': 'Cấp miễn phạt EXP khi thua',
@@ -2570,6 +2572,8 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
     'Ví dụ: Lv{level}, max EXP {need}, hệ số {factor} → trừ {expPen} EXP',
   'admin.battlePenalty.repairDefeatGroupTitle': 'Phí sửa chữa khi thua',
   'admin.battlePenalty.repairRetreatGroupTitle': 'Phí sửa chữa khi rút lui',
+  'admin.battlePenalty.repairTierDesc':
+    'Phí sửa tính theo hư hỏng, không có trần. Cấp thấp được quốc gia hỗ trợ tối đa {subsidyMax} mỗi lần.',
   'admin.battlePenalty.retreatFreeLevel.title': 'Cấp miễn phạt rút lui',
   'admin.battlePenalty.retreatFreeLevel.desc':
     'Gear từ cấp này trở xuống rút lui không bị phạt EXP, Credit hay WP',
@@ -2583,21 +2587,26 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'admin.battlePenalty.retreatWpPenaltyPct.title': '% WP phạt theo Credit phạt',
   'admin.battlePenalty.retreatWpPenaltyPct.desc':
     'Điểm Chiến Trận bị trừ bằng tỉ lệ này của khoản phạt Credit (tối thiểu 0)',
-  'admin.battlePenalty.repair.freeLevel.title': 'Cấp miễn phí sửa chữa',
-  'admin.battlePenalty.repair.freeLevel.desc':
-    'Được quốc gia hỗ trợ toàn bộ phí nếu cấp Gear <= ngưỡng này (kèm điều kiện Credit)',
-  'admin.battlePenalty.repair.freeCredits.title': 'Credit tối đa được miễn phí',
-  'admin.battlePenalty.repair.freeCredits.desc':
-    'Ngưỡng Credit (sau thưởng/phạt) để vẫn được quốc gia chi trả phí sửa chữa',
+  'admin.battlePenalty.repair.subsidyLevel.title': 'Cấp được hỗ trợ sửa chữa',
+  'admin.battlePenalty.repair.subsidyLevel.desc':
+    'Gear từ cấp này trở xuống được quốc gia hỗ trợ phí sửa mỗi trận (trên ngưỡng này hỗ trợ = 0)',
+  'admin.battlePenalty.repair.subsidyLevel.ex':
+    'Ví dụ: phí {fee} → cấp ≤ {lv} hỗ trợ {subsidy}, trả {payable}; cấp {aboveLv} trả {fee}',
+  'admin.battlePenalty.repair.subsidyMax.title': 'Mức hỗ trợ tối đa (CR)',
+  'admin.battlePenalty.repair.subsidyMax.desc':
+    'Số Credit tối đa quốc gia bù cho mỗi lần thua hoặc rút lui khi đủ điều kiện cấp',
+  'admin.battlePenalty.repair.subsidyMax.ex':
+    'Phi cơ HP 3000 + khiên 1000 × 4 chiếc: phí {fee} → hỗ trợ {subsidy} → trả {payable} (cấp ≤ {lv})',
   'admin.battlePenalty.repair.hpCoef.title': 'Hệ số phí theo HP',
   'admin.battlePenalty.repair.hpCoef.desc':
     'Chi phí Credit nhân cho mỗi điểm HP tối đa (thua) hoặc HP mất (rút lui)',
+  'admin.battlePenalty.repair.hpCoef.ex':
+    'Ví dụ 12.000 HP × {coef} = {hpFee} CR; tổng 4 chiếc phí {fee} → trả {payable}',
   'admin.battlePenalty.repair.shieldCoef.title': 'Hệ số phí theo Khiên',
   'admin.battlePenalty.repair.shieldCoef.desc':
     'Chi phí Credit nhân cho mỗi điểm Khiên tối đa (thua) hoặc Khiên mất (rút lui)',
-  'admin.battlePenalty.repair.cap.title': 'Trần phí sửa chữa (CR)',
-  'admin.battlePenalty.repair.cap.desc':
-    'Giới hạn Credit tối đa phải trả cho một lần sửa chữa sau trận',
+  'admin.battlePenalty.repair.shieldCoef.ex':
+    'Ví dụ 4.000 Khiên × {coef} = {shFee} CR; tổng 4 chiếc phí {fee} → trả {payable}',
 
   // Voucher WP shop (VOUCHER-a)
   'shop.voucherSection': 'Voucher ({count})',
@@ -2692,6 +2701,9 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'voucher.totalCharged': 'Tổng bị trừ: {amount} {unit}',
   'voucher.refundAmount': 'Voucher giảm: {amount} {unit}',
   'voucher.remainingAmount': 'Còn lại: {amount} {unit}',
+  'voucher.creditsAfterUse': 'Credit sau khi dùng voucher: {amount} CR',
+  'voucher.creditsIfSkip': 'Credit nếu không dùng: {amount} CR',
+  'voucher.wasteCreditWarn': 'Phần thừa {amount} CR bị bỏ',
   'voucher.ownedLabel': 'Hiện có: {qty}',
   'voucher.confirmBtn': 'Xác nhận',
   'voucher.skipBtn': 'Không dùng',

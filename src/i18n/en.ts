@@ -730,6 +730,8 @@ export const EN_TRANSLATIONS = {
   'summary.nationalSupportNote':
     'National Support: +{expPct}% EXP, +{creditPct}% Credit/WP',
   'summary.repairFeeLine': 'Repair fee: -{fee} CR',
+  'summary.repairBreakdownLine':
+    'Repair fee {fee} · Govt subsidy -{subsidy} · Payable {payable}',
   'summary.repairFreeLine': 'Repair fee: Free (state-covered)',
   'summary.retreatPenaltyLine':
     'Retreat penalty: -{exp} EXP / -{credit} CR / -{wp} WP',
@@ -2552,7 +2554,7 @@ export const EN_TRANSLATIONS = {
   'admin.battlePenalty.exDefeat':
     'Defeat: Lv{level}, max EXP {need}, factor {factor} → lose {expPen} EXP',
   'admin.battlePenalty.exRepairSummary':
-    'Free repair: Defeat Lv≤{defeatLv} & CR≤{defeatCr} (cap {defeatCap}); Retreat Lv≤{retreatLv} & CR≤{retreatCr} (cap {retreatCap})',
+    'Subsidy: Defeat Lv≤{defeatLv} (max {defeatMax} CR); Retreat Lv≤{retreatLv} (max {retreatMax} CR) — uncapped damage fee',
   'admin.battlePenalty.retreatGroupTitle': 'Retreat Penalty',
   'admin.battlePenalty.defeatGroupTitle': 'Defeat EXP Penalty',
   'admin.battlePenalty.defeatFreeLevel.title': 'Penalty-Free Defeat Level',
@@ -2568,6 +2570,8 @@ export const EN_TRANSLATIONS = {
     'Example: Lv{level}, max EXP {need}, factor {factor} → lose {expPen} EXP',
   'admin.battlePenalty.repairDefeatGroupTitle': 'Repair Fee on Defeat',
   'admin.battlePenalty.repairRetreatGroupTitle': 'Repair Fee on Retreat',
+  'admin.battlePenalty.repairTierDesc':
+    'Repair fee follows actual damage with no cap. Low-level Gears receive government subsidy up to {subsidyMax} per incident.',
   'admin.battlePenalty.retreatFreeLevel.title': 'Penalty-Free Retreat Level',
   'admin.battlePenalty.retreatFreeLevel.desc':
     'Gears at or below this level pay no EXP, Credit, or WP penalty when retreating',
@@ -2581,21 +2585,26 @@ export const EN_TRANSLATIONS = {
   'admin.battlePenalty.retreatWpPenaltyPct.title': 'WP Penalty % of Credit Penalty',
   'admin.battlePenalty.retreatWpPenaltyPct.desc':
     'War Points deducted equal to this percentage of the Credit penalty (floored at 0)',
-  'admin.battlePenalty.repair.freeLevel.title': 'Free Repair Max Level',
-  'admin.battlePenalty.repair.freeLevel.desc':
-    'State pays repair fee when Gear level <= this threshold (with Credits cap)',
-  'admin.battlePenalty.repair.freeCredits.title': 'Free Repair Max Credits',
-  'admin.battlePenalty.repair.freeCredits.desc':
-    'Credits threshold (after rewards/penalty) required to keep state repair coverage',
+  'admin.battlePenalty.repair.subsidyLevel.title': 'Subsidized Max Level',
+  'admin.battlePenalty.repair.subsidyLevel.desc':
+    'Gears at or below this level receive government repair subsidy (above this level subsidy is 0)',
+  'admin.battlePenalty.repair.subsidyLevel.ex':
+    'Example: fee {fee} → Lv≤{lv} subsidy {subsidy}, pay {payable}; Lv{aboveLv} pays {fee}',
+  'admin.battlePenalty.repair.subsidyMax.title': 'Max Subsidy (CR)',
+  'admin.battlePenalty.repair.subsidyMax.desc':
+    'Maximum Credits covered by government subsidy per defeat or retreat when eligible',
+  'admin.battlePenalty.repair.subsidyMax.ex':
+    'Gear HP 3000 + shield 1000 × 4 units: fee {fee} → subsidy {subsidy} → pay {payable} (Lv≤{lv})',
   'admin.battlePenalty.repair.hpCoef.title': 'HP Repair Coefficient',
   'admin.battlePenalty.repair.hpCoef.desc':
     'Credits charged per point of max HP (defeat) or lost HP (retreat)',
+  'admin.battlePenalty.repair.hpCoef.ex':
+    'Example 12,000 HP × {coef} = {hpFee} CR; 4-unit fee {fee} → pay {payable}',
   'admin.battlePenalty.repair.shieldCoef.title': 'Shield Repair Coefficient',
   'admin.battlePenalty.repair.shieldCoef.desc':
     'Credits charged per point of max Shield (defeat) or lost Shield (retreat)',
-  'admin.battlePenalty.repair.cap.title': 'Repair Fee Cap (CR)',
-  'admin.battlePenalty.repair.cap.desc':
-    'Maximum Credits charged for a single post-battle repair',
+  'admin.battlePenalty.repair.shieldCoef.ex':
+    'Example 4,000 Shield × {coef} = {shFee} CR; 4-unit fee {fee} → pay {payable}',
 
   // Voucher WP shop (VOUCHER-a)
   'shop.voucherSection': 'Voucher ({count})',
@@ -2690,6 +2699,9 @@ export const EN_TRANSLATIONS = {
   'voucher.totalCharged': 'Total charged: {amount} {unit}',
   'voucher.refundAmount': 'Voucher refund: {amount} {unit}',
   'voucher.remainingAmount': 'Remaining: {amount} {unit}',
+  'voucher.creditsAfterUse': 'Credits after voucher: {amount} CR',
+  'voucher.creditsIfSkip': 'Credits if skipped: {amount} CR',
+  'voucher.wasteCreditWarn': 'Excess {amount} CR forfeited',
   'voucher.ownedLabel': 'Owned: {qty}',
   'voucher.confirmBtn': 'Confirm',
   'voucher.skipBtn': 'Skip',

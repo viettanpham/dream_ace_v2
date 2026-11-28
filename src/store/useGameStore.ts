@@ -1119,10 +1119,10 @@ function finalizeBattleOutcome(
         updatedUnits,
         state.adminConfig?.battlePenalty
       )
-    : { fee: 0, free: false };
+    : { fee: 0, subsidy: 0, payable: 0, free: false };
   const repairPaid = repairCheck.free
     ? 0
-    : Math.min(Math.max(0, retreatPenalty.nextCredits), repairCheck.fee);
+    : Math.min(Math.max(0, retreatPenalty.nextCredits), repairCheck.payable);
   const finalCredits = Math.max(0, retreatPenalty.nextCredits - repairPaid);
   const finalWarPoints = Math.max(0, retreatPenalty.nextWarPoints);
 
@@ -1590,6 +1590,8 @@ function finalizeBattleOutcome(
         supportExpPct: rewards.supportExpPct,
         supportCreditPct: rewards.supportCreditPct,
         repairFee: repairPaid,
+        repairFeeGross: !won ? repairCheck.fee : 0,
+        repairSubsidy: !won ? repairCheck.subsidy : 0,
         repairFree: repairCheck.free,
         retreatPenaltyExp: retreatPenalty.expPenalty,
         retreatPenaltyCredit: retreatPenalty.creditPenalty,

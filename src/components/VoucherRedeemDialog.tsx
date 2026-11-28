@@ -4,7 +4,8 @@ import { getAllVouchers } from '../data/vouchers';
 import {
   applyVoucherRefund,
   getBattleSummaryCharges,
-  pickVouchersSmallestSufficient,
+  getVoucherSelectionFaceSum,
+  pickDefaultVoucherSelection,
 } from '../engine/battlePenalty';
 import type { TranslationKey } from '../i18n/en';
 import type {
@@ -18,6 +19,7 @@ import type {
 export interface VoucherRedeemDialogProps {
   summary: BattleSummary;
   ownedVouchers?: Record<string, number> | null;
+  currentCredits?: number;
   adminConfig?: AdminConfig | null;
   lang: Language;
   t: (key: TranslationKey, params?: Record<string, string | number>) => string;
@@ -54,6 +56,7 @@ export function hasUsableVoucherForSummary(
 export function VoucherRedeemDialog({
   summary,
   ownedVouchers,
+  currentCredits = 0,
   adminConfig,
   lang,
   t,
@@ -83,7 +86,7 @@ export function VoucherRedeemDialog({
 
   const [creditSel, setCreditSel] = useState<Record<string, number>>(() =>
     creditCharged > 0
-      ? pickVouchersSmallestSufficient(
+      ? pickDefaultVoucherSelection(
           ownedVouchers,
           'credit',
           creditCharged,
@@ -93,7 +96,7 @@ export function VoucherRedeemDialog({
   );
   const [expSel, setExpSel] = useState<Record<string, number>>(() =>
     expCharged > 0
-      ? pickVouchersSmallestSufficient(
+      ? pickDefaultVoucherSelection(
           ownedVouchers,
           'exp',
           expCharged,
@@ -147,6 +150,14 @@ export function VoucherRedeemDialog({
     const remaining = Math.max(0, charged - refund);
     const unit = kind === 'credit' ? 'CR' : 'EXP';
     const formatAmt = (n: number) => Math.round(n).toLocaleString(numberLocale);
+    const selectedFaceSum = getVoucherSelectionFaceSum(
+      selection,
+      kind,
+      adminConfig
+    );
+    const wastedFace = Math.max(0, selectedFaceSum - charged);
+    const safeCredits = Math.max(0, Math.round(currentCredits));
+    const creditsAfterVoucher = safeCredits + Math.round(refund);
 
     return (
       <section
@@ -187,6 +198,36 @@ export function VoucherRedeemDialog({
               unit,
             })}
           </div>
+          {kind === 'credit' && (
+            <>
+              <div
+                data-testid="voucher-redeem-credits-after"
+                className="text-emerald-300 pt-0.5 border-t border-slate-800/70"
+              >
+                {t('voucher.creditsAfterUse', {
+                  amount: formatAmt(creditsAfterVoucher),
+                })}
+              </div>
+              <div
+                data-testid="voucher-redeem-credits-skip"
+                className="text-slate-400"
+              >
+                {t('voucher.creditsIfSkip', {
+                  amount: formatAmt(safeCredits),
+                })}
+              </div>
+              {wastedFace > 0 && (
+                <div
+                  data-testid="voucher-redeem-waste-credit"
+                  className="text-amber-300 font-semibold"
+                >
+                  {t('voucher.wasteCreditWarn', {
+                    amount: formatAmt(wastedFace),
+                  })}
+                </div>
+              )}
+            </>
+          )}
         </div>
 
         <div className="divide-y divide-slate-800/80">

@@ -228,24 +228,45 @@ export function BattleResultDialog({
                 )}
 
                 {(summary.outcome === 'defeat' || summary.retreated) &&
-                  (summary.repairFree || (summary.repairFee ?? 0) > 0) && (
-                    <div
-                      data-testid="battle-result-repair-line"
-                      className={`col-span-2 rounded px-2.5 py-1.5 text-[12px] font-mono-nums border ${
-                        summary.repairFree
-                          ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
-                          : 'border-rose-500/30 bg-rose-500/10 text-rose-300'
-                      }`}
-                    >
-                      {summary.repairFree
-                        ? t('summary.repairFreeLine')
-                        : t('summary.repairFeeLine', {
-                            fee: Math.round(summary.repairFee ?? 0).toLocaleString(
-                              lang === 'vi' ? 'vi-VN' : 'en-US'
-                            ),
-                          })}
-                    </div>
-                  )}
+                  (summary.repairFree ||
+                    (summary.repairFeeGross ?? 0) > 0 ||
+                    (summary.repairFee ?? 0) > 0) &&
+                  (() => {
+                    const numLoc = lang === 'vi' ? 'vi-VN' : 'en-US';
+                    const payable = Math.max(
+                      0,
+                      Math.round(summary.repairFee ?? 0)
+                    );
+                    const grossFee = Math.max(
+                      0,
+                      Math.round(summary.repairFeeGross ?? payable)
+                    );
+                    const subsidy = Math.max(
+                      0,
+                      Math.round(
+                        summary.repairSubsidy ?? Math.max(0, grossFee - payable)
+                      )
+                    );
+                    const isFree = payable === 0;
+                    return (
+                      <div
+                        data-testid="battle-result-repair-line"
+                        className={`col-span-2 rounded px-2.5 py-1.5 text-[12px] font-mono-nums border ${
+                          isFree
+                            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                            : 'border-rose-500/30 bg-rose-500/10 text-rose-300'
+                        }`}
+                      >
+                        {grossFee > 0
+                          ? t('summary.repairBreakdownLine', {
+                              fee: grossFee.toLocaleString(numLoc),
+                              subsidy: subsidy.toLocaleString(numLoc),
+                              payable: payable.toLocaleString(numLoc),
+                            })
+                          : t('summary.repairFreeLine')}
+                      </div>
+                    );
+                  })()}
 
                 {((summary.retreatPenaltyExp ?? 0) > 0 ||
                   (summary.retreatPenaltyCredit ?? 0) > 0 ||

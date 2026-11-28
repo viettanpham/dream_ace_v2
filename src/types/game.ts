@@ -1327,6 +1327,8 @@ export interface BattleSummary {
   supportExpPct?: number;
   supportCreditPct?: number;
   repairFee?: number;
+  repairFeeGross?: number;
+  repairSubsidy?: number;
   repairFree?: boolean;
   retreatPenaltyExp?: number;
   retreatPenaltyCredit?: number;
@@ -2042,11 +2044,10 @@ export interface BattleRewardsConfig {
 }
 
 export interface RepairFeeTierConfig {
-  freeLevel: number;
-  freeCredits: number;
+  subsidyLevel: number;
+  subsidyMax: number;
   hpCoef: number;
   shieldCoef: number;
-  cap: number;
 }
 
 export interface BattlePenaltyConfig {

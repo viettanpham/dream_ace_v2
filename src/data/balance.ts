@@ -821,18 +821,16 @@ export const DEFAULT_BATTLE_PENALTY_CONFIG: BattlePenaltyConfig = {
   defeatFreeLevel: 10,
   defeatExpPenaltyFactor: 0.5,
   repairDefeat: {
-    freeLevel: 20,
-    freeCredits: 100000,
+    subsidyLevel: 15,
+    subsidyMax: 20000,
     hpCoef: 10,
     shieldCoef: 10,
-    cap: 100000,
   },
   repairRetreat: {
-    freeLevel: 10,
-    freeCredits: 10000,
+    subsidyLevel: 12,
+    subsidyMax: 10000,
     hpCoef: 10,
     shieldCoef: 10,
-    cap: 50000,
   },
 };
 
@@ -850,11 +848,14 @@ function sanitizeRepairTier(
       ? (raw as Record<string, unknown>)
       : {};
   return {
-    freeLevel: Math.round(clampNonNegativeNum(obj.freeLevel, def.freeLevel)),
-    freeCredits: Math.round(clampNonNegativeNum(obj.freeCredits, def.freeCredits)),
+    subsidyLevel: Math.round(
+      clampNonNegativeNum(obj.subsidyLevel, def.subsidyLevel)
+    ),
+    subsidyMax: Math.round(
+      clampNonNegativeNum(obj.subsidyMax, def.subsidyMax)
+    ),
     hpCoef: clampNonNegativeNum(obj.hpCoef, def.hpCoef),
     shieldCoef: clampNonNegativeNum(obj.shieldCoef, def.shieldCoef),
-    cap: Math.round(clampNonNegativeNum(obj.cap, def.cap)),
   };
 }
 

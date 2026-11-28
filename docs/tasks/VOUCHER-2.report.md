@@ -1,0 +1,7 @@
+# TASK VOUCHER-2 Report
+- ITEM 1 (Engine + config): `src/types/game.ts`, `src/data/balance.ts`, `src/engine/battlePenalty.ts`, `src/store/useGameStore.ts` — uncapped damage fee, `subsidyLevel`/`subsidyMax` (defeat 15/20k, retreat 12/10k), `computeRepairFee` `{ fee, subsidy, payable, free }`, legacy key fallback, `BattleSummary.repairFeeGross`/`repairSubsidy`.
+- ITEM 2 (Result + voucher dialog): `src/components/BattleResultDialog.tsx`, `src/components/VoucherRedeemDialog.tsx`, `src/components/BattleScreen.tsx`, `src/i18n/vi.ts`, `src/i18n/en.ts` — 3-number repair line, credits after/skip lines, waste warning, default 0 vouchers when waste > 50%.
+- ITEM 3 (Admin block): `src/components/admin/BattlePenaltyAdminBlock.tsx`, `src/i18n/vi.ts`, `src/i18n/en.ts` — `subsidyLevel`/`subsidyMax` fields, tier description, live examples per repair field.
+- Old tests updated (`src/engine/__tests__/battlePenaltyEconLossB.test.tsx`): test 2 free-repair expects -> subsidy expects; test 3 `{ fee, subsidy, payable, free }`, uncapped 400k, and 3-number `battle-result-repair-line`; test 5 `CURRENT_SAVE_VERSION` 15 and `subsidyMax` sanitizer check.
+- Tests & checks: `npx tsc --noEmit` (0 errors); `npx vitest run --reporter=dot` on `battlePenaltyEconLossB.test.tsx`, `voucherRepairV2.test.tsx` (5 new tests), `vouchersA.test.tsx`, `vouchersB.test.tsx`, `BattleResultDialog.test.tsx` -> 5 files, 24 tests passed.
+- Browser verification: NOT checked in a real browser.
