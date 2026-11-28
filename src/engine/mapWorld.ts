@@ -249,6 +249,7 @@ export function advanceCampaignMonth(
         if (isAlliedCapital) {
           cur.siegeShield = raidDmg.shield;
           cur.siegeHp = raidDmg.broken ? 1 : raidDmg.hp;
+          cur.lastAttackedMonth = nextMonth;
           raidResults.push({
             sectorId: sector.id,
             shieldBefore: beforeRaid.shield,
@@ -266,6 +267,7 @@ export function advanceCampaignMonth(
           cur.repairMonthsRemaining = 0;
           cur.siegeShield = beforeRaid.maxShield;
           cur.siegeHp = beforeRaid.maxHp;
+          cur.lastAttackedMonth = nextMonth;
           delete cur.lastRepairHpMonth;
           delete cur.lastRepairShieldMonth;
           flippedSectorIds.push(sector.id);
@@ -282,6 +284,7 @@ export function advanceCampaignMonth(
         } else {
           cur.siegeShield = raidDmg.shield;
           cur.siegeHp = raidDmg.hp;
+          cur.lastAttackedMonth = nextMonth;
           raidResults.push({
             sectorId: sector.id,
             shieldBefore: beforeRaid.shield,

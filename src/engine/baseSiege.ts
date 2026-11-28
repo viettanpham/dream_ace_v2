@@ -230,6 +230,74 @@ export function computeWinsToCapture(
   );
 }
 
+export type BaseSiegeLabel =
+  | 'ally_held'
+  | 'contested'
+  | 'recovering'
+  | 'enemy_held'
+  | 'neutral';
+
+export function getBaseSiegeLabel(
+  base: BaseRuntimeState | undefined | null,
+  baseType: BaseType,
+  cfg?: Partial<BaseSiegeConfig> | null,
+  campaignMonth = 1
+): BaseSiegeLabel {
+  const safeCfg = sanitizeBaseSiegeConfig(cfg);
+  const siege = getBaseSiege(base, baseType, safeCfg);
+  const isBelowMax = siege.shield < siege.maxShield || siege.hp < siege.maxHp;
+  const curMonth = Math.max(1, Math.floor(campaignMonth || 1));
+
+  if (isBelowMax) {
+    if (base?.underAttack) {
+      return 'contested';
+    }
+    if (typeof base?.lastAttackedMonth === 'number') {
+      const elapsed = curMonth - base.lastAttackedMonth;
+      if (elapsed < safeCfg.regen.idleMonths) {
+        return 'contested';
+      }
+    }
+    return 'recovering';
+  }
+
+  const faction = base?.faction ?? 'hostile';
+  if (faction === 'allied') return 'ally_held';
+  if (faction === 'neutral') return 'neutral';
+  return 'enemy_held';
+}
+
+export function computeWinsRemaining(
+  siege: { shield: number; hp: number },
+  cfg?: Partial<BaseSiegeConfig> | null
+): number {
+  const safeCfg = sanitizeBaseSiegeConfig(cfg);
+  const s = Math.max(0, Math.round(siege.shield));
+  const h = Math.max(0, Math.round(siege.hp));
+  if (s === 0 && h === 0) return 0;
+  return (
+    Math.ceil(s / safeCfg.shieldDamagePerWin) +
+    Math.ceil(h / safeCfg.hpDamagePerWin)
+  );
+}
+
+export function getSiegePct(siege: {
+  shield: number;
+  hp: number;
+  maxShield: number;
+  maxHp: number;
+}): { shieldPct: number; hpPct: number } {
+  const shieldPct =
+    siege.maxShield > 0
+      ? Math.max(0, Math.min(100, Math.round((siege.shield / siege.maxShield) * 100)))
+      : 0;
+  const hpPct =
+    siege.maxHp > 0
+      ? Math.max(0, Math.min(100, Math.round((siege.hp / siege.maxHp) * 100)))
+      : 0;
+  return { shieldPct, hpPct };
+}
+
 export function getPilotHighestGearLevel(pilot: PilotAccount): number {
   const levels = Object.values(pilot.gears ?? {}).map((g) => g?.level ?? 1);
   return levels.length > 0 ? Math.max(1, ...levels) : 1;

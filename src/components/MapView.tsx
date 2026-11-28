@@ -52,6 +52,17 @@ import {
 } from '../engine/frontline';
 import { getActivePirateIncidentForNode } from '../engine/pirates';
 import {
+  computeBaseRepairAmount,
+  computeBaseRepairCost,
+  computeWinsRemaining,
+  getBaseSiege,
+  getBaseSiegeLabel,
+  getPilotHighestGearLevel,
+  getSiegePct,
+  sanitizeBaseSiegeConfig,
+  type BaseSiegeLabel,
+} from '../engine/baseSiege';
+import {
   ENGINEER_OVERCHARGE_COST,
   getBaseMonthlyIncome,
   getBaseState,
@@ -68,7 +79,7 @@ import {
   useI18n,
 } from '../i18n';
 import type { TranslationKey } from '../i18n/en';
-import { useGameStore } from '../store/useGameStore';
+import { isBattleActive, useGameStore } from '../store/useGameStore';
 import type {
   BaseFaction,
   BaseNpcRole,
@@ -355,6 +366,11 @@ export function MapView() {
   const startBattle = useGameStore((s) => s.startBattle);
   const setActiveTab = useGameStore((s) => s.setActiveTab);
   const repairBase = useGameStore((s) => s.repairBase);
+  const repairBaseHp = useGameStore((s) => s.repairBaseHp);
+  const repairBaseShield = useGameStore((s) => s.repairBaseShield);
+  const isBattleBusy = useGameStore(
+    (s) => isBattleActive(s) || Boolean(s.autoRepeatSession?.active)
+  );
   const advanceMonth = useGameStore((s) => s.advanceMonth);
   const hireWingmanAtBase = useGameStore((s) => s.hireWingmanAtBase);
   const acceptMissionAtBase = useGameStore((s) => s.acceptMissionAtBase);
@@ -410,6 +426,14 @@ export function MapView() {
     key: string;
   } | null>(null);
   const [hireClass, setHireClass] = useState<MechClassId>('interceptor');
+  const [repairFeedback, setRepairFeedback] = useState<{
+    text: string;
+    ok: boolean;
+  } | null>(null);
+
+  useEffect(() => {
+    setRepairFeedback(null);
+  }, [selectedSectorId]);
 
   const mapViewportRef = useRef<HTMLDivElement | null>(null);
   const userInteractedRef = useRef(false);
@@ -915,6 +939,113 @@ export function MapView() {
         ? t('map.patrolBtn', { size: effectiveSquadSize })
         : t('map.assaultBtn', { size: effectiveSquadSize });
 
+    const siegeCfg = sanitizeBaseSiegeConfig(adminConfig.baseSiege);
+    const siege = getBaseSiege(selectedBaseState, selectedSector.baseType, siegeCfg);
+    const siegePct = getSiegePct(siege);
+    const curCampaignMonth = Math.max(1, Math.floor(pilot.campaignMonth || 1));
+    const siegeLabel = getBaseSiegeLabel(
+      selectedBaseState,
+      selectedSector.baseType,
+      siegeCfg,
+      curCampaignMonth
+    );
+    const winsRemaining = !isAllied ? computeWinsRemaining(siege, siegeCfg) : 0;
+    const hpBarDanger = siege.shield === 0 && siegePct.hpPct < 30;
+    const siegeLabelClass: Record<BaseSiegeLabel, string> = {
+      ally_held: 'border-emerald-500/50 bg-emerald-500/15 text-emerald-300',
+      contested: 'border-amber-500/50 bg-amber-500/15 text-amber-300',
+      recovering: 'border-sky-500/50 bg-sky-500/15 text-sky-300',
+      enemy_held: 'border-red-500/50 bg-red-500/15 text-red-300',
+      neutral: 'border-slate-600/70 bg-slate-800 text-slate-300',
+    };
+    const highestGearLv = getPilotHighestGearLevel(pilot);
+    const hpStepAmt = computeBaseRepairAmount('hp', selectedSector.baseType, siegeCfg);
+    const shieldStepAmt = computeBaseRepairAmount('shield', selectedSector.baseType, siegeCfg);
+    const hpMissing = Math.max(0, siege.maxHp - siege.hp);
+    const shieldMissing = Math.max(0, siege.maxShield - siege.shield);
+    const hpBtnAmt = hpMissing > 0 ? Math.min(hpMissing, hpStepAmt) : hpStepAmt;
+    const shieldBtnAmt =
+      shieldMissing > 0 ? Math.min(shieldMissing, shieldStepAmt) : shieldStepAmt;
+    const hpCost = computeBaseRepairCost('hp', highestGearLv, siegeCfg);
+    const shieldCost = computeBaseRepairCost('shield', highestGearLv, siegeCfg);
+    const cooldownMo = siegeCfg.repair.cooldownMonths;
+    const getRepairDisabledReason = (
+      missing: number,
+      lastMonth: number | undefined,
+      cost: number
+    ): string | null => {
+      if (isBattleBusy) return t('map.siege.reason.busy');
+      if (missing <= 0) return t('map.siege.reason.full');
+      if (
+        typeof lastMonth === 'number' &&
+        curCampaignMonth < lastMonth + cooldownMo
+      ) {
+        return t('map.siege.reason.cooldown', {
+          months: lastMonth + cooldownMo - curCampaignMonth,
+        });
+      }
+      if (pilot.credits < cost) return t('map.siege.reason.no_credits');
+      return null;
+    };
+    const hpDisabledReason = isAllied
+      ? getRepairDisabledReason(hpMissing, selectedBaseState.lastRepairHpMonth, hpCost)
+      : null;
+    const shieldDisabledReason = isAllied
+      ? getRepairDisabledReason(
+          shieldMissing,
+          selectedBaseState.lastRepairShieldMonth,
+          shieldCost
+        )
+      : null;
+
+    const formatFailureReason = (
+      reason: string | undefined,
+      lastMonth: number | undefined
+    ): string => {
+      if (reason === 'busy') return t('map.siege.reason.busy');
+      if (reason === 'full') return t('map.siege.reason.full');
+      if (reason === 'no_credits') return t('map.siege.reason.no_credits');
+      if (reason === 'cooldown') {
+        const wait =
+          typeof lastMonth === 'number'
+            ? Math.max(1, lastMonth + cooldownMo - curCampaignMonth)
+            : cooldownMo;
+        return t('map.siege.reason.cooldown', { months: wait });
+      }
+      return t('map.siege.reason.not_allied');
+    };
+
+    const handleSiegeRepair = (kind: 'hp' | 'shield') => {
+      soundFx.playClick();
+      const res =
+        kind === 'hp'
+          ? repairBaseHp(selectedSector.id)
+          : repairBaseShield(selectedSector.id);
+      if (res.ok) {
+        const amt = (res.healed ?? 0).toLocaleString();
+        const costStr = (res.cost ?? 0).toLocaleString();
+        setRepairFeedback({
+          ok: true,
+          text: t(
+            kind === 'hp'
+              ? 'map.siege.repairedHpMsg'
+              : 'map.siege.repairedShieldMsg',
+            { amount: amt, cost: costStr }
+          ),
+        });
+      } else {
+        setRepairFeedback({
+          ok: false,
+          text: formatFailureReason(
+            res.reason,
+            kind === 'hp'
+              ? selectedBaseState.lastRepairHpMonth
+              : selectedBaseState.lastRepairShieldMonth
+          ),
+        });
+      }
+    };
+
     return (
       <div className="space-y-4">
         {/* Title + Faction / Type / Status Badges */}
@@ -965,6 +1096,146 @@ export function MapView() {
               {effectiveSquadSize}v{effectiveSquadSize}
             </span>
           </div>
+        </div>
+
+        {/* Base Siege Shield + Capture HP Block */}
+        <div
+          data-testid="map-briefing-siege-block"
+          className="rounded-lg border border-slate-800/90 bg-[#080C15] p-2.5 space-y-2 min-w-0"
+        >
+          <div className="flex items-center justify-between gap-2 min-w-0">
+            <span className="text-xs font-semibold text-slate-200">
+              {t('map.siege.blockTitle')}
+            </span>
+            <span
+              data-testid="map-briefing-siege-label"
+              className={`px-2 py-0.5 rounded border text-[11px] font-semibold shrink-0 ${siegeLabelClass[siegeLabel]}`}
+            >
+              {t(`map.siege.label.${siegeLabel}` as never)}
+            </span>
+          </div>
+
+          <div className="space-y-1.5">
+            {/* Shield bar */}
+            <div className="space-y-0.5 min-w-0">
+              <div className="flex items-center justify-between gap-2 text-[11px] min-w-0">
+                <span className="text-cyan-300 font-medium truncate">
+                  {t('map.siege.shieldLabel')}
+                </span>
+                <span className="font-mono-nums text-slate-200 font-semibold shrink-0">
+                  {siege.shield.toLocaleString()} / {siege.maxShield.toLocaleString()} ({siegePct.shieldPct}%)
+                </span>
+              </div>
+              <div className="h-1.5 w-full rounded-full bg-slate-800 overflow-hidden">
+                <div
+                  data-testid="map-briefing-siege-shield-bar"
+                  className="h-full bg-cyan-400 transition-all"
+                  style={{ width: `${siegePct.shieldPct}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Capture HP bar */}
+            <div className="space-y-0.5 min-w-0">
+              <div className="flex items-center justify-between gap-2 text-[11px] min-w-0">
+                <span
+                  className={`font-medium truncate ${
+                    hpBarDanger ? 'text-red-300' : 'text-amber-300'
+                  }`}
+                >
+                  {t('map.siege.hpLabel')}
+                </span>
+                <span className="font-mono-nums text-slate-200 font-semibold shrink-0">
+                  {siege.hp.toLocaleString()} / {siege.maxHp.toLocaleString()} ({siegePct.hpPct}%)
+                </span>
+              </div>
+              <div className="h-1.5 w-full rounded-full bg-slate-800 overflow-hidden">
+                <div
+                  data-testid="map-briefing-siege-hp-bar"
+                  data-danger={hpBarDanger ? 'true' : 'false'}
+                  className={`h-full transition-all ${
+                    hpBarDanger ? 'bg-red-500' : 'bg-amber-500'
+                  }`}
+                  style={{ width: `${siegePct.hpPct}%` }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {!isAllied && (
+            <p
+              data-testid="map-briefing-siege-wins"
+              className="text-[11px] text-amber-300 font-medium"
+            >
+              {t('map.siege.winsRemaining', { wins: winsRemaining })}
+            </p>
+          )}
+
+          {isAllied && (
+            <div
+              data-testid="map-briefing-siege-repairs"
+              className="space-y-1.5 pt-1 border-t border-slate-800/80"
+            >
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                <div className="space-y-0.5 min-w-0">
+                  <button
+                    type="button"
+                    data-testid="briefing-repair-hp-btn"
+                    disabled={Boolean(hpDisabledReason)}
+                    onClick={() => handleSiegeRepair('hp')}
+                    className="w-full min-h-[44px] px-2.5 py-1.5 rounded border border-amber-500/50 bg-amber-500/15 hover:bg-amber-500/25 disabled:border-slate-700 disabled:bg-slate-900 disabled:text-slate-500 text-amber-200 font-semibold text-xs leading-tight cursor-pointer disabled:cursor-not-allowed"
+                  >
+                    {t('map.siege.repairHpBtn', {
+                      amount: hpBtnAmt.toLocaleString(),
+                      cost: hpCost.toLocaleString(),
+                    })}
+                  </button>
+                  {hpDisabledReason && (
+                    <p
+                      data-testid="briefing-repair-hp-reason"
+                      className="text-[11px] text-slate-400 px-0.5"
+                    >
+                      {hpDisabledReason}
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-0.5 min-w-0">
+                  <button
+                    type="button"
+                    data-testid="briefing-repair-shield-btn"
+                    disabled={Boolean(shieldDisabledReason)}
+                    onClick={() => handleSiegeRepair('shield')}
+                    className="w-full min-h-[44px] px-2.5 py-1.5 rounded border border-cyan-500/50 bg-cyan-500/15 hover:bg-cyan-500/25 disabled:border-slate-700 disabled:bg-slate-900 disabled:text-slate-500 text-cyan-200 font-semibold text-xs leading-tight cursor-pointer disabled:cursor-not-allowed"
+                  >
+                    {t('map.siege.repairShieldBtn', {
+                      amount: shieldBtnAmt.toLocaleString(),
+                      cost: shieldCost.toLocaleString(),
+                    })}
+                  </button>
+                  {shieldDisabledReason && (
+                    <p
+                      data-testid="briefing-repair-shield-reason"
+                      className="text-[11px] text-slate-400 px-0.5"
+                    >
+                      {shieldDisabledReason}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {repairFeedback && (
+                <p
+                  data-testid="briefing-repair-feedback"
+                  className={`text-[11px] font-medium ${
+                    repairFeedback.ok ? 'text-emerald-300' : 'text-amber-300'
+                  }`}
+                >
+                  {repairFeedback.text}
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Under Attack Urgent Alert */}
@@ -1856,6 +2127,14 @@ export function MapView() {
               const pirateMonthsLeft = pirateIncident
                 ? Math.max(1, pirateIncident.expiresMonth - pilot.campaignMonth)
                 : 0;
+              const nodeSiege = getBaseSiege(
+                baseState,
+                sector.baseType,
+                adminConfig.baseSiege
+              );
+              const nodeSiegeBelowMax =
+                nodeSiege.shield < nodeSiege.maxShield ||
+                nodeSiege.hp < nodeSiege.maxHp;
               const pirateTitle = pirateIncident
                 ? t('map.pirateBadgeTitle', {
                     size: pirateIncident.size,
@@ -2004,6 +2283,23 @@ export function MapView() {
                       fill="#f59e0b"
                       stroke="#0D131D"
                       strokeWidth="1.5"
+                    />
+                  )}
+
+                  {/* Siege Damage Pip (Top-Right of token, max 6px, purely decorative) */}
+                  {nodeSiegeBelowMax && (
+                    <circle
+                      data-testid={`map-node-siege-pip-${sector.id}`}
+                      data-siege-state={
+                        nodeSiege.shield === 0 ? 'shield_zero' : 'damaged'
+                      }
+                      cx={pos.x + 13}
+                      cy={pos.y - 13}
+                      r="2.5"
+                      fill={nodeSiege.shield === 0 ? '#EF4444' : '#F59E0B'}
+                      stroke="#0D131D"
+                      strokeWidth="1"
+                      pointerEvents="none"
                     />
                   )}
 
@@ -2271,6 +2567,14 @@ export function MapView() {
             const unlocked = pilot.unlockedSectorIds.includes(sector.id);
             const isSelected = sector.id === selectedSector.id;
             const st = getBaseState(pilot, sector.id);
+            const stSiege = getBaseSiege(
+              st,
+              sector.baseType,
+              adminConfig.baseSiege
+            );
+            const stBelowMax =
+              stSiege.shield < stSiege.maxShield || stSiege.hp < stSiege.maxHp;
+            const stSiegePct = stBelowMax ? getSiegePct(stSiege) : null;
             const inc = getBaseMonthlyIncome(sector, st);
             const scale = adminConfig.battleSizeOverride ?? sector.squadSize;
             const isSquare =
@@ -2356,6 +2660,19 @@ export function MapView() {
                     <span className="px-1.5 py-0.5 rounded bg-sky-500/20 border border-sky-500/50 text-sky-200 font-semibold">
                       {t('map.status.repairing', {
                         months: st.repairMonthsRemaining,
+                      })}
+                    </span>
+                  )}
+                  {stSiegePct && (
+                    <span
+                      data-testid={`map-list-siege-pct-${sector.id}`}
+                      className={`font-mono-nums font-semibold ${
+                        stSiege.shield === 0 ? 'text-red-300' : 'text-cyan-300'
+                      }`}
+                    >
+                      {t('map.siege.listPct', {
+                        shieldPct: stSiegePct.shieldPct,
+                        hpPct: stSiegePct.hpPct,
                       })}
                     </span>
                   )}

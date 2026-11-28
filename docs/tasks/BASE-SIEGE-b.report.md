@@ -1,0 +1,6 @@
+# TASK BASE-SIEGE-b Report
+- Items done: STEP 0 (located briefing/list/token/status/campaignMonth/baseSiege), ITEM 1 (`getBaseSiegeLabel`, `computeWinsRemaining`, `getSiegePct` + raid `lastAttackedMonth`), ITEM 2 (briefing `"Căn cứ"` block: Shield cyan + HP orange/red bars, 5-state label chip, `~N` wins remaining, existing `BaseStatus` preserved), ITEM 3 (allied HP/Shield credit repair buttons + result feedback + `full`/`cooldown`/`no_credits`/`busy` reasons), ITEM 4 (list `S % · H %` when below max + decorative `r=2.5` `pointerEvents="none"` SVG token pip).
+- Files changed: new `src/components/__tests__/baseSiegeUiB.test.tsx`; edited `src/engine/baseSiege.ts`, `src/engine/mapWorld.ts`, `src/components/MapView.tsx`, `src/i18n/vi.ts`, `src/i18n/en.ts`, `docs/CODEMAP.md`.
+- Tests & typecheck: `npx tsc --noEmit` 0 errors; 7 related vitest files 38/38 passed (`baseSiegeUiB.test.tsx` 5/5, `baseSiegeA.test.ts` 6/6, `mapM1.test.tsx`, `mapFrontlineF2.test.tsx`, `frontlineIntegrationF1b.test.tsx`, `mapPreviewBrief1.test.tsx`, `mapFixesC3b.test.tsx`).
+- Not checked: real browser layout/overflow inspection at 360px, generated-world interactive play, full `vitest` suite, production build (`npm run build`), `npm run lint`.
+CHƯA chạy trình duyệt thật
