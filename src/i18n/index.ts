@@ -867,6 +867,25 @@ function formatCombatLogBody(
       return translate(lang, 'log.sectorSupply', { n });
     }
 
+    case 'log.npcBuffCards': {
+      const tokens = String(p.cards ?? '')
+        .split(',')
+        .map((token) => token.trim())
+        .filter(Boolean);
+      const formattedCards = tokens
+        .map((token) => {
+          const [rawKind, rawTier] = token.split(':');
+          const tier = Math.max(1, Math.floor(Number(rawTier ?? 1)));
+          const kindLabel = getBuffCardKindLabel(lang, rawKind as BuffCardKind);
+          return `${kindLabel} T${tier}`;
+        })
+        .join(', ');
+      return translate(lang, 'log.npcBuffCards', {
+        actor: String(p.actor ?? entry.actorName ?? ''),
+        cards: formattedCards,
+      });
+    }
+
     case 'log.enragePhaseActivated': {
       const phase = String(p.phase ?? 'rage') as EnragePhaseKey;
       const round = Math.max(1, Math.floor(Number(p.round ?? entry.round ?? 1)));

@@ -27,6 +27,7 @@ import { CrateShopAdminBlock } from './admin/CrateShopAdminBlock';
 import { PriceTableAdminBlock } from './admin/PriceTableAdminBlock';
 import { SupplyGiveAdminBlock } from './admin/SupplyGiveAdminBlock';
 import { NpcSupplyAdminBlock } from './admin/NpcSupplyAdminBlock';
+import { NpcBuffCardsAdminBlock } from './admin/NpcBuffCardsAdminBlock';
 import { EnemyLevelAdminBlock } from './admin/EnemyLevelAdminBlock';
 import { EnrageAdminBlock } from './admin/EnrageAdminBlock';
 import { BattleRewardsAdminBlock } from './admin/BattleRewardsAdminBlock';
@@ -2536,6 +2537,15 @@ export function AdminPanel() {
                   description={t('admin.battleSection.npcSupply.desc')}
                 >
                   <NpcSupplyAdminBlock flash={flash} />
+                </AdminSection>
+
+                {/* 7b. NPC Buff Cards */}
+                <AdminSection
+                  id="npc-buff-cards"
+                  title={t('admin.battleSection.npcBuffCards.title')}
+                  description={t('admin.battleSection.npcBuffCards.desc')}
+                >
+                  <NpcBuffCardsAdminBlock />
                 </AdminSection>
 
                 {/* 8. SP Economy (>8 fields) */}

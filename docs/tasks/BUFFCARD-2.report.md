@@ -1,0 +1,8 @@
+TASK BUFFCARD-2 — Complete (CURRENT_SAVE_VERSION unchanged at 15; no Firebase).
+- ITEM 1: Added `NpcBuffCardsConfig`, sanitizer/clone (`src/types/game.ts`, `src/engine/buffCards.ts`, `src/engine/migration.ts`, `src/store/useGameStore.ts`), `rollNpcBuffCards()` (excludes `exp`; deterministic rng; boss x2 chance & +1 tier <=5), `buildCombatUnit(..., npcBuffs)` (`!isPlayer` only), and calls at the 3 NPC sites in `src/engine/combat.ts`.
+- HP/Shield/SP init: Verified in `src/engine/combat.ts:447-533` (`effectivePassives` feeds `calculateEffectiveStats` + `calculateDerivedStats`, initializing `hp: derived.maxHp`, `shield: derived.maxShield`, `sp: derived.maxSp` before `engineerShieldBoost` & `applyPrestageBuffs`).
+- ITEM 2: Emitted `log.npcBuffCards` SYSTEM log at battle start per buffed NPC (`src/engine/combat.ts`, `src/i18n/index.ts`, `src/utils/combatLogFormat.ts`); added `src/components/admin/NpcBuffCardsAdminBlock.tsx` (toggles, 6 kind checkboxes, live example under every number field) mounted in collapsed `<AdminSection id="npc-buff-cards">` (`src/components/AdminPanel.tsx`).
+- ITEM 3: Added matching `vi` & `en` keys in `src/i18n/vi.ts` and `src/i18n/en.ts`; updated `docs/CODEMAP.md`.
+- Tests: `npx vitest run --reporter=dot src/engine/__tests__/npcBuffCards2.test.ts src/engine/__tests__/buffCards1.test.ts src/engine/__tests__/npcRoleSkillsNpcSk1.test.ts src/engine/__tests__/npcSupplyCs6a.test.ts src/engine/__tests__/mapFixesC3b.test.tsx` -> 5 files / 23 tests passed.
+- Typecheck: `npx tsc --noEmit` -> passed cleanly (0 errors). No full vitest or production build run.
+- Browser check: NOT checked in a real browser.

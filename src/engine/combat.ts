@@ -42,6 +42,7 @@ import {
 import { resolveSkillSpecs } from './skillSpecs';
 import type {
   ActionType,
+  ActiveBuffEntry,
   ActiveStatusEffect,
   AdminConfig,
   BattleEvent,
@@ -50,6 +51,7 @@ import type {
   BattleRoundSnapshot,
   BattleSize,
   BattleState,
+  BuffCardKind,
   CombatFxEvent,
   CombatFxKind,
   CombatLogEntry,
@@ -115,6 +117,10 @@ import {
   evaluateTurnPhaseAfterAction,
   sanitizeTurnPhaseConfig,
 } from './turnPhase';
+import {
+  NPC_BUFF_CARD_KINDS,
+  rollNpcBuffCards,
+} from './buffCards';
 import {
   addOrRefreshStatus,
   applyPrestageBuffs,
@@ -428,6 +434,7 @@ export function buildCombatUnit(params: {
   equipmentBonuses?: StatBlock;
   specialTraits?: ItemSpecialTraits;
   passives?: GearPassiveBonuses;
+  npcBuffs?: Partial<Record<BuffCardKind, ActiveBuffEntry>> | null;
   adminConfig?: Partial<AdminConfig>;
 }): CombatUnit {
   const skillCap = getEffectiveSkillMaxLevel(params.adminConfig);
@@ -438,7 +445,7 @@ export function buildCombatUnit(params: {
   );
   const rawSkillLevels = params.skillLevels ?? npcFallback.skillLevels;
   const effectiveSkillLevels = clampBattleSkillLevels(rawSkillLevels, skillCap);
-  const effectivePassives =
+  const basePassives =
     params.passives ??
     getGearPassiveBonuses(
       {
@@ -449,6 +456,10 @@ export function buildCombatUnit(params: {
       },
       params.adminConfig
     );
+  const effectivePassives =
+    !params.isPlayer && params.npcBuffs
+      ? applyPilotBuffsToPassives(basePassives, params.npcBuffs, params.adminConfig)
+      : basePassives;
 
   const stats = calculateEffectiveStats(
     params.classId,
@@ -811,6 +822,34 @@ export function createInitialBattleState(
   const usedCallsigns = new Set<string>([playerUnit.callsign]);
   const savedWingmen = savedFormation.filter((u) => !u.isPlayer);
   const rawAllyUnits: CombatUnit[] = [playerUnit];
+  const npcBuffLogs: CombatLogEntry[] = [];
+  const pushNpcBuffLog = (
+    unit: CombatUnit,
+    buffs: Partial<Record<BuffCardKind, ActiveBuffEntry>>
+  ) => {
+    const parts: string[] = [];
+    for (const kind of NPC_BUFF_CARD_KINDS) {
+      const entry = buffs[kind];
+      if (entry && entry.battles > 0 && entry.tier > 0) {
+        parts.push(`${kind}:${entry.tier}`);
+      }
+    }
+    if (parts.length === 0) return;
+    npcBuffLogs.push({
+      id: nextId('log'),
+      round: 1,
+      actorName: unit.name,
+      actorSide: unit.side,
+      actorIsPlayer: false,
+      actorIsBoss: unit.isBoss,
+      tag: 'SYSTEM',
+      templateKey: 'log.npcBuffCards',
+      params: {
+        actor: unit.name,
+        cards: parts.join(','),
+      },
+    });
+  };
 
   for (let i = 0; i < effectiveSquadCount - 1; i++) {
     const savedSlot = savedWingmen[i];
@@ -840,22 +879,30 @@ export function createInitialBattleState(
       savedSlot?.classId ?? randomItem(classIds, rng);
     const levelJitter = Math.floor(rng() * 3) - 1;
     const allyLevel = Math.max(1, activeGear.level + levelJitter);
-
-    rawAllyUnits.push(
-      buildCombatUnit({
-        id: savedSlot?.id ?? `ally_npc_${i + 1}`,
-        name: pilotName,
-        callsign,
-        side: 'ally',
-        row: savedSlot?.row ?? 'front',
-        formationCol: 0,
-        isPlayer: false,
-        classId: allyClass,
-        level: allyLevel,
-        allocatedPoints: generateNpcAllocations(allyClass, allyLevel, rng),
-        adminConfig,
-      })
+    const allyNpcBuffs = rollNpcBuffCards(
+      rng,
+      'ally',
+      allyLevel,
+      false,
+      false,
+      adminConfig
     );
+    const allyUnit = buildCombatUnit({
+      id: savedSlot?.id ?? `ally_npc_${i + 1}`,
+      name: pilotName,
+      callsign,
+      side: 'ally',
+      row: savedSlot?.row ?? 'front',
+      formationCol: 0,
+      isPlayer: false,
+      classId: allyClass,
+      level: allyLevel,
+      allocatedPoints: generateNpcAllocations(allyClass, allyLevel, rng),
+      npcBuffs: allyNpcBuffs,
+      adminConfig,
+    });
+    pushNpcBuffLog(allyUnit, allyNpcBuffs);
+    rawAllyUnits.push(allyUnit);
   }
 
   // Place player squadron into the 3 rows:
@@ -875,25 +922,36 @@ export function createInitialBattleState(
       allyRowCounts,
       formationConfig
     );
+    const mercBuffs = rollNpcBuffCards(
+      rng,
+      'ally',
+      hiredLv,
+      false,
+      false,
+      adminConfig
+    );
+    const mercUnit = buildCombatUnit({
+      id: 'ally_hired_merc',
+      name: pilot.hiredWingman.callsign,
+      callsign: 'MERC',
+      side: 'ally',
+      row: mercRow,
+      formationCol: 0,
+      isPlayer: false,
+      classId: pilot.hiredWingman.classId,
+      level: hiredLv,
+      allocatedPoints: generateNpcAllocations(
+        pilot.hiredWingman.classId,
+        hiredLv,
+        rng
+      ),
+      npcBuffs: mercBuffs,
+      adminConfig,
+    });
+    pushNpcBuffLog(mercUnit, mercBuffs);
     allyUnits = assignFormationColumns([
       ...allyUnits,
-      buildCombatUnit({
-        id: 'ally_hired_merc',
-        name: pilot.hiredWingman.callsign,
-        callsign: 'MERC',
-        side: 'ally',
-        row: mercRow,
-        formationCol: 0,
-        isPlayer: false,
-        classId: pilot.hiredWingman.classId,
-        level: hiredLv,
-        allocatedPoints: generateNpcAllocations(
-          pilot.hiredWingman.classId,
-          hiredLv,
-          rng
-        ),
-        adminConfig,
-      }),
+      mercUnit,
     ]);
   }
 
@@ -962,29 +1020,39 @@ export function createInitialBattleState(
       ? Math.max(1, rawEnemyLevel)
       : clampEnemyLevel(rawEnemyLevel, adminConfig?.enemyLevel);
 
-    rawEnemyUnits.push(
-      buildCombatUnit({
-        id: `enemy_${i + 1}`,
-        name: `${prefix} ${baseName}`,
-        callsign: isBoss ? 'BOSS' : isStructure ? `Turret-${i + 1}` : `Hostile-${i + 1}`,
-        side: 'enemy',
-        row: 'front',
-        formationCol: 0,
-        hasLongRangeWeapon: archetype === 'sniper',
-        isPlayer: false,
-        classId: archDef.classId,
-        archetype,
-        isBoss,
-        isStructure,
-        level: Math.max(1, enemyLevel),
-        allocatedPoints: generateNpcAllocations(
-          archDef.classId,
-          Math.max(1, enemyLevel),
-          rng
-        ),
-        adminConfig,
-      })
+    const clampedEnemyLevel = Math.max(1, enemyLevel);
+    const enemyNpcBuffs = rollNpcBuffCards(
+      rng,
+      'enemy',
+      clampedEnemyLevel,
+      isBoss,
+      isStructure,
+      adminConfig
     );
+    const enemyUnit = buildCombatUnit({
+      id: `enemy_${i + 1}`,
+      name: `${prefix} ${baseName}`,
+      callsign: isBoss ? 'BOSS' : isStructure ? `Turret-${i + 1}` : `Hostile-${i + 1}`,
+      side: 'enemy',
+      row: 'front',
+      formationCol: 0,
+      hasLongRangeWeapon: archetype === 'sniper',
+      isPlayer: false,
+      classId: archDef.classId,
+      archetype,
+      isBoss,
+      isStructure,
+      level: clampedEnemyLevel,
+      allocatedPoints: generateNpcAllocations(
+        archDef.classId,
+        clampedEnemyLevel,
+        rng
+      ),
+      npcBuffs: enemyNpcBuffs,
+      adminConfig,
+    });
+    pushNpcBuffLog(enemyUnit, enemyNpcBuffs);
+    rawEnemyUnits.push(enemyUnit);
   }
 
   const enemyUnits: CombatUnit[] = autoPlaceFormation(
@@ -1050,9 +1118,11 @@ export function createInitialBattleState(
         }
       : null;
 
-  const baseInitialLog = sectorSupplyLog
-    ? [sectorSupplyLog, openingLog]
-    : [openingLog];
+  const baseInitialLog = [
+    ...(sectorSupplyLog ? [sectorSupplyLog] : []),
+    openingLog,
+    ...npcBuffLogs,
+  ];
   const initialEnrageLogs = buildEnrageActivationLogs(
     1,
     adminConfig,

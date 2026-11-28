@@ -752,6 +752,7 @@ export const EN_TRANSLATIONS = {
   'log.battleStart':
     'Engagement started at {sector} ({difficulty}). Turn order sorted by Speed.',
   'log.sectorSupply': 'Area supplies: {n}%',
+  'log.npcBuffCards': '{actor} uses buff cards: {cards}',
   'log.enragePhaseActivated': 'Round {round}: {phase} activated',
   'log.defend':
     '{actor} raises an Energy Shield (-50% dmg{shieldPart}{spPart}).',
@@ -2417,6 +2418,30 @@ export const EN_TRANSLATIONS = {
   'admin.battleSection.npcSupply.title': 'NPC & Sector Supplies',
   'admin.battleSection.npcSupply.desc':
     'NPC battle supply rolls, auto-use thresholds, and sector drain/regen',
+  'admin.battleSection.npcBuffCards.title': 'NPC Buff Cards',
+  'admin.battleSection.npcBuffCards.desc':
+    'NPCs simulate player buff cards for this battle only; not saved, no inventory cost, no EXP cards.',
+  'admin.npcBuffTitle': 'NPC Battle Buff Cards',
+  'admin.npcBuffDesc':
+    'NPCs simulate player buff cards for this battle only; not saved, no inventory cost, no EXP cards.',
+  'admin.npcBuffEnabled': 'Enable NPC buff cards',
+  'admin.npcBuffIncludeBoss': 'Bosses get x2 chance (cap 100%) & +1 tier cap',
+  'admin.npcBuffIncludeStructure': 'Include structures / turrets',
+  'admin.npcBuffAllyChancePct': 'Ally wingman chance (%)',
+  'admin.npcBuffEnemyChancePct': 'Enemy unit chance (%)',
+  'admin.npcBuffMinLevel': 'Minimum level to roll cards',
+  'admin.npcBuffMaxTier': 'Base max tier cap (T1–T5)',
+  'admin.npcBuffLevelPerTier': 'Levels per +1 tier cap',
+  'admin.npcBuffMaxKindsPerUnit': 'Max card kinds per NPC',
+  'admin.npcBuffKindsLabel': 'Allowed NPC card kinds (EXP excluded)',
+  'admin.npcBuffExAllyChance': 'Live: Ally Lv{lv} has a {pct}% chance to roll cards at battle start.',
+  'admin.npcBuffExEnemyChance': 'Live: Enemy Lv{lv} has {pct}%; Boss Lv{lv} has {bossPct}%.',
+  'admin.npcBuffExMinLevel': 'Live: Lv{below} and below get no cards; Lv{at}+ start rolling.',
+  'admin.npcBuffExMaxTier': 'Live: Enemy Lv{highLv} caps at T{cap}; Boss Lv{highLv} caps at T{bossCap} (max T5).',
+  'admin.npcBuffExLevelPerTier':
+    'Live: Enemy Lv{exLv}: max T{cap} (1 + ({exLv}-{minLevel})/{step}), up to {maxKinds} card kinds, {chance}% chance.',
+  'admin.npcBuffExMaxKinds':
+    'Live: Each buffed NPC receives 1–{maxKinds} distinct kinds (from {enabledKinds} enabled).',
   'admin.battleSection.spEconomy.title': 'SP Economy, Flux & Lidar',
   'admin.battleSection.spEconomy.desc':
     'SP regen per SPIRIT, class cost factors, Flux Transfer table, and Lidar range',

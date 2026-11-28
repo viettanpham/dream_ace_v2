@@ -1,0 +1,21 @@
+TASK BUFFCARD-2 — NPC wingmen / hired merc / enemies use buff cards. Model: Hydrogen. If this prompt looks cut off, STOP and tell me the last words you can see.
+
+STEP A (resume): save this prompt verbatim to docs/tasks/BUFFCARD-2.md, checklist docs/tasks/BUFFCARD-2.progress.md, tick items, final report docs/tasks/BUFFCARD-2.report.md and print it. On retry continue from the first unticked item.
+
+TOKEN SAVING: read docs/CODEMAP.md first; grep by symbol. Open ONLY: src/engine/combat.ts buildCombatUnit (~408-470) and the 3 NPC build sites (~845, ~880, ~966) + where the battle start log is created (grep 'prestage' / initial log); src/engine/skills.ts getPilotBuffBonuses / applyPilotBuffsToPassives (~274-345); src/data/buffCards.ts (kinds, tiers); src/engine/buffCards.ts only for style; src/types/game.ts AdminConfig (~1805) and BuffCardsConfig (~653); src/engine/migration.ts where adminConfig fields are defaulted + sanitized; one Admin block as style (src/components/admin/NpcSupplyAdminBlock.tsx or similar). Related tests only + tsc. Do not enable Firebase. CURRENT_SAVE_VERSION unchanged (adminConfig sanitizer only).
+
+RULES: NPCs behave like players using buff cards, only at battle build time, only for THIS battle (nothing is stored in the save, no inventory, no decrement). Kinds allowed: max_hp, max_shield, max_sp, attack, defense, dodge (NEVER exp). Same numbers as the player cards (reuse getBuffCardPercent / tiers). One card per kind per unit (kinds are independent).
+
+ITEM 1 — Engine. New AdminConfig.npcBuffCards (optional, sanitized, default below, no save bump):
+{ enabled: true, allyChancePct: 20, enemyChancePct: 20, minLevel: 10, maxTier: 3, levelPerTier: 10, maxKindsPerUnit: 2, includeBoss: true, includeStructure: false, kinds: {max_hp,max_shield,max_sp,attack,defense,dodge: true} }.
+New pure function rollNpcBuffCards(rng, side, level, isBoss, isStructure, admin) in src/engine/buffCards.ts returning Partial<Record<BuffCardKind, ActiveBuffEntry>> (battles: 1): nothing when disabled or level < minLevel or structure not included; else with chance (ally or enemy) the unit gets 1..maxKindsPerUnit distinct allowed kinds, each tier = random 1..tierCap where tierCap = min(maxTier, 1 + floor((level - minLevel) / levelPerTier)) and never above the tiers that exist; bosses (includeBoss) get chance 100% of the side chance x2 capped at 100 and +1 tier cap (still <= 5). Use the battle rng (deterministic with a seeded rng). buildCombatUnit gets an optional param npcBuffs; when given, effectivePassives = applyPilotBuffsToPassives(effectivePassives, npcBuffs, adminConfig). Call rollNpcBuffCards at the 3 NPC sites (allied wingmen, hired merc, enemies) and pass the result; the PLAYER unit is untouched. After build, make sure current HP / shield / SP start at the new max (check how buildCombatUnit sets hp from derived).
+ITEM 2 — Visibility + Admin. For every NPC that got cards add one SYSTEM log line at battle start (vi + en): "<name> dùng thẻ <kind> T<tier>" (several kinds in one line, comma separated). Admin block "Thẻ buff NPC" inside an AdminSection (id npc-buff-cards, collapsed by default, title + one-line description): enabled toggle, ally/enemy chance %, minLevel, maxTier, levelPerTier, maxKindsPerUnit, includeBoss, includeStructure, 6 kind checkboxes; EVERY number field has a LIVE EXAMPLE line, e.g. "Địch Lv25: tối đa T2 (1 + (25-10)/10), tối đa 2 loại thẻ, xác suất 20%". Short description: "NPC mô phỏng người chơi dùng thẻ buff trong trận này; không lưu, không tốn thẻ, không có thẻ EXP."
+ITEM 3 — vi AND en keys.
+
+HARD LIMITS: player stats/numbers unchanged; old saves load; no new screen; with enabled=false battles are identical to today; level < minLevel (default 10) battles unchanged, so new players are not affected.
+
+TESTS (max 4, small): level below minLevel -> no cards; disabled -> none; deterministic roll with a seeded rng respects tierCap and never returns exp; buildCombatUnit with npcBuffs {attack T2} has higher attack than without and the player unit built without npcBuffs is unchanged.
+
+CHECKS (slim): related test files with --reporter=dot (combat build tests + the new test) + tsc --noEmit. NO full vitest, NO production build.
+
+REPORT (<= 10 lines): items + files changed; where HP/SP init was checked; tests; NOT checked in a real browser.

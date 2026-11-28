@@ -47,6 +47,11 @@ import {
   sanitizePilotBuffCards,
 } from '../data/buffCards';
 import {
+  cloneNpcBuffCardsConfig,
+  DEFAULT_NPC_BUFF_CARDS_CONFIG,
+  sanitizeNpcBuffCardsConfig,
+} from './buffCards';
+import {
   DEFAULT_CARD_POPUP_END_SCALE_PCT,
   DEFAULT_CARD_POPUP_FLIGHT_MS,
   DEFAULT_CARD_POPUP_MAX_CONCURRENT,
@@ -563,6 +568,7 @@ export function createDefaultAdminConfig(): AdminConfig {
     starterEvent: cloneStarterEventConfig(DEFAULT_STARTER_EVENT_CONFIG),
     baseSiege: cloneBaseSiegeConfig(DEFAULT_BASE_SIEGE_CONFIG),
     buffCards: cloneBuffCardsConfig(DEFAULT_BUFF_CARDS_CONFIG),
+    npcBuffCards: cloneNpcBuffCardsConfig(DEFAULT_NPC_BUFF_CARDS_CONFIG),
     cardTiers: cloneCardTiersConfig(DEFAULT_CARD_TIERS_CONFIG),
     medals: cloneMedalsConfig(DEFAULT_MEDALS_CONFIG),
     monthlyEconomy: cloneMonthlyEconomyConfig(DEFAULT_MONTHLY_ECONOMY_CONFIG),
@@ -1110,6 +1116,7 @@ export function migrateSaveData(
     crateShop: sanitizeCrateShopConfig(rawAdmin.crateShop),
     baseSiege: sanitizeBaseSiegeConfig(rawAdmin.baseSiege),
     buffCards: sanitizeBuffCardsConfig(rawAdmin.buffCards),
+    npcBuffCards: sanitizeNpcBuffCardsConfig(rawAdmin.npcBuffCards),
     cardTiers: sanitizeCardTiersConfig(rawAdmin.cardTiers),
     medals: sanitizeMedalsConfig(rawAdmin.medals),
     monthlyEconomy: sanitizeMonthlyEconomyConfig(rawAdmin.monthlyEconomy),

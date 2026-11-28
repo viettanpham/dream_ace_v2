@@ -659,6 +659,21 @@ export interface BuffCardsConfig {
   shop: BuffCardsShopConfig;
 }
 
+export type NpcBuffCardKind = Exclude<BuffCardKind, 'exp'>;
+
+export interface NpcBuffCardsConfig {
+  enabled: boolean;
+  allyChancePct: number;
+  enemyChancePct: number;
+  minLevel: number;
+  maxTier: number;
+  levelPerTier: number;
+  maxKindsPerUnit: number;
+  includeBoss: boolean;
+  includeStructure: boolean;
+  kinds: Record<NpcBuffCardKind, boolean>;
+}
+
 export type SupplyFamily = 'hp_kit' | 'shield_kit' | 'sp_kit' | 'buff' | 'utility';
 
 export type SupplyEffectKind =
@@ -1233,6 +1248,7 @@ export type CombatLogTag =
 export type CombatLogTemplateKey =
   | 'log.battleStart'
   | 'log.sectorSupply'
+  | 'log.npcBuffCards'
   | 'log.enragePhaseActivated'
   | 'log.defend'
   | 'log.healSquad'
@@ -1887,6 +1903,7 @@ export interface AdminConfig {
   crateShop?: CrateShopConfig;
   baseSiege?: BaseSiegeConfig;
   buffCards?: BuffCardsConfig;
+  npcBuffCards?: Partial<NpcBuffCardsConfig>;
   cardTiers?: CardTiersConfig;
   medals?: MedalsConfig;
   monthlyEconomy?: MonthlyEconomyConfig;

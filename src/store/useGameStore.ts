@@ -31,6 +31,7 @@ import {
 import {
   decrementActiveBuffsAfterBattle,
   grantBuffCardToPilot,
+  sanitizeNpcBuffCardsConfig,
   useBuffCard as useBuffCardEngine,
   type UseBuffCardResult,
 } from '../engine/buffCards';
@@ -6898,6 +6899,11 @@ export const useGameStore = create<GameStoreState>()(
             ...patch,
             baseSiege: nextBaseSiege,
             buffCards: nextBuffCards,
+            npcBuffCards: sanitizeNpcBuffCardsConfig(
+              patch.npcBuffCards !== undefined
+                ? patch.npcBuffCards
+                : state.adminConfig.npcBuffCards
+            ),
             ...sanitizeSupplyShopExtraConfig({
               supplyShopMaxRefreshes:
                 patch.supplyShopMaxRefreshes ??
@@ -7440,6 +7446,9 @@ export const useGameStore = create<GameStoreState>()(
                 rawAdmin.vouchers as AdminConfig['vouchers']
               ),
               buffCards: sanitizeBuffCardsConfig(rawAdmin.buffCards),
+              npcBuffCards: sanitizeNpcBuffCardsConfig(
+                rawAdmin.npcBuffCards as AdminConfig['npcBuffCards']
+              ),
               rewardMultiplier:
                 typeof state.adminConfig.rewardMultiplier === 'number' &&
                 Number.isFinite(state.adminConfig.rewardMultiplier) &&

@@ -754,6 +754,7 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'log.battleStart':
     'Bắt đầu giao tranh tại {sector} ({difficulty}). Thứ tự lượt xếp theo Tốc độ.',
   'log.sectorSupply': 'Quân nhu khu vực: {n}%',
+  'log.npcBuffCards': '{actor} dùng thẻ {cards}',
   'log.enragePhaseActivated': 'Vòng {round}: {phase} kích hoạt',
   'log.defend':
     '{actor} bật Khiên năng lượng (-50% sát thương{shieldPart}{spPart}).',
@@ -2420,6 +2421,30 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'admin.battleSection.npcSupply.title': 'Vật tư NPC & Quân nhu khu vực',
   'admin.battleSection.npcSupply.desc':
     'Cấp phát vật tư cho NPC, ngưỡng tự dùng và mức tiêu hao/hồi kho khu vực',
+  'admin.battleSection.npcBuffCards.title': 'Thẻ buff NPC',
+  'admin.battleSection.npcBuffCards.desc':
+    'NPC mô phỏng người chơi dùng thẻ buff trong trận này; không lưu, không tốn thẻ, không có thẻ EXP.',
+  'admin.npcBuffTitle': 'Thẻ buff NPC trong trận',
+  'admin.npcBuffDesc':
+    'NPC mô phỏng người chơi dùng thẻ buff trong trận này; không lưu, không tốn thẻ, không có thẻ EXP.',
+  'admin.npcBuffEnabled': 'Bật NPC dùng thẻ buff',
+  'admin.npcBuffIncludeBoss': 'Boss được x2 xác suất (tối đa 100%) & +1 cấp thẻ',
+  'admin.npcBuffIncludeStructure': 'Pháo đài / công trình cũng dùng thẻ',
+  'admin.npcBuffAllyChancePct': 'Xác suất phe Đồng minh (%)',
+  'admin.npcBuffEnemyChancePct': 'Xác suất phe Địch (%)',
+  'admin.npcBuffMinLevel': 'Cấp tối thiểu bắt đầu dùng thẻ',
+  'admin.npcBuffMaxTier': 'Trần cấp thẻ tối đa (T1–T5)',
+  'admin.npcBuffLevelPerTier': 'Số cấp để tăng +1 trần T',
+  'admin.npcBuffMaxKindsPerUnit': 'Số loại thẻ tối đa / NPC',
+  'admin.npcBuffKindsLabel': 'Loại thẻ NPC được phép dùng (không có EXP)',
+  'admin.npcBuffExAllyChance': 'Ví dụ: Đồng minh Lv{lv} có {pct}% cơ hội kích hoạt thẻ khi vào trận.',
+  'admin.npcBuffExEnemyChance': 'Ví dụ: Địch thường Lv{lv} có {pct}%; Boss Lv{lv} có {bossPct}% cơ hội.',
+  'admin.npcBuffExMinLevel': 'Ví dụ: Lv{below} trở xuống không có thẻ; từ Lv{at} trở lên mới bắt đầu dùng.',
+  'admin.npcBuffExMaxTier': 'Ví dụ: Địch Lv{highLv} tối đa T{cap}; Boss Lv{highLv} tối đa T{bossCap} (trần 5).',
+  'admin.npcBuffExLevelPerTier':
+    'Ví dụ: Địch Lv{exLv}: tối đa T{cap} (1 + ({exLv}-{minLevel})/{step}), tối đa {maxKinds} loại thẻ, xác suất {chance}%.',
+  'admin.npcBuffExMaxKinds':
+    'Ví dụ: Mỗi NPC trúng thẻ nhận 1–{maxKinds} loại khác nhau (trong {enabledKinds} loại đang bật).',
   'admin.battleSection.spEconomy.title': 'Kinh tế SP, Flux & Lidar',
   'admin.battleSection.spEconomy.desc':
     'Hồi SP theo SPIRIT, hệ số chi phí theo lớp, bảng Flux Transfer và phạm vi Lidar',

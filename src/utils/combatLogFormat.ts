@@ -1451,6 +1451,7 @@ export function parseStructuredCombatLogRow(
 
     case 'log.battleStart':
     case 'log.sectorSupply':
+    case 'log.npcBuffCards':
     case 'log.enragePhaseActivated':
     case 'log.prestageConfirm':
     case 'log.emergencyResupplyAlly':
