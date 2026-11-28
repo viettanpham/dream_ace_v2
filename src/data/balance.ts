@@ -987,5 +987,17 @@ export function sanitizeSkillCardPriceMult(raw: unknown): number {
   return Number(clamped.toFixed(4));
 }
 
-
-
+export function readPriceOverride(
+  priceOverrides: Record<string, number> | null | undefined,
+  itemId: string | undefined
+): number | null {
+  if (!priceOverrides || typeof priceOverrides !== 'object' || !itemId) {
+    return null;
+  }
+  const raw = priceOverrides[itemId];
+  if (typeof raw !== 'number' || !Number.isFinite(raw) || raw <= 0) {
+    return null;
+  }
+  const intVal = Math.round(raw);
+  return intVal >= 1 ? intVal : null;
+}

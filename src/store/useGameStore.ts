@@ -215,7 +215,10 @@ import {
   rollSupplyReward,
   sanitizeSupplyRewardsConfig,
 } from '../engine/supplyRewards';
-import { computeSupplyPrice } from '../engine/itemPrice';
+import {
+  computeSupplyPrice,
+  sanitizePriceOverrides,
+} from '../engine/itemPrice';
 import {
   clearModule as clearModuleEngine,
   setModule as setModuleEngine,
@@ -6953,6 +6956,11 @@ export const useGameStore = create<GameStoreState>()(
                 ? patch.skillCardPriceMult
                 : state.adminConfig.skillCardPriceMult
             ),
+            priceOverrides: sanitizePriceOverrides(
+              patch.priceOverrides !== undefined
+                ? patch.priceOverrides
+                : state.adminConfig.priceOverrides
+            ),
             skillMods: sanitizeSkillMods(
               patch.skillMods !== undefined
                 ? patch.skillMods
@@ -7426,6 +7434,7 @@ export const useGameStore = create<GameStoreState>()(
               skillCardPriceMult: sanitizeSkillCardPriceMult(
                 rawAdmin.skillCardPriceMult
               ),
+              priceOverrides: sanitizePriceOverrides(rawAdmin.priceOverrides),
               starterEvent: sanitizeStarterEventConfig(
                 rawAdmin.starterEvent,
                 rawAdmin.vouchers as AdminConfig['vouchers']

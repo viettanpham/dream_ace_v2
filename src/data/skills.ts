@@ -10,6 +10,7 @@ import {
   BALANCE_CONFIG,
   DEFAULT_SKILL_TIERS_CONFIG,
   getEffectiveSkillMaxLevel,
+  readPriceOverride,
   sanitizePassiveScaleAfter5,
   sanitizeRestorePctCap,
   sanitizeSkillCardPriceMult,
@@ -392,9 +393,19 @@ export function getBaseSkillCardCost(
 }
 
 export function getSkillCardPrice(
-  card: Pick<OpeningCardDefinition, 'warPointCost'>,
-  adminCfg?: Pick<AdminConfig, 'skillCardPriceMult'> | number | null
+  card: Pick<OpeningCardDefinition, 'warPointCost'> &
+    Partial<Pick<OpeningCardDefinition, 'id'>>,
+  adminCfg?:
+    | Partial<Pick<AdminConfig, 'skillCardPriceMult' | 'priceOverrides'>>
+    | number
+    | null
 ): number {
+  if (adminCfg && typeof adminCfg === 'object' && card.id) {
+    const override = readPriceOverride(adminCfg.priceOverrides, card.id);
+    if (override !== null) {
+      return override;
+    }
+  }
   const mult = sanitizeSkillCardPriceMult(
     typeof adminCfg === 'number' ? adminCfg : adminCfg?.skillCardPriceMult
   );
@@ -447,6 +458,10 @@ export function getOpeningCardById(
   _cfgOrAdmin?: SkillTiersConfig | Pick<AdminConfig, 'skillTiers'> | null
 ): OpeningCardDefinition | undefined {
   return OPENING_CARDS_BY_ID[cardId] ?? ALL_SKILL_CARDS_BY_ID[cardId];
+}
+
+export function isKnownSkillCardId(cardId: string): boolean {
+  return Boolean(OPENING_CARDS_BY_ID[cardId] ?? ALL_SKILL_CARDS_BY_ID[cardId]);
 }
 
 export interface SkillScaleOptions {

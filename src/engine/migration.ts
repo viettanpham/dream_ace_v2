@@ -90,6 +90,7 @@ import {
   DEFAULT_SUPPLY_REWARDS_CONFIG,
   sanitizeSupplyRewardsConfig,
 } from './supplyRewards';
+import { sanitizePriceOverrides } from './itemPrice';
 import { EMPTY_STAT_BLOCK, MECH_CLASS_LIST } from '../data/classes';
 import {
   BUILTIN_ITEM_REGISTRY_TAG,
@@ -556,6 +557,7 @@ export function createDefaultAdminConfig(): AdminConfig {
     skillTiers: cloneSkillTiersConfig(DEFAULT_SKILL_TIERS_CONFIG),
     skillWpCostFactor: DEFAULT_SKILL_WP_COST_FACTOR,
     skillCardPriceMult: DEFAULT_SKILL_CARD_PRICE_MULT,
+    priceOverrides: {},
     supplyRewards: cloneSupplyRewardsConfig(DEFAULT_SUPPLY_REWARDS_CONFIG),
     crateShop: cloneCrateShopConfig(DEFAULT_CRATE_SHOP_CONFIG),
     starterEvent: cloneStarterEventConfig(DEFAULT_STARTER_EVENT_CONFIG),
@@ -1096,6 +1098,7 @@ export function migrateSaveData(
     skillTiers: sanitizeSkillTiersConfig(rawAdmin.skillTiers),
     skillWpCostFactor: sanitizeSkillWpCostFactor(rawAdmin.skillWpCostFactor),
     skillCardPriceMult: sanitizeSkillCardPriceMult(rawAdmin.skillCardPriceMult),
+    priceOverrides: sanitizePriceOverrides(rawAdmin.priceOverrides),
     battleRewards: sanitizeBattleRewardsConfig(rawAdmin.battleRewards),
     battlePenalty: sanitizeBattlePenaltyConfig(rawAdmin.battlePenalty),
     vouchers: sanitizeVoucherConfig(rawAdmin.vouchers),

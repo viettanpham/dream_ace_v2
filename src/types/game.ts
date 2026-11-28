@@ -1879,6 +1879,7 @@ export interface AdminConfig {
   skillTiers?: SkillTiersConfig;
   skillWpCostFactor?: number;
   skillCardPriceMult?: number;
+  priceOverrides?: Record<string, number>;
   skillMods?: SkillModDefinition[];
   vouchers?: VoucherConfig;
   starterEvent?: StarterEventConfig;

@@ -1,5 +1,8 @@
+import { readPriceOverride } from '../data/balance';
+import { SUPPLY_TEMPLATES_BY_ID } from '../data/consumables';
 import { SHOP_CONFIG } from '../data/items';
 import { PRICE_FORMULA } from '../data/itemPricing';
+import { isKnownSkillCardId } from '../data/skills';
 import type {
   AdminConfig,
   EquipmentSlot,
@@ -79,12 +82,26 @@ export function computeItemPrice(input: ComputeItemPriceInput): number {
  */
 export function computeSupplyPrice(
   template: Pick<SupplyTemplate, 'family' | 'tier' | 'priceOverride'> &
-    Partial<Pick<SupplyTemplate, 'effects'>>,
+    Partial<Pick<SupplyTemplate, 'id' | 'effects'>>,
   adminOrEconomy?:
-    | Pick<AdminConfig, 'supplyEconomy'>
+    | Partial<Pick<AdminConfig, 'supplyEconomy' | 'priceOverrides'>>
     | SupplyEconomyConfig
     | null
 ): number {
+  if (
+    adminOrEconomy &&
+    typeof adminOrEconomy === 'object' &&
+    'priceOverrides' in adminOrEconomy &&
+    template.id
+  ) {
+    const override = readPriceOverride(
+      adminOrEconomy.priceOverrides,
+      template.id
+    );
+    if (override !== null) {
+      return override;
+    }
+  }
   if (
     typeof template.priceOverride === 'number' &&
     Number.isFinite(template.priceOverride) &&
@@ -143,3 +160,38 @@ export function getModuleSellPrice(
 ): number {
   return Math.round(computeModulePrice(template) * SHOP_CONFIG.sellPriceRatio);
 }
+
+export function isKnownPriceOverrideId(itemId: string): boolean {
+  return Boolean(SUPPLY_TEMPLATES_BY_ID[itemId] || isKnownSkillCardId(itemId));
+}
+
+export function sanitizePriceOverrides(raw: unknown): Record<string, number> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return {};
+  }
+  const clean: Record<string, number> = {};
+  for (const [rawKey, rawVal] of Object.entries(
+    raw as Record<string, unknown>
+  )) {
+    const id = rawKey.trim();
+    if (!id || !isKnownPriceOverrideId(id)) continue;
+    const num =
+      typeof rawVal === 'number'
+        ? rawVal
+        : typeof rawVal === 'string' && rawVal.trim() !== ''
+          ? Number(rawVal)
+          : NaN;
+    if (!Number.isFinite(num) || num <= 0) continue;
+    const intVal = Math.round(num);
+    if (intVal < 1) continue;
+    clean[id] = intVal;
+  }
+  return clean;
+}
+
+export function clonePriceOverrides(
+  raw?: Record<string, number> | null
+): Record<string, number> {
+  return sanitizePriceOverrides(raw);
+}
+

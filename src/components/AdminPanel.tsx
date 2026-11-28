@@ -24,6 +24,7 @@ import {
 import { SupplyEconomyAdminBlock } from './admin/SupplyEconomyAdminBlock';
 import { SupplyRewardsAdminBlock } from './admin/SupplyRewardsAdminBlock';
 import { CrateShopAdminBlock } from './admin/CrateShopAdminBlock';
+import { PriceTableAdminBlock } from './admin/PriceTableAdminBlock';
 import { SupplyGiveAdminBlock } from './admin/SupplyGiveAdminBlock';
 import { NpcSupplyAdminBlock } from './admin/NpcSupplyAdminBlock';
 import { EnemyLevelAdminBlock } from './admin/EnemyLevelAdminBlock';
@@ -3116,6 +3117,18 @@ export function AdminPanel() {
                   description={t('admin.battleSection.crateShop.desc')}
                 >
                   <CrateShopAdminBlock
+                    adminConfig={adminConfig}
+                    adminUpdateConfig={adminUpdateConfig}
+                  />
+                </AdminSection>
+
+                {/* 11c2. Item Price Table (PRICE-1a) */}
+                <AdminSection
+                  id="price-table"
+                  title={t('admin.battleSection.priceTable.title')}
+                  description={t('admin.battleSection.priceTable.desc')}
+                >
+                  <PriceTableAdminBlock
                     adminConfig={adminConfig}
                     adminUpdateConfig={adminUpdateConfig}
                   />

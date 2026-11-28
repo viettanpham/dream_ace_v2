@@ -816,8 +816,11 @@ export function sanitizeSupplyShopStockWp(
 
 export function getSupplyWpPrice(
   template: Pick<SupplyTemplate, 'family' | 'tier' | 'priceOverride'> &
-    Partial<Pick<SupplyTemplate, 'effects'>>,
-  cfg?: Pick<AdminConfig, 'supplyWpPriceDivisor' | 'supplyEconomy'> | null
+    Partial<Pick<SupplyTemplate, 'id' | 'effects'>>,
+  cfg?:
+    | (Pick<AdminConfig, 'supplyWpPriceDivisor' | 'supplyEconomy'> &
+        Partial<Pick<AdminConfig, 'priceOverrides'>>)
+    | null
 ): number {
   const crPrice = computeSupplyPrice(template, cfg);
   const divisor = sanitizeSupplyWpPriceDivisor(cfg?.supplyWpPriceDivisor);

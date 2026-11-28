@@ -729,7 +729,10 @@ export function unequipPassiveFromGear(
 export function buyOpeningCard(
   pilot: PilotAccount,
   cardId: string,
-  admin?: Pick<AdminConfig, 'skillTiers' | 'skillCardPriceMult'> | null
+  admin?:
+    | (Pick<AdminConfig, 'skillTiers'> &
+        Partial<Pick<AdminConfig, 'skillCardPriceMult' | 'priceOverrides'>>)
+    | null
 ): {
   pilot: PilotAccount;
   ok: boolean;

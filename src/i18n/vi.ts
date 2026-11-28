@@ -3119,6 +3119,29 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
     'Ước tính WP/tháng: 20% căn cứ ≈ {wp20} WP (Lương {s20} + HC {medWp20}) · 60% căn cứ ≈ {wp60} WP (Lương {s60} + HC {medWp60})',
   'admin.cardTiersMedals.resetBtn': 'Khôi phục mặc định',
   'admin.cardTiersMedals.resetDone': 'Đã khôi phục mặc định Thẻ cấp bậc & Huân chương.',
+
+  // Admin CP — Bảng giá vật phẩm (PRICE-1a)
+  'admin.battleSection.priceTable.title': 'Bảng giá vật phẩm',
+  'admin.battleSection.priceTable.desc':
+    'Xem mặc định và đặt giá riêng cho từng vật tư và thẻ kỹ năng',
+  'admin.priceTable.overrideCount': 'Đang ghi đè: {count} mục',
+  'admin.priceTable.resetAll': 'Đặt lại tất cả',
+  'admin.priceTable.resetAllConfirm': 'Xác nhận đặt lại toàn bộ giá riêng?',
+  'admin.priceTable.tab.supplies': 'Vật tư',
+  'admin.priceTable.tab.skillCards': 'Thẻ kỹ năng',
+  'admin.priceTable.tab.other': 'Khác',
+  'admin.priceTable.searchPlaceholder': 'Tìm theo tên, mã hoặc bậc...',
+  'admin.priceTable.empty': 'Không tìm thấy mục phù hợp.',
+  'admin.priceTable.defaultLabel': 'Mặc định',
+  'admin.priceTable.overrideInput': 'Giá riêng',
+  'admin.priceTable.defaultPlaceholder': 'Mặc định',
+  'admin.priceTable.finalLabel': 'Giá áp dụng',
+  'admin.priceTable.resetRow': 'Đặt lại',
+  'admin.priceTable.liveResaleEx': 'Giá bán lại = {pct}% = {amount} {unit}',
+  'admin.priceTable.editedInSection': 'Chỉnh tại mục: {section}',
+  'admin.priceTable.other.buffCards': 'Thẻ buff',
+  'admin.priceTable.other.vouchers': 'Voucher',
+  'admin.priceTable.other.crates': 'Rương vật tư',
+  'admin.priceTable.other.expCreditCards': 'Thẻ EXP/Credit',
+  'admin.priceTable.other.medals': 'Huân chương',
 };
-
-

@@ -3117,8 +3117,31 @@ export const EN_TRANSLATIONS = {
     'Estimated WP/month: 20% bases ≈ {wp20} WP (Salary {s20} + Medals {medWp20}) · 60% bases ≈ {wp60} WP (Salary {s60} + Medals {medWp60})',
   'admin.cardTiersMedals.resetBtn': 'Reset defaults',
   'admin.cardTiersMedals.resetDone': 'Card Tiers & Medals settings restored.',
+
+  // Admin CP — Item Price Table (PRICE-1a)
+  'admin.battleSection.priceTable.title': 'Item Price Table',
+  'admin.battleSection.priceTable.desc':
+    'Inspect defaults and set per-item price overrides for supplies and skill cards',
+  'admin.priceTable.overrideCount': 'Active overrides: {count}',
+  'admin.priceTable.resetAll': 'Reset All',
+  'admin.priceTable.resetAllConfirm': 'Reset all custom price overrides?',
+  'admin.priceTable.tab.supplies': 'Supplies',
+  'admin.priceTable.tab.skillCards': 'Skill Cards',
+  'admin.priceTable.tab.other': 'Other',
+  'admin.priceTable.searchPlaceholder': 'Search by name, id, or tier...',
+  'admin.priceTable.empty': 'No matching items found.',
+  'admin.priceTable.defaultLabel': 'Default',
+  'admin.priceTable.overrideInput': 'Custom price',
+  'admin.priceTable.defaultPlaceholder': 'Default',
+  'admin.priceTable.finalLabel': 'Final price',
+  'admin.priceTable.resetRow': 'Reset',
+  'admin.priceTable.liveResaleEx': 'Resale price = {pct}% = {amount} {unit}',
+  'admin.priceTable.editedInSection': 'Edited in section: {section}',
+  'admin.priceTable.other.buffCards': 'Buff Cards',
+  'admin.priceTable.other.vouchers': 'Voucher',
+  'admin.priceTable.other.crates': 'Supply Crates',
+  'admin.priceTable.other.expCreditCards': 'EXP / Credit Cards',
+  'admin.priceTable.other.medals': 'Medals',
 } as const;
 
 export type TranslationKey = keyof typeof EN_TRANSLATIONS;
-
-
