@@ -28,6 +28,7 @@ import { PriceTableAdminBlock } from './admin/PriceTableAdminBlock';
 import { SupplyGiveAdminBlock } from './admin/SupplyGiveAdminBlock';
 import { NpcSupplyAdminBlock } from './admin/NpcSupplyAdminBlock';
 import { NpcBuffCardsAdminBlock } from './admin/NpcBuffCardsAdminBlock';
+import { VoiceAdminBlock } from './admin/VoiceAdminBlock';
 import { EnemyLevelAdminBlock } from './admin/EnemyLevelAdminBlock';
 import { EnrageAdminBlock } from './admin/EnrageAdminBlock';
 import { BattleRewardsAdminBlock } from './admin/BattleRewardsAdminBlock';
@@ -2546,6 +2547,15 @@ export function AdminPanel() {
                   description={t('admin.battleSection.npcBuffCards.desc')}
                 >
                   <NpcBuffCardsAdminBlock />
+                </AdminSection>
+
+                {/* 7c. Voice Lines */}
+                <AdminSection
+                  id="voice-lines"
+                  title={t('admin.battleSection.voice.title')}
+                  description={t('admin.battleSection.voice.desc')}
+                >
+                  <VoiceAdminBlock />
                 </AdminSection>
 
                 {/* 8. SP Economy (>8 fields) */}

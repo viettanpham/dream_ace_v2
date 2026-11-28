@@ -211,6 +211,7 @@ import {
   applyActionVoiceHooks,
   emitOutcomeVoice,
   emitVoice,
+  sanitizeVoiceConfig,
 } from '../engine/voice';
 import {
   addSupplyCrateToConsumables,
@@ -6981,6 +6982,11 @@ export const useGameStore = create<GameStoreState>()(
                 ? patch.npcBuffCards
                 : state.adminConfig.npcBuffCards
             ),
+            voice: sanitizeVoiceConfig(
+              patch.voice !== undefined
+                ? patch.voice
+                : state.adminConfig.voice
+            ),
             ...sanitizeSupplyShopExtraConfig({
               supplyShopMaxRefreshes:
                 patch.supplyShopMaxRefreshes ??
@@ -7525,6 +7531,9 @@ export const useGameStore = create<GameStoreState>()(
               buffCards: sanitizeBuffCardsConfig(rawAdmin.buffCards),
               npcBuffCards: sanitizeNpcBuffCardsConfig(
                 rawAdmin.npcBuffCards as AdminConfig['npcBuffCards']
+              ),
+              voice: sanitizeVoiceConfig(
+                rawAdmin.voice as AdminConfig['voice']
               ),
               rewardMultiplier:
                 typeof state.adminConfig.rewardMultiplier === 'number' &&

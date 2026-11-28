@@ -96,6 +96,7 @@ import {
   sanitizeSupplyRewardsConfig,
 } from './supplyRewards';
 import { sanitizePriceOverrides } from './itemPrice';
+import { cloneVoiceConfig, sanitizeVoiceConfig } from './voice';
 import { EMPTY_STAT_BLOCK, MECH_CLASS_LIST } from '../data/classes';
 import {
   BUILTIN_ITEM_REGISTRY_TAG,
@@ -569,6 +570,7 @@ export function createDefaultAdminConfig(): AdminConfig {
     baseSiege: cloneBaseSiegeConfig(DEFAULT_BASE_SIEGE_CONFIG),
     buffCards: cloneBuffCardsConfig(DEFAULT_BUFF_CARDS_CONFIG),
     npcBuffCards: cloneNpcBuffCardsConfig(DEFAULT_NPC_BUFF_CARDS_CONFIG),
+    voice: cloneVoiceConfig(),
     cardTiers: cloneCardTiersConfig(DEFAULT_CARD_TIERS_CONFIG),
     medals: cloneMedalsConfig(DEFAULT_MEDALS_CONFIG),
     monthlyEconomy: cloneMonthlyEconomyConfig(DEFAULT_MONTHLY_ECONOMY_CONFIG),
@@ -1117,6 +1119,7 @@ export function migrateSaveData(
     baseSiege: sanitizeBaseSiegeConfig(rawAdmin.baseSiege),
     buffCards: sanitizeBuffCardsConfig(rawAdmin.buffCards),
     npcBuffCards: sanitizeNpcBuffCardsConfig(rawAdmin.npcBuffCards),
+    voice: sanitizeVoiceConfig(rawAdmin.voice as AdminConfig['voice']),
     cardTiers: sanitizeCardTiersConfig(rawAdmin.cardTiers),
     medals: sanitizeMedalsConfig(rawAdmin.medals),
     monthlyEconomy: sanitizeMonthlyEconomyConfig(rawAdmin.monthlyEconomy),

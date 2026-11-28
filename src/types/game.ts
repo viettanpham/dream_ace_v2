@@ -1249,8 +1249,16 @@ export type VoiceTrigger =
 
 export type VoiceSpeakerSide = 'ally' | 'player' | 'enemy';
 
+export interface VoiceConfig {
+  enabled: boolean;
+  actionCooldown: number;
+  maxPerRound: number;
+  chances: Record<VoiceTrigger, number>;
+}
+
 export interface BattleVoiceState {
   enabled?: boolean;
+  config?: VoiceConfig;
   seed: number;
   counter: number;
   unitActionCounts: Record<string, number>;
@@ -1936,6 +1944,7 @@ export interface AdminConfig {
   baseSiege?: BaseSiegeConfig;
   buffCards?: BuffCardsConfig;
   npcBuffCards?: Partial<NpcBuffCardsConfig>;
+  voice?: Partial<VoiceConfig>;
   cardTiers?: CardTiersConfig;
   medals?: MedalsConfig;
   monthlyEconomy?: MonthlyEconomyConfig;

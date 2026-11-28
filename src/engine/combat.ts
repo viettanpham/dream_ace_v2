@@ -125,6 +125,7 @@ import {
   createInitialBattleVoiceState,
   deriveBattleVoiceSeed,
   emitStartTauntVoice,
+  sanitizeVoiceConfig,
 } from './voice';
 import {
   addOrRefreshStatus,
@@ -1139,8 +1140,7 @@ export function createInitialBattleState(
       .map((u) => `${u.id}:${u.name}:${u.derived.maxHp}:${u.derived.attackPower}`)
       .join(',')}`
   );
-  const voiceEnabled =
-    (adminConfig as { voiceEnabled?: boolean } | undefined)?.voiceEnabled ?? true;
+  const voiceConfig = sanitizeVoiceConfig(adminConfig?.voice);
 
   const initialBattle: BattleState = {
     sectorId: sector.id,
@@ -1173,7 +1173,7 @@ export function createInitialBattleState(
       active: prestageCfg.enabled,
       appliedByUnit: prestageResult.appliedByUnit,
     },
-    voice: createInitialBattleVoiceState(voiceSeed, voiceEnabled),
+    voice: createInitialBattleVoiceState(voiceSeed, voiceConfig),
     isResolving: false,
     summary: null,
   };

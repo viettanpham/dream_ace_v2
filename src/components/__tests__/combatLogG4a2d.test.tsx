@@ -572,6 +572,7 @@ describe('TASK G4a-2d — Combat log newest-first order, jump pill & compact 2-r
     expect(row2.querySelector('[data-testid="combat-log-filter-ally"]')?.textContent).toBe('Ta');
     expect(row2.querySelector('[data-testid="combat-log-filter-enemy"]')?.textContent).toBe('Địch');
     expect(row2.querySelector('[data-testid="combat-log-filter-system"]')).not.toBeNull();
+    expect(row2.querySelector('[data-testid="combat-log-filter-voice"]')?.textContent).toBe('Thoại');
     expect(row2.querySelector('[data-testid="combat-log-order-toggle"]')).not.toBeNull();
     const row2Expand = row2.querySelector('[data-testid="combat-log-expand-all"]') as HTMLButtonElement;
     const row2Collapse = row2.querySelector('[data-testid="combat-log-collapse-all"]') as HTMLButtonElement;

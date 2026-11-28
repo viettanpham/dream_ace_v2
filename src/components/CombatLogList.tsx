@@ -83,7 +83,7 @@ interface CombatLogListProps {
   className?: string;
 }
 
-const CHANNELS: CombatLogChannel[] = ['all', 'ally', 'enemy', 'system'];
+const CHANNELS: CombatLogChannel[] = ['all', 'ally', 'enemy', 'system', 'voice'];
 
 function ActionKindIcon({ kind }: { kind: CombatLogActionKind }) {
   const cls = 'w-3.5 h-3.5 shrink-0';
@@ -645,9 +645,9 @@ export function CombatLogList({
         data-testid="combat-log-filters"
         role="tablist"
         aria-label={t('battle.combatLog')}
-        className={`shrink-0 border-b border-slate-800/90 bg-[#090E17] flex items-center justify-between gap-1 flex-nowrap ${
+        className={`shrink-0 border-b border-slate-800/90 bg-[#090E17] flex items-center justify-between gap-0.5 flex-nowrap ${
           isCompact
-            ? 'h-[36px] min-h-[36px] max-h-[36px] px-1.5'
+            ? 'h-[36px] min-h-[36px] max-h-[36px] px-1'
             : 'px-3 py-1.5'
         }`}
       >
@@ -673,7 +673,7 @@ export function CombatLogList({
                 data-testid={`combat-log-filter-${ch}`}
                 onClick={() => setChannel(ch)}
                 className={`${
-                  isCompact ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-0.5 text-[11px]'
+                  isCompact ? 'px-1 py-0.5 text-[10px]' : 'px-2 py-0.5 text-[11px]'
                 } rounded font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                   isSelected
                     ? ch === 'ally'
@@ -682,6 +682,8 @@ export function CombatLogList({
                       ? 'bg-red-500/25 text-red-200 border border-red-400/60'
                       : ch === 'system'
                       ? 'bg-slate-700 text-slate-100 border border-slate-500'
+                      : ch === 'voice'
+                      ? 'bg-cyan-500/25 text-cyan-200 border border-cyan-400/60'
                       : 'bg-sky-500 text-slate-950 border border-sky-400'
                     : 'text-slate-400 hover:text-slate-200 border border-transparent'
                 }`}

@@ -194,7 +194,10 @@ describe('TASK CHAT-1a — NPC voice lines', () => {
           ...(baseAdmin.prestage ?? { enabled: false, countdownSec: 0 }),
           enabled: false,
         },
-        voiceEnabled,
+        voice: {
+          ...(baseAdmin.voice ?? {}),
+          enabled: voiceEnabled,
+        },
       };
       const rng = makeSeededRng(77);
       const mathSpy = vi.spyOn(Math, 'random').mockImplementation(rng);

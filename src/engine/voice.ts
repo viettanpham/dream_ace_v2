@@ -9,10 +9,79 @@ import type {
   CombatLogEntry,
   CombatSide,
   CombatUnit,
+  VoiceConfig,
   VoiceSpeakerSide,
   VoiceTrigger,
 } from '../types/game';
 import { hashSeed, mulberry32 } from './mapGenerator';
+
+export const VOICE_TRIGGERS: readonly VoiceTrigger[] = [
+  'startTaunt',
+  'skillAttack',
+  'skillSupport',
+  'supplyUse',
+  'kill',
+  'crit',
+  'evade',
+  'lowHp',
+  'shieldBreak',
+  'allyDown',
+  'win',
+  'lose',
+] as const;
+
+function clampInt(
+  raw: unknown,
+  fallback: number,
+  min: number,
+  max: number
+): number {
+  const num = Number(raw);
+  if (!Number.isFinite(num)) return fallback;
+  return Math.max(min, Math.min(max, Math.round(num)));
+}
+
+export function cloneVoiceConfig(cfg?: VoiceConfig): VoiceConfig {
+  const src = cfg ?? VOICE_DEFAULTS;
+  const chances = {} as Record<VoiceTrigger, number>;
+  for (const trigger of VOICE_TRIGGERS) {
+    chances[trigger] = src.chances[trigger];
+  }
+  return {
+    enabled: src.enabled,
+    actionCooldown: src.actionCooldown,
+    maxPerRound: src.maxPerRound,
+    chances,
+  };
+}
+
+export function sanitizeVoiceConfig(
+  raw?: Partial<VoiceConfig> | null
+): VoiceConfig {
+  const d = VOICE_DEFAULTS;
+  if (!raw || typeof raw !== 'object') {
+    return cloneVoiceConfig();
+  }
+  const rawChances =
+    raw.chances && typeof raw.chances === 'object'
+      ? (raw.chances as Partial<Record<VoiceTrigger, unknown>>)
+      : {};
+  const chances = {} as Record<VoiceTrigger, number>;
+  for (const trigger of VOICE_TRIGGERS) {
+    chances[trigger] = clampInt(
+      rawChances[trigger],
+      d.chances[trigger],
+      0,
+      100
+    );
+  }
+  return {
+    enabled: typeof raw.enabled === 'boolean' ? raw.enabled : d.enabled,
+    actionCooldown: clampInt(raw.actionCooldown, d.actionCooldown, 0, 10),
+    maxPerRound: clampInt(raw.maxPerRound, d.maxPerRound, 0, 6),
+    chances,
+  };
+}
 
 export function deriveBattleVoiceSeed(seedInput: string): number {
   return hashSeed(seedInput || 'dream_ace_voice');
@@ -20,10 +89,15 @@ export function deriveBattleVoiceSeed(seedInput: string): number {
 
 export function createInitialBattleVoiceState(
   seed: number,
-  enabled: boolean = VOICE_DEFAULTS.enabled
+  configOrEnabled?: boolean | Partial<VoiceConfig> | null
 ): BattleVoiceState {
+  const config =
+    typeof configOrEnabled === 'boolean'
+      ? sanitizeVoiceConfig({ enabled: configOrEnabled })
+      : sanitizeVoiceConfig(configOrEnabled);
   return {
-    enabled,
+    enabled: config.enabled,
+    config,
     seed: seed >>> 0,
     counter: 0,
     unitActionCounts: {},
@@ -42,7 +116,7 @@ function ensureVoiceState(state: BattleState): BattleVoiceState {
       .map((u) => `${u.id}:${u.derived.maxHp}`)
       .join(',')}`
   );
-  return createInitialBattleVoiceState(fallbackSeed, VOICE_DEFAULTS.enabled);
+  return createInitialBattleVoiceState(fallbackSeed);
 }
 
 function nextVoiceRand(voice: BattleVoiceState): {
@@ -86,12 +160,12 @@ export function recordVoiceUnitAction(
 export function emitVoice(
   state: BattleState,
   trigger: VoiceTrigger,
-  unit: CombatUnit | undefined | null,
-  opts?: { enabled?: boolean }
+  unit: CombatUnit | undefined | null
 ): BattleState {
   if (!unit) return state;
   const voice = ensureVoiceState(state);
-  const enabled = opts?.enabled ?? voice.enabled ?? VOICE_DEFAULTS.enabled;
+  const cfg = voice.config;
+  const enabled = cfg?.enabled ?? voice.enabled ?? VOICE_DEFAULTS.enabled;
   if (!enabled) return state;
 
   if (trigger === 'startTaunt' && unit.side !== 'enemy') {
@@ -106,6 +180,8 @@ export function emitVoice(
   const roundSpoken = voice.spokenCountByRound[round] ?? 0;
   const curUnitActions = voice.unitActionCounts[unit.id] ?? 0;
   const lastSpokeAction = voice.lastSpokeActionByUnit[unit.id];
+  const maxPerRound = cfg?.maxPerRound ?? VOICE_DEFAULTS.maxPerRound;
+  const actionCooldown = cfg?.actionCooldown ?? VOICE_DEFAULTS.actionCooldown;
 
   if (!isOutcome) {
     if (
@@ -114,18 +190,18 @@ export function emitVoice(
     ) {
       return state;
     }
-    if (roundSpoken >= VOICE_DEFAULTS.maxPerRound) {
+    if (roundSpoken >= maxPerRound) {
       return state;
     }
     if (
       lastSpokeAction !== undefined &&
-      curUnitActions - lastSpokeAction < VOICE_DEFAULTS.actionCooldown
+      curUnitActions - lastSpokeAction < actionCooldown
     ) {
       return state;
     }
   }
 
-  const chance = VOICE_DEFAULTS.chances[trigger] ?? 0;
+  const chance = cfg?.chances?.[trigger] ?? VOICE_DEFAULTS.chances[trigger] ?? 0;
   if (chance <= 0) return state;
 
   const { value: chanceRoll, nextVoice: vAfterChance } = nextVoiceRand(voice);
@@ -211,25 +287,18 @@ function pickRandomUnitWithVoiceRng(
   };
 }
 
-export function emitStartTauntVoice(
-  state: BattleState,
-  opts?: { enabled?: boolean }
-): BattleState {
+export function emitStartTauntVoice(state: BattleState): BattleState {
   const enemies = state.units.filter((u) => u.side === 'enemy' && u.alive);
   if (enemies.length === 0) return state;
   const boss = enemies.find((u) => u.isBoss);
   if (boss) {
-    return emitVoice(state, 'startTaunt', boss, opts);
+    return emitVoice(state, 'startTaunt', boss);
   }
   const picked = pickRandomUnitWithVoiceRng(state, enemies);
-  return emitVoice(picked.state, 'startTaunt', picked.unit, opts);
+  return emitVoice(picked.state, 'startTaunt', picked.unit);
 }
 
-export function emitOutcomeVoice(
-  state: BattleState,
-  won: boolean,
-  opts?: { enabled?: boolean }
-): BattleState {
+export function emitOutcomeVoice(state: BattleState, won: boolean): BattleState {
   const winSide: CombatSide = won ? 'ally' : 'enemy';
   const loseSide: CombatSide = won ? 'enemy' : 'ally';
 
@@ -242,10 +311,10 @@ export function emitOutcomeVoice(
 
   let next = state;
   const winPick = pickSideUnit(next, winSide);
-  next = emitVoice(winPick.state, 'win', winPick.unit, opts);
+  next = emitVoice(winPick.state, 'win', winPick.unit);
 
   const losePick = pickSideUnit(next, loseSide);
-  next = emitVoice(losePick.state, 'lose', losePick.unit, opts);
+  next = emitVoice(losePick.state, 'lose', losePick.unit);
 
   return next;
 }
@@ -256,9 +325,8 @@ export function applyActionVoiceHooks(params: {
   events: BattleEvent[];
   actorId: string;
   adminConfig?: Partial<AdminConfig>;
-  opts?: { enabled?: boolean };
 }): BattleState {
-  const { beforeUnits, events, actorId, adminConfig, opts } = params;
+  const { beforeUnits, events, actorId, adminConfig } = params;
   let next = recordVoiceUnitAction(params.state, actorId);
   const unitMap = new Map(next.units.map((u) => [u.id, u]));
   const beforeMap = new Map(beforeUnits.map((u) => [u.id, u]));
@@ -276,8 +344,7 @@ export function applyActionVoiceHooks(params: {
         next = emitVoice(
           next,
           isSupport ? 'skillSupport' : 'skillAttack',
-          actor,
-          opts
+          actor
         );
       }
       continue;
@@ -286,7 +353,7 @@ export function applyActionVoiceHooks(params: {
     if (ev.type === 'dodge' && ev.targetId) {
       const dodger = unitMap.get(ev.targetId);
       if (dodger && dodger.alive) {
-        next = emitVoice(next, 'evade', dodger, opts);
+        next = emitVoice(next, 'evade', dodger);
       }
       continue;
     }
@@ -294,7 +361,7 @@ export function applyActionVoiceHooks(params: {
     if (ev.type === 'damage' && ev.flags?.crit) {
       const actor = unitMap.get(ev.actorId);
       if (actor && actor.alive) {
-        next = emitVoice(next, 'crit', actor, opts);
+        next = emitVoice(next, 'crit', actor);
       }
       continue;
     }
@@ -307,7 +374,7 @@ export function applyActionVoiceHooks(params: {
       shieldBrokenIds.add(ev.targetId);
       const target = unitMap.get(ev.targetId);
       if (target && target.alive) {
-        next = emitVoice(next, 'shieldBreak', target, opts);
+        next = emitVoice(next, 'shieldBreak', target);
       }
       continue;
     }
@@ -316,7 +383,7 @@ export function applyActionVoiceHooks(params: {
       const killer = unitMap.get(ev.actorId);
       const victim = unitMap.get(ev.targetId);
       if (killer && victim && killer.id !== victim.id && killer.alive) {
-        next = emitVoice(next, 'kill', killer, opts);
+        next = emitVoice(next, 'kill', killer);
       }
       if (victim) {
         const aliveAllies = next.units.filter(
@@ -324,7 +391,7 @@ export function applyActionVoiceHooks(params: {
         );
         if (aliveAllies.length > 0) {
           const picked = pickRandomUnitWithVoiceRng(next, aliveAllies);
-          next = emitVoice(picked.state, 'allyDown', picked.unit, opts);
+          next = emitVoice(picked.state, 'allyDown', picked.unit);
         }
       }
     }
@@ -335,7 +402,7 @@ export function applyActionVoiceHooks(params: {
     if (shieldBrokenIds.has(unit.id) || !unit.alive) continue;
     const prev = beforeMap.get(unit.id);
     if (prev && prev.shield > 0 && unit.shield <= 0) {
-      next = emitVoice(next, 'shieldBreak', unit, opts);
+      next = emitVoice(next, 'shieldBreak', unit);
     }
   }
 
@@ -343,7 +410,7 @@ export function applyActionVoiceHooks(params: {
   for (const unit of next.units) {
     if (!unit.alive || unit.derived.maxHp <= 0) continue;
     if (unit.hp / unit.derived.maxHp < 0.25) {
-      next = emitVoice(next, 'lowHp', unit, opts);
+      next = emitVoice(next, 'lowHp', unit);
     }
   }
 

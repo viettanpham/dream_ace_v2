@@ -33,7 +33,7 @@ import {
   type CardPopupIconKind,
 } from './cardPopupQueue';
 
-export type CombatLogChannel = 'all' | 'ally' | 'enemy' | 'system';
+export type CombatLogChannel = 'all' | 'ally' | 'enemy' | 'system' | 'voice';
 export type CombatLogDisplayMode = 'docked' | 'popup';
 export type SidebarCombatLogMode = 'line' | 'expanded';
 export type CombatLogOrder = 'newest' | 'oldest';
@@ -270,24 +270,40 @@ export function isSystemOrKillLogEntry(entry: CombatLogEntry): boolean {
   );
 }
 
+export function isVoiceLogEntry(entry: CombatLogEntry): boolean {
+  return (
+    entry.category === 'voice' ||
+    entry.tag === 'VOICE' ||
+    entry.templateKey === 'log.voice'
+  );
+}
+
 /**
  * Filters combat log entries by channel:
  * - all: every entry
- * - ally / enemy: entries whose actor belongs to that faction
- * - system: neutral/system messages AND kills (KO / destroyed)
+ * - ally / enemy: non-voice entries whose actor belongs to that faction
+ * - system: neutral/system messages AND kills (KO / destroyed), excluding voice
+ * - voice: voice entries only
  */
 export function filterCombatLogEntries(
   entries: CombatLogEntry[],
   channel: CombatLogChannel
 ): CombatLogEntry[] {
   if (channel === 'all') return entries;
+  if (channel === 'voice') {
+    return entries.filter(isVoiceLogEntry);
+  }
   if (channel === 'ally') {
-    return entries.filter((e) => e.actorSide === 'ally');
+    return entries.filter((e) => !isVoiceLogEntry(e) && e.actorSide === 'ally');
   }
   if (channel === 'enemy') {
-    return entries.filter((e) => e.actorSide === 'enemy');
+    return entries.filter(
+      (e) => !isVoiceLogEntry(e) && e.actorSide === 'enemy'
+    );
   }
-  return entries.filter(isSystemOrKillLogEntry);
+  return entries.filter(
+    (e) => !isVoiceLogEntry(e) && isSystemOrKillLogEntry(e)
+  );
 }
 
 function getRowLabel(lang: Language, rawRow: unknown): string {
