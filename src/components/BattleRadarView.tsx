@@ -63,6 +63,13 @@ import {
   type TargetValidityResult,
 } from '../utils/battleDisplay';
 import {
+  computeDesktopLaneFit,
+  computeDesktopSlotPosition,
+  computePhoneFitRadius,
+  getBattleSizeClass,
+  shouldShowRadarMiniChips,
+} from '../utils/radarSizeLayout';
+import {
   getCardPopupSymbol,
   isSpPopupText,
   parseCardPopupDisplay,
@@ -409,25 +416,35 @@ export function computeLaneTokenRadius(
   squadSize: number
 ): number {
   if (isLandscape) {
-    return DESKTOP_RADAR_TOKEN_RADIUS;
+    if (!lane) {
+      return countInLane <= 2
+        ? DESKTOP_RADAR_TOKEN_RADIUS
+        : computeDesktopLaneFit(366, countInLane).radius;
+    }
+    return computeDesktopLaneFit(lane.h, countInLane).radius;
   }
   const safeCount = Math.max(1, countInLane);
   const baseRadius =
     safeCount <= 2 && squadSize <= 4 ? 22 : safeCount <= 3 ? 18 : 16;
 
-  if (!lane || lane.h < 115) {
+  if (!lane) {
     return baseRadius;
   }
 
-  // Phone: grow ring only when collapsed empty lanes give the occupied lane room
-  const bodyH = Math.max(20, lane.h - PHONE_EMPTY_LANE_HEIGHT_PX);
-  const maxByHeight = Math.floor((bodyH - 58) / 2);
-  const slotW = (lane.w - 16) / safeCount;
-  const maxByWidth = Math.floor((slotW - 16) / 2);
-  return Math.max(
-    baseRadius,
-    Math.min(DESKTOP_RADAR_TOKEN_RADIUS, maxByHeight, maxByWidth)
-  );
+  let phoneRadius = baseRadius;
+  if (lane.h >= 115) {
+    // Phone: grow ring only when collapsed empty lanes give the occupied lane room
+    const bodyH = Math.max(20, lane.h - PHONE_EMPTY_LANE_HEIGHT_PX);
+    const maxByHeight = Math.floor((bodyH - 58) / 2);
+    const slotW = (lane.w - 16) / safeCount;
+    const maxByWidth = Math.floor((slotW - 16) / 2);
+    phoneRadius = Math.max(
+      baseRadius,
+      Math.min(DESKTOP_RADAR_TOKEN_RADIUS, maxByHeight, maxByWidth)
+    );
+  }
+
+  return computePhoneFitRadius(phoneRadius, lane.h, countInLane);
 }
 
 /**
@@ -635,14 +652,16 @@ export function computeUnitPositions(
     const count = rowUnits.length;
     if (count === 0) continue;
 
+    const desktopFit = isLandscape
+      ? computeDesktopLaneFit(lane.h, count)
+      : undefined;
+
     rowUnits.forEach((unit, idx) => {
       if (isLandscape) {
-        const topSafe = lane.y + (count <= 2 ? 90 : 78);
-        const bottomSafe = lane.y + lane.h - (count <= 2 ? 78 : 60);
-        const frac = count === 1 ? 0.45 : idx / (count - 1);
-        const x = lane.x + lane.w / 2;
-        const y = topSafe + frac * Math.max(20, bottomSafe - topSafe);
-        map.set(unit.id, { x, y });
+        map.set(
+          unit.id,
+          computeDesktopSlotPosition(lane, idx, count, desktopFit)
+        );
       } else {
         const frac = (idx + 0.5) / count;
         const leftSafe = lane.x + 36;
@@ -669,6 +688,7 @@ interface RadarUnitMarkerProps {
   tokenRadius: number;
   hitSize: number;
   barW: number;
+  showMiniChips?: boolean;
   facingAngle: number;
   isActive: boolean;
   isTargeted: boolean;
@@ -696,6 +716,7 @@ const RadarUnitMarker = memo(function RadarUnitMarker({
   tokenRadius,
   hitSize,
   barW,
+  showMiniChips = true,
   facingAngle,
   isActive,
   isTargeted,
@@ -720,7 +741,7 @@ const RadarUnitMarker = memo(function RadarUnitMarker({
   const shape = getMarkerShape(unit);
   const isStealthed = hasStatus(unit, 'stealth');
 
-  const shortName = formatShortUnitName(unit.name, 10);
+  const shortName = formatShortUnitName(unit.name, barW <= 48 ? 7 : 10);
 
   const visualRadius = tokenRadius;
   const ringResult = computeUnitRingArcs(unit, visualRadius);
@@ -1200,8 +1221,8 @@ const RadarUnitMarker = memo(function RadarUnitMarker({
             {shortName}
           </text>
 
-          {/* Up to 3 icon-only 20px mini chips (+N when more) */}
-          {statusLayout.visible.length > 0 && (
+          {/* Up to 3 icon-only 20px mini chips (+N when more); suppressed in crowded >=4-unit lanes */}
+          {showMiniChips && statusLayout.visible.length > 0 && (
             <g
               data-testid={`radar-status-${unit.id}`}
               transform="translate(0, 23)"
@@ -1761,13 +1782,21 @@ export function BattleRadarView({
   const unitRingMetaMap = useMemo(() => {
     const map = new Map<
       string,
-      { tokenRadius: number; ringOuterRadius: number; barW: number }
+      {
+        tokenRadius: number;
+        ringOuterRadius: number;
+        barW: number;
+        showMiniChips: boolean;
+      }
     >();
     for (const u of battle.units) {
       if (!u.alive) continue;
       const laneKey = `${u.side}:${u.row}`;
       const lane = laneByKey.get(laneKey);
       const countInLane = aliveCountByLane.get(laneKey) ?? 1;
+      const fit = isLandscape
+        ? computeDesktopLaneFit(lane?.h ?? 366, countInLane)
+        : null;
       const tokenRadius = computeLaneTokenRadius(
         isLandscape,
         lane,
@@ -1775,14 +1804,19 @@ export function BattleRadarView({
         battle.squadSize
       );
       const ringOuterRadius = computeUnitRingArcs(u, tokenRadius).outerRadius;
+      const showMiniChips = fit
+        ? fit.showMiniChips
+        : shouldShowRadarMiniChips(countInLane);
       const barW = isLandscape
-        ? 64
+        ? fit && fit.subColumns === 2 && lane
+          ? Math.min(64, Math.max(28, Math.floor(lane.w * 0.5 - 10)))
+          : 64
         : tokenRadius >= 28
         ? 60
         : tokenRadius >= 22
         ? 56
         : 52;
-      map.set(u.id, { tokenRadius, ringOuterRadius, barW });
+      map.set(u.id, { tokenRadius, ringOuterRadius, barW, showMiniChips });
     }
     return map;
   }, [battle.units, battle.squadSize, laneByKey, aliveCountByLane, isLandscape]);
@@ -2132,11 +2166,16 @@ export function BattleRadarView({
   );
 
   const autoBadgeText = t('auto.badge');
+  const sizeClass = useMemo(
+    () => getBattleSizeClass(battle.units),
+    [battle.units]
+  );
 
   return (
     <div
       ref={containerRef}
       data-testid="battle-radar-container"
+      data-size-class={sizeClass}
       data-animations-skipped={animationsSkipped ? 'true' : 'false'}
       data-reduced-motion={resolvedReducedMotion ? 'true' : 'false'}
       style={{ touchAction: 'pan-y' }}
@@ -2357,6 +2396,7 @@ export function BattleRadarView({
               tokenRadius={ringMeta.tokenRadius}
               hitSize={hitSize}
               barW={ringMeta.barW}
+              showMiniChips={ringMeta.showMiniChips}
               facingAngle={facingAngle}
               isActive={isActive}
               isTargeted={isTargeted}
