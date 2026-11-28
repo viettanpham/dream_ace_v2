@@ -79,7 +79,7 @@ function measureEnemySpawnsForSize(size: BattleSize, seedCount = 500): SizeStats
 }
 
 describe('FM1: Enemy spawn lane placement across 500 seeds per size', () => {
-  it('never places support in front while middle or back has room, and keeps support/siege off front across 500 seeds per size', () => {
+  it('never places support in front while middle or back has room, and puts siege in front across 500 seeds per size', () => {
     const results = ([4, 6, 8] as BattleSize[]).map((size) =>
       measureEnemySpawnsForSize(size, 500)
     );
@@ -91,7 +91,7 @@ describe('FM1: Enemy spawn lane placement across 500 seeds per size', () => {
       expect(r.supportUnitsTotal).toBeGreaterThan(0);
       expect(r.supportInFrontWithMidOrBackFree).toBe(0);
       expect(r.supportInFront).toBe(0);
-      expect(r.siegeInFront).toBe(0);
+      expect(r.siegeInFront).toBeGreaterThan(0);
       expect(r.distinctFormations).toBeGreaterThan(1);
     }
   });

@@ -831,7 +831,7 @@ export function createInitialBattleState(
 
   // Place player squadron into the 3 rows:
   // - If user customized their formation in Garage, keep their row choices while enforcing capacities.
-  // - Otherwise, run class-based auto-placement (Striker->front, Interceptor->front/middle, Siege->back, Support->middle/back).
+  // - Otherwise, run class-based auto-placement (Siege->front, Striker/Interceptor->middle, Support->back).
   let allyUnits: CombatUnit[] =
     pilot.formationCustomized && savedFormation.length > 0
       ? enforceFormationCapacities(rawAllyUnits, formationConfig)

@@ -4,7 +4,7 @@ export const FORMATION_ROWS: readonly CombatRow[] = ['front', 'middle', 'back'] 
 
 /**
  * Centralized 3-row formation configuration (editable in Admin CP).
- * - Row capacities default: front 3, middle 3, back 2 (total 8 per side).
+ * - Row capacities default: front 8, middle 8, back 8 (max 8 per side).
  * - Row modifiers default:
  *   - front:  +10% DEF, 0% damage
  *   - middle: neutral (0% DEF, 0% damage)
@@ -12,9 +12,9 @@ export const FORMATION_ROWS: readonly CombatRow[] = ['front', 'middle', 'back'] 
  */
 export const DEFAULT_FORMATION_CONFIG: FormationConfig = {
   rowCapacities: {
-    front: 3,
-    middle: 3,
-    back: 2,
+    front: 8,
+    middle: 8,
+    back: 8,
   },
   maxUnitsPerSide: 8,
   rowModifiers: {
@@ -47,28 +47,26 @@ export interface ClassFormationPreference {
 
 /**
  * Default auto-placement preferences by class:
- * - Striker     -> front
- * - Interceptor -> front / middle
- * - Siege       -> back
- * - Support     -> middle / back
+ * - Siege (tank) -> front  (['front', 'middle', 'back'])
+ * - Striker      -> middle (['middle', 'front', 'back'])
+ * - Interceptor  -> middle (['middle', 'front', 'back'])
+ * - Support      -> back   (['back', 'middle', 'front'])
  */
 export const CLASS_FORMATION_PREFERENCES: Record<MechClassId, ClassFormationPreference> = {
-  striker: {
+  siege: {
     preferred: ['front', 'middle', 'back'],
     placementPriority: 1,
   },
-  siege: {
+  support: {
     preferred: ['back', 'middle', 'front'],
     placementPriority: 1,
   },
-  interceptor: {
-    preferred: ['front', 'middle', 'back'],
-    flexPair: ['front', 'middle'],
+  striker: {
+    preferred: ['middle', 'front', 'back'],
     placementPriority: 2,
   },
-  support: {
-    preferred: ['middle', 'back', 'front'],
-    flexPair: ['middle', 'back'],
+  interceptor: {
+    preferred: ['middle', 'front', 'back'],
     placementPriority: 2,
   },
 };

@@ -42,16 +42,16 @@ describe('FormationEditor UI (3-Row Squad Editor)', () => {
     expect(middleRow).not.toBeNull();
     expect(backRow).not.toBeNull();
 
-    // Capacity displays like 3/3, 3/3, 2/2
+    // Capacity displays default 8/8/8 with Siege (2) front, Striker/Interceptor (4) middle, Support (2) back
     expect(
       container.querySelector('[data-testid="row-capacity-front"]')?.textContent
-    ).toBe('3/3');
+    ).toBe('2/8');
     expect(
       container.querySelector('[data-testid="row-capacity-middle"]')?.textContent
-    ).toBe('3/3');
+    ).toBe('4/8');
     expect(
       container.querySelector('[data-testid="row-capacity-back"]')?.textContent
-    ).toBe('2/2');
+    ).toBe('2/8');
 
     // One-line effect descriptions reflect default row modifiers
     expect(frontRow?.textContent).toContain('+10% DEF');
@@ -69,19 +69,38 @@ describe('FormationEditor UI (3-Row Squad Editor)', () => {
   });
 
   it('swaps cleanly when moving into a full row (unit tap & row button) and allows tap-to-move into an open row', () => {
-    // Increase middle capacity to 4 so middle has an open slot while front (3/3) and back (2/2) are full
+    // Explicit tight setup: front (2/2 full with ally_player in front) and back (2/2 full), middle open (4/5)
     useGameStore.getState().adminUpdateConfig({
       formation: {
         ...DEFAULT_FORMATION_CONFIG,
-        rowCapacities: { front: 3, middle: 4, back: 2 },
+        rowCapacities: { front: 2, middle: 5, back: 2 },
       },
     });
+    const curSquad = useGameStore.getState().pilot.squadFormation ?? [];
+    const movedSquad = curSquad.map((u) => {
+      if (u.id === 'ally_player') return { ...u, row: 'front' as const };
+      if (u.id === 'ally_npc_1') return { ...u, row: 'middle' as const };
+      return u;
+    });
+    const frontSwap = movedSquad.filter((u) => u.row === 'front');
+    if (frontSwap.length > 2) {
+      let extra = frontSwap.length - 2;
+      for (let i = 0; i < movedSquad.length && extra > 0; i++) {
+        if (movedSquad[i].row === 'front' && movedSquad[i].id !== 'ally_player') {
+          movedSquad[i] = { ...movedSquad[i], row: 'middle' };
+          extra--;
+        }
+      }
+    }
+    useGameStore.setState((s) => ({
+      pilot: { ...s.pilot, squadFormation: movedSquad },
+    }));
 
     act(() => {
       root.render(createElement(FormationEditor));
     });
 
-    // Player lead starts in front row (3/3)
+    // Player lead placed in front row (2/2)
     const leadBtn = container.querySelector<HTMLButtonElement>(
       '[data-testid="formation-unit-ally_player"]'
     );
@@ -134,7 +153,7 @@ describe('FormationEditor UI (3-Row Squad Editor)', () => {
     ).toBe('2/2');
     expect(
       container.querySelector('[data-testid="row-capacity-front"]')?.textContent
-    ).toBe('3/3');
+    ).toBe('2/2');
 
     // Now select the swapped unit (now in front) and tap move-to-back row button -> swaps with last unit in back row
     const swappedBackInFrontBtn = container.querySelector<HTMLButtonElement>(
@@ -161,7 +180,7 @@ describe('FormationEditor UI (3-Row Squad Editor)', () => {
         .pilot.squadFormation?.find((u) => u.id === lastBackUnit.id)?.row
     ).toBe('front');
 
-    // Tap lead unit (still in back) and tap open Middle row (3/4) -> moves cleanly into open slot
+    // Tap lead unit (still in back) and tap open Middle row (4/5) -> moves cleanly into open slot
     const leadNow = container.querySelector<HTMLButtonElement>(
       '[data-testid="formation-unit-ally_player"]'
     );
@@ -186,9 +205,9 @@ describe('FormationEditor UI (3-Row Squad Editor)', () => {
     ).toBe('1/2');
     expect(
       container.querySelector('[data-testid="row-capacity-middle"]')?.textContent
-    ).toBe('4/4');
+    ).toBe('5/5');
 
-    // Clicking "Auto arrange" returns the Striker lead to Front row
+    // Clicking "Auto arrange" returns the Striker lead to Middle row
     const autoBtn = Array.from(container.querySelectorAll('button')).find((b) =>
       b.textContent?.includes('Auto arrange')
     );
@@ -200,7 +219,7 @@ describe('FormationEditor UI (3-Row Squad Editor)', () => {
       useGameStore
         .getState()
         .pilot.squadFormation?.find((u) => u.id === 'ally_player')?.row
-    ).toBe('front');
+    ).toBe('middle');
     expect(useGameStore.getState().pilot.formationCustomized).toBe(false);
   });
 

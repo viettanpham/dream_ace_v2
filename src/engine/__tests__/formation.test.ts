@@ -339,7 +339,10 @@ describe('3-Row Formation System', () => {
 
   describe('4. Capacity validation & moving units between rows', () => {
     it('blocks moves into a full row and succeeds when row has capacity', () => {
-      const cfg = cloneFormationConfig(DEFAULT_FORMATION_CONFIG); // 3 / 3 / 2
+      const cfg = sanitizeFormationConfig({
+        rowCapacities: { front: 3, middle: 3, back: 2 },
+        maxUnitsPerSide: 8,
+      });
       const units: SquadFormationUnit[] = [
         { id: 'u1', name: 'A1', callsign: 'L1', classId: 'striker', isPlayer: true, row: 'front', formationCol: 0 },
         { id: 'u2', name: 'A2', callsign: 'L2', classId: 'striker', isPlayer: false, row: 'front', formationCol: 1 },
@@ -380,7 +383,10 @@ describe('3-Row Formation System', () => {
     });
 
     it('swaps units cleanly when swapIfFull is enabled and target row is at capacity', () => {
-      const cfg = cloneFormationConfig(DEFAULT_FORMATION_CONFIG); // 3 / 3 / 2
+      const cfg = sanitizeFormationConfig({
+        rowCapacities: { front: 3, middle: 3, back: 2 },
+        maxUnitsPerSide: 8,
+      });
       const units: SquadFormationUnit[] = [
         { id: 'u1', name: 'A1', callsign: 'L1', classId: 'striker', isPlayer: true, row: 'front', formationCol: 0 },
         { id: 'u2', name: 'A2', callsign: 'L2', classId: 'striker', isPlayer: false, row: 'front', formationCol: 1 },
@@ -476,11 +482,11 @@ describe('3-Row Formation System', () => {
       };
 
       const migrated = migrateSaveData(legacySave, CURRENT_SAVE_VERSION - 1);
-      // Old 4/4 defaults cleanly migrate to 3-row 3/3/2 defaults
+      // Old 4/4 defaults cleanly migrate to 3-row 8/8/8 defaults
       expect(migrated.adminConfig.formation.rowCapacities).toEqual({
-        front: 3,
-        middle: 3,
-        back: 2,
+        front: 8,
+        middle: 8,
+        back: 8,
       });
       expect(migrated.adminConfig.formation.maxUnitsPerSide).toBe(8);
       // Dead legacy key must not exist
@@ -536,7 +542,7 @@ describe('3-Row Formation System', () => {
   });
 
   describe('6. Auto-placement by class & enemy 3-row generation', () => {
-    it('auto-places Striker -> front, Interceptor -> front/middle, Siege -> back, Support -> middle/back', () => {
+    it('auto-places Siege -> front, Striker/Interceptor -> middle, Support -> back', () => {
       const roster: Array<{ id: string; classId: MechClassId }> = [
         { id: 's1', classId: 'striker' },
         { id: 's2', classId: 'striker' },
@@ -551,23 +557,22 @@ describe('3-Row Formation System', () => {
       const placed = autoPlaceFormation(roster, DEFAULT_FORMATION_CONFIG);
       const byId = new Map(placed.map((u) => [u.id, u.row]));
 
-      // Strikers go front
-      expect(byId.get('s1')).toBe('front');
-      expect(byId.get('s2')).toBe('front');
-      // Sieges go back
-      expect(byId.get('g1')).toBe('back');
-      expect(byId.get('g2')).toBe('back');
-      // Interceptors go front or middle
-      expect(['front', 'middle']).toContain(byId.get('i1'));
-      expect(['front', 'middle']).toContain(byId.get('i2'));
-      // Supports go middle or back
-      expect(['middle', 'back']).toContain(byId.get('p1'));
-      expect(['middle', 'back']).toContain(byId.get('p2'));
+      // Sieges go front
+      expect(byId.get('g1')).toBe('front');
+      expect(byId.get('g2')).toBe('front');
+      // Strikers and Interceptors go middle
+      expect(byId.get('s1')).toBe('middle');
+      expect(byId.get('s2')).toBe('middle');
+      expect(byId.get('i1')).toBe('middle');
+      expect(byId.get('i2')).toBe('middle');
+      // Supports go back
+      expect(byId.get('p1')).toBe('back');
+      expect(byId.get('p2')).toBe('back');
 
-      // Row counts stay strictly within default capacities (3 / 3 / 2)
-      expect(placed.filter((u) => u.row === 'front').length).toBeLessThanOrEqual(3);
-      expect(placed.filter((u) => u.row === 'middle').length).toBeLessThanOrEqual(3);
-      expect(placed.filter((u) => u.row === 'back').length).toBeLessThanOrEqual(2);
+      // Row counts stay strictly within default capacities (8 / 8 / 8)
+      expect(placed.filter((u) => u.row === 'front').length).toBeLessThanOrEqual(8);
+      expect(placed.filter((u) => u.row === 'middle').length).toBeLessThanOrEqual(8);
+      expect(placed.filter((u) => u.row === 'back').length).toBeLessThanOrEqual(8);
     });
 
     it('never fails even when more units than a single preferred row capacity exist', () => {
@@ -575,7 +580,11 @@ describe('3-Row Formation System', () => {
         id: `str_${idx}`,
         classId: 'striker' as MechClassId,
       }));
-      const placed = autoPlaceFormation(eightStrikers, DEFAULT_FORMATION_CONFIG);
+      const tightCfg = sanitizeFormationConfig({
+        rowCapacities: { front: 3, middle: 3, back: 2 },
+        maxUnitsPerSide: 8,
+      });
+      const placed = autoPlaceFormation(eightStrikers, tightCfg);
       expect(placed).toHaveLength(8);
       expect(placed.filter((u) => u.row === 'front')).toHaveLength(3);
       expect(placed.filter((u) => u.row === 'middle')).toHaveLength(3);
@@ -599,9 +608,9 @@ describe('3-Row Formation System', () => {
         const back = enemies.filter((u) => u.row === 'back').length;
 
         expect(front + middle + back).toBe(8);
-        expect(front).toBeLessThanOrEqual(3);
-        expect(middle).toBeLessThanOrEqual(3);
-        expect(back).toBeLessThanOrEqual(2);
+        expect(front).toBeLessThanOrEqual(8);
+        expect(middle).toBeLessThanOrEqual(8);
+        expect(back).toBeLessThanOrEqual(8);
         patterns.add(enemies.map((e) => `${e.classId}:${e.row}`).join('|'));
       }
 

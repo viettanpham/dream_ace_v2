@@ -71,7 +71,7 @@ export function sanitizeFormationConfig(
     'formationFrontCapacity' in obj ||
     'formationBackCapacity' in obj
   ) {
-    // Legacy save migration: if old defaults (4/4), adopt clean 3-row defaults (3/3/2).
+    // Legacy save migration: if old defaults (4/4), adopt clean 3-row defaults (8/8/8).
     // If customized, preserve custom front/back caps while adding middle row.
     const oldFront = Number(obj.formationFrontCapacity);
     const oldBack = Number(obj.formationBackCapacity);
@@ -329,8 +329,7 @@ export function pickRowForClass(
     pref.preferred[0] === 'front' &&
     freeMidBack <= reservedMidBack;
 
-  // For flex classes (Interceptor: front/middle, Support: middle/back), allow random variation on enemy squads;
-  // deterministic auto-placement follows preferred priority order so front/middle/back fill cleanly without starving flex classes.
+  // Deterministic auto-placement follows preferred priority order; enemy squads allow small random variation.
   if (pref.flexPair && variation > 0 && rng() < 0.5) {
     const [r1, r2] = pref.flexPair;
     if (counts[r1] < caps[r1] && counts[r2] < caps[r2]) {
@@ -372,10 +371,10 @@ export function pickRowForClass(
 
 /**
  * Default auto-placement by class respecting 3-row capacities:
- * - Striker     -> front
- * - Interceptor -> front / middle
- * - Siege       -> back
- * - Support     -> middle / back
+ * - Siege       -> front
+ * - Striker     -> middle
+ * - Interceptor -> middle
+ * - Support     -> back
  * Preserves input unit order in the returned array, sets `row` and sequential `formationCol`,
  * and NEVER fails.
  */
@@ -389,7 +388,7 @@ export function autoPlaceFormation<
   const counts: Record<CombatRow, number> = { front: 0, middle: 0, back: 0 };
   const assignedRows = new Map<string, CombatRow>();
 
-  // Place strict-preference classes (Striker, Siege) before flex classes (Interceptor, Support)
+  // Place strict-preference classes (Siege, Support) before middle classes (Striker, Interceptor)
   const indexed = units.map((u, idx) => ({
     unit: u,
     idx,
@@ -398,15 +397,14 @@ export function autoPlaceFormation<
   }));
   indexed.sort((a, b) => a.priority - b.priority || a.idx - b.idx);
 
-  // Track how many remaining unplaced units require middle/back rows (support & siege)
-  // so strict swaps or interceptor flex placements never starve supports into the front lane.
+  // Track how many remaining unplaced units require middle/back rows (support)
+  // so front-preferring random variations never starve supports into the front lane.
   let remainingMidBackNeeders = indexed.filter(
-    (entry) =>
-      entry.unit.classId === 'support' || entry.unit.classId === 'siege'
+    (entry) => entry.unit.classId === 'support'
   ).length;
 
   for (const entry of indexed) {
-    if (entry.unit.classId === 'support' || entry.unit.classId === 'siege') {
+    if (entry.unit.classId === 'support') {
       remainingMidBackNeeders -= 1;
     }
     const chosen = pickRowForClass(entry.unit.classId, counts, config, {
