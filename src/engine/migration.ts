@@ -239,6 +239,14 @@ import {
   grantStarterSetToGear,
 } from './starter';
 import {
+  cloneStarterEventConfig,
+  DEFAULT_STARTER_EVENT_CONFIG,
+  grantStarterEventPack,
+  sanitizeOwnedCards,
+  sanitizeStarterEventConfig,
+  sanitizeStarterEventGranted,
+} from './starterEvent';
+import {
   cloneSupplyEconomyConfig,
   DEFAULT_SUPPLY_ECONOMY_CONFIG,
   DEFAULT_SUPPLY_LOADOUT_SLOTS,
@@ -502,6 +510,7 @@ export function createDefaultAdminConfig(): AdminConfig {
     passiveSlots: clonePassiveSlotsConfig(DEFAULT_PASSIVE_SLOTS_CONFIG),
     activeSlots: cloneActiveSlotsConfig(DEFAULT_ACTIVE_SLOTS_CONFIG),
     supplyRewards: cloneSupplyRewardsConfig(DEFAULT_SUPPLY_REWARDS_CONFIG),
+    starterEvent: cloneStarterEventConfig(DEFAULT_STARTER_EVENT_CONFIG),
     baseSiege: cloneBaseSiegeConfig(DEFAULT_BASE_SIEGE_CONFIG),
     skillMods: [],
     mapPack: null,
@@ -513,11 +522,22 @@ export function createFreshCampaignState(
   name = 'Vance',
   starterClassId: MechClassId = 'striker',
   rng: () => number = Math.random,
-  starterConfig?: StarterSetConfig
+  starterConfig?: StarterSetConfig,
+  starterEventConfig?: AdminConfig['starterEvent'],
+  voucherConfig?: AdminConfig['vouchers']
 ): PersistedCampaignState {
   const adminConfig = createDefaultAdminConfig();
   if (starterConfig) {
     adminConfig.starterSet = sanitizeStarterSetConfig(starterConfig);
+  }
+  if (voucherConfig) {
+    adminConfig.vouchers = sanitizeVoucherConfig(voucherConfig);
+  }
+  if (starterEventConfig) {
+    adminConfig.starterEvent = sanitizeStarterEventConfig(
+      starterEventConfig,
+      adminConfig.vouchers
+    );
   }
   const basePilot: PilotAccount = {
     ...createDefaultPilotAccount(name, starterClassId, []),
@@ -526,11 +546,17 @@ export function createFreshCampaignState(
     activeExpBoostBattles: 0,
     activeEnchantBonusPct: 0,
   };
-  const { pilot } = grantStarterSetToGear(
+  const { pilot: withStarterGear } = grantStarterSetToGear(
     basePilot,
     starterClassId,
     adminConfig.starterSet ?? DEFAULT_STARTER_SET_CONFIG,
     rng
+  );
+  const { pilot } = grantStarterEventPack(
+    withStarterGear,
+    adminConfig.starterEvent ?? DEFAULT_STARTER_EVENT_CONFIG,
+    starterClassId,
+    { voucherCfgOrAdmin: adminConfig }
   );
   const freshSupplyShopStock = generateSupplyShopStock(
     1,
@@ -1011,6 +1037,10 @@ export function migrateSaveData(
     battleRewards: sanitizeBattleRewardsConfig(rawAdmin.battleRewards),
     battlePenalty: sanitizeBattlePenaltyConfig(rawAdmin.battlePenalty),
     vouchers: sanitizeVoucherConfig(rawAdmin.vouchers),
+    starterEvent: sanitizeStarterEventConfig(
+      rawAdmin.starterEvent,
+      sanitizeVoucherConfig(rawAdmin.vouchers)
+    ),
     supplyRewards: sanitizeSupplyRewardsConfig(rawAdmin.supplyRewards),
     baseSiege: sanitizeBaseSiegeConfig(rawAdmin.baseSiege),
     skillMods: sanitizeSkillMods(
@@ -1448,6 +1478,10 @@ export function migrateSaveData(
     );
 
     const sanitizedSectorSupply = sanitizeSectorSupply(rawPilot.sectorSupply);
+    const sanitizedCards = sanitizeOwnedCards(rawPilot.cards);
+    const sanitizedStarterEventGranted = sanitizeStarterEventGranted(
+      rawPilot.starterEventGranted
+    );
 
     const migratedPilot: PilotAccount = {
       name: pilotNameClean,
@@ -1469,6 +1503,10 @@ export function migrateSaveData(
       activeBonusMission: rawPilot.activeBonusMission ?? null,
       consumables: rawConsumables,
       vouchers: sanitizeOwnedVouchers(rawPilot.vouchers, adminConfig.vouchers),
+      ...(Object.keys(sanitizedCards).length > 0 ? { cards: sanitizedCards } : {}),
+      ...(sanitizedStarterEventGranted.length > 0
+        ? { starterEventGranted: sanitizedStarterEventGranted }
+        : {}),
       activeExpBoostBattles: Math.max(
         0,
         Number(rawPilot.activeExpBoostBattles) || 0

@@ -32,6 +32,7 @@ import { BattlePenaltyAdminBlock } from './admin/BattlePenaltyAdminBlock';
 import { MapPackAdminBlock } from './admin/MapPackAdminBlock';
 import { WorldGenAdminBlock } from './admin/WorldGenAdminBlock';
 import { BaseSiegeAdminBlock } from './admin/BaseSiegeAdminBlock';
+import { StarterEventAdminBlock } from './admin/StarterEventAdminBlock';
 import { VoucherAdminBlock } from './admin/VoucherAdminBlock';
 import {
   AdminSection,
@@ -1038,6 +1039,18 @@ export function AdminPanel() {
           {/* 2B. STARTER SET TAB */}
           {tab === 'starter' && (
             <div className="space-y-4" data-testid="admin-starter-panel">
+              <AdminSection
+                id="starter-event"
+                title={t('admin.starterEvent.title')}
+                description={t('admin.starterEvent.sectionDesc')}
+              >
+                <StarterEventAdminBlock
+                  adminConfig={adminConfig}
+                  adminUpdateConfig={adminUpdateConfig}
+                  onFlash={flash}
+                />
+              </AdminSection>
+
               {/* Header + Global Enable + Reset */}
               <div className="p-3.5 rounded-lg border border-slate-800 bg-[#0D1422] space-y-3">
                 <div className="flex flex-wrap items-start justify-between gap-2">

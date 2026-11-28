@@ -1042,6 +1042,8 @@ export interface PilotAccount {
   pirateIncidents?: PirateIncident[];
   sectorSupply?: Record<string, number>;
   vouchers?: Record<string, number>;
+  cards?: Record<string, number>;
+  starterEventGranted?: string[];
 }
 
 export type EnemyArchetype = 'drone' | 'gunship' | 'sniper' | 'repair_ship';
@@ -1794,9 +1796,30 @@ export interface AdminConfig {
   activeSlots?: ActiveSlotsConfig;
   skillMods?: SkillModDefinition[];
   vouchers?: VoucherConfig;
+  starterEvent?: StarterEventConfig;
   supplyRewards?: SupplyRewardsConfig;
   baseSiege?: BaseSiegeConfig;
   showRawI18nKeys: boolean;
+}
+
+export type StarterEventEntryType =
+  | 'card_credit'
+  | 'card_exp'
+  | 'voucher_credit'
+  | 'voucher_exp';
+
+export interface StarterEventEntry {
+  type: StarterEventEntryType;
+  value: number;
+  qty: number;
+}
+
+export type StarterEventMode = 'oncePerSave' | 'perGear';
+
+export interface StarterEventConfig {
+  enabled: boolean;
+  mode: StarterEventMode;
+  entries: StarterEventEntry[];
 }
 
 export interface BaseSiegePoolMax {

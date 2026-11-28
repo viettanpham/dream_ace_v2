@@ -243,6 +243,13 @@ import {
   grantStarterSetToGear,
 } from '../engine/starter';
 import {
+  getCardDef,
+  grantStarterEventPack,
+  sanitizeOwnedCards,
+  sanitizeStarterEventConfig,
+  sanitizeStarterEventGranted,
+} from '../engine/starterEvent';
+import {
   allocateGearStats,
   applyExpToGear,
   estimateBattlesToNextLevel,
@@ -661,6 +668,20 @@ interface GameStoreState {
     creditRefund: number;
     expRefund: number;
   };
+  redeemCard: (
+    cardId: string,
+    qty?: number
+  ) => {
+    ok: boolean;
+    reason?: 'busy' | 'not_found' | 'invalid_qty' | 'max_level';
+    kind?: 'credit' | 'exp';
+    credit?: number;
+    exp?: number;
+    gearId?: MechClassId;
+    previousLevel?: number;
+    newLevel?: number;
+    levelsGained?: number;
+  };
   refreshSupplyShop: () => {
     ok: boolean;
     cost?: number;
@@ -758,6 +779,8 @@ interface GameStoreState {
   adminUnlockAllGears: () => void;
   adminUnlockAllSectors: () => void;
   adminApplyStarterToEmptySlots: () => number;
+  adminGrantStarterEventNow: () => number;
+  adminResetStarterEventGranted: () => void;
   adminGiveSupply: (
     target: string,
     qty: number
@@ -1765,7 +1788,9 @@ export const useGameStore = create<GameStoreState>()(
             cleanName,
             chosenClass,
             Math.random,
-            state.adminConfig.starterSet
+            state.adminConfig.starterSet,
+            state.adminConfig.starterEvent,
+            state.adminConfig.vouchers
           );
           const startSupplyStock = generateSupplyShopStock(
             getMaxGearLevel(fresh.pilot),
@@ -1939,9 +1964,15 @@ export const useGameStore = create<GameStoreState>()(
           classId,
           state.adminConfig.starterSet
         ).pilot;
+        const withStarterEvent = grantStarterEventPack(
+          withStarter,
+          state.adminConfig.starterEvent,
+          classId,
+          { voucherCfgOrAdmin: state.adminConfig }
+        ).pilot;
 
         set({
-          pilot: withStarter,
+          pilot: withStarterEvent,
           hasSaveData: true,
         });
         return { ok: true, cost };
@@ -3601,6 +3632,93 @@ export const useGameStore = create<GameStoreState>()(
           expUsed: expRes.used,
           creditRefund: creditRes.refund,
           expRefund: expRes.refund,
+        };
+      },
+
+      redeemCard: (cardId, qty = 1) => {
+        const state = get();
+        if (isBattleActive(state) || state.autoRepeatSession?.active) {
+          return { ok: false, reason: 'busy' };
+        }
+        const def = getCardDef(cardId);
+        if (!def) {
+          return { ok: false, reason: 'not_found' };
+        }
+        const currentCards = sanitizeOwnedCards(state.pilot.cards);
+        const ownedQty = currentCards[def.id] ?? 0;
+        if (ownedQty <= 0) {
+          return { ok: false, reason: 'not_found' };
+        }
+        const reqQty = Math.floor(Number(qty));
+        if (!Number.isFinite(reqQty) || reqQty <= 0) {
+          return { ok: false, reason: 'invalid_qty' };
+        }
+        const useQty = Math.min(ownedQty, reqQty);
+        const remaining = ownedQty - useQty;
+        const nextCards = { ...currentCards };
+        if (remaining > 0) {
+          nextCards[def.id] = remaining;
+        } else {
+          delete nextCards[def.id];
+        }
+
+        if (def.kind === 'credit') {
+          const creditGain = useQty * def.value;
+          soundFx.playConfirm();
+          set({
+            pilot: {
+              ...state.pilot,
+              credits: state.pilot.credits + creditGain,
+              cards: nextCards,
+            },
+            hasSaveData: true,
+          });
+          return {
+            ok: true,
+            kind: 'credit',
+            credit: creditGain,
+          };
+        }
+
+        const activeGearId = state.pilot.activeGearId;
+        const activeGear = state.pilot.gears[activeGearId];
+        if (!activeGear || !activeGear.owned) {
+          return { ok: false, reason: 'not_found' };
+        }
+        const maxLevel = getMaxLevel();
+        if (activeGear.level >= maxLevel) {
+          return {
+            ok: false,
+            reason: 'max_level',
+            gearId: activeGearId,
+            previousLevel: activeGear.level,
+            newLevel: activeGear.level,
+            levelsGained: 0,
+          };
+        }
+
+        const expGain = useQty * def.value;
+        const levelRes = applyExpToGear(activeGear, expGain);
+        soundFx.playConfirm();
+        set({
+          pilot: {
+            ...state.pilot,
+            gears: {
+              ...state.pilot.gears,
+              [activeGearId]: levelRes.updatedGear,
+            },
+            cards: nextCards,
+          },
+          hasSaveData: true,
+        });
+        return {
+          ok: true,
+          kind: 'exp',
+          exp: expGain,
+          gearId: activeGearId,
+          previousLevel: levelRes.previousLevel,
+          newLevel: levelRes.newLevel,
+          levelsGained: levelRes.newLevel - levelRes.previousLevel,
         };
       },
 
@@ -5875,12 +5993,48 @@ export const useGameStore = create<GameStoreState>()(
               clsId,
               state.adminConfig.starterSet
             ).pilot;
+            nextPilot = grantStarterEventPack(
+              nextPilot,
+              state.adminConfig.starterEvent,
+              clsId,
+              { voucherCfgOrAdmin: state.adminConfig }
+            ).pilot;
           }
           return {
             pilot: nextPilot,
             hasSaveData: true,
           };
         });
+      },
+
+      adminGrantStarterEventNow: () => {
+        let grantedCount = 0;
+        set((state) => {
+          const res = grantStarterEventPack(
+            state.pilot,
+            state.adminConfig.starterEvent,
+            state.pilot.activeGearId,
+            { force: true, voucherCfgOrAdmin: state.adminConfig }
+          );
+          grantedCount = res.granted.length;
+          if (res.granted.length === 0) return {};
+          soundFx.playConfirm();
+          return {
+            pilot: res.pilot,
+            hasSaveData: true,
+          };
+        });
+        return grantedCount;
+      },
+
+      adminResetStarterEventGranted: () => {
+        set((state) => ({
+          pilot: {
+            ...state.pilot,
+            starterEventGranted: [],
+          },
+          hasSaveData: true,
+        }));
       },
 
       adminUnlockAllSectors: () => {
@@ -6018,7 +6172,9 @@ export const useGameStore = create<GameStoreState>()(
           pilotName,
           starterClassId,
           Math.random,
-          state.adminConfig?.starterSet
+          state.adminConfig?.starterSet,
+          state.adminConfig?.starterEvent,
+          state.adminConfig?.vouchers
         );
         const nextAdminConfig: AdminConfig = {
           ...state.adminConfig,
@@ -6350,6 +6506,14 @@ export const useGameStore = create<GameStoreState>()(
               patch.supplyRewards !== undefined
                 ? sanitizeSupplyRewardsConfig(patch.supplyRewards)
                 : sanitizeSupplyRewardsConfig(state.adminConfig.supplyRewards),
+            starterEvent: sanitizeStarterEventConfig(
+              patch.starterEvent !== undefined
+                ? patch.starterEvent
+                : state.adminConfig.starterEvent,
+              patch.vouchers !== undefined
+                ? patch.vouchers
+                : state.adminConfig.vouchers
+            ),
           };
           let updatedPilot =
             patch.formation &&
@@ -6710,6 +6874,10 @@ export const useGameStore = create<GameStoreState>()(
               restorePctCap: sanitizeRestorePctCap(rawAdmin.restorePctCap),
               passiveSlots: sanitizePassiveSlotsConfig(rawAdmin.passiveSlots),
               activeSlots: sanitizeActiveSlotsConfig(rawAdmin.activeSlots),
+              starterEvent: sanitizeStarterEventConfig(
+                rawAdmin.starterEvent,
+                rawAdmin.vouchers as AdminConfig['vouchers']
+              ),
               rewardMultiplier:
                 typeof state.adminConfig.rewardMultiplier === 'number' &&
                 Number.isFinite(state.adminConfig.rewardMultiplier) &&
@@ -6734,6 +6902,24 @@ export const useGameStore = create<GameStoreState>()(
             state.selectedSectorId = getDefaultSelectedNodeId();
           }
           if (state.pilot && typeof state.pilot === 'object') {
+            if (state.pilot.cards !== undefined) {
+              const sanitizedCards = sanitizeOwnedCards(state.pilot.cards);
+              if (Object.keys(sanitizedCards).length > 0) {
+                state.pilot.cards = sanitizedCards;
+              } else {
+                delete state.pilot.cards;
+              }
+            }
+            if (state.pilot.starterEventGranted !== undefined) {
+              const sanitizedGranted = sanitizeStarterEventGranted(
+                state.pilot.starterEventGranted
+              );
+              if (sanitizedGranted.length > 0) {
+                state.pilot.starterEventGranted = sanitizedGranted;
+              } else {
+                delete state.pilot.starterEventGranted;
+              }
+            }
             if (
               !Array.isArray(state.pilot.squadFormation) ||
               state.pilot.squadFormation.length === 0

@@ -4,6 +4,7 @@ import {
   ArrowLeftRight,
   Check,
   CheckSquare,
+  CreditCard,
   Lock,
   PackageOpen,
   Star,
@@ -18,6 +19,11 @@ import {
   getBoxCapacity,
   sanitizeWarehouseCapacity,
 } from '../engine/migration';
+import {
+  getCardDef,
+  getCardName,
+  sanitizeOwnedCards,
+} from '../engine/starterEvent';
 import type { WarehouseTransferResult } from '../engine/warehouse';
 import {
   formatItemTraitsList,
@@ -255,12 +261,15 @@ export function WarehouseView() {
   const moveAllUnusedToWarehouse = useGameStore(
     (s) => s.moveAllUnusedToWarehouse
   );
+  const redeemCard = useGameStore((s) => s.redeemCard);
   const [autoVoucherEnabled, setAutoVoucherEnabled] = useAutoVoucherPref();
 
   const [mobilePanel, setMobilePanel] = useState<WarehouseContainer>('box');
   const [slotFilter, setSlotFilter] = useState<SlotFilter>('all');
   const [selected, setSelected] = useState<SelectedWarehouseItem | null>(null);
   const [toastText, setToastText] = useState<string | null>(null);
+  const [cardResultText, setCardResultText] = useState<string | null>(null);
+  const [cardResultIsError, setCardResultIsError] = useState(false);
   const [selectionContainer, setSelectionContainer] =
     useState<WarehouseContainer | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -320,6 +329,85 @@ export function WarehouseView() {
     () => ownedVoucherRows.reduce((s, r) => s + r.qty, 0),
     [ownedVoucherRows]
   );
+
+  const ownedCardRows = useMemo(() => {
+    const clean = sanitizeOwnedCards(pilot.cards);
+    return Object.entries(clean)
+      .map(([id, qty]) => {
+        const def = getCardDef(id);
+        if (!def || qty <= 0) return null;
+        return {
+          def,
+          name: getCardName(def.id, lang),
+          qty,
+        };
+      })
+      .filter((r): r is NonNullable<typeof r> => r !== null)
+      .sort((a, b) => {
+        if (a.def.kind !== b.def.kind) {
+          return a.def.kind === 'credit' ? -1 : 1;
+        }
+        return a.def.value - b.def.value;
+      });
+  }, [pilot.cards, lang]);
+
+  const totalOwnedCards = useMemo(
+    () => ownedCardRows.reduce((s, r) => s + r.qty, 0),
+    [ownedCardRows]
+  );
+
+  const activeGearForCards = pilot.gears[pilot.activeGearId];
+
+  const handleRedeemCard = (cardId: string, qty: number) => {
+    const res = redeemCard(cardId, qty);
+    const numberLocale = lang === 'vi' ? 'vi-VN' : 'en-US';
+    if (!res.ok) {
+      setCardResultIsError(true);
+      if (res.reason === 'busy') {
+        setCardResultText(t('warehouse.cardBusy'));
+      } else if (res.reason === 'max_level') {
+        const gearName = getClassName(
+          lang,
+          res.gearId ?? pilot.activeGearId
+        );
+        setCardResultText(
+          t('warehouse.cardMaxLevel', {
+            gear: gearName,
+            level: res.newLevel ?? activeGearForCards.level,
+          })
+        );
+      }
+      return;
+    }
+
+    setCardResultIsError(false);
+    if (res.kind === 'credit') {
+      setCardResultText(
+        t('warehouse.cardUsedCredit', {
+          value: (res.credit ?? 0).toLocaleString(numberLocale),
+        })
+      );
+    } else if (res.kind === 'exp') {
+      const gearName = getClassName(lang, res.gearId ?? pilot.activeGearId);
+      const valStr = (res.exp ?? 0).toLocaleString(numberLocale);
+      if ((res.levelsGained ?? 0) > 0) {
+        setCardResultText(
+          t('warehouse.cardUsedExpLevelUp', {
+            value: valStr,
+            gear: gearName,
+            level: res.newLevel ?? activeGearForCards.level,
+          })
+        );
+      } else {
+        setCardResultText(
+          t('warehouse.cardUsedExp', {
+            value: valStr,
+            gear: gearName,
+          })
+        );
+      }
+    }
+  };
 
   const handleBulkMoveUnused = () => {
     const res = moveAllUnusedToWarehouse();
@@ -727,59 +815,149 @@ export function WarehouseView() {
         </div>
 
         {/* Voucher section */}
-        <section
-          data-testid="warehouse-voucher-section"
-          className="rounded-lg border border-purple-500/30 bg-[#0B111C]/90 p-3 space-y-2.5 min-w-0"
-        >
-          <div className="flex flex-wrap items-center justify-between gap-2 pb-1.5 border-b border-slate-800/80">
-            <h3 className="text-xs md:text-sm font-bold text-slate-100 inline-flex items-center gap-1.5">
-              <Ticket className="w-4 h-4 text-purple-400 shrink-0" aria-hidden="true" />
-              <span>
-                {t('warehouse.voucherSectionTitle', { count: totalOwnedVouchers })}
+        {/* Cards ("Thẻ") + Vouchers next to each other on desktop, stacked on mobile */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 min-w-0 items-start">
+          {/* Cards Section ("Thẻ") */}
+          <section
+            data-testid="warehouse-card-section"
+            className="rounded-lg border border-amber-500/30 bg-[#0B111C]/90 p-3 space-y-2.5 min-w-0"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2 pb-1.5 border-b border-slate-800/80">
+              <h3 className="text-xs md:text-sm font-bold text-slate-100 inline-flex items-center gap-1.5">
+                <CreditCard
+                  className="w-4 h-4 text-amber-400 shrink-0"
+                  aria-hidden="true"
+                />
+                <span>
+                  {t('warehouse.cardSectionTitle', { count: totalOwnedCards })}
+                </span>
+              </h3>
+              <span className="text-[11px] text-slate-400 truncate max-w-full">
+                {t('warehouse.cardTargetHint', {
+                  gear: getClassName(lang, pilot.activeGearId),
+                  level: activeGearForCards?.level ?? 1,
+                })}
               </span>
-            </h3>
-
-            <label className="inline-flex items-center gap-2 text-xs text-slate-200 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                data-testid="warehouse-voucher-auto-toggle"
-                checked={autoVoucherEnabled}
-                onChange={(e) => setAutoVoucherEnabled(e.target.checked)}
-                className="w-4 h-4 rounded border-slate-600 bg-slate-900 accent-purple-500 cursor-pointer"
-              />
-              <span>{t('warehouse.voucherAutoToggle')}</span>
-            </label>
-          </div>
-
-          {ownedVoucherRows.length === 0 ? (
-            <p
-              data-testid="warehouse-voucher-empty"
-              className="text-xs text-slate-500 py-1"
-            >
-              {t('warehouse.voucherEmpty')}
-            </p>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-              {ownedVoucherRows.map(({ def, name, qty }) => (
-                <div
-                  key={def.id}
-                  data-testid={`warehouse-voucher-row-${def.id}`}
-                  className="rounded border border-slate-800 bg-slate-950/70 px-2.5 py-2 flex items-center justify-between gap-2 text-xs min-w-0"
-                >
-                  <span className="font-medium text-slate-100 truncate">
-                    {name}
-                  </span>
-                  <span
-                    data-testid={`warehouse-voucher-qty-${def.id}`}
-                    className="font-mono-nums font-bold text-purple-300 shrink-0"
-                  >
-                    ×{qty}
-                  </span>
-                </div>
-              ))}
             </div>
-          )}
-        </section>
+
+            {ownedCardRows.length === 0 ? (
+              <p
+                data-testid="warehouse-card-empty"
+                className="text-xs text-slate-500 py-1"
+              >
+                {t('warehouse.cardEmpty')}
+              </p>
+            ) : (
+              <div className="space-y-2 min-w-0">
+                {ownedCardRows.map(({ def, name, qty }) => (
+                  <div
+                    key={def.id}
+                    data-testid={`warehouse-card-row-${def.id}`}
+                    className="rounded border border-slate-800 bg-slate-950/70 px-2.5 py-2 flex flex-wrap items-center justify-between gap-2 text-xs min-w-0"
+                  >
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <span className="font-medium text-slate-100 truncate">
+                        {name}
+                      </span>
+                      <span
+                        data-testid={`warehouse-card-qty-${def.id}`}
+                        className="font-mono-nums font-bold text-amber-300 shrink-0"
+                      >
+                        ×{qty}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        data-testid={`warehouse-card-use1-${def.id}`}
+                        onClick={() => handleRedeemCard(def.id, 1)}
+                        className="min-h-[34px] px-2.5 rounded border border-amber-500/50 bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 font-semibold text-xs cursor-pointer"
+                      >
+                        {t('warehouse.cardUseOne')}
+                      </button>
+                      <button
+                        type="button"
+                        data-testid={`warehouse-card-useall-${def.id}`}
+                        onClick={() => handleRedeemCard(def.id, qty)}
+                        className="min-h-[34px] px-2.5 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs cursor-pointer"
+                      >
+                        {t('warehouse.cardUseAll')}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {cardResultText && (
+              <div
+                data-testid="warehouse-card-result"
+                className={`text-xs font-medium px-2.5 py-1.5 rounded border break-words ${
+                  cardResultIsError
+                    ? 'border-rose-500/40 bg-rose-950/30 text-rose-200'
+                    : 'border-emerald-500/40 bg-emerald-950/30 text-emerald-200'
+                }`}
+              >
+                {cardResultText}
+              </div>
+            )}
+          </section>
+
+          {/* Voucher Section */}
+          <section
+            data-testid="warehouse-voucher-section"
+            className="rounded-lg border border-purple-500/30 bg-[#0B111C]/90 p-3 space-y-2.5 min-w-0"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2 pb-1.5 border-b border-slate-800/80">
+              <h3 className="text-xs md:text-sm font-bold text-slate-100 inline-flex items-center gap-1.5">
+                <Ticket className="w-4 h-4 text-purple-400 shrink-0" aria-hidden="true" />
+                <span>
+                  {t('warehouse.voucherSectionTitle', { count: totalOwnedVouchers })}
+                </span>
+              </h3>
+
+              <label className="inline-flex items-center gap-2 text-xs text-slate-200 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  data-testid="warehouse-voucher-auto-toggle"
+                  checked={autoVoucherEnabled}
+                  onChange={(e) => setAutoVoucherEnabled(e.target.checked)}
+                  className="w-4 h-4 rounded border-slate-600 bg-slate-900 accent-purple-500 cursor-pointer"
+                />
+                <span>{t('warehouse.voucherAutoToggle')}</span>
+              </label>
+            </div>
+
+            {ownedVoucherRows.length === 0 ? (
+              <p
+                data-testid="warehouse-voucher-empty"
+                className="text-xs text-slate-500 py-1"
+              >
+                {t('warehouse.voucherEmpty')}
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {ownedVoucherRows.map(({ def, name, qty }) => (
+                  <div
+                    key={def.id}
+                    data-testid={`warehouse-voucher-row-${def.id}`}
+                    className="rounded border border-slate-800 bg-slate-950/70 px-2.5 py-2 flex items-center justify-between gap-2 text-xs min-w-0"
+                  >
+                    <span className="font-medium text-slate-100 truncate">
+                      {name}
+                    </span>
+                    <span
+                      data-testid={`warehouse-voucher-qty-${def.id}`}
+                      className="font-mono-nums font-bold text-purple-300 shrink-0"
+                    >
+                      ×{qty}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
       </div>
 
       {/* Item Info & Single-Move Sheet */}
