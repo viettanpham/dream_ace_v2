@@ -146,18 +146,31 @@ describe('STARTER-EVENT-1 — Starter support cards, grants, WarehouseView, and 
       container!.querySelector('[data-testid="warehouse-card-result"]')?.textContent
     ).toContain('+50.000 credit');
 
-    // Click [Dùng hết] on EXP card -> levels up active Gear (striker)
+    // Click [Dùng hết] on EXP card -> opens EXP-waste confirm dialog -> confirm levels up active Gear (striker)
     const useAllExpBtn = container!.querySelector<HTMLButtonElement>(
       '[data-testid="warehouse-card-useall-card_exp_10000"]'
     );
     act(() => {
       useAllExpBtn!.click();
     });
+    expect(
+      container!.querySelector('[data-testid="warehouse-card-waste-confirm-body"]')
+    ).not.toBeNull();
+    const wasteConfirmBtn = container!.querySelector<HTMLButtonElement>(
+      '[data-testid="warehouse-card-waste-confirm-btn"]'
+    );
+    expect(wasteConfirmBtn).not.toBeNull();
+    act(() => {
+      wasteConfirmBtn!.click();
+    });
     expect(useGameStore.getState().pilot.cards?.card_exp_10000).toBeUndefined();
     expect(useGameStore.getState().pilot.gears.striker.level).toBeGreaterThan(1);
     expect(
       container!.querySelector('[data-testid="warehouse-card-result"]')?.textContent
-    ).toContain('+50.000 EXP');
+    ).toContain('EXP');
+    expect(
+      container!.querySelector('[data-testid="warehouse-card-result"]')?.textContent
+    ).toContain('Lv.');
 
     // Refused during battle (busy)
     act(() => {

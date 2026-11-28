@@ -180,6 +180,7 @@ export function BattleScreen() {
   const startBattle = useGameStore((s) => s.startBattle);
   const reloadBattle = useGameStore((s) => s.reloadBattle);
   const confirmPrestage = useGameStore((s) => s.confirmPrestage);
+  const cancelPrestage = useGameStore((s) => s.cancelPrestage);
   const setBattleSpeed = useGameStore((s) => s.setBattleSpeed);
   const setBattleViewMode = useGameStore((s) => s.setBattleViewMode);
   const toggleSkipAnimations = useGameStore((s) => s.toggleSkipAnimations);
@@ -3589,6 +3590,7 @@ export function BattleScreen() {
           lang={lang}
           t={t}
           onConfirm={confirmPrestage}
+          onCancel={cancelPrestage}
         />
       )}
 

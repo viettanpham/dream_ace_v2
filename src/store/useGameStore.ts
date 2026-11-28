@@ -798,6 +798,7 @@ interface GameStoreState {
   startBattle: (sectorId?: string, opts?: LaunchBattleOptions) => void;
   reloadBattle: (sectorId?: string, opts?: LaunchBattleOptions) => void;
   confirmPrestage: () => void;
+  cancelPrestage: () => void;
   selectTarget: (unitId: string) => void;
   selectAllyTarget: (unitId: string) => void;
   logRadarInvalidTarget: (targetName: string, reasonKey: string) => void;
@@ -4631,6 +4632,34 @@ export const useGameStore = create<GameStoreState>()(
             },
             log: [...battle.log, confirmLog],
           },
+        });
+      },
+
+      cancelPrestage: () => {
+        const state = get();
+        const { battle } = state;
+        if (!battle || !battle.prestage?.active || battle.summary) return;
+        soundFx.playClick();
+        if (state.autoRepeatSession?.active) {
+          const stopReason: AutoStopReason =
+            state.autoRepeatSession.stopReason ?? 'cancelled';
+          set({
+            battle: null,
+            screen: 'HANGAR',
+            activeTab: 'map',
+            autoRepeatToast: null,
+            autoRepeatSession: {
+              ...state.autoRepeatSession,
+              active: false,
+              stopReason,
+            },
+          });
+          return;
+        }
+        set({
+          battle: null,
+          screen: 'HANGAR',
+          activeTab: 'map',
         });
       },
 

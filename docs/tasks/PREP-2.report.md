@@ -1,0 +1,8 @@
+# TASK PREP-2 Report
+- Items done: ITEM 0, ITEM 1, ITEM 2, ITEM 3, TESTS & CHECKS (tất cả [x]).
+- Files changed: `src/types/game.ts`, `src/i18n/vi.ts`, `src/i18n/en.ts`, `src/store/useGameStore.ts`, `src/components/PrestageDialog.tsx`, `src/components/BattleScreen.tsx`, `src/engine/__tests__/starterEvent.test.tsx`, `src/components/__tests__/prestageHeaderCancelPrep2.test.tsx`, `docs/CODEMAP.md`, `docs/tasks/PREP-2.progress.md`, `docs/tasks/PREP-2.report.md`.
+- ITEM 0 assert changed: `starterEvent.test.tsx:156-160` (`warehouse-card-useall-card_exp_10000` giờ mở dialog xác nhận EXP dư `warehouse-card-waste-confirm-body`; đổi sang assert dialog hiện ra, bấm `warehouse-card-waste-confirm-btn`, rồi kiểm tra thẻ đã dùng, Gear lên Lv và text kết quả chứa `EXP` / `Lv.`).
+- `launchBattleForSector` before dialog: chỉ set `selectedSectorId`, `battle` (`prestage.active: true`), `screen: 'BATTLE'`, `hasSaveData: true`, `battleLaunchToast: null` (và clear `autoRepeatSession`/`Toast` nếu không active); không tiêu hao pilot/kinh tế/vật tư/thẻ/tháng/làm mới shop, nên `cancelPrestage()` chỉ cần reset `battle: null`, dừng `autoRepeatSession` với `stopReason: 'cancelled'` nếu đang active và trả về `screen: 'HANGAR'`, `activeTab: 'map'`.
+- Tests & checks: `prestageDialog.test.tsx` (8/8), `prestageHeaderCancelPrep2.test.tsx` (4/4), `starterEvent.test.tsx` (5/5), `prestage.test.ts` (5/5), `battleKindsK1.test.tsx` (9/9) -> 31/31 passed (`--reporter=dot`); `npx tsc --noEmit` passed (0 lỗi). Không chạy full vitest, không chạy production build.
+- Old failing asserts: không có (toàn bộ 31 test liên quan đều pass).
+- NOT checked in a real browser (chỉ kiểm tra bằng jsdom + TypeScript compiler).

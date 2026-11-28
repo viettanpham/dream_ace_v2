@@ -1007,6 +1007,7 @@ export type AutoStopReason =
   | 'inventory_full'
   | 'node_not_contested'
   | 'source_inactive'
+  | 'cancelled'
   | 'manual_stop';
 
 export type AutoRepeatDefeatRule =

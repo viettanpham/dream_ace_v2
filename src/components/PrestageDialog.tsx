@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { getMapNodeById } from '../data/maps';
 import { getCatalogRowForStatus } from '../data/statusIconMap';
 import {
   buildAllySupplyBagSummary,
@@ -9,10 +10,11 @@ import {
   type PrestageSideSummary,
 } from '../engine/prestage';
 import type { BattleSupplyRow } from '../engine/supplies';
-import { getClassName, getStatusLabel } from '../i18n';
+import { getClassName, getSectorName, getStatusLabel } from '../i18n';
 import type { TranslationKey } from '../i18n/en';
 import type {
   AdminConfig,
+  BattleKind,
   BattleState,
   CombatSide,
   CombatUnit,
@@ -36,7 +38,16 @@ export interface PrestageDialogProps {
   lang: Language;
   t: TranslateFn;
   onConfirm: () => void;
+  onCancel?: () => void;
 }
+
+const KIND_BADGE_CLASSES: Record<BattleKind, string> = {
+  assault: 'bg-rose-500/20 border-rose-500/50 text-rose-200',
+  defend: 'bg-sky-500/20 border-sky-500/50 text-sky-200',
+  patrol: 'bg-emerald-500/20 border-emerald-500/50 text-emerald-200',
+  mission: 'bg-violet-500/20 border-violet-500/50 text-violet-200',
+  event: 'bg-amber-500/20 border-amber-500/50 text-amber-200',
+};
 
 function formatMixText(
   summary: PrestageSideSummary,
@@ -58,6 +69,7 @@ export function PrestageDialog({
   lang,
   t,
   onConfirm,
+  onCancel,
 }: PrestageDialogProps) {
   const layoutMode = useBattleLayoutMode();
   const isPhonePortrait = layoutMode === 'phone-portrait';
@@ -148,6 +160,78 @@ export function PrestageDialog({
     >
       {t('prestage.confirm')}
     </button>
+  );
+
+  const cancelButton = (
+    <button
+      type="button"
+      data-testid="prestage-cancel-btn"
+      onClick={() => onCancel?.()}
+      className={`${
+        isPhonePortrait ? 'w-full h-[44px] min-h-[44px]' : 'min-h-[40px] px-4'
+      } rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200 font-semibold text-sm transition-colors cursor-pointer whitespace-nowrap`}
+    >
+      {t('prestage.cancel')}
+    </button>
+  );
+
+  const footerActions = (
+    <div
+      className={
+        isPhonePortrait
+          ? 'grid grid-cols-2 gap-2 w-full'
+          : 'flex items-center justify-end gap-2.5'
+      }
+    >
+      {cancelButton}
+      {confirmButton}
+    </div>
+  );
+
+  const battleKind: BattleKind = battle.kind ?? 'assault';
+  const kindLabel = t(`battle.kind.${battleKind}` as TranslationKey);
+  const sectorNode = battle.sectorId
+    ? getMapNodeById(battle.sectorId)
+    : undefined;
+  const baseName = sectorNode ? getSectorName(lang, sectorNode.id) : '—';
+  const baseTypeLabel = sectorNode
+    ? t(`prestage.baseType.${sectorNode.baseType}` as TranslationKey)
+    : '—';
+  const headerSubLine =
+    battleKind === 'assault'
+      ? t('prestage.headerSubAssault', { baseName })
+      : battleKind === 'defend'
+      ? t('prestage.headerSubDefend', { baseName })
+      : kindLabel;
+
+  const infoHeaderBlock = (
+    <div className="space-y-0.5 min-w-0">
+      <div
+        data-testid="prestage-info-line1"
+        className="flex items-center gap-1.5 text-xs text-slate-200 min-w-0"
+      >
+        <span
+          data-testid="prestage-kind-badge"
+          className={`inline-flex items-center px-1.5 py-0.5 rounded border text-xs font-bold shrink-0 whitespace-nowrap ${KIND_BADGE_CLASSES[battleKind]}`}
+        >
+          {kindLabel}
+        </span>
+        <span className="truncate font-mono-nums">
+          {t('prestage.headerInfoLine', {
+            baseName,
+            baseType: baseTypeLabel,
+            ally: allySummary.total,
+            enemy: enemySummary.total,
+          })}
+        </span>
+      </div>
+      <div
+        data-testid="prestage-info-line2"
+        className="text-xs text-slate-400 truncate"
+      >
+        {headerSubLine}
+      </div>
+    </div>
   );
 
   const renderSupplyOrIntelStrip = (side: CombatSide) => {
@@ -422,10 +506,11 @@ export function PrestageDialog({
         maxHeightClass="max-h-[86dvh]"
         bodyScrollable={false}
         testId="prestage-dialog"
-        footer={confirmButton}
+        footer={footerActions}
       >
         {/* Fixed overview + buff count ABOVE tabs */}
         <div className="shrink-0 px-4 pt-2 pb-1.5 space-y-1 min-w-0">
+          {infoHeaderBlock}
           <div
             data-testid="prestage-phone-overview"
             className="text-xs font-semibold text-slate-200 font-mono-nums truncate"
@@ -510,6 +595,7 @@ export function PrestageDialog({
               })}
             </span>
           </div>
+          {infoHeaderBlock}
           <div className="flex items-center justify-between gap-3 min-w-0 flex-wrap">
             <div
               data-testid="prestage-desktop-mix"
@@ -535,7 +621,7 @@ export function PrestageDialog({
 
         {/* Fixed Footer */}
         <div className="shrink-0 px-5 py-3 border-t border-slate-800/90 bg-[#080C14]/95 flex justify-end">
-          {confirmButton}
+          {footerActions}
         </div>
       </div>
     </div>
