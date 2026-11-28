@@ -17,7 +17,10 @@ import {
   getModuleSocketOwner,
 } from '../engine/extenders';
 import { calculateItemPowerScore, RARITY_RANK } from '../engine/inventory';
-import { getGearPassiveBonuses } from '../engine/skills';
+import {
+  applyPilotBuffsToPassives,
+  getGearPassiveBonuses,
+} from '../engine/skills';
 import { calculateEffectiveStats } from '../engine/stats';
 import {
   formatEquipValidationReason,
@@ -119,7 +122,11 @@ export function GearSwapPicker({
       adminConfig,
       pilot.warehouse
     );
-    const passiveBonuses = getGearPassiveBonuses(activeGear, adminConfig);
+    const passiveBonuses = applyPilotBuffsToPassives(
+      getGearPassiveBonuses(activeGear, adminConfig),
+      pilot.activeBuffs,
+      adminConfig
+    );
     const currentStats = calculateEffectiveStats(
       activeGear.classId,
       activeGear.level,

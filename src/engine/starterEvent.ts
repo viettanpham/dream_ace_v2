@@ -1,7 +1,15 @@
 import { getMaxLevel } from '../data/balance';
+import {
+  BUFF_CARD_MAX_STOCK,
+  getBuffCardId,
+  parseBuffCardId,
+  sanitizePilotBuffCards,
+} from '../data/buffCards';
+import { getSupplyTemplateById } from '../data/consumables';
 import { getAllVouchers } from '../data/vouchers';
 import type {
   AdminConfig,
+  ConsumableItem,
   Language,
   PilotAccount,
   StarterEventConfig,
@@ -11,6 +19,7 @@ import type {
   VoucherConfig,
 } from '../types/game';
 import { getExpForNextLevel } from './stats';
+import { addSupplyToConsumables } from './supplies';
 
 export type CardKind = 'credit' | 'exp';
 
@@ -26,7 +35,7 @@ export const CARD_EXP_MIN = 100;
 export const CARD_EXP_MAX = 1_000_000;
 export const OWNED_CARD_MAX_QTY = 99999;
 
-export const STARTER_EVENT_MAX_ENTRIES = 12;
+export const STARTER_EVENT_MAX_ENTRIES = 20;
 export const STARTER_EVENT_MAX_QTY = 999;
 
 export const DEFAULT_STARTER_EVENT_CONFIG: StarterEventConfig = {
@@ -128,6 +137,7 @@ export function cloneStarterEventConfig(
       type: entry.type,
       value: entry.value,
       qty: entry.qty,
+      ...(entry.refId ? { refId: entry.refId } : {}),
     })),
   };
 }
@@ -137,7 +147,9 @@ function isStarterEventEntryType(raw: unknown): raw is StarterEventEntryType {
     raw === 'card_credit' ||
     raw === 'card_exp' ||
     raw === 'voucher_credit' ||
-    raw === 'voucher_exp'
+    raw === 'voucher_exp' ||
+    raw === 'buff_card' ||
+    raw === 'supply'
   );
 }
 
@@ -176,9 +188,34 @@ export function sanitizeStarterEventConfig(
       typeof rec.qty === 'number' ? rec.qty : Number(rec.qty);
     if (!Number.isFinite(rawQty)) continue;
     const qty = Math.max(
-      1,
+      0,
       Math.min(STARTER_EVENT_MAX_QTY, Math.floor(rawQty))
     );
+
+    if (rec.type === 'buff_card') {
+      const parsed = parseBuffCardId(rec.refId);
+      if (!parsed) continue;
+      entries.push({
+        type: 'buff_card',
+        refId: getBuffCardId(parsed.kind, parsed.tier),
+        value: parsed.tier,
+        qty,
+      });
+      continue;
+    }
+
+    if (rec.type === 'supply') {
+      const refStr = typeof rec.refId === 'string' ? rec.refId.trim() : '';
+      const tpl = refStr ? getSupplyTemplateById(refStr) : undefined;
+      if (!tpl) continue;
+      entries.push({
+        type: 'supply',
+        refId: tpl.id,
+        value: tpl.tier,
+        qty,
+      });
+      continue;
+    }
 
     const rawVal =
       typeof rec.value === 'number' ? rec.value : Number(rec.value);
@@ -249,9 +286,15 @@ export function grantStarterEventPack(
   const allVouchers = getAllVouchers(opts?.voucherCfgOrAdmin);
   const nextCards = sanitizeOwnedCards(pilot.cards);
   const nextVouchers: Record<string, number> = { ...(pilot.vouchers ?? {}) };
+  const nextBuffCards = sanitizePilotBuffCards(pilot.buffCards);
+  let nextConsumables: ConsumableItem[] = Array.isArray(pilot.consumables)
+    ? [...pilot.consumables]
+    : [];
   const granted: StarterEventEntry[] = [];
 
   for (const entry of cleanCfg.entries) {
+    if (entry.qty <= 0) continue;
+
     if (entry.type === 'card_credit' || entry.type === 'card_exp') {
       const kind: CardKind = entry.type === 'card_credit' ? 'credit' : 'exp';
       const cardId = makeCardId(kind, entry.value);
@@ -259,6 +302,20 @@ export function grantStarterEventPack(
         OWNED_CARD_MAX_QTY,
         (nextCards[cardId] ?? 0) + entry.qty
       );
+      granted.push({ ...entry });
+    } else if (entry.type === 'buff_card') {
+      const parsed = parseBuffCardId(entry.refId);
+      if (!parsed) continue;
+      const cardId = getBuffCardId(parsed.kind, parsed.tier);
+      nextBuffCards[cardId] = Math.min(
+        BUFF_CARD_MAX_STOCK,
+        (nextBuffCards[cardId] ?? 0) + entry.qty
+      );
+      granted.push({ ...entry });
+    } else if (entry.type === 'supply') {
+      const tpl = entry.refId ? getSupplyTemplateById(entry.refId) : undefined;
+      if (!tpl) continue;
+      nextConsumables = addSupplyToConsumables(nextConsumables, tpl.id, entry.qty);
       granted.push({ ...entry });
     } else {
       const voucherKind = entry.type === 'voucher_credit' ? 'credit' : 'exp';
@@ -287,6 +344,8 @@ export function grantStarterEventPack(
       ...pilot,
       cards: nextCards,
       vouchers: nextVouchers,
+      ...(Object.keys(nextBuffCards).length > 0 ? { buffCards: nextBuffCards } : {}),
+      consumables: nextConsumables,
       starterEventGranted: nextGranted,
     },
     granted,
@@ -298,6 +357,8 @@ export interface StarterEventSummary {
   exp: number;
   voucherCredit: number;
   voucherExp: number;
+  buffCardsCount: number;
+  suppliesCount: number;
 }
 
 export function summarizeStarterEvent(
@@ -309,13 +370,18 @@ export function summarizeStarterEvent(
   let exp = 0;
   let voucherCredit = 0;
   let voucherExp = 0;
+  let buffCardsCount = 0;
+  let suppliesCount = 0;
 
   for (const entry of cleanCfg.entries) {
+    if (entry.qty <= 0) continue;
     const total = entry.value * entry.qty;
     if (entry.type === 'card_credit') credit += total;
     else if (entry.type === 'card_exp') exp += total;
     else if (entry.type === 'voucher_credit') voucherCredit += total;
     else if (entry.type === 'voucher_exp') voucherExp += total;
+    else if (entry.type === 'buff_card') buffCardsCount += entry.qty;
+    else if (entry.type === 'supply') suppliesCount += entry.qty;
   }
 
   return {
@@ -323,6 +389,8 @@ export function summarizeStarterEvent(
     exp,
     voucherCredit,
     voucherExp,
+    buffCardsCount,
+    suppliesCount,
   };
 }
 

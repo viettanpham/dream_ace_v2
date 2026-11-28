@@ -55,7 +55,10 @@ import {
   type InventoryEntryView,
 } from '../engine/inventory';
 import { sanitizeNoticeDurationSec } from '../engine/migration';
-import { getGearPassiveBonuses } from '../engine/skills';
+import {
+  applyPilotBuffsToPassives,
+  getGearPassiveBonuses,
+} from '../engine/skills';
 import {
   calculateDerivedStats,
   calculateEffectiveStats,
@@ -388,8 +391,13 @@ export function GearView() {
   );
 
   const passiveBonuses = useMemo(
-    () => getGearPassiveBonuses(activeGear, adminConfig),
-    [activeGear, adminConfig]
+    () =>
+      applyPilotBuffsToPassives(
+        getGearPassiveBonuses(activeGear, adminConfig),
+        pilot.activeBuffs,
+        adminConfig
+      ),
+    [activeGear, pilot.activeBuffs, adminConfig]
   );
 
   const currentStats = useMemo(
@@ -450,9 +458,10 @@ export function GearView() {
         activeGear,
         pilot.inventory,
         adminConfig,
-        pilot.warehouse
+        pilot.warehouse,
+        pilot.activeBuffs
       ),
-    [activeGear, pilot.inventory, adminConfig, pilot.warehouse]
+    [activeGear, pilot.inventory, adminConfig, pilot.warehouse, pilot.activeBuffs]
   );
 
   const statDeltas: StatBlock = useMemo(() => {
@@ -2706,7 +2715,7 @@ export function GearView() {
           {filterState.slot === 'consumables' ? (
             <div className="space-y-3">
               {((pilot.activeEnchantBonusPct ?? 0) > 0 ||
-                (pilot.activeExpBoostBattles ?? 0) > 0) && (
+                (pilot.activeBuffs?.exp?.battles ?? pilot.activeExpBoostBattles ?? 0) > 0) && (
                 <div className="flex flex-wrap gap-2">
                   {(pilot.activeEnchantBonusPct ?? 0) > 0 && (
                     <div className="rounded border border-purple-500/40 bg-purple-500/10 px-3 py-1.5 text-xs text-purple-200 inline-flex items-center gap-1.5">
@@ -2718,12 +2727,15 @@ export function GearView() {
                       </span>
                     </div>
                   )}
-                  {(pilot.activeExpBoostBattles ?? 0) > 0 && (
+                  {(pilot.activeBuffs?.exp?.battles ?? pilot.activeExpBoostBattles ?? 0) > 0 && (
                     <div className="rounded border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-200 inline-flex items-center gap-1.5">
                       <Sparkles className="w-3.5 h-3.5 text-emerald-300" />
                       <span>
                         {t('inv.expBoostActive', {
-                          battles: pilot.activeExpBoostBattles ?? 0,
+                          battles:
+                            pilot.activeBuffs?.exp?.battles ??
+                            pilot.activeExpBoostBattles ??
+                            0,
                         })}
                       </span>
                     </div>

@@ -212,7 +212,7 @@ describe('STARTER-EVENT-1 — Starter support cards, grants, WarehouseView, and 
     expect(getCardName('card_credit_50000', 'vi')).toBe('Thẻ Credit 50.000');
     expect(getCardName('card_exp_10000', 'en')).toBe('EXP Card 10,000');
 
-    const entries15 = Array.from({ length: 15 }, (_, i) => ({
+    const entries22 = Array.from({ length: 22 }, (_, i) => ({
       type: 'card_credit',
       value: 1000 + i * 100,
       qty: 1,
@@ -224,11 +224,11 @@ describe('STARTER-EVENT-1 — Starter support cards, grants, WarehouseView, and 
         { type: 'voucher_credit', value: 999999, qty: 3 }, // no def -> dropped
         { type: 'voucher_credit', value: 100000, qty: 2 }, // exists -> kept
         { type: 'card_exp', value: 50, qty: 2000 }, // clamped 100, qty clamped 999
-        ...entries15,
+        ...entries22,
       ],
     });
     expect(cleanCfg.mode).toBe('perGear');
-    expect(cleanCfg.entries).toHaveLength(12);
+    expect(cleanCfg.entries).toHaveLength(20);
     expect(cleanCfg.entries[0]).toEqual({
       type: 'voucher_credit',
       value: 100000,
@@ -309,6 +309,8 @@ describe('STARTER-EVENT-1 — Starter support cards, grants, WarehouseView, and 
       exp: 50000,
       voucherCredit: 1000000,
       voucherExp: 1000000,
+      buffCardsCount: 0,
+      suppliesCount: 0,
     });
 
     const totalText =

@@ -7,12 +7,23 @@ import {
   CreditCard,
   Lock,
   PackageOpen,
+  Sparkles,
   Star,
   Ticket,
   X,
 } from 'lucide-react';
+import {
+  BUFF_CARD_ICON_IDS,
+  BUFF_CARD_LIST,
+  getBuffCardPercent,
+  parseBuffCardId,
+  resolveBuffCardsConfig,
+  sanitizePilotActiveBuffs,
+  sanitizePilotBuffCards,
+} from '../data/buffCards';
 import { STAT_KEYS } from '../data/classes';
 import { ITEM_SLOTS, RARITY_META } from '../data/items';
+import { getCatalogRow } from '../data/iconCatalog';
 import { getAllVouchers } from '../data/vouchers';
 import { getEffectiveItemStats, getItemEquippedByGear } from '../engine/equipment';
 import {
@@ -27,6 +38,8 @@ import {
 import type { WarehouseTransferResult } from '../engine/warehouse';
 import {
   formatItemTraitsList,
+  getBuffCardKindLabel,
+  getBuffCardName,
   getClassName,
   getItemInstanceDesc,
   getItemInstanceName,
@@ -38,9 +51,10 @@ import {
 } from '../i18n';
 import type { TranslationKey } from '../i18n/en';
 import { isBattleActive, useGameStore } from '../store/useGameStore';
-import type { ItemInstance, MechClassId } from '../types/game';
+import type { BuffCardKind, ItemInstance, MechClassId } from '../types/game';
 import { useAutoVoucherPref } from '../utils/voucherAutoPrefs';
 import { BottomSheet } from './BottomSheet';
+import { CatalogIcon } from './CatalogIcon';
 import { ClassIcon, SlotIcon } from './GameIcons';
 
 type WarehouseContainer = 'box' | 'warehouse';
@@ -262,6 +276,7 @@ export function WarehouseView() {
     (s) => s.moveAllUnusedToWarehouse
   );
   const redeemCard = useGameStore((s) => s.redeemCard);
+  const useBuffCard = useGameStore((s) => s.useBuffCard);
   const [autoVoucherEnabled, setAutoVoucherEnabled] = useAutoVoucherPref();
 
   const [mobilePanel, setMobilePanel] = useState<WarehouseContainer>('box');
@@ -270,6 +285,14 @@ export function WarehouseView() {
   const [toastText, setToastText] = useState<string | null>(null);
   const [cardResultText, setCardResultText] = useState<string | null>(null);
   const [cardResultIsError, setCardResultIsError] = useState(false);
+  const [buffResultText, setBuffResultText] = useState<string | null>(null);
+  const [buffResultIsError, setBuffResultIsError] = useState(false);
+  const [pendingBuffReplace, setPendingBuffReplace] = useState<{
+    cardId: string;
+    kind: BuffCardKind;
+    previousTier: number;
+    nextTier: number;
+  } | null>(null);
   const [selectionContainer, setSelectionContainer] =
     useState<WarehouseContainer | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -355,6 +378,89 @@ export function WarehouseView() {
     () => ownedCardRows.reduce((s, r) => s + r.qty, 0),
     [ownedCardRows]
   );
+
+  const buffCardsCfg = useMemo(
+    () => resolveBuffCardsConfig(adminConfig),
+    [adminConfig]
+  );
+
+  const ownedBuffCardRows = useMemo(() => {
+    const clean = sanitizePilotBuffCards(pilot.buffCards);
+    return BUFF_CARD_LIST.map((def) => {
+      const qty = clean[def.id] ?? 0;
+      if (qty <= 0) return null;
+      return {
+        def,
+        qty,
+        name: getBuffCardName(lang, def.kind, def.tier),
+        pct: getBuffCardPercent(def.kind, def.tier, buffCardsCfg),
+      };
+    }).filter((r): r is NonNullable<typeof r> => r !== null);
+  }, [pilot.buffCards, lang, buffCardsCfg]);
+
+  const totalOwnedBuffCards = useMemo(
+    () => ownedBuffCardRows.reduce((s, r) => s + r.qty, 0),
+    [ownedBuffCardRows]
+  );
+
+  const activeBuffRows = useMemo(() => {
+    const sanitized = sanitizePilotActiveBuffs(
+      pilot.activeBuffs,
+      pilot.activeExpBoostBattles
+    );
+    return (
+      Object.entries(sanitized) as [
+        BuffCardKind,
+        { tier: number; battles: number },
+      ][]
+    ).map(([kind, entry]) => ({
+      kind,
+      tier: entry.tier,
+      battles: entry.battles,
+      pct: getBuffCardPercent(kind, entry.tier, buffCardsCfg),
+      label: getBuffCardKindLabel(lang, kind),
+      iconId: BUFF_CARD_ICON_IDS[kind],
+    }));
+  }, [pilot.activeBuffs, pilot.activeExpBoostBattles, buffCardsCfg, lang]);
+
+  const handleUseBuffCard = (cardId: string, confirmReplace = false) => {
+    const res = useBuffCard(cardId, { confirmReplace });
+    if (!res.ok) {
+      if (res.reason === 'confirm_replace' && res.kind !== undefined) {
+        setPendingBuffReplace({
+          cardId,
+          kind: res.kind,
+          previousTier: res.previousTier ?? 0,
+          nextTier: res.nextTier ?? 1,
+        });
+        return;
+      }
+      setBuffResultIsError(true);
+      if (res.reason === 'busy') {
+        setBuffResultText(t('warehouse.buffBusy'));
+      } else if (res.reason === 'max_stack') {
+        setBuffResultText(
+          t('warehouse.buffMaxStack', {
+            max: res.maxStackBattles ?? buffCardsCfg.maxStackBattles,
+          })
+        );
+      }
+      return;
+    }
+
+    setPendingBuffReplace(null);
+    setBuffResultIsError(false);
+    const parsed = parseBuffCardId(cardId);
+    const cardName = parsed
+      ? getBuffCardName(lang, parsed.kind, parsed.tier)
+      : cardId;
+    setBuffResultText(
+      t('warehouse.buffUsedMsg', {
+        name: cardName,
+        battles: res.battles ?? buffCardsCfg.battlesPerCard,
+      })
+    );
+  };
 
   const activeGearForCards = pilot.gears[pilot.activeGearId];
 
@@ -814,9 +920,8 @@ export function WarehouseView() {
           </section>
         </div>
 
-        {/* Voucher section */}
-        {/* Cards ("Thẻ") + Vouchers next to each other on desktop, stacked on mobile */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 min-w-0 items-start">
+        {/* Cards ("Thẻ") + Buff Cards ("Thẻ buff") + Vouchers next to each other on desktop, stacked on mobile */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 min-w-0 items-start">
           {/* Cards Section ("Thẻ") */}
           <section
             data-testid="warehouse-card-section"
@@ -957,6 +1062,142 @@ export function WarehouseView() {
               </div>
             )}
           </section>
+
+          {/* Buff Cards Section ("Thẻ buff") */}
+          <section
+            data-testid="warehouse-buff-card-section"
+            className="rounded-lg border border-emerald-500/30 bg-[#0B111C]/90 p-3 space-y-2.5 min-w-0"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2 pb-1.5 border-b border-slate-800/80">
+              <h3 className="text-xs md:text-sm font-bold text-slate-100 inline-flex items-center gap-1.5">
+                <Sparkles
+                  className="w-4 h-4 text-emerald-400 shrink-0"
+                  aria-hidden="true"
+                />
+                <span>
+                  {t('warehouse.buffSectionTitle', {
+                    count: totalOwnedBuffCards,
+                  })}
+                </span>
+              </h3>
+            </div>
+
+            {/* Active Buffs strip ("Buff đang chạy") */}
+            <div
+              data-testid="warehouse-active-buffs"
+              className="rounded border border-emerald-500/25 bg-slate-950/80 p-2 space-y-1.5"
+            >
+              <div className="text-[11px] font-semibold text-emerald-300">
+                {t('warehouse.activeBuffsTitle')}
+              </div>
+              {activeBuffRows.length === 0 ? (
+                <p
+                  data-testid="warehouse-active-buffs-empty"
+                  className="text-[11px] text-slate-500"
+                >
+                  {t('warehouse.activeBuffsEmpty')}
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-1.5">
+                  {activeBuffRows.map((ab) => (
+                    <div
+                      key={ab.kind}
+                      data-testid={`warehouse-active-buff-${ab.kind}`}
+                      className="inline-flex items-center gap-1.5 rounded border border-emerald-500/35 bg-emerald-500/10 px-2 py-1 text-[11px] text-emerald-100"
+                    >
+                      <CatalogIcon
+                        row={
+                          getCatalogRow(
+                            ab.iconId,
+                            adminConfig.iconCatalogMods
+                          ) ?? null
+                        }
+                        size="sm"
+                        showBadges={false}
+                        showArrowBadge={false}
+                      />
+                      <span>
+                        {t('buffCard.activeEntry', {
+                          stat: ab.label,
+                          pct: ab.pct,
+                          tier: ab.tier,
+                          battles: ab.battles,
+                        })}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {ownedBuffCardRows.length === 0 ? (
+              <p
+                data-testid="warehouse-buff-empty"
+                className="text-xs text-slate-500 py-1"
+              >
+                {t('warehouse.buffEmpty')}
+              </p>
+            ) : (
+              <div className="space-y-2 min-w-0">
+                {ownedBuffCardRows.map(({ def, name, qty, pct }) => (
+                  <div
+                    key={def.id}
+                    data-testid={`warehouse-buff-row-${def.id}`}
+                    className="rounded border border-slate-800 bg-slate-950/70 px-2.5 py-2 flex flex-wrap items-center justify-between gap-2 text-xs min-w-0"
+                  >
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <CatalogIcon
+                        row={
+                          getCatalogRow(
+                            def.iconId,
+                            adminConfig.iconCatalogMods
+                          ) ?? null
+                        }
+                        size="sm"
+                        showBadges={false}
+                        showArrowBadge={false}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="font-medium text-slate-100 truncate">
+                          {name}
+                        </div>
+                        <div className="text-[11px] text-slate-400">
+                          T{def.tier} · +{pct}% ·{' '}
+                          <span
+                            data-testid={`warehouse-buff-qty-${def.id}`}
+                            className="font-mono-nums font-bold text-emerald-300"
+                          >
+                            ×{qty}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      data-testid={`warehouse-buff-use1-${def.id}`}
+                      onClick={() => handleUseBuffCard(def.id)}
+                      className="min-h-[34px] px-2.5 rounded border border-emerald-500/50 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-200 font-semibold text-xs cursor-pointer shrink-0"
+                    >
+                      {t('warehouse.buffUseOne')}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {buffResultText && (
+              <div
+                data-testid="warehouse-buff-result"
+                className={`text-xs font-medium px-2.5 py-1.5 rounded border break-words ${
+                  buffResultIsError
+                    ? 'border-rose-500/40 bg-rose-950/30 text-rose-200'
+                    : 'border-emerald-500/40 bg-emerald-950/30 text-emerald-200'
+                }`}
+              >
+                {buffResultText}
+              </div>
+            )}
+          </section>
         </div>
       </div>
 
@@ -1090,6 +1331,57 @@ export function WarehouseView() {
               </div>
             )}
           </div>
+        )}
+      </BottomSheet>
+
+      {/* Replace Active Buff Confirm Dialog */}
+      <BottomSheet
+        open={pendingBuffReplace !== null}
+        onClose={() => setPendingBuffReplace(null)}
+        title={t('warehouse.buffConfirmTitle')}
+        footer={
+          pendingBuffReplace ? (
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                data-testid="warehouse-buff-cancel-btn"
+                onClick={() => setPendingBuffReplace(null)}
+                className="min-h-[40px] px-3.5 rounded border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200 text-xs font-semibold cursor-pointer"
+              >
+                {t('warehouse.buffCancelBtn')}
+              </button>
+              <button
+                type="button"
+                data-testid="warehouse-buff-confirm-btn"
+                onClick={() =>
+                  handleUseBuffCard(pendingBuffReplace.cardId, true)
+                }
+                className="min-h-[40px] px-3.5 rounded bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold cursor-pointer"
+              >
+                {t('warehouse.buffConfirmBtn')}
+              </button>
+            </div>
+          ) : undefined
+        }
+      >
+        {pendingBuffReplace && (
+          <p
+            data-testid="warehouse-buff-confirm-body"
+            className="text-sm text-slate-200 leading-relaxed"
+          >
+            {t('warehouse.buffConfirmBody', {
+              old: getBuffCardName(
+                lang,
+                pendingBuffReplace.kind,
+                pendingBuffReplace.previousTier
+              ),
+              next: getBuffCardName(
+                lang,
+                pendingBuffReplace.kind,
+                pendingBuffReplace.nextTier
+              ),
+            })}
+          </p>
         )}
       </BottomSheet>
     </div>

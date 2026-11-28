@@ -10,6 +10,7 @@ import type {
   ActiveStatusEffect,
   AutoStopReason,
   BattleSkillUsability,
+  BuffCardKind,
   CombatLogEntry,
   CombatLogTag,
   CombatUnit,
@@ -1317,6 +1318,24 @@ function formatActionParam(
   }
   const base = getSkillName(lang, skillId);
   return totalHits > 1 ? `${base} (${hitIndex}/${totalHits})` : base;
+}
+
+export function getBuffCardKindLabel(
+  lang: Language,
+  kind: BuffCardKind
+): string {
+  return translate(lang, `buffCard.kind.${kind}` as TranslationKey);
+}
+
+export function getBuffCardName(
+  lang: Language,
+  kind: BuffCardKind,
+  tier: number
+): string {
+  if (kind === 'exp' && tier === 0) {
+    return translate(lang, 'buffCard.name.exp0');
+  }
+  return translate(lang, `buffCard.name.${kind}` as TranslationKey, { tier });
 }
 
 export function useI18n() {

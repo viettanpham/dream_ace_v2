@@ -912,7 +912,7 @@ describe('9. Per-Gear Skill Bars (Max 6), Passives Always ON, & Level Gate', () 
 
 describe('10. War Point Shop & Special/Elite Opening Cards', () => {
   it('blocks Special/Elite learning without Opening Card, enforces WP cost, and unlocks after purchase', () => {
-    expect(OPENING_CARDS_LIST.length).toBe(9);
+    expect(OPENING_CARDS_LIST.length).toBe(18);
     let pilot = createDefaultPilotAccount('Ace', 'siege');
     pilot.credits = 100000;
     pilot.warPoints = 50; // Not enough for Elite card (160 WP)

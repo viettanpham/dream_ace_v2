@@ -1,5 +1,14 @@
-import { useMemo } from 'react';
-import { Gift, Plus, RotateCcw, Trash2 } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { ChevronDown, Gift, Plus, RotateCcw, Trash2 } from 'lucide-react';
+import {
+  BUFF_CARD_KINDS,
+  BUFF_CARD_LIST,
+  getBuffCardId,
+  getBuffCardPercent,
+  getBuffCardTiersRange,
+  parseBuffCardId,
+} from '../../data/buffCards';
+import { getSupplyTemplateById, SUPPLY_TEMPLATES } from '../../data/consumables';
 import { getAllVouchers } from '../../data/vouchers';
 import {
   CARD_CREDIT_MAX,
@@ -18,16 +27,23 @@ import {
   STARTER_EVENT_MAX_QTY,
   summarizeStarterEvent,
 } from '../../engine/starterEvent';
-import { getClassName, useI18n } from '../../i18n';
+import {
+  getBuffCardKindLabel,
+  getBuffCardName,
+  getClassName,
+  useI18n,
+} from '../../i18n';
 import { useGameStore } from '../../store/useGameStore';
 import type {
   AdminConfig,
+  BuffCardKind,
   MechClassId,
   StarterEventConfig,
   StarterEventEntry,
   StarterEventEntryType,
   StarterEventMode,
 } from '../../types/game';
+import { getSupplyName } from '../SupplyLoadoutBar';
 
 interface StarterEventAdminBlockProps {
   adminConfig: AdminConfig;
@@ -51,6 +67,13 @@ export function StarterEventAdminBlock({
   );
   const adminResetStarterEventGranted = useGameStore(
     (s) => s.adminResetStarterEventGranted
+  );
+
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const [menuBuffKind, setMenuBuffKind] = useState<BuffCardKind>('attack');
+  const [menuBuffTier, setMenuBuffTier] = useState<number>(1);
+  const [menuSupplyId, setMenuSupplyId] = useState<string>(
+    SUPPLY_TEMPLATES[0]?.id ?? 'sup_hp_t1'
   );
 
   const cfg = sanitizeStarterEventConfig(
@@ -101,22 +124,33 @@ export function StarterEventAdminBlock({
     if (!cur) return;
 
     let nextValue = cur.value;
+    let nextRefId: string | undefined = undefined;
     if (nextType === 'card_credit') {
       nextValue = clampCardValue('credit', cur.value);
     } else if (nextType === 'card_exp') {
       nextValue = clampCardValue('exp', cur.value);
     } else if (nextType === 'voucher_credit') {
       const exact = creditVouchers.find((v) => v.value === cur.value);
-      nextValue = exact?.value ?? creditVouchers[creditVouchers.length - 1]?.value ?? 1000;
+      nextValue =
+        exact?.value ?? creditVouchers[creditVouchers.length - 1]?.value ?? 1000;
     } else if (nextType === 'voucher_exp') {
       const exact = expVouchers.find((v) => v.value === cur.value);
-      nextValue = exact?.value ?? expVouchers[expVouchers.length - 1]?.value ?? 1000;
+      nextValue =
+        exact?.value ?? expVouchers[expVouchers.length - 1]?.value ?? 1000;
+    } else if (nextType === 'buff_card') {
+      nextRefId = BUFF_CARD_LIST[0]?.id ?? 'bcard_exp_t0';
+      nextValue = 0;
+    } else if (nextType === 'supply') {
+      const tpl = SUPPLY_TEMPLATES[0];
+      nextRefId = tpl?.id ?? 'sup_hp_t1';
+      nextValue = tpl?.tier ?? 1;
     }
 
     next.entries[idx] = {
       type: nextType,
       value: nextValue,
       qty: cur.qty,
+      ...(nextRefId ? { refId: nextRefId } : {}),
     };
     commitConfig(next);
   };
@@ -135,7 +169,7 @@ export function StarterEventAdminBlock({
         ...cur,
         value: clampCardValue('exp', raw),
       };
-    } else {
+    } else if (cur.type === 'voucher_credit' || cur.type === 'voucher_exp') {
       const list = cur.type === 'voucher_credit' ? creditVouchers : expVouchers;
       const matched = list.find((v) => v.value === Math.round(raw));
       if (!matched) return;
@@ -147,13 +181,37 @@ export function StarterEventAdminBlock({
     commitConfig(next);
   };
 
+  const handleEntryRefChange = (idx: number, refId: string) => {
+    const next = cloneStarterEventConfig(cfg);
+    const cur = next.entries[idx];
+    if (!cur) return;
+    if (cur.type === 'buff_card') {
+      const parsed = parseBuffCardId(refId);
+      if (!parsed) return;
+      next.entries[idx] = {
+        ...cur,
+        refId: getBuffCardId(parsed.kind, parsed.tier),
+        value: parsed.tier,
+      };
+    } else if (cur.type === 'supply') {
+      const tpl = getSupplyTemplateById(refId);
+      if (!tpl) return;
+      next.entries[idx] = {
+        ...cur,
+        refId: tpl.id,
+        value: tpl.tier,
+      };
+    }
+    commitConfig(next);
+  };
+
   const handleEntryQtyChange = (idx: number, raw: number) => {
     const next = cloneStarterEventConfig(cfg);
     const cur = next.entries[idx];
     if (!cur) return;
     const cleanQty = Number.isFinite(raw)
-      ? Math.max(1, Math.min(STARTER_EVENT_MAX_QTY, Math.round(raw)))
-      : 1;
+      ? Math.max(0, Math.min(STARTER_EVENT_MAX_QTY, Math.round(raw)))
+      : 0;
     next.entries[idx] = {
       ...cur,
       qty: cleanQty,
@@ -167,19 +225,38 @@ export function StarterEventAdminBlock({
     commitConfig(next);
   };
 
-  const handleAddEntry = () => {
+  const appendEntry = (entry: StarterEventEntry) => {
     if (cfg.entries.length >= STARTER_EVENT_MAX_ENTRIES) return;
     const next = cloneStarterEventConfig(cfg);
-    const newEntry: StarterEventEntry = {
-      type: 'card_credit',
-      value: 10000,
-      qty: 1,
-    };
-    next.entries.push(newEntry);
+    next.entries.push(entry);
     commitConfig(next);
+    setAddMenuOpen(false);
   };
 
   const formatEntryLiveLabel = (entry: StarterEventEntry): string => {
+    if (entry.type === 'buff_card') {
+      const parsed = parseBuffCardId(entry.refId);
+      const name = parsed
+        ? getBuffCardName(lang, parsed.kind, parsed.tier)
+        : entry.refId ?? '';
+      const pct = parsed
+        ? getBuffCardPercent(parsed.kind, parsed.tier, adminConfig)
+        : 0;
+      return `${t('admin.starterEvent.rowItemExample', {
+        name,
+        qty: entry.qty,
+      })} (+${pct}%)`;
+    }
+    if (entry.type === 'supply') {
+      const tpl = entry.refId ? getSupplyTemplateById(entry.refId) : undefined;
+      const name = tpl
+        ? `${getSupplyName(tpl.id, t)} (T${tpl.tier})`
+        : entry.refId ?? '';
+      return t('admin.starterEvent.rowItemExample', {
+        name,
+        qty: entry.qty,
+      });
+    }
     const totalStr = fmtLocale(entry.value * entry.qty, lang);
     const valStr = fmtLocale(entry.value, lang);
     if (entry.type === 'card_credit') {
@@ -215,6 +292,13 @@ export function StarterEventAdminBlock({
       unit: lang === 'vi' ? 'voucher EXP' : 'EXP vouchers',
     });
   };
+
+  const hasExtraSummary =
+    summary.buffCardsCount > 0 || summary.suppliesCount > 0;
+  const menuBuffTiers = getBuffCardTiersRange(menuBuffKind);
+  const effectiveMenuBuffTier = menuBuffTiers.includes(menuBuffTier)
+    ? menuBuffTier
+    : menuBuffTiers[0] ?? 1;
 
   return (
     <div className="space-y-3 min-w-0" data-testid="admin-starter-event-block">
@@ -263,33 +347,220 @@ export function StarterEventAdminBlock({
             </select>
           </label>
           <p className="text-[11px] leading-snug text-slate-400">
-            <span className={cfg.mode === 'oncePerSave' ? 'text-amber-300 font-medium' : ''}>
+            <span
+              className={
+                cfg.mode === 'oncePerSave' ? 'text-amber-300 font-medium' : ''
+              }
+            >
               oncePerSave: {t('admin.starterEvent.modeOnceDesc')}
             </span>
             {' · '}
-            <span className={cfg.mode === 'perGear' ? 'text-amber-300 font-medium' : ''}>
+            <span
+              className={
+                cfg.mode === 'perGear' ? 'text-amber-300 font-medium' : ''
+              }
+            >
               perGear: {t('admin.starterEvent.modePerGearDesc')}
             </span>
           </p>
         </div>
       </div>
 
-      {/* Entries Header + Add Row */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-xs font-semibold text-slate-200">
-          {t('admin.starterEvent.entriesTitle')} ({cfg.entries.length}/
-          {STARTER_EVENT_MAX_ENTRIES})
-        </span>
-        <button
-          type="button"
-          data-testid="admin-starter-event-add-row"
-          disabled={cfg.entries.length >= STARTER_EVENT_MAX_ENTRIES}
-          onClick={handleAddEntry}
-          className="h-8 px-2.5 inline-flex items-center gap-1 rounded border border-emerald-500/50 bg-emerald-500/15 hover:bg-emerald-500/25 disabled:opacity-40 disabled:cursor-not-allowed text-emerald-200 text-xs font-semibold cursor-pointer"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          <span>{t('admin.starterEvent.addRowBtn')}</span>
-        </button>
+      {/* Entries Header + Grouped "+ Thêm dòng" Menu */}
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-xs font-semibold text-slate-200">
+            {t('admin.starterEvent.entriesTitle')} ({cfg.entries.length}/
+            {STARTER_EVENT_MAX_ENTRIES})
+          </span>
+          <button
+            type="button"
+            data-testid="admin-starter-event-add-row"
+            disabled={cfg.entries.length >= STARTER_EVENT_MAX_ENTRIES}
+            onClick={() => setAddMenuOpen((v) => !v)}
+            className="h-8 px-2.5 inline-flex items-center gap-1 rounded border border-emerald-500/50 bg-emerald-500/15 hover:bg-emerald-500/25 disabled:opacity-40 disabled:cursor-not-allowed text-emerald-200 text-xs font-semibold cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>{t('admin.starterEvent.addRowBtn')}</span>
+            <ChevronDown className="w-3 h-3" />
+          </button>
+        </div>
+
+        {addMenuOpen && (
+          <div
+            data-testid="admin-starter-event-add-menu"
+            className="rounded-lg border border-emerald-500/40 bg-[#080C14] p-2.5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 text-xs"
+          >
+            {/* Group 1: Thẻ */}
+            <div className="space-y-1.5 rounded border border-slate-800 bg-slate-950/70 p-2">
+              <div className="text-[11px] font-bold text-amber-300">
+                {t('admin.starterEvent.menuGroupCards')}
+              </div>
+              <div className="flex flex-col gap-1">
+                <button
+                  type="button"
+                  data-testid="admin-starter-add-card-credit"
+                  onClick={() =>
+                    appendEntry({
+                      type: 'card_credit',
+                      value: 10000,
+                      qty: 1,
+                    })
+                  }
+                  className="h-8 px-2 text-left rounded border border-slate-700 bg-slate-900 hover:border-amber-400 text-slate-100 cursor-pointer"
+                >
+                  {t('admin.starterEvent.typeCardCredit')}
+                </button>
+                <button
+                  type="button"
+                  data-testid="admin-starter-add-card-exp"
+                  onClick={() =>
+                    appendEntry({
+                      type: 'card_exp',
+                      value: 5000,
+                      qty: 1,
+                    })
+                  }
+                  className="h-8 px-2 text-left rounded border border-slate-700 bg-slate-900 hover:border-amber-400 text-slate-100 cursor-pointer"
+                >
+                  {t('admin.starterEvent.typeCardExp')}
+                </button>
+              </div>
+            </div>
+
+            {/* Group 2: Voucher */}
+            <div className="space-y-1.5 rounded border border-slate-800 bg-slate-950/70 p-2">
+              <div className="text-[11px] font-bold text-purple-300">
+                {t('admin.starterEvent.menuGroupVouchers')}
+              </div>
+              <div className="flex flex-col gap-1">
+                <button
+                  type="button"
+                  data-testid="admin-starter-add-voucher-credit"
+                  onClick={() =>
+                    appendEntry({
+                      type: 'voucher_credit',
+                      value:
+                        creditVouchers[creditVouchers.length - 1]?.value ??
+                        100000,
+                      qty: 1,
+                    })
+                  }
+                  className="h-8 px-2 text-left rounded border border-slate-700 bg-slate-900 hover:border-purple-400 text-slate-100 cursor-pointer"
+                >
+                  {t('admin.starterEvent.typeVoucherCredit')}
+                </button>
+                <button
+                  type="button"
+                  data-testid="admin-starter-add-voucher-exp"
+                  onClick={() =>
+                    appendEntry({
+                      type: 'voucher_exp',
+                      value:
+                        expVouchers[expVouchers.length - 1]?.value ?? 100000,
+                      qty: 1,
+                    })
+                  }
+                  className="h-8 px-2 text-left rounded border border-slate-700 bg-slate-900 hover:border-purple-400 text-slate-100 cursor-pointer"
+                >
+                  {t('admin.starterEvent.typeVoucherExp')}
+                </button>
+              </div>
+            </div>
+
+            {/* Group 3: Thẻ buff (7 kinds, pick tier) */}
+            <div className="space-y-1.5 rounded border border-slate-800 bg-slate-950/70 p-2">
+              <div className="text-[11px] font-bold text-emerald-300">
+                {t('admin.starterEvent.menuGroupBuffCards')}
+              </div>
+              <select
+                data-testid="admin-starter-add-buff-kind"
+                value={menuBuffKind}
+                onChange={(e) => {
+                  const nextKind = e.target.value as BuffCardKind;
+                  setMenuBuffKind(nextKind);
+                  const validTiers = getBuffCardTiersRange(nextKind);
+                  if (!validTiers.includes(menuBuffTier)) {
+                    setMenuBuffTier(validTiers[0] ?? 1);
+                  }
+                }}
+                className="w-full h-8 px-1.5 rounded border border-slate-700 bg-slate-900 text-xs text-slate-100"
+              >
+                {BUFF_CARD_KINDS.map((k) => (
+                  <option key={k} value={k}>
+                    {getBuffCardKindLabel(lang, k)}
+                  </option>
+                ))}
+              </select>
+              <div className="flex items-center gap-1.5">
+                <select
+                  data-testid="admin-starter-add-buff-tier"
+                  value={effectiveMenuBuffTier}
+                  onChange={(e) => setMenuBuffTier(Number(e.target.value))}
+                  className="flex-1 h-8 px-1.5 rounded border border-slate-700 bg-slate-900 text-xs text-slate-100"
+                >
+                  {menuBuffTiers.map((tier) => (
+                    <option key={tier} value={tier}>
+                      T{tier} (+
+                      {getBuffCardPercent(menuBuffKind, tier, adminConfig)}%)
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  data-testid="admin-starter-add-buff-confirm"
+                  onClick={() =>
+                    appendEntry({
+                      type: 'buff_card',
+                      refId: getBuffCardId(menuBuffKind, effectiveMenuBuffTier),
+                      value: effectiveMenuBuffTier,
+                      qty: 1,
+                    })
+                  }
+                  className="h-8 px-2.5 rounded bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs cursor-pointer"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+
+            {/* Group 4: Vật tư */}
+            <div className="space-y-1.5 rounded border border-slate-800 bg-slate-950/70 p-2">
+              <div className="text-[11px] font-bold text-sky-300">
+                {t('admin.starterEvent.menuGroupSupplies')}
+              </div>
+              <select
+                data-testid="admin-starter-add-supply-select"
+                value={menuSupplyId}
+                onChange={(e) => setMenuSupplyId(e.target.value)}
+                className="w-full h-8 px-1.5 rounded border border-slate-700 bg-slate-900 text-xs text-slate-100"
+              >
+                {SUPPLY_TEMPLATES.map((tpl) => (
+                  <option key={tpl.id} value={tpl.id}>
+                    {getSupplyName(tpl.id, t)} (T{tpl.tier})
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                data-testid="admin-starter-add-supply-confirm"
+                onClick={() => {
+                  const tpl = getSupplyTemplateById(menuSupplyId);
+                  if (!tpl) return;
+                  appendEntry({
+                    type: 'supply',
+                    refId: tpl.id,
+                    value: tpl.tier,
+                    qty: 1,
+                  });
+                }}
+                className="w-full h-8 px-2 rounded bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs cursor-pointer"
+              >
+                + {t('admin.starterEvent.typeSupply')}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Entries Rows */}
@@ -302,6 +573,11 @@ export function StarterEventAdminBlock({
           {cfg.entries.map((entry, idx) => {
             const isCard =
               entry.type === 'card_credit' || entry.type === 'card_exp';
+            const isVoucher =
+              entry.type === 'voucher_credit' || entry.type === 'voucher_exp';
+            const isBuffCard = entry.type === 'buff_card';
+            const isSupply = entry.type === 'supply';
+            const isZeroQty = entry.qty <= 0;
             const voucherOptions =
               entry.type === 'voucher_credit' ? creditVouchers : expVouchers;
             const minCard =
@@ -314,7 +590,9 @@ export function StarterEventAdminBlock({
               <div
                 key={`${entry.type}-${idx}`}
                 data-testid={`admin-starter-event-row-${idx}`}
-                className="p-2.5 rounded border border-slate-800 bg-[#080C14] space-y-2 min-w-0"
+                className={`p-2.5 rounded border border-slate-800 bg-[#080C14] space-y-2 min-w-0 transition-opacity ${
+                  isZeroQty ? 'opacity-50' : ''
+                }`}
               >
                 <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-start min-w-0">
                   {/* Type */}
@@ -345,13 +623,21 @@ export function StarterEventAdminBlock({
                       <option value="voucher_exp">
                         {t('admin.starterEvent.typeVoucherExp')}
                       </option>
+                      <option value="buff_card">
+                        {t('admin.starterEvent.typeBuffCard')}
+                      </option>
+                      <option value="supply">
+                        {t('admin.starterEvent.typeSupply')}
+                      </option>
                     </select>
                   </label>
 
-                  {/* Value */}
+                  {/* Value / Target Picker */}
                   <label className="sm:col-span-4 space-y-1 block min-w-0">
                     <span className="text-[11px] text-slate-400 block">
-                      {t('admin.starterEvent.valueLabel')}
+                      {isBuffCard || isSupply
+                        ? t('admin.starterEvent.pickItem')
+                        : t('admin.starterEvent.valueLabel')}
                     </span>
                     {isCard ? (
                       <>
@@ -377,37 +663,87 @@ export function StarterEventAdminBlock({
                           {rowExample} ({t('admin.starterEvent.cardValueHint')})
                         </span>
                       </>
+                    ) : isVoucher ? (
+                      <>
+                        <select
+                          data-testid={`admin-starter-event-value-${idx}`}
+                          value={entry.value}
+                          onChange={(e) =>
+                            handleEntryValueChange(idx, Number(e.target.value))
+                          }
+                          className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums text-slate-100"
+                        >
+                          {voucherOptions.map((v) => (
+                            <option key={v.id} value={v.value}>
+                              {fmtLocale(v.value, lang)}
+                            </option>
+                          ))}
+                        </select>
+                        <span className="text-[11px] text-slate-400 block leading-snug break-words">
+                          {rowExample}
+                        </span>
+                      </>
+                    ) : isBuffCard ? (
+                      <>
+                        <select
+                          data-testid={`admin-starter-event-ref-${idx}`}
+                          value={entry.refId ?? 'bcard_exp_t0'}
+                          onChange={(e) =>
+                            handleEntryRefChange(idx, e.target.value)
+                          }
+                          className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs text-slate-100"
+                        >
+                          {BUFF_CARD_LIST.map((def) => (
+                            <option key={def.id} value={def.id}>
+                              {getBuffCardName(lang, def.kind, def.tier)} (+
+                              {getBuffCardPercent(def.kind, def.tier, adminConfig)}
+                              %)
+                            </option>
+                          ))}
+                        </select>
+                        <span className="text-[11px] text-slate-400 block leading-snug break-words">
+                          {rowExample}
+                        </span>
+                      </>
                     ) : (
-                      <select
-                        data-testid={`admin-starter-event-value-${idx}`}
-                        value={entry.value}
-                        onChange={(e) =>
-                          handleEntryValueChange(idx, Number(e.target.value))
-                        }
-                        className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums text-slate-100"
-                      >
-                        {voucherOptions.map((v) => (
-                          <option key={v.id} value={v.value}>
-                            {fmtLocale(v.value, lang)}
-                          </option>
-                        ))}
-                      </select>
+                      <>
+                        <select
+                          data-testid={`admin-starter-event-ref-${idx}`}
+                          value={entry.refId ?? 'sup_hp_t1'}
+                          onChange={(e) =>
+                            handleEntryRefChange(idx, e.target.value)
+                          }
+                          className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs text-slate-100"
+                        >
+                          {SUPPLY_TEMPLATES.map((tpl) => (
+                            <option key={tpl.id} value={tpl.id}>
+                              {getSupplyName(tpl.id, t)} (T{tpl.tier})
+                            </option>
+                          ))}
+                        </select>
+                        <span className="text-[11px] text-slate-400 block leading-snug break-words">
+                          {rowExample}
+                        </span>
+                      </>
                     )}
                   </label>
 
-                  {/* Qty */}
+                  {/* Qty (min 0) */}
                   <label className="sm:col-span-3 space-y-1 block min-w-0">
                     <span className="text-[11px] text-slate-400 block">
-                      {t('admin.starterEvent.qtyLabel')} (1–{STARTER_EVENT_MAX_QTY})
+                      {t('admin.starterEvent.qtyLabel')} (0–{STARTER_EVENT_MAX_QTY})
                     </span>
                     <input
                       type="number"
                       data-testid={`admin-starter-event-qty-${idx}`}
-                      min={1}
+                      min={0}
                       max={STARTER_EVENT_MAX_QTY}
                       value={entry.qty}
                       onChange={(e) =>
-                        handleEntryQtyChange(idx, Number(e.target.value) || 1)
+                        handleEntryQtyChange(
+                          idx,
+                          e.target.value === '' ? 0 : Number(e.target.value)
+                        )
                       }
                       className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums text-slate-100"
                     />
@@ -415,7 +751,9 @@ export function StarterEventAdminBlock({
                       data-testid={`admin-starter-event-qty-ex-${idx}`}
                       className="text-[11px] text-amber-300/90 block leading-snug break-words"
                     >
-                      {rowExample}
+                      {isZeroQty
+                        ? t('admin.starterEvent.rowDisabledNote')
+                        : rowExample}
                     </span>
                   </label>
 
@@ -446,13 +784,23 @@ export function StarterEventAdminBlock({
         data-testid="admin-starter-event-total"
         className="p-2.5 rounded border border-amber-500/35 bg-amber-950/20 text-xs font-semibold text-amber-200 break-words"
       >
-        {t('admin.starterEvent.totalLine', {
-          credit: fmtLocale(summary.credit, lang),
-          exp: fmtLocale(summary.exp, lang),
-          lv: approxLevelFromExp,
-          voucherCredit: fmtLocale(summary.voucherCredit, lang),
-          voucherExp: fmtLocale(summary.voucherExp, lang),
-        })}
+        {hasExtraSummary
+          ? t('admin.starterEvent.totalLineExtra', {
+              credit: fmtLocale(summary.credit, lang),
+              exp: fmtLocale(summary.exp, lang),
+              lv: approxLevelFromExp,
+              voucherCredit: fmtLocale(summary.voucherCredit, lang),
+              voucherExp: fmtLocale(summary.voucherExp, lang),
+              buffCards: fmtLocale(summary.buffCardsCount, lang),
+              supplies: fmtLocale(summary.suppliesCount, lang),
+            })
+          : t('admin.starterEvent.totalLine', {
+              credit: fmtLocale(summary.credit, lang),
+              exp: fmtLocale(summary.exp, lang),
+              lv: approxLevelFromExp,
+              voucherCredit: fmtLocale(summary.voucherCredit, lang),
+              voucherExp: fmtLocale(summary.voucherExp, lang),
+            })}
       </div>
 
       {/* Granted history + Action buttons */}

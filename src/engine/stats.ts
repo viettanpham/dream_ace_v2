@@ -33,7 +33,11 @@ import type {
 import { sumGearEquipmentStats, sumGearSpecialTraits } from './equipment';
 import { createDefaultSquadFormation } from './formation';
 import { neighbours } from './frontline';
-import { type GearPassiveBonuses, getGearPassiveBonuses } from './skills';
+import {
+  applyPilotBuffsToPassives,
+  type GearPassiveBonuses,
+  getGearPassiveBonuses,
+} from './skills';
 import { createDefaultTacticsForClass } from './tactics';
 
 /**
@@ -118,11 +122,11 @@ export function calculateDerivedStats(
     (lvl - 1) * COMBAT_FORMULAS.shieldPerLevel;
   const maxShield = Math.round(rawMaxShield * (1 + (passives?.maxShieldPct ?? 0)));
 
-  const maxSp = Math.round(
+  const rawMaxSp =
     cls.baseSp +
-      stats.spirit * COMBAT_FORMULAS.spPerSpirit +
-      (lvl - 1) * COMBAT_FORMULAS.spPerLevel
-  );
+    stats.spirit * COMBAT_FORMULAS.spPerSpirit +
+    (lvl - 1) * COMBAT_FORMULAS.spPerLevel;
+  const maxSp = Math.round(rawMaxSp * (1 + (passives?.spMaxPct ?? 0)));
 
   const rawSpeed =
     cls.baseSpeed +
@@ -216,12 +220,18 @@ export function calculateGearPowerRating(
     | 'passiveScaleAfter5'
     | 'restorePctCap'
     | 'passiveSlots'
+    | 'buffCards'
   > | null,
-  warehouse: readonly ItemInstance[] = []
+  warehouse: readonly ItemInstance[] = [],
+  activeBuffs?: PilotAccount['activeBuffs'] | null
 ): number {
   const equipBonuses = sumGearEquipmentStats(gear, inventory, admin, warehouse);
   const traits = sumGearSpecialTraits(gear, inventory, admin, warehouse);
-  const passives = getGearPassiveBonuses(gear, admin);
+  const passives = applyPilotBuffsToPassives(
+    getGearPassiveBonuses(gear, admin),
+    activeBuffs,
+    admin
+  );
   const stats = calculateEffectiveStats(
     gear.classId,
     gear.level,

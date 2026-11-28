@@ -36,6 +36,7 @@ import { BaseSiegeAdminBlock } from './admin/BaseSiegeAdminBlock';
 import { StarterEventAdminBlock } from './admin/StarterEventAdminBlock';
 import { VoucherAdminBlock } from './admin/VoucherAdminBlock';
 import { SkillTiersAdminBlock } from './admin/SkillTiersAdminBlock';
+import { BuffCardsAdminBlock } from './admin/BuffCardsAdminBlock';
 import {
   AdminSection,
   AdminSectionsProvider,
@@ -2242,6 +2243,15 @@ export function AdminPanel() {
                   description={t('admin.battleSection.skillTiers.desc')}
                 >
                   <SkillTiersAdminBlock />
+                </AdminSection>
+
+                {/* 4c. Buff Cards (BUFFCARD-1) */}
+                <AdminSection
+                  id="buff-cards"
+                  title={t('admin.buffCards.title')}
+                  description={t('admin.buffCards.sectionDesc')}
+                >
+                  <BuffCardsAdminBlock onFlash={flash} />
                 </AdminSection>
 
                 {/* 5. Enemy Level (>8 fields) */}

@@ -20,10 +20,13 @@ import {
   getSkillTier,
   type SkillModsSource,
 } from '../data/skills';
+import { getBuffCardPercent } from '../data/buffCards';
 import type {
+  ActiveBuffEntry,
   ActiveSlotsConfig,
   AdminConfig,
   BattleSkillUsability,
+  BuffCardKind,
   CombatUnit,
   GearUnit,
   MechClassId,
@@ -56,6 +59,7 @@ export interface GearPassiveBonuses {
   spRegenFlat: number; // e.g., +3 SP/turn from passive_stat
   maxHpPct: number; // e.g., 0.09 for +9%
   maxShieldPct: number; // e.g., 0.15 for +15%
+  spMaxPct: number; // e.g., 0.10 for +10%
   critFlat: number; // e.g., +4.5% crit chance
   critDamagePct: number; // e.g., +25% crit damage
   dodgeFlat: number; // e.g., +5% dodge chance
@@ -80,6 +84,7 @@ export function createEmptyGearPassiveBonuses(): GearPassiveBonuses {
     spRegenFlat: 0,
     maxHpPct: 0,
     maxShieldPct: 0,
+    spMaxPct: 0,
     critFlat: 0,
     critDamagePct: 0,
     dodgeFlat: 0,
@@ -264,6 +269,79 @@ export function getGearPassiveBonuses(
 
   bonuses.spRegenPerTurn = legacySpRegen + bonuses.spRegenFlat;
   return bonuses;
+}
+
+export function getPilotBuffBonuses(
+  activeBuffs?: Partial<Record<BuffCardKind, ActiveBuffEntry>> | null,
+  admin?: Partial<AdminConfig> | null
+): Partial<GearPassiveBonuses> {
+  if (!activeBuffs) return {};
+  const out: Partial<GearPassiveBonuses> = {};
+
+  const hpEntry = activeBuffs.max_hp;
+  if (hpEntry && hpEntry.battles > 0) {
+    const pct = getBuffCardPercent('max_hp', hpEntry.tier, admin);
+    if (pct > 0) out.maxHpPct = pct / 100;
+  }
+
+  const shieldEntry = activeBuffs.max_shield;
+  if (shieldEntry && shieldEntry.battles > 0) {
+    const pct = getBuffCardPercent('max_shield', shieldEntry.tier, admin);
+    if (pct > 0) out.maxShieldPct = pct / 100;
+  }
+
+  const spEntry = activeBuffs.max_sp;
+  if (spEntry && spEntry.battles > 0) {
+    const pct = getBuffCardPercent('max_sp', spEntry.tier, admin);
+    if (pct > 0) out.spMaxPct = pct / 100;
+  }
+
+  const atkEntry = activeBuffs.attack;
+  if (atkEntry && atkEntry.battles > 0) {
+    const pct = getBuffCardPercent('attack', atkEntry.tier, admin);
+    if (pct > 0) out.attackPct = pct / 100;
+  }
+
+  const defEntry = activeBuffs.defense;
+  if (defEntry && defEntry.battles > 0) {
+    const pct = getBuffCardPercent('defense', defEntry.tier, admin);
+    if (pct > 0) out.defPct = pct / 100;
+  }
+
+  const dodgeEntry = activeBuffs.dodge;
+  if (dodgeEntry && dodgeEntry.battles > 0) {
+    const pts = getBuffCardPercent('dodge', dodgeEntry.tier, admin);
+    if (pts > 0) out.dodgeFlat = pts;
+  }
+
+  return out;
+}
+
+export function applyPilotBuffsToPassives(
+  passives: GearPassiveBonuses,
+  activeBuffs?: Partial<Record<BuffCardKind, ActiveBuffEntry>> | null,
+  admin?: Partial<AdminConfig> | null
+): GearPassiveBonuses {
+  const b = getPilotBuffBonuses(activeBuffs, admin);
+  if (
+    !b.maxHpPct &&
+    !b.maxShieldPct &&
+    !b.spMaxPct &&
+    !b.attackPct &&
+    !b.defPct &&
+    !b.dodgeFlat
+  ) {
+    return passives;
+  }
+  return {
+    ...passives,
+    maxHpPct: passives.maxHpPct + (b.maxHpPct ?? 0),
+    maxShieldPct: passives.maxShieldPct + (b.maxShieldPct ?? 0),
+    spMaxPct: passives.spMaxPct + (b.spMaxPct ?? 0),
+    attackPct: passives.attackPct + (b.attackPct ?? 0),
+    defPct: passives.defPct + (b.defPct ?? 0),
+    dodgeFlat: passives.dodgeFlat + (b.dodgeFlat ?? 0),
+  };
 }
 
 /**

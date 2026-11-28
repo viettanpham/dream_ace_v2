@@ -1,4 +1,12 @@
 import { getSupplyTemplateById, SUPPLY_TEMPLATES } from '../data/consumables';
+import {
+  BUFF_CARD_KINDS,
+  getBuffCardId,
+  getBuffCardPercent,
+  getBuffCardRatePct,
+  getBuffCardWpPrice,
+  resolveBuffCardsConfig,
+} from '../data/buffCards';
 import { PRICE_FORMULA } from '../data/itemPricing';
 import { EQUIPMENT_SLOTS, ITEM_TEMPLATES } from '../data/items';
 import { SECTORS_CATALOG } from '../data/maps';
@@ -252,16 +260,19 @@ export function generateWpMarketOffers(
     minOffers?: number;
     maxOffers?: number;
     shipyardBonus?: boolean;
+    adminConfig?: Partial<AdminConfig> | null;
   } = {},
   rng: () => number = Math.random
 ): WpMarketOffer[] {
+  const maxOffersCap = options.maxOffers ?? SHOP_STOCK_CONFIG.wpMaxOffers;
   const count = rollWeightedStockCount(
     options.minOffers ?? SHOP_STOCK_CONFIG.wpMinOffers,
-    options.maxOffers ?? SHOP_STOCK_CONFIG.wpMaxOffers,
+    maxOffersCap,
     SHOP_STOCK_CONFIG.stockCountWeights,
     options.shipyardBonus ? 1 : 0,
     rng
   );
+  const buffCfg = resolveBuffCardsConfig(options.adminConfig);
 
   const kindPool: ConsumableKind[] = [
     'equipment_crate',
@@ -318,11 +329,46 @@ export function generateWpMarketOffers(
       offers.push({
         id,
         kind: 'exp_boost',
-        battlesCount: SHOP_STOCK_CONFIG.wpOffers.expBoost.battlesCount,
-        bonusPct: SHOP_STOCK_CONFIG.wpOffers.expBoost.expBonusPct,
+        cardId: getBuffCardId('exp', 0),
+        buffKind: 'exp',
+        tier: 0,
+        battlesCount: buffCfg.battlesPerCard,
+        bonusPct: getBuffCardPercent('exp', 0, buffCfg),
         wpCost: SHOP_STOCK_CONFIG.wpOffers.expBoost.wpCost,
         soldOut: false,
       });
+    }
+  }
+
+  for (const tier of [1, 2, 3, 4, 5]) {
+    const ratePct = getBuffCardRatePct(tier, buffCfg.shop);
+    if (ratePct <= 0 || rng() * 100 >= ratePct) continue;
+    const buffKind =
+      BUFF_CARD_KINDS[Math.floor(rng() * BUFF_CARD_KINDS.length)] ?? 'attack';
+    const cardId = getBuffCardId(buffKind, tier);
+    wpOfferSeq += 1;
+    const offer: WpMarketOffer = {
+      id: `wp_offer_${Date.now().toString(36)}_${wpOfferSeq}_${Math.floor(
+        rng() * 1e5
+      ).toString(36)}`,
+      kind: 'buff_card',
+      cardId,
+      buffKind,
+      tier,
+      bonusPct: getBuffCardPercent(buffKind, tier, buffCfg),
+      battlesCount: buffCfg.battlesPerCard,
+      wpCost: getBuffCardWpPrice(buffKind, tier, buffCfg),
+      soldOut: false,
+    };
+    if (offers.length < maxOffersCap) {
+      offers.push(offer);
+    } else {
+      const replaceIdx = offers.findIndex(
+        (o, idx) => idx >= guaranteedKinds.length && o.kind !== 'buff_card'
+      );
+      if (replaceIdx >= 0) {
+        offers[replaceIdx] = offer;
+      }
     }
   }
 

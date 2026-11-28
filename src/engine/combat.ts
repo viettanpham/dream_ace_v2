@@ -85,6 +85,7 @@ import {
 } from './formation';
 import { getBattleOptions, pickDefaultBattle } from './frontline';
 import {
+  applyPilotBuffsToPassives,
   canUnitUseSkill,
   type GearPassiveBonuses,
   getEffectiveSpCost,
@@ -744,7 +745,11 @@ export function createInitialBattleState(
     adminConfig,
     pilot.warehouse
   );
-  const playerPassives = getGearPassiveBonuses(activeGear, adminConfig);
+  const playerPassives = applyPilotBuffsToPassives(
+    getGearPassiveBonuses(activeGear, adminConfig),
+    pilot.activeBuffs,
+    adminConfig
+  );
 
   const savedFormation = Array.isArray(pilot.squadFormation)
     ? pilot.squadFormation

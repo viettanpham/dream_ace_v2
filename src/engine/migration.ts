@@ -40,6 +40,13 @@ import {
   sanitizeStealthConfig,
 } from '../data/balance';
 import {
+  cloneBuffCardsConfig,
+  DEFAULT_BUFF_CARDS_CONFIG,
+  sanitizeBuffCardsConfig,
+  sanitizePilotActiveBuffs,
+  sanitizePilotBuffCards,
+} from '../data/buffCards';
+import {
   DEFAULT_CARD_POPUP_END_SCALE_PCT,
   DEFAULT_CARD_POPUP_FLIGHT_MS,
   DEFAULT_CARD_POPUP_MAX_CONCURRENT,
@@ -533,6 +540,7 @@ export function createDefaultAdminConfig(): AdminConfig {
     crateShop: cloneCrateShopConfig(DEFAULT_CRATE_SHOP_CONFIG),
     starterEvent: cloneStarterEventConfig(DEFAULT_STARTER_EVENT_CONFIG),
     baseSiege: cloneBaseSiegeConfig(DEFAULT_BASE_SIEGE_CONFIG),
+    buffCards: cloneBuffCardsConfig(DEFAULT_BUFF_CARDS_CONFIG),
     skillMods: [],
     mapPack: null,
     showRawI18nKeys: false,
@@ -568,7 +576,6 @@ export function createFreshCampaignState(
     ...createDefaultPilotAccount(name, starterClassId, []),
     consumables: [],
     vouchers: {},
-    activeExpBoostBattles: 0,
     activeEnchantBonusPct: 0,
   };
   const { pilot: withStarterGear } = grantStarterSetToGear(
@@ -610,7 +617,7 @@ export function createFreshCampaignState(
     crateShopStockCredit: rollCrateShopStockCredit(adminConfig.crateShop, rng),
     supplyShopRefresh: { used: 0 },
     wpMarketOffers: generateWpMarketOffers(
-      { shipyardBonus: hasOperationalShipyard(pilot) },
+      { shipyardBonus: hasOperationalShipyard(pilot), adminConfig },
       rng
     ),
     battlesUntilRestock: SHOP_STOCK_CONFIG.restockEveryNBattles,
@@ -1074,6 +1081,7 @@ export function migrateSaveData(
     supplyRewards: sanitizeSupplyRewardsConfig(rawAdmin.supplyRewards),
     crateShop: sanitizeCrateShopConfig(rawAdmin.crateShop),
     baseSiege: sanitizeBaseSiegeConfig(rawAdmin.baseSiege),
+    buffCards: sanitizeBuffCardsConfig(rawAdmin.buffCards),
     skillMods: sanitizeSkillMods(
       rawAdmin.skillMods,
       Array.isArray(rawAdmin.iconCatalogMods) ? rawAdmin.iconCatalogMods : []
@@ -1514,6 +1522,11 @@ export function migrateSaveData(
     const sanitizedStarterEventGranted = sanitizeStarterEventGranted(
       rawPilot.starterEventGranted
     );
+    const sanitizedBuffCards = sanitizePilotBuffCards(rawPilot.buffCards);
+    const sanitizedActiveBuffs = sanitizePilotActiveBuffs(
+      rawPilot.activeBuffs,
+      rawPilot.activeExpBoostBattles
+    );
 
     const migratedPilot: PilotAccount = {
       name: pilotNameClean,
@@ -1536,13 +1549,15 @@ export function migrateSaveData(
       consumables: rawConsumables,
       vouchers: sanitizeOwnedVouchers(rawPilot.vouchers, adminConfig.vouchers),
       ...(Object.keys(sanitizedCards).length > 0 ? { cards: sanitizedCards } : {}),
+      ...(Object.keys(sanitizedBuffCards).length > 0
+        ? { buffCards: sanitizedBuffCards }
+        : {}),
+      ...(Object.keys(sanitizedActiveBuffs).length > 0
+        ? { activeBuffs: sanitizedActiveBuffs }
+        : {}),
       ...(sanitizedStarterEventGranted.length > 0
         ? { starterEventGranted: sanitizedStarterEventGranted }
         : {}),
-      activeExpBoostBattles: Math.max(
-        0,
-        Number(rawPilot.activeExpBoostBattles) || 0
-      ),
       activeEnchantBonusPct: Math.max(
         0,
         Number(rawPilot.activeEnchantBonusPct) || 0
@@ -1635,7 +1650,7 @@ export function migrateSaveData(
         rawWpOffers.length > 0
           ? rawWpOffers
           : generateWpMarketOffers(
-              { shipyardBonus: hasOperationalShipyard(finalMigratedPilot) },
+              { shipyardBonus: hasOperationalShipyard(finalMigratedPilot), adminConfig },
               rng
             ),
       battlesUntilRestock,
@@ -1792,7 +1807,6 @@ export function migrateSaveData(
     activeBonusMission: null,
     consumables: [],
     vouchers: {},
-    activeExpBoostBattles: 0,
     activeEnchantBonusPct: 0,
     squadFormation: createDefaultSquadFormation(
       typeof legacyPlayer.name === 'string' &&
@@ -1843,7 +1857,7 @@ export function migrateSaveData(
     crateShopStockCredit: [],
     supplyShopRefresh: sanitizeSupplyShopRefresh(raw.supplyShopRefresh),
     wpMarketOffers: generateWpMarketOffers(
-      { shipyardBonus: hasOperationalShipyard(finalLegacyPilot) },
+      { shipyardBonus: hasOperationalShipyard(finalLegacyPilot), adminConfig },
       rng
     ),
     battlesUntilRestock,

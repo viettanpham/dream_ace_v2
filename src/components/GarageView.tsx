@@ -28,7 +28,10 @@ import {
   sumGearEquipmentStats,
   sumGearSpecialTraits,
 } from '../engine/equipment';
-import { getGearPassiveBonuses } from '../engine/skills';
+import {
+  applyPilotBuffsToPassives,
+  getGearPassiveBonuses,
+} from '../engine/skills';
 import {
   getStatBreakdown,
   type StatSourceBreakdown,
@@ -190,9 +193,10 @@ export function GarageView() {
         activeGear,
         pilot.inventory,
         adminConfig,
-        pilot.warehouse
+        pilot.warehouse,
+        pilot.activeBuffs
       ),
-    [activeGear, pilot.inventory, adminConfig, pilot.warehouse]
+    [activeGear, pilot.inventory, adminConfig, pilot.warehouse, pilot.activeBuffs]
   );
   const activeNextExp = getExpForNextLevel(activeGear.level);
 
@@ -219,8 +223,13 @@ export function GarageView() {
   );
 
   const passiveBonuses = useMemo(
-    () => getGearPassiveBonuses(activeGear, adminConfig),
-    [activeGear, adminConfig]
+    () =>
+      applyPilotBuffsToPassives(
+        getGearPassiveBonuses(activeGear, adminConfig),
+        pilot.activeBuffs,
+        adminConfig
+      ),
+    [activeGear, pilot.activeBuffs, adminConfig]
   );
 
   const currentStats = useMemo(
@@ -799,7 +808,8 @@ export function GarageView() {
               gear,
               pilot.inventory,
               adminConfig,
-              pilot.warehouse
+              pilot.warehouse,
+              pilot.activeBuffs
             );
             const nextExp = getExpForNextLevel(gear.level);
             const canAfford = pilot.credits >= nextGearPrice;

@@ -16,7 +16,12 @@ import {
   Unlock,
 } from 'lucide-react';
 import { MECH_CLASS_LIST, STAT_KEYS } from '../data/classes';
+import {
+  BUFF_CARD_ICON_IDS,
+  parseBuffCardId,
+} from '../data/buffCards';
 import { ITEM_SLOTS, RARITY_META, SHOP_CONFIG } from '../data/items';
+import { getCatalogRow } from '../data/iconCatalog';
 import { getBoxCapacity } from '../engine/migration';
 import { SHOP_STOCK_CONFIG } from '../data/shopConfig';
 import {
@@ -35,6 +40,8 @@ import { hasOperationalShipyard } from '../engine/shop';
 import {
   formatEquipValidationReason,
   formatItemTraitsList,
+  getBuffCardKindLabel,
+  getBuffCardName,
   getClassName,
   getItemInstanceDesc,
   getItemInstanceName,
@@ -58,6 +65,7 @@ import type {
   WpMarketOffer,
 } from '../types/game';
 import { BottomSheet } from './BottomSheet';
+import { CatalogIcon } from './CatalogIcon';
 import {
   ClassIcon,
   ConsumableIcon,
@@ -83,6 +91,21 @@ function getWpOfferText(
   t: (key: TranslationKey, params?: Record<string, string | number>) => string,
   offer: WpMarketOffer
 ): { name: string; desc: string } {
+  if (offer.kind === 'buff_card') {
+    const parsed = parseBuffCardId(offer.cardId);
+    const buffKind = offer.buffKind ?? parsed?.kind ?? 'attack';
+    const tier = offer.tier ?? parsed?.tier ?? 1;
+    const pct = offer.bonusPct ?? 0;
+    const battles = offer.battlesCount ?? 3;
+    const statLabel = getBuffCardKindLabel(lang, buffKind);
+    return {
+      name: getBuffCardName(lang, buffKind, tier),
+      desc:
+        buffKind === 'dodge'
+          ? t('buffCard.effectPointsDesc', { pct, stat: statLabel, battles })
+          : t('buffCard.effectDesc', { pct, stat: statLabel, battles }),
+    };
+  }
   const rarityLabel = offer.minRarity
     ? getRarityLabel(lang, offer.minRarity)
     : '';
@@ -805,10 +828,24 @@ export function ShopScreen() {
                                   : 'border-purple-400/50 bg-purple-500/15 text-purple-300'
                               }`}
                             >
-                              <ConsumableIcon
-                                kind={offer.kind}
-                                className="w-5 h-5"
-                              />
+                              {offer.kind === 'buff_card' && offer.buffKind ? (
+                                <CatalogIcon
+                                  row={
+                                    getCatalogRow(
+                                      BUFF_CARD_ICON_IDS[offer.buffKind],
+                                      adminConfig.iconCatalogMods
+                                    ) ?? null
+                                  }
+                                  size="sm"
+                                  showBadges={false}
+                                  showArrowBadge={false}
+                                />
+                              ) : (
+                                <ConsumableIcon
+                                  kind={offer.kind}
+                                  className="w-5 h-5"
+                                />
+                              )}
                             </div>
                             <div className="min-w-0">
                               <div className="text-sm font-bold text-slate-100 truncate">
@@ -887,10 +924,24 @@ export function ShopScreen() {
                                       : 'border-purple-400/50 bg-purple-500/15 text-purple-300'
                                   }`}
                                 >
-                                  <ConsumableIcon
-                                    kind={offer.kind}
-                                    className="w-5 h-5"
-                                  />
+                                  {offer.kind === 'buff_card' && offer.buffKind ? (
+                                    <CatalogIcon
+                                      row={
+                                        getCatalogRow(
+                                          BUFF_CARD_ICON_IDS[offer.buffKind],
+                                          adminConfig.iconCatalogMods
+                                        ) ?? null
+                                      }
+                                      size="sm"
+                                      showBadges={false}
+                                      showArrowBadge={false}
+                                    />
+                                  ) : (
+                                    <ConsumableIcon
+                                      kind={offer.kind}
+                                      className="w-5 h-5"
+                                    />
+                                  )}
                                 </div>
 
                                 <div className="min-w-0">

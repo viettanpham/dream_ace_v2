@@ -20,6 +20,20 @@ import {
   sanitizeStealthConfig,
   setRuntimeMaxLevel,
 } from '../data/balance';
+import {
+  getBuffCardId,
+  getBuffCardPercent,
+  parseBuffCardId,
+  sanitizeBuffCardsConfig,
+  sanitizePilotActiveBuffs,
+  sanitizePilotBuffCards,
+} from '../data/buffCards';
+import {
+  decrementActiveBuffsAfterBattle,
+  grantBuffCardToPilot,
+  useBuffCard as useBuffCardEngine,
+  type UseBuffCardResult,
+} from '../engine/buffCards';
 import { BATTLE_KIND_RULES } from '../data/battleKinds';
 import { sanitizeAutoEquipConfig } from '../data/autoEquipConfig';
 import { EMPTY_STAT_BLOCK, MECH_CLASS_LIST } from '../data/classes';
@@ -730,6 +744,10 @@ interface GameStoreState {
     reason?: 'not_found' | 'sold_out' | 'insufficient_wp';
   };
   refreshWpMarket: () => { ok: boolean; cost: number };
+  useBuffCard: (
+    cardId: string,
+    opts?: { confirmReplace?: boolean }
+  ) => UseBuffCardResult;
   useConsumable: (consumableId: string) => {
     ok: boolean;
     openedItem?: ItemInstance;
@@ -827,6 +845,10 @@ interface GameStoreState {
     added: number;
     lost: number;
   };
+  adminGiveBuffCard: (
+    cardId: string,
+    qty: number
+  ) => { ok: boolean; cardId?: string; qty?: number };
   adminUpdateConfig: (patch: Partial<AdminConfig>) => void;
   applyMapPack: (
     pack: MapPackDefinition | null
@@ -1000,13 +1022,20 @@ function finalizeBattleOutcome(
     state.adminConfig?.moduleDrop
   );
 
-  // Active EXP Boost consumable (+50% EXP for N battles)
-  const expBoostActive = (state.pilot.activeExpBoostBattles ?? 0) > 0;
-  const effectiveExpGained = expBoostActive
-    ? Math.round(
-        rewards.expGained * (1 + SHOP_STOCK_CONFIG.wpOffers.expBoost.expBonusPct / 100)
-      )
-    : rewards.expGained;
+  // Active EXP buff card multiplier
+  const activeBuffsBeforeBattle = sanitizePilotActiveBuffs(
+    state.pilot.activeBuffs,
+    state.pilot.activeExpBoostBattles
+  );
+  const expBuffEntry = activeBuffsBeforeBattle.exp;
+  const expBuffPct =
+    expBuffEntry && expBuffEntry.battles > 0
+      ? getBuffCardPercent('exp', expBuffEntry.tier, state.adminConfig)
+      : 0;
+  const effectiveExpGained =
+    expBuffPct > 0
+      ? Math.round(rewards.expGained * (1 + expBuffPct / 100))
+      : rewards.expGained;
 
   // Per-Gear EXP: ONLY the deployed Gear receives EXP & battle record!
   const levelResult = applyExpToGear(deployedGear, effectiveExpGained, { won });
@@ -1074,6 +1103,11 @@ function finalizeBattleOutcome(
     nextCapturedSectors = [...state.pilot.capturedSectorIds, battle.sectorId];
   }
 
+  const { nextActiveBuffs } = decrementActiveBuffsAfterBattle(
+    state.pilot.activeBuffs,
+    state.pilot.activeExpBoostBattles
+  );
+
   const pilotWithBaseRewards: PilotAccount = {
     ...state.pilot,
     credits: finalCredits,
@@ -1085,9 +1119,8 @@ function finalizeBattleOutcome(
     },
     unlockedSectorIds: state.pilot.unlockedSectorIds,
     capturedSectorIds: nextCapturedSectors,
-    activeExpBoostBattles: expBoostActive
-      ? Math.max(0, (state.pilot.activeExpBoostBattles ?? 1) - 1)
-      : 0,
+    activeBuffs: nextActiveBuffs,
+    activeExpBoostBattles: undefined,
   };
   const basePilotBeforeConsequences = pilotWithBaseRewards;
   const totalCreditsGained = rewards.creditsGained;
@@ -1286,7 +1319,10 @@ function finalizeBattleOutcome(
     ? { used: 0 }
     : sanitizeSupplyShopRefresh(state.supplyShopRefresh);
   const refreshedWpOffers = shouldRestock
-    ? generateWpMarketOffers({ shipyardBonus: hasOperationalShipyard(nextPilot) })
+    ? generateWpMarketOffers({
+        shipyardBonus: hasOperationalShipyard(nextPilot),
+        adminConfig: state.adminConfig,
+      })
     : state.wpMarketOffers;
 
   if (won) soundFx.playVictory();
@@ -2815,6 +2851,7 @@ export const useGameStore = create<GameStoreState>()(
         const nextWpOffers = SHOP_STOCK_CONFIG.restockOnMonthAdvance
           ? generateWpMarketOffers({
               shipyardBonus: hasOperationalShipyard(summary.pilot),
+              adminConfig: state.adminConfig,
             })
           : state.wpMarketOffers;
         set({
@@ -4003,6 +4040,30 @@ export const useGameStore = create<GameStoreState>()(
           return { ok: false, reason: 'insufficient_wp' };
         }
 
+        const nextOffers = state.wpMarketOffers.map((o, i) =>
+          i === idx ? { ...o, soldOut: true } : o
+        );
+
+        if (offer.kind === 'buff_card' || offer.kind === 'exp_boost') {
+          const targetCardId =
+            offer.cardId ?? getBuffCardId('exp', 0);
+          const pilotWithCard = grantBuffCardToPilot(
+            state.pilot,
+            targetCardId,
+            1
+          );
+          soundFx.playConfirm();
+          set({
+            pilot: {
+              ...pilotWithCard,
+              warPoints: state.pilot.warPoints - offer.wpCost,
+            },
+            wpMarketOffers: nextOffers,
+            hasSaveData: true,
+          });
+          return { ok: true };
+        }
+
         const existingConsumables = [...(state.pilot.consumables ?? [])];
         // Stack identical consumables when possible
         const matchIdx = existingConsumables.findIndex(
@@ -4029,10 +4090,6 @@ export const useGameStore = create<GameStoreState>()(
             battlesCount: offer.battlesCount,
           });
         }
-
-        const nextOffers = state.wpMarketOffers.map((o, i) =>
-          i === idx ? { ...o, soldOut: true } : o
-        );
 
         soundFx.playConfirm();
         set({
@@ -4061,10 +4118,32 @@ export const useGameStore = create<GameStoreState>()(
           },
           wpMarketOffers: generateWpMarketOffers({
             shipyardBonus: hasOperationalShipyard(state.pilot),
+            adminConfig: state.adminConfig,
           }),
           hasSaveData: true,
         });
         return { ok: true, cost };
+      },
+
+      useBuffCard: (cardId, opts) => {
+        const state = get();
+        const res = useBuffCardEngine(
+          state.pilot,
+          cardId,
+          state.adminConfig,
+          {
+            confirmReplace: opts?.confirmReplace,
+            isBattleActive: isBattleActive(state),
+            isAutoRepeatActive: Boolean(state.autoRepeatSession?.active),
+          }
+        );
+        if (!res.ok) return res;
+        soundFx.playConfirm();
+        set({
+          pilot: res.pilot,
+          hasSaveData: true,
+        });
+        return res;
       },
 
       useConsumable: (consumableId) => {
@@ -4147,16 +4226,36 @@ export const useGameStore = create<GameStoreState>()(
         }
 
         if (entry.kind === 'exp_boost') {
-          const battles =
-            entry.battlesCount ?? SHOP_STOCK_CONFIG.wpOffers.expBoost.battlesCount;
+          const cardId = getBuffCardId('exp', 0);
+          const pilotWithCard = grantBuffCardToPilot(
+            { ...state.pilot, consumables: nextConsumables },
+            cardId,
+            1
+          );
+          const useRes = useBuffCardEngine(
+            pilotWithCard,
+            cardId,
+            state.adminConfig,
+            {
+              isBattleActive: isBattleActive(state),
+              isAutoRepeatActive: Boolean(state.autoRepeatSession?.active),
+            }
+          );
+          if (!useRes.ok) {
+            if (useRes.reason === 'busy') {
+              return { ok: false };
+            }
+            // Move into buffCards stock so user can confirm replace or wait for stack room
+            soundFx.playConfirm();
+            set({
+              pilot: pilotWithCard,
+              hasSaveData: true,
+            });
+            return { ok: true, kind: entry.kind };
+          }
           soundFx.playConfirm();
           set({
-            pilot: {
-              ...state.pilot,
-              consumables: nextConsumables,
-              activeExpBoostBattles:
-                (state.pilot.activeExpBoostBattles ?? 0) + battles,
-            },
+            pilot: useRes.pilot,
             hasSaveData: true,
           });
           return { ok: true, kind: entry.kind };
@@ -5917,6 +6016,7 @@ export const useGameStore = create<GameStoreState>()(
           supplyShopRefresh: { used: 0 },
           wpMarketOffers: generateWpMarketOffers({
             shipyardBonus: hasOperationalShipyard(state.pilot),
+            adminConfig: state.adminConfig,
           }),
           battlesUntilRestock: SHOP_STOCK_CONFIG.restockEveryNBattles,
           hasSaveData: true,
@@ -6517,6 +6617,22 @@ export const useGameStore = create<GameStoreState>()(
         };
       },
 
+      adminGiveBuffCard: (cardId, qty) => {
+        const parsed = parseBuffCardId(cardId);
+        const amount = Math.max(
+          1,
+          Math.min(999, Math.floor(Number(qty) || 1))
+        );
+        if (!parsed) return { ok: false };
+        const normalizedId = getBuffCardId(parsed.kind, parsed.tier);
+        set((state) => ({
+          pilot: grantBuffCardToPilot(state.pilot, normalizedId, amount),
+          hasSaveData: true,
+        }));
+        soundFx.playConfirm();
+        return { ok: true, cardId: normalizedId, qty: amount };
+      },
+
       adminUpdateConfig: (patch) => {
         set((state) => {
           const nextFormation = patch.formation
@@ -6575,10 +6691,15 @@ export const useGameStore = create<GameStoreState>()(
             patch.baseSiege !== undefined
               ? sanitizeBaseSiegeConfig(patch.baseSiege)
               : sanitizeBaseSiegeConfig(state.adminConfig.baseSiege);
+          const nextBuffCards =
+            patch.buffCards !== undefined
+              ? sanitizeBuffCardsConfig(patch.buffCards)
+              : sanitizeBuffCardsConfig(state.adminConfig.buffCards);
           const nextAdminConfig: AdminConfig = {
             ...state.adminConfig,
             ...patch,
             baseSiege: nextBaseSiege,
+            buffCards: nextBuffCards,
             ...sanitizeSupplyShopExtraConfig({
               supplyShopMaxRefreshes:
                 patch.supplyShopMaxRefreshes ??
@@ -7112,6 +7233,7 @@ export const useGameStore = create<GameStoreState>()(
                 rawAdmin.starterEvent,
                 rawAdmin.vouchers as AdminConfig['vouchers']
               ),
+              buffCards: sanitizeBuffCardsConfig(rawAdmin.buffCards),
               rewardMultiplier:
                 typeof state.adminConfig.rewardMultiplier === 'number' &&
                 Number.isFinite(state.adminConfig.rewardMultiplier) &&
@@ -7144,6 +7266,24 @@ export const useGameStore = create<GameStoreState>()(
                 delete state.pilot.cards;
               }
             }
+            const sanitizedBuffCards = sanitizePilotBuffCards(
+              state.pilot.buffCards
+            );
+            if (Object.keys(sanitizedBuffCards).length > 0) {
+              state.pilot.buffCards = sanitizedBuffCards;
+            } else {
+              delete state.pilot.buffCards;
+            }
+            const sanitizedActiveBuffs = sanitizePilotActiveBuffs(
+              state.pilot.activeBuffs,
+              state.pilot.activeExpBoostBattles
+            );
+            if (Object.keys(sanitizedActiveBuffs).length > 0) {
+              state.pilot.activeBuffs = sanitizedActiveBuffs;
+            } else {
+              delete state.pilot.activeBuffs;
+            }
+            delete state.pilot.activeExpBoostBattles;
             if (state.pilot.starterEventGranted !== undefined) {
               const sanitizedGranted = sanitizeStarterEventGranted(
                 state.pilot.starterEventGranted
@@ -7244,6 +7384,7 @@ export const useGameStore = create<GameStoreState>()(
           ) {
             state.wpMarketOffers = generateWpMarketOffers({
               shipyardBonus: hasOperationalShipyard(state.pilot),
+              adminConfig: state.adminConfig,
             });
           }
           if (

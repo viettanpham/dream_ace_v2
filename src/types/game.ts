@@ -627,7 +627,37 @@ export type ConsumableKind =
   | 'respec_token'
   | 'exp_boost'
   | 'battle_supply'
-  | 'supply_crate';
+  | 'supply_crate'
+  | 'buff_card';
+
+export type BuffCardKind =
+  | 'exp'
+  | 'max_hp'
+  | 'max_shield'
+  | 'max_sp'
+  | 'attack'
+  | 'defense'
+  | 'dodge';
+
+export interface ActiveBuffEntry {
+  tier: number;
+  battles: number;
+}
+
+export interface BuffCardsShopConfig {
+  baseRatePct: number;
+  decayPctPerTier: number;
+  minRatePct: number;
+}
+
+export interface BuffCardsConfig {
+  battlesPerCard: number;
+  maxStackBattles: number;
+  tiers: Record<BuffCardKind, number[]>;
+  wpPrice: Record<BuffCardKind, number[]>;
+  priceMult: number;
+  shop: BuffCardsShopConfig;
+}
 
 export type SupplyFamily = 'hp_kit' | 'shield_kit' | 'sp_kit' | 'buff' | 'utility';
 
@@ -670,6 +700,9 @@ export interface ConsumableItem {
   kind: ConsumableKind;
   quantity: number;
   templateId?: string;
+  cardId?: string;
+  buffKind?: BuffCardKind;
+  tier?: number;
   slot?: EquipmentSlot;
   minRarity?: ItemRarity;
   bonusPct?: number;
@@ -681,6 +714,9 @@ export interface WpMarketOffer {
   kind: ConsumableKind;
   wpCost: number;
   soldOut: boolean;
+  cardId?: string;
+  buffKind?: BuffCardKind;
+  tier?: number;
   slot?: EquipmentSlot;
   minRarity?: ItemRarity;
   bonusPct?: number;
@@ -1078,6 +1114,8 @@ export interface PilotAccount {
   sectorSupply?: Record<string, number>;
   vouchers?: Record<string, number>;
   cards?: Record<string, number>;
+  buffCards?: Record<string, number>;
+  activeBuffs?: Partial<Record<BuffCardKind, ActiveBuffEntry>>;
   starterEventGranted?: string[];
 }
 
@@ -1838,6 +1876,7 @@ export interface AdminConfig {
   supplyRewards?: SupplyRewardsConfig;
   crateShop?: CrateShopConfig;
   baseSiege?: BaseSiegeConfig;
+  buffCards?: BuffCardsConfig;
   showRawI18nKeys: boolean;
 }
 
@@ -1845,12 +1884,15 @@ export type StarterEventEntryType =
   | 'card_credit'
   | 'card_exp'
   | 'voucher_credit'
-  | 'voucher_exp';
+  | 'voucher_exp'
+  | 'buff_card'
+  | 'supply';
 
 export interface StarterEventEntry {
   type: StarterEventEntryType;
   value: number;
   qty: number;
+  refId?: string;
 }
 
 export type StarterEventMode = 'oncePerSave' | 'perGear';
