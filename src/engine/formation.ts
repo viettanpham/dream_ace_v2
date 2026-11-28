@@ -71,7 +71,7 @@ export function sanitizeFormationConfig(
     'formationFrontCapacity' in obj ||
     'formationBackCapacity' in obj
   ) {
-    // Legacy save migration: if old defaults (4/4), adopt clean 3-row defaults (8/8/8).
+    // Legacy save migration: if old defaults (4/4), adopt clean 3-row defaults (5/5/5).
     // If customized, preserve custom front/back caps while adding middle row.
     const oldFront = Number(obj.formationFrontCapacity);
     const oldBack = Number(obj.formationBackCapacity);

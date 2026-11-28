@@ -4,7 +4,7 @@ export const FORMATION_ROWS: readonly CombatRow[] = ['front', 'middle', 'back'] 
 
 /**
  * Centralized 3-row formation configuration (editable in Admin CP).
- * - Row capacities default: front 8, middle 8, back 8 (max 8 per side).
+ * - Row capacities default: front 5, middle 5, back 5 (max 8 per side).
  * - Row modifiers default:
  *   - front:  +10% DEF, 0% damage
  *   - middle: neutral (0% DEF, 0% damage)
@@ -12,9 +12,9 @@ export const FORMATION_ROWS: readonly CombatRow[] = ['front', 'middle', 'back'] 
  */
 export const DEFAULT_FORMATION_CONFIG: FormationConfig = {
   rowCapacities: {
-    front: 8,
-    middle: 8,
-    back: 8,
+    front: 5,
+    middle: 5,
+    back: 5,
   },
   maxUnitsPerSide: 8,
   rowModifiers: {

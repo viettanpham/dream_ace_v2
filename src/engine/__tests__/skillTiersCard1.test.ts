@@ -191,7 +191,8 @@ describe('TASK CARD-1: Skill tiers (Credit / WP / Card) & card price multiplier'
     expect(sanitizeSkillWpCostFactor(-5)).toBe(0.0001);
     expect(sanitizeSkillWpCostFactor(5)).toBe(1);
     expect(sanitizeSkillCardPriceMult(0)).toBe(0.1);
-    expect(sanitizeSkillCardPriceMult(100)).toBe(20);
+    expect(sanitizeSkillCardPriceMult(100)).toBe(100);
+    expect(sanitizeSkillCardPriceMult(2_000_000_000)).toBe(999_999_999);
 
     // 9 active special/elite + 9 passive cards = 18 default cards
     expect(OPENING_CARDS_LIST.length).toBe(18);

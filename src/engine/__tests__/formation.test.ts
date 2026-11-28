@@ -482,11 +482,11 @@ describe('3-Row Formation System', () => {
       };
 
       const migrated = migrateSaveData(legacySave, CURRENT_SAVE_VERSION - 1);
-      // Old 4/4 defaults cleanly migrate to 3-row 8/8/8 defaults
+      // Old 4/4 defaults cleanly migrate to 3-row 5/5/5 defaults
       expect(migrated.adminConfig.formation.rowCapacities).toEqual({
-        front: 8,
-        middle: 8,
-        back: 8,
+        front: 5,
+        middle: 5,
+        back: 5,
       });
       expect(migrated.adminConfig.formation.maxUnitsPerSide).toBe(8);
       // Dead legacy key must not exist
@@ -569,10 +569,10 @@ describe('3-Row Formation System', () => {
       expect(byId.get('p1')).toBe('back');
       expect(byId.get('p2')).toBe('back');
 
-      // Row counts stay strictly within default capacities (8 / 8 / 8)
-      expect(placed.filter((u) => u.row === 'front').length).toBeLessThanOrEqual(8);
-      expect(placed.filter((u) => u.row === 'middle').length).toBeLessThanOrEqual(8);
-      expect(placed.filter((u) => u.row === 'back').length).toBeLessThanOrEqual(8);
+      // Row counts stay strictly within default capacities (5 / 5 / 5)
+      expect(placed.filter((u) => u.row === 'front').length).toBeLessThanOrEqual(5);
+      expect(placed.filter((u) => u.row === 'middle').length).toBeLessThanOrEqual(5);
+      expect(placed.filter((u) => u.row === 'back').length).toBeLessThanOrEqual(5);
     });
 
     it('never fails even when more units than a single preferred row capacity exist', () => {

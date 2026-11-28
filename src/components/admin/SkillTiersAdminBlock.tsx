@@ -4,6 +4,8 @@ import {
   DEFAULT_SKILL_CARD_PRICE_MULT,
   DEFAULT_SKILL_TIERS_CONFIG,
   DEFAULT_SKILL_WP_COST_FACTOR,
+  MAX_SKILL_CARD_PRICE_MULT,
+  MIN_SKILL_CARD_PRICE_MULT,
   sanitizeSkillCardPriceMult,
   sanitizeSkillWpCostFactor,
 } from '../../data/balance';
@@ -227,8 +229,8 @@ export function SkillTiersAdminBlock() {
           </span>
           <input
             type="number"
-            min={0.1}
-            max={20}
+            min={MIN_SKILL_CARD_PRICE_MULT}
+            max={MAX_SKILL_CARD_PRICE_MULT}
             step={0.1}
             data-testid="admin-skill-card-price-mult"
             value={cardMult}

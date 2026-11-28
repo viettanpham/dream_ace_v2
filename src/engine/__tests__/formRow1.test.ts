@@ -76,17 +76,17 @@ describe('FORM-ROW-1 defaults and class preferences', () => {
     expect(placedAttackers.find((u) => u.id === 'st_2')?.row).toBe('front');
   });
 
-  it('defaults fresh config to 8-8-8, restores 8-8-8 on reset, and preserves saved 3/3/2 on load', () => {
+  it('defaults fresh config to 5-5-5, restores 5-5-5 on reset, and preserves saved 3/3/2 on load', () => {
     const freshAdmin = createDefaultAdminConfig();
     expect(freshAdmin.formation.rowCapacities).toEqual({
-      front: 8,
-      middle: 8,
-      back: 8,
+      front: 5,
+      middle: 5,
+      back: 5,
     });
     expect(freshAdmin.formation.maxUnitsPerSide).toBe(8);
 
     const resetCfg = cloneFormationConfig(DEFAULT_FORMATION_CONFIG);
-    expect(resetCfg.rowCapacities).toEqual({ front: 8, middle: 8, back: 8 });
+    expect(resetCfg.rowCapacities).toEqual({ front: 5, middle: 5, back: 5 });
 
     const saved332 = {
       pilot: createDefaultPilotAccount('Veteran', 'striker'),

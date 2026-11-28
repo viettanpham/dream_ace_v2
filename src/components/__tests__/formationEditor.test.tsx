@@ -42,16 +42,16 @@ describe('FormationEditor UI (3-Row Squad Editor)', () => {
     expect(middleRow).not.toBeNull();
     expect(backRow).not.toBeNull();
 
-    // Capacity displays default 8/8/8 with Siege (2) front, Striker/Interceptor (4) middle, Support (2) back
+    // Capacity displays default 5/5/5 with Siege (2) front, Striker/Interceptor (4) middle, Support (2) back
     expect(
       container.querySelector('[data-testid="row-capacity-front"]')?.textContent
-    ).toBe('2/8');
+    ).toBe('2/5');
     expect(
       container.querySelector('[data-testid="row-capacity-middle"]')?.textContent
-    ).toBe('4/8');
+    ).toBe('4/5');
     expect(
       container.querySelector('[data-testid="row-capacity-back"]')?.textContent
-    ).toBe('2/8');
+    ).toBe('2/5');
 
     // One-line effect descriptions reflect default row modifiers
     expect(frontRow?.textContent).toContain('+10% DEF');

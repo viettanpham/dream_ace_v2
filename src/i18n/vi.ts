@@ -2412,7 +2412,7 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'admin.skillTiers.wpFactorExample': 'Nâng kỹ năng 5000 Credits = {wp} WP',
   'admin.skillTiers.cardPriceMultLabel': 'Hệ số giá thẻ & WP (skillCardPriceMult)',
   'admin.skillTiers.cardPriceMultDesc':
-    'Nhân giá WP của mọi thẻ kỹ năng trong shop và chi phí học bậc WP (0.1–20)',
+    'Nhân giá WP của mọi thẻ kỹ năng trong shop và chi phí học bậc WP (0.1–999.999.999)',
   'admin.skillTiers.cardPriceExample': 'Thẻ Special 1000 WP -> {wp} WP',
   'admin.skillTiers.resetBtn': 'Khôi phục mặc định',
   'admin.battleSection.enemyLevel.title': 'Cấp độ kẻ địch',

@@ -921,9 +921,9 @@ export const DEFAULT_SKILL_WP_COST_FACTOR = 0.001;
 export const MIN_SKILL_WP_COST_FACTOR = 0.0001;
 export const MAX_SKILL_WP_COST_FACTOR = 1;
 
-export const DEFAULT_SKILL_CARD_PRICE_MULT = 1;
+export const DEFAULT_SKILL_CARD_PRICE_MULT = 10;
 export const MIN_SKILL_CARD_PRICE_MULT = 0.1;
-export const MAX_SKILL_CARD_PRICE_MULT = 20;
+export const MAX_SKILL_CARD_PRICE_MULT = 999999999;
 
 export const DEFAULT_SKILL_TIERS_CONFIG: SkillTiersConfig = {
   striker: {

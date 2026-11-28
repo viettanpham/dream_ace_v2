@@ -2409,7 +2409,7 @@ export const EN_TRANSLATIONS = {
   'admin.skillTiers.wpFactorExample': '5000 Credits upgrade = {wp} WP',
   'admin.skillTiers.cardPriceMultLabel': 'Card & WP Price Mult (skillCardPriceMult)',
   'admin.skillTiers.cardPriceMultDesc':
-    'Multiplies WP prices of all shop skill cards and WP-tier skill learn costs (0.1–20)',
+    'Multiplies WP prices of all shop skill cards and WP-tier skill learn costs (0.1–999,999,999)',
   'admin.skillTiers.cardPriceExample': 'Special Card 1000 WP -> {wp} WP',
   'admin.skillTiers.resetBtn': 'Reset to Defaults',
   'admin.battleSection.enemyLevel.title': 'Enemy Level',
