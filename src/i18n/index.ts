@@ -1328,6 +1328,12 @@ function formatCombatLogBody(
       });
     }
 
+    case 'log.voice':
+      return translate(lang, 'log.voice', {
+        actor: String(p.actor ?? entry.actorName ?? ''),
+        line: String(p.line ?? ''),
+      });
+
     case 'log.unitMovesRow': {
       const rowKey =
         p.row === 'front'

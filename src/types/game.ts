@@ -1233,6 +1233,34 @@ export interface FloatingPopup {
   tone: PopupTone;
 }
 
+export type VoiceTrigger =
+  | 'startTaunt'
+  | 'skillAttack'
+  | 'skillSupport'
+  | 'supplyUse'
+  | 'kill'
+  | 'crit'
+  | 'evade'
+  | 'lowHp'
+  | 'shieldBreak'
+  | 'allyDown'
+  | 'win'
+  | 'lose';
+
+export type VoiceSpeakerSide = 'ally' | 'player' | 'enemy';
+
+export interface BattleVoiceState {
+  enabled?: boolean;
+  seed: number;
+  counter: number;
+  unitActionCounts: Record<string, number>;
+  lastSpokeActionByUnit: Record<string, number>;
+  spokenCountByRound: Record<number, number>;
+  lowHpSpokenUnitIds: string[];
+  winSpoken?: boolean;
+  loseSpoken?: boolean;
+}
+
 export type CombatLogTag =
   | 'ATTACK'
   | 'SKILL'
@@ -1243,12 +1271,14 @@ export type CombatLogTag =
   | 'HEAL'
   | 'STATUS'
   | 'KO'
-  | 'SYSTEM';
+  | 'SYSTEM'
+  | 'VOICE';
 
 export type CombatLogTemplateKey =
   | 'log.battleStart'
   | 'log.sectorSupply'
   | 'log.npcBuffCards'
+  | 'log.voice'
   | 'log.enragePhaseActivated'
   | 'log.defend'
   | 'log.healSquad'
@@ -1308,6 +1338,7 @@ export interface CombatLogEntry {
   actorIsBoss?: boolean;
   autoRuleNumber?: number; // >0 => [AUTO #N], 0 => [AUTO] fallback
   tag: CombatLogTag;
+  category?: 'voice';
   templateKey: CombatLogTemplateKey;
   params: Record<string, string | number>;
 }
@@ -1561,6 +1592,7 @@ export interface BattleState {
   turnStep2Used?: number;
   turnLockedSkillIds?: string[];
   prestage?: PrestageState;
+  voice?: BattleVoiceState;
   isResolving: boolean;
   summary: BattleSummary | null;
 }

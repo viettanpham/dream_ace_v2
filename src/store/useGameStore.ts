@@ -208,6 +208,11 @@ import {
   sanitizeAutoSuppliesConfig,
 } from '../engine/supplyAi';
 import {
+  applyActionVoiceHooks,
+  emitOutcomeVoice,
+  emitVoice,
+} from '../engine/voice';
+import {
   addSupplyCrateToConsumables,
   addSupplyWithOverflow,
   applySupplyRewardGrant,
@@ -1372,11 +1377,22 @@ function finalizeBattleOutcome(
   const enemies = updatedUnits.filter((u) => u.side === 'enemy');
   const aliveAllies = updatedUnits.filter((u) => u.side === 'ally' && u.alive);
 
+  const outcomeVoiced = emitOutcomeVoice(
+    {
+      ...battle,
+      units: updatedUnits,
+      log: extraLog,
+    },
+    won
+  );
+
   // Update Auto-Repeat batch session if active (or stopped manually during current run)
   let nextAutoRepeat = state.autoRepeatSession;
   let nextAutoRepeatToast: AutoRepeatRunToast | null = null;
   let finalLog =
-    supplyRewardLogs.length > 0 ? [...extraLog, ...supplyRewardLogs] : extraLog;
+    supplyRewardLogs.length > 0
+      ? [...outcomeVoiced.log, ...supplyRewardLogs]
+      : outcomeVoiced.log;
   if (baseConseq.siegeResult) {
     const sr = baseConseq.siegeResult;
     finalLog = [
@@ -1567,6 +1583,7 @@ function finalizeBattleOutcome(
     battle: {
       ...battle,
       units: updatedUnits,
+      voice: outcomeVoiced.voice,
       turnCounter: extraTurnCounter,
       log: finalLog,
       events: extraEvents,
@@ -4786,13 +4803,25 @@ export const useGameStore = create<GameStoreState>()(
         playCue(feedback.cue, muteSound);
 
         const supplyLog = enrichLogEntries([feedback.logEntry], activeUnit);
+        const supplyActorAfter =
+          res.units.find((u) => u.id === activeUnit.id) ?? activeUnit;
+        const supplyVoiced = emitVoice(
+          {
+            ...battle,
+            units: res.units,
+            log: [...battle.log, ...supplyLog],
+          },
+          'supplyUse',
+          supplyActorAfter
+        );
 
         set({
           battle: {
             ...battle,
             units: res.units,
             supplyByUnit: res.supplyByUnit,
-            log: [...battle.log, ...supplyLog],
+            log: supplyVoiced.log,
+            voice: supplyVoiced.voice,
             popups: skipVisualFx
               ? []
               : [...battle.popups, ...feedback.popups].slice(-18),
@@ -4884,6 +4913,19 @@ export const useGameStore = create<GameStoreState>()(
         ].slice(-5000);
         const enrichedLogs = enrichLogEntries(resolution.logEntries, activeUnit);
         let nextLog = [...battle.log, ...enrichedLogs];
+        const voicedAfterAction = applyActionVoiceHooks({
+          state: {
+            ...battle,
+            units: resolution.updatedUnits,
+            log: nextLog,
+          },
+          beforeUnits: battle.units,
+          events: resolution.events,
+          actorId: activeUnit.id,
+          adminConfig: state.adminConfig,
+        });
+        nextLog = voicedAfterAction.log;
+        const nextVoice = voicedAfterAction.voice;
         const nextPopups = skipVisualFx
           ? []
           : [...battle.popups, ...resolution.popups].slice(-18);
@@ -4903,7 +4945,7 @@ export const useGameStore = create<GameStoreState>()(
           set(
             finalizeBattleOutcome(
               state,
-              battle,
+              { ...battle, voice: nextVoice },
               resolution.updatedUnits,
               won,
               false,
@@ -4957,6 +4999,7 @@ export const useGameStore = create<GameStoreState>()(
             battle: {
               ...battle,
               units: resolution.updatedUnits,
+              voice: nextVoice,
               log: nextLog,
               events: nextEvents,
               popups: nextPopups,
@@ -5030,6 +5073,7 @@ export const useGameStore = create<GameStoreState>()(
           battle: {
             ...battle,
             units: finalUnits,
+            voice: nextVoice,
             supplyByUnit: nextSupplyByUnit,
             turnCounter: nextTurnCounter,
             log: nextLog,
@@ -5369,6 +5413,19 @@ export const useGameStore = create<GameStoreState>()(
           autoRuleNumber
         );
         let nextLog = [...battle.log, ...enrichedLogs];
+        const voicedAfterAuto = applyActionVoiceHooks({
+          state: {
+            ...battle,
+            units: resolution.updatedUnits,
+            log: nextLog,
+          },
+          beforeUnits: battle.units,
+          events: resolution.events,
+          actorId: activeUnit.id,
+          adminConfig: state.adminConfig,
+        });
+        nextLog = voicedAfterAuto.log;
+        const nextVoice = voicedAfterAuto.voice;
         const nextPopups = skipVisualFx
           ? []
           : [...battle.popups, ...resolution.popups].slice(-18);
@@ -5388,7 +5445,7 @@ export const useGameStore = create<GameStoreState>()(
           set(
             finalizeBattleOutcome(
               state,
-              battle,
+              { ...battle, voice: nextVoice },
               resolution.updatedUnits,
               won,
               false,
@@ -5461,6 +5518,7 @@ export const useGameStore = create<GameStoreState>()(
           battle: {
             ...battle,
             units: finalUnits,
+            voice: nextVoice,
             supplyByUnit: nextSupplyByUnit,
             turnCounter: nextTurnCounter,
             log: nextLog,
@@ -5556,11 +5614,16 @@ export const useGameStore = create<GameStoreState>()(
             templates: SUPPLY_TEMPLATES,
             rng: Math.random,
           });
+          const usedSupplyInStep =
+            supplyStep.battle.log.length > workingBattle.log.length;
           workingBattle = supplyStep.battle;
           npcSupplyEvents = supplyStep.events;
           workingActor =
             workingBattle.units.find((u) => u.id === activeUnit.id) ??
             activeUnit;
+          if (usedSupplyInStep) {
+            workingBattle = emitVoice(workingBattle, 'supplyUse', workingActor);
+          }
         }
 
         const resolution = resolveMultiStepTurn({
@@ -5612,6 +5675,19 @@ export const useGameStore = create<GameStoreState>()(
           workingActor
         );
         let nextLog = [...workingBattle.log, ...enrichedLogs];
+        const voicedAfterAi = applyActionVoiceHooks({
+          state: {
+            ...workingBattle,
+            units: resolution.updatedUnits,
+            log: nextLog,
+          },
+          beforeUnits: workingBattle.units,
+          events: resolution.events,
+          actorId: workingActor.id,
+          adminConfig: state.adminConfig,
+        });
+        nextLog = voicedAfterAi.log;
+        const nextVoice = voicedAfterAi.voice;
         const nextPopups = skipVisualFx
           ? []
           : [...workingBattle.popups, ...resolution.popups].slice(-18);
@@ -5631,7 +5707,7 @@ export const useGameStore = create<GameStoreState>()(
           set(
             finalizeBattleOutcome(
               state,
-              workingBattle,
+              { ...workingBattle, voice: nextVoice },
               resolution.updatedUnits,
               won,
               false,
@@ -5726,6 +5802,7 @@ export const useGameStore = create<GameStoreState>()(
           battle: {
             ...workingBattle,
             units: finalUnits,
+            voice: nextVoice,
             supplyByUnit: workingBattle.supplyByUnit,
             npcSupply: workingBattle.npcSupply,
             turnCounter: nextTurnCounter,

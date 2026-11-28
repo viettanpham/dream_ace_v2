@@ -122,6 +122,11 @@ import {
   rollNpcBuffCards,
 } from './buffCards';
 import {
+  createInitialBattleVoiceState,
+  deriveBattleVoiceSeed,
+  emitStartTauntVoice,
+} from './voice';
+import {
   addOrRefreshStatus,
   applyPrestageBuffs,
   DEBUFF_TYPES,
@@ -1129,7 +1134,15 @@ export function createInitialBattleState(
     baseInitialLog
   );
 
-  return {
+  const voiceSeed = deriveBattleVoiceSeed(
+    `${pilot.name}|${sector.id}|${resolvedKind}|${units
+      .map((u) => `${u.id}:${u.name}:${u.derived.maxHp}:${u.derived.attackPower}`)
+      .join(',')}`
+  );
+  const voiceEnabled =
+    (adminConfig as { voiceEnabled?: boolean } | undefined)?.voiceEnabled ?? true;
+
+  const initialBattle: BattleState = {
     sectorId: sector.id,
     kind: resolvedKind,
     sourceId: sourceId ?? null,
@@ -1160,9 +1173,12 @@ export function createInitialBattleState(
       active: prestageCfg.enabled,
       appliedByUnit: prestageResult.appliedByUnit,
     },
+    voice: createInitialBattleVoiceState(voiceSeed, voiceEnabled),
     isResolving: false,
     summary: null,
   };
+
+  return emitStartTauntVoice(initialBattle);
 }
 
 export interface ActionResolution {

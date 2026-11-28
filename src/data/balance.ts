@@ -1001,3 +1001,24 @@ export function readPriceOverride(
   const intVal = Math.round(raw);
   return intVal >= 1 ? intVal : null;
 }
+
+export const VOICE_DEFAULTS = {
+  enabled: true,
+  actionCooldown: 3,
+  maxPerRound: 2,
+  chances: {
+    startTaunt: 30,
+    skillAttack: 15,
+    skillSupport: 20,
+    supplyUse: 25,
+    kill: 40,
+    crit: 30,
+    evade: 25,
+    lowHp: 60,
+    shieldBreak: 35,
+    allyDown: 40,
+    win: 100,
+    lose: 100,
+  },
+} as const;
+

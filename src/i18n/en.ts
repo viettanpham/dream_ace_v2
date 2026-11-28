@@ -987,6 +987,7 @@ export const EN_TRANSLATIONS = {
 
   // Wingman Radio Chatter
   'log.wingmanChat': '{actor}: "{quote}"',
+  'log.voice': '{actor}: "{line}"',
   'chat.engaging': 'Fox two! Engaging target!',
   'chat.covering': 'Covering your six, Lead!',
   'chat.shieldsUp': 'Deflectors holding — pressing forward!',
@@ -1798,6 +1799,7 @@ export const EN_TRANSLATIONS = {
   'log.actionSystem': 'System',
   'log.actionEvade': 'Evaded',
   'log.actionBlocked': 'Blocked',
+  'log.actionVoice': 'Voice',
   'stats.progressBtn': 'Progress',
   'stats.reportBtn': 'Report',
   'stats.progressTitle': 'Battle Progress',

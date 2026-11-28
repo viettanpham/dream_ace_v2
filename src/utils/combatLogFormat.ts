@@ -46,6 +46,7 @@ export type CombatLogActionKind =
   | 'debuff'
   | 'kill'
   | 'move-row'
+  | 'voice'
   | 'system';
 export type CombatLogValueTone =
   | 'damage'
@@ -1442,6 +1443,28 @@ export function parseStructuredCombatLogRow(
         valueTone: 'neutral',
         fallbackText,
         sentence,
+        spCost: null,
+        isStrong: false,
+        strongTone: null,
+        ...avatarMeta,
+      };
+    }
+
+    case 'log.voice': {
+      return {
+        id: entry.id,
+        round,
+        turnLabel,
+        faction,
+        actorName: actorFromParams,
+        autoBadge,
+        actionKind: 'voice',
+        actionLabel: translate(lang, 'log.actionVoice'),
+        targetName: null,
+        valueText: null,
+        valueTone: 'neutral',
+        fallbackText,
+        sentence: fallbackText,
         spCost: null,
         isStrong: false,
         strongTone: null,

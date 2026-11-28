@@ -74,7 +74,7 @@ function toRomanNumeral(num: number): string {
   return out;
 }
 
-function hashSeed(seedText: string): number {
+export function hashSeed(seedText: string): number {
   let h = 2166136261 >>> 0;
   for (let i = 0; i < seedText.length; i += 1) {
     h ^= seedText.charCodeAt(i);
@@ -83,7 +83,7 @@ function hashSeed(seedText: string): number {
   return h >>> 0;
 }
 
-function mulberry32(initialSeed: number): () => number {
+export function mulberry32(initialSeed: number): () => number {
   let a = initialSeed >>> 0;
   return () => {
     a = (a + 0x6d2b79f5) >>> 0;

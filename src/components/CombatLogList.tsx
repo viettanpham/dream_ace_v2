@@ -14,6 +14,7 @@ import {
   ChevronsUpDown,
   Flame,
   Heart,
+  MessageSquare,
   MoveHorizontal,
   Shield,
   Skull,
@@ -104,6 +105,10 @@ function ActionKindIcon({ kind }: { kind: CombatLogActionKind }) {
     case 'move-row':
       return (
         <MoveHorizontal className={`${cls} text-cyan-300`} aria-hidden="true" />
+      );
+    case 'voice':
+      return (
+        <MessageSquare className={`${cls} text-cyan-300`} aria-hidden="true" />
       );
     case 'system':
     default:

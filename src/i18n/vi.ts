@@ -989,6 +989,7 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
 
   // Wingman Radio Chatter
   'log.wingmanChat': '{actor}: "{quote}"',
+  'log.voice': '{actor}: "{line}"',
   'chat.engaging': 'Phóng hỏa lực! Đang tiếp cận mục tiêu!',
   'chat.covering': 'Tôi đang yểm trợ sườn cho Chỉ huy!',
   'chat.shieldsUp': 'Khiên vẫn vững — tiến công thôi!',
@@ -1800,6 +1801,7 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'log.actionSystem': 'Hệ thống',
   'log.actionEvade': 'Né đòn',
   'log.actionBlocked': 'Chặn đòn',
+  'log.actionVoice': 'Thoại',
   'stats.progressBtn': 'Diễn biến',
   'stats.reportBtn': 'Báo cáo',
   'stats.progressTitle': 'Diễn biến trận đấu',
