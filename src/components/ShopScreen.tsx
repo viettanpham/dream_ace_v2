@@ -19,7 +19,11 @@ import { MECH_CLASS_LIST, STAT_KEYS } from '../data/classes';
 import { ITEM_SLOTS, RARITY_META, SHOP_CONFIG } from '../data/items';
 import { getBoxCapacity } from '../engine/migration';
 import { SHOP_STOCK_CONFIG } from '../data/shopConfig';
-import { getSkillById, OPENING_CARDS_LIST } from '../data/skills';
+import {
+  getOpeningCardsList,
+  getSkillById,
+  getSkillCardPrice,
+} from '../data/skills';
 import {
   getEffectiveItemStats,
   getGearEquippedInstances,
@@ -106,7 +110,8 @@ function getWpOfferText(
 export function ShopScreen() {
   const { lang, t } = useI18n();
   const pilot = useGameStore((s) => s.pilot);
-  const adminBoxCapacity = useGameStore((s) => s.adminConfig.boxCapacity);
+  const adminConfig = useGameStore((s) => s.adminConfig);
+  const adminBoxCapacity = adminConfig.boxCapacity;
   const shopStock = useGameStore((s) => s.shopStock);
   const wpMarketOffers = useGameStore((s) => s.wpMarketOffers);
   const battlesUntilRestock = useGameStore((s) => s.battlesUntilRestock);
@@ -218,14 +223,19 @@ export function ShopScreen() {
     });
   }, [pilot.inventory, slotFilter]);
 
+  const openingCardsList = useMemo(
+    () => getOpeningCardsList(adminConfig),
+    [adminConfig]
+  );
+
   const filteredOpeningCards = useMemo(() => {
-    return OPENING_CARDS_LIST.filter((card) => {
+    return openingCardsList.filter((card) => {
       if (wpClassFilter !== 'all' && card.classId !== wpClassFilter) {
         return false;
       }
       return true;
     });
-  }, [wpClassFilter]);
+  }, [openingCardsList, wpClassFilter]);
 
   const handleBuy = (item: ShopItemListing) => {
     if (item.soldOut || isInventoryFull || pilot.credits < item.price) return;
@@ -321,7 +331,7 @@ export function ShopScreen() {
 
   const activeWpCard =
     mobileSheet?.kind === 'wp'
-      ? OPENING_CARDS_LIST.find((c) => c.id === mobileSheet.cardId) ?? null
+      ? openingCardsList.find((c) => c.id === mobileSheet.cardId) ?? null
       : null;
 
   const activeWpOffer =
@@ -703,7 +713,7 @@ export function ShopScreen() {
                   <span>
                     {t('shop.tabWarPoints', {
                       owned: ownedCardsCount,
-                      total: OPENING_CARDS_LIST.length,
+                      total: openingCardsList.length,
                     })}
                   </span>
                 </div>
@@ -963,7 +973,7 @@ export function ShopScreen() {
                     {t('shop.wpOpeningCardsTitle')}
                   </h2>
                   <span className="font-mono-nums text-xs text-slate-400">
-                    ({ownedCardsCount}/{OPENING_CARDS_LIST.length})
+                    ({ownedCardsCount}/{openingCardsList.length})
                   </span>
                 </div>
               </div>
@@ -1015,6 +1025,7 @@ export function ShopScreen() {
                   if (!skill) return null;
                   const isOwned = pilot.ownedOpeningCards.includes(card.id);
                   const isElite = card.category === 'elite';
+                  const cardPrice = getSkillCardPrice(card, adminConfig);
                   return (
                     <button
                       key={card.id}
@@ -1052,7 +1063,7 @@ export function ShopScreen() {
                           </span>
                         ) : (
                           <span className="font-mono-nums text-sm font-bold text-purple-300">
-                            {card.warPointCost} WP
+                            {cardPrice} WP
                           </span>
                         )}
                         <ChevronRight className="w-4 h-4 text-slate-500" />
@@ -1068,7 +1079,8 @@ export function ShopScreen() {
                   const skill = getSkillById(card.skillId);
                   if (!skill) return null;
                   const isOwned = pilot.ownedOpeningCards.includes(card.id);
-                  const canAfford = (pilot.warPoints ?? 0) >= card.warPointCost;
+                  const cardPrice = getSkillCardPrice(card, adminConfig);
+                  const canAfford = (pilot.warPoints ?? 0) >= cardPrice;
                   const isElite = card.category === 'elite';
 
                   return (
@@ -1137,7 +1149,7 @@ export function ShopScreen() {
                       <div className="pt-2.5 border-t border-slate-800/80 flex items-center justify-between gap-3">
                         <div className="font-mono-nums text-sm font-bold text-purple-300 flex items-center gap-1">
                           <Award className="w-4 h-4 text-purple-400" />
-                          <span>{card.warPointCost} WP</span>
+                          <span>{cardPrice} WP</span>
                         </div>
 
                         {isOwned ? (
@@ -1162,10 +1174,10 @@ export function ShopScreen() {
                             <span>
                               {canAfford
                                 ? t('shop.buyCardBtn', {
-                                    cost: card.warPointCost,
+                                    cost: cardPrice,
                                   })
                                 : t('shop.insufficientWp', {
-                                    cost: card.warPointCost,
+                                    cost: cardPrice,
                                   })}
                             </span>
                           </button>
@@ -1903,8 +1915,8 @@ export function ShopScreen() {
               const skill = getSkillById(activeWpCard.skillId);
               if (!skill) return null;
               const isOwned = pilot.ownedOpeningCards.includes(activeWpCard.id);
-              const canAfford =
-                (pilot.warPoints ?? 0) >= activeWpCard.warPointCost;
+              const cardPrice = getSkillCardPrice(activeWpCard, adminConfig);
+              const canAfford = (pilot.warPoints ?? 0) >= cardPrice;
               return (
                 <div className="space-y-4">
                   <p className="text-sm text-slate-300 leading-relaxed">
@@ -1940,10 +1952,10 @@ export function ShopScreen() {
                     >
                       {canAfford
                         ? t('shop.buyCardBtn', {
-                            cost: activeWpCard.warPointCost,
+                            cost: cardPrice,
                           })
                         : t('shop.insufficientWp', {
-                            cost: activeWpCard.warPointCost,
+                            cost: cardPrice,
                           })}
                     </button>
                   )}

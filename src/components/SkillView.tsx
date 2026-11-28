@@ -22,12 +22,19 @@ import {
   sanitizePassiveSlotsConfig,
 } from '../data/balance';
 import { getCatalogRow } from '../data/iconCatalog';
-import { getSkillById } from '../data/skills';
+import {
+  getOpeningCardById,
+  getSkillById,
+  getSkillCardId,
+  getSkillCardPrice,
+  getSkillTier,
+} from '../data/skills';
 import {
   getEffectiveSpCost,
   getRequiredGearLevelForSkillLevel,
   getSkillLearnOrUpgradeCost,
   getSkillsForClass,
+  getSkillWpLearnOrUpgradeCost,
   validateEquipPassiveSkill,
   validateEquipSkillOnBar,
   validateLearnOrUpgradeSkill,
@@ -45,6 +52,7 @@ import type {
   IconCatalogModRow,
   SkillCategory,
   SkillDefinition,
+  SkillTierKind,
 } from '../types/game';
 import {
   formatSkillRealSummary,
@@ -68,6 +76,17 @@ function getCategoryStyle(category: SkillCategory): string {
       return 'border-emerald-400/70 bg-emerald-500/15 text-emerald-300';
     default:
       return 'border-slate-700 bg-slate-800/80 text-slate-300';
+  }
+}
+
+function getTierBadgeStyle(tier: SkillTierKind): string {
+  switch (tier) {
+    case 'card':
+      return 'border-pink-400/70 bg-pink-500/15 text-pink-300';
+    case 'wp':
+      return 'border-purple-400/70 bg-purple-500/15 text-purple-300';
+    default:
+      return 'border-amber-500/50 bg-amber-500/10 text-amber-300';
   }
 }
 
@@ -128,6 +147,7 @@ export function SkillView() {
   const [filter, setFilter] = useState<SkillFilter>('all');
   const [feedback, setFeedback] = useState<string | null>(null);
   const [mobileSkillId, setMobileSkillId] = useState<string | null>(null);
+  const [cardDialogSkillId, setCardDialogSkillId] = useState<string | null>(null);
 
   const activeGear = pilot.gears[pilot.activeGearId];
   const activeGearName = getClassName(lang, activeGear.classId);
@@ -253,8 +273,34 @@ export function SkillView() {
     );
   };
 
+  const ownedCardEntries = useMemo(() => {
+    const seen = new Set<string>();
+    const entries: Array<{
+      cardId: string;
+      skill: SkillDefinition;
+      priceWp: number;
+    }> = [];
+    for (const cardId of pilot.ownedOpeningCards) {
+      if (!cardId || seen.has(cardId)) continue;
+      seen.add(cardId);
+      const card = getOpeningCardById(cardId, adminConfig);
+      if (!card) continue;
+      const skill = getSkillById(card.skillId, adminConfig);
+      if (!skill) continue;
+      entries.push({
+        cardId,
+        skill,
+        priceWp: getSkillCardPrice(card, adminConfig),
+      });
+    }
+    return entries;
+  }, [pilot.ownedOpeningCards, adminConfig]);
+
   const mobileSelectedSkill = mobileSkillId
     ? getSkillById(mobileSkillId, adminConfig) ?? null
+    : null;
+  const cardDialogSkill = cardDialogSkillId
+    ? getSkillById(cardDialogSkillId, adminConfig) ?? null
     : null;
 
   return (
@@ -326,6 +372,61 @@ export function SkillView() {
             <X className="w-4 h-4" />
           </button>
         </div>
+      )}
+
+      {ownedCardEntries.length > 0 && (
+        <section
+          data-testid="owned-skill-cards-bar"
+          className="rounded-lg border border-pink-500/30 bg-[#0C121D]/95 p-3 sm:p-3.5 space-y-2"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <KeyRound className="w-4 h-4 text-pink-300 shrink-0" />
+              <h2 className="text-xs sm:text-sm font-bold text-slate-100">
+                {t('skill.ownedCardsTitle', { count: ownedCardEntries.length })}
+              </h2>
+            </div>
+            <span className="text-[11px] text-slate-400">
+              {t('skill.ownedCardsHint')}
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {ownedCardEntries.map((entry) => {
+              const learnedLv =
+                entry.skill.classScope === activeGear.classId ||
+                entry.skill.classScope === 'general'
+                  ? activeGear.skillLevels[entry.skill.id] ?? 0
+                  : 0;
+              return (
+                <button
+                  key={entry.cardId}
+                  type="button"
+                  data-testid={`owned-skill-card-${entry.cardId}`}
+                  onClick={() => setCardDialogSkillId(entry.skill.id)}
+                  className="px-2.5 py-1.5 rounded-md border border-pink-500/40 bg-pink-500/10 hover:bg-pink-500/20 text-xs text-slate-100 inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <SkillIcon
+                    icon={entry.skill.icon}
+                    className="w-3.5 h-3.5 text-pink-300 shrink-0"
+                  />
+                  <span className="font-semibold">
+                    {getSkillName(entry.skill, lang)}
+                  </span>
+                  {entry.skill.classScope !== 'general' && (
+                    <span className="text-[10px] text-slate-400">
+                      ({getClassName(lang, entry.skill.classScope)})
+                    </span>
+                  )}
+                  {learnedLv > 0 && (
+                    <span className="text-[10px] font-mono-nums text-emerald-300 font-semibold">
+                      Lv.{Math.min(skillMaxLevel, learnedLv)}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </section>
       )}
 
       {/* 1. ACTIVE SKILL BAR (unlocked by gear level, hard max 9) */}
@@ -623,6 +724,18 @@ export function SkillView() {
                 skillMaxLevel
               );
               const cost = getSkillLearnOrUpgradeCost(skill, nextLv);
+              const tier = getSkillTier(skill, activeGear.classId, adminConfig);
+              const wpCost =
+                tier === 'wp'
+                  ? getSkillWpLearnOrUpgradeCost(skill, nextLv, adminConfig)
+                  : 0;
+              const requiredCardId =
+                tier === 'card' ? getSkillCardId(skill) : undefined;
+              const hasCard = Boolean(
+                requiredCardId &&
+                  pilot.ownedOpeningCards.includes(requiredCardId)
+              );
+              const needsCard = Boolean(requiredCardId && !hasCard);
               const validation = validateLearnOrUpgradeSkill(
                 pilot,
                 activeGear.classId,
@@ -673,6 +786,14 @@ export function SkillView() {
                             <h3 className="font-display text-lg font-bold text-slate-100 leading-tight">
                               {getSkillName(skill, lang)}
                             </h3>
+                            <span
+                              data-testid={`skill-tier-badge-${skill.id}`}
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border ${getTierBadgeStyle(
+                                tier
+                              )}`}
+                            >
+                              {t(`skill.tier.${tier}`)}
+                            </span>
                             {isEquippedInActiveSlot && (
                               <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
                                 {t('skill.passiveSlotActive')}
@@ -718,6 +839,34 @@ export function SkillView() {
                       summary={summary}
                       mods={adminConfig.iconCatalogMods}
                     />
+
+                    {!isMax && (needsCard || hasCard) && (
+                      <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                        {needsCard && (
+                          <span className="px-2 py-0.5 rounded bg-pink-500/15 border border-pink-500/40 text-pink-200 inline-flex items-center gap-1">
+                            <KeyRound className="w-3 h-3" />
+                            <span>
+                              {t('skill.needSpecificCard', {
+                                name: getSkillName(skill, lang),
+                              })}
+                            </span>
+                          </span>
+                        )}
+                        {hasCard && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setCardDialogSkillId(skill.id);
+                            }}
+                            className="px-2 py-0.5 rounded bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 inline-flex items-center gap-1 cursor-pointer transition-colors"
+                          >
+                            <Check className="w-3 h-3" />
+                            <span>{t('skill.cardOwned')}</span>
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-800/80 text-xs">
@@ -728,29 +877,55 @@ export function SkillView() {
                     </span>
 
                     <div className="flex flex-wrap items-center gap-2">
-                      {!isMax && (
-                        <button
-                          type="button"
-                          disabled={!validation.ok}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleLearnOrUpgrade(skill);
-                          }}
-                          className="min-h-[44px] md:min-h-0 md:h-8 px-3 inline-flex items-center gap-1.5 rounded-lg md:rounded bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-slate-950 font-semibold text-xs transition-colors cursor-pointer"
-                        >
-                          <ArrowUpCircle className="w-3.5 h-3.5" />
-                          <span>
-                            {isLearned
-                              ? t('skill.upgradeBtn', {
-                                  next: nextLv,
-                                  cost: cost.toLocaleString(),
-                                })
-                              : t('skill.learnBtn', {
-                                  cost: cost.toLocaleString(),
-                                })}
-                          </span>
-                        </button>
-                      )}
+                      {!isMax &&
+                        (needsCard ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openWarPointShop();
+                            }}
+                            className="min-h-[44px] md:min-h-0 md:h-8 px-3 inline-flex items-center gap-1 rounded-lg md:rounded border border-purple-500/50 bg-purple-500/15 hover:bg-purple-500/25 text-purple-200 font-semibold text-xs transition-colors cursor-pointer"
+                          >
+                            <KeyRound className="w-3.5 h-3.5" />
+                            <span>{t('skill.getCardInWpShop')}</span>
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={!validation.ok}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleLearnOrUpgrade(skill);
+                            }}
+                            className={`min-h-[44px] md:min-h-0 md:h-8 px-3 inline-flex items-center gap-1.5 rounded-lg md:rounded font-semibold text-xs transition-colors cursor-pointer disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed ${
+                              tier === 'wp'
+                                ? 'bg-purple-500 hover:bg-purple-400 text-white'
+                                : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950'
+                            }`}
+                          >
+                            <ArrowUpCircle className="w-3.5 h-3.5" />
+                            <span>
+                              {tier === 'wp'
+                                ? isLearned
+                                  ? t('skill.upgradeWpBtn', {
+                                      next: nextLv,
+                                      cost: wpCost.toLocaleString(),
+                                    })
+                                  : t('skill.learnWpBtn', {
+                                      cost: wpCost.toLocaleString(),
+                                    })
+                                : isLearned
+                                ? t('skill.upgradeBtn', {
+                                    next: nextLv,
+                                    cost: cost.toLocaleString(),
+                                  })
+                                : t('skill.learnBtn', {
+                                    cost: cost.toLocaleString(),
+                                  })}
+                            </span>
+                          </button>
+                        ))}
 
                       {isLearned &&
                         (isEquippedInActiveSlot || isEquippedInOverflowSlot ? (
@@ -879,10 +1054,13 @@ export function SkillView() {
               skillMaxLevel
             );
             const isEquipped = activeGear.equippedSkillBar.includes(skill.id);
-            const needsCard =
-              !isLearned &&
-              Boolean(skill.openingCardId) &&
-              !pilot.ownedOpeningCards.includes(skill.openingCardId!);
+            const tier = getSkillTier(skill, activeGear.classId, adminConfig);
+            const requiredCardId =
+              tier === 'card' ? getSkillCardId(skill) : undefined;
+            const hasCard = Boolean(
+              requiredCardId && pilot.ownedOpeningCards.includes(requiredCardId)
+            );
+            const needsCard = Boolean(requiredCardId && !hasCard);
             const isLevelLocked = activeGear.level < reqGearLv;
             const isGreyedOut = !isLearned && (needsCard || isLevelLocked);
             const spCost = getEffectiveSpCost(skill, activeGear, adminConfig);
@@ -927,6 +1105,13 @@ export function SkillView() {
                       <span className="text-sm font-bold text-slate-100 truncate">
                         {getSkillName(skill, lang)}
                       </span>
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border shrink-0 ${getTierBadgeStyle(
+                          tier
+                        )}`}
+                      >
+                        {t(`skill.tier.${tier}`)}
+                      </span>
                       {isEquipped && (
                         <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] font-bold shrink-0">
                           {t('skill.equippedBtn')}
@@ -966,6 +1151,11 @@ export function SkillView() {
               skillMaxLevel
             );
             const cost = getSkillLearnOrUpgradeCost(skill, nextLv);
+            const tier = getSkillTier(skill, activeGear.classId, adminConfig);
+            const wpCost =
+              tier === 'wp'
+                ? getSkillWpLearnOrUpgradeCost(skill, nextLv, adminConfig)
+                : 0;
             const learnVal = validateLearnOrUpgradeSkill(
               pilot,
               activeGear.classId,
@@ -974,13 +1164,12 @@ export function SkillView() {
             );
             const isEquipped = activeGear.equippedSkillBar.includes(skill.id);
             const equipVal = validateEquipSkillOnBar(activeGear, skill.id, adminConfig);
-            const needsCard =
-              !isLearned &&
-              Boolean(skill.openingCardId) &&
-              !pilot.ownedOpeningCards.includes(skill.openingCardId!);
-            const hasCard =
-              Boolean(skill.openingCardId) &&
-              pilot.ownedOpeningCards.includes(skill.openingCardId!);
+            const requiredCardId =
+              tier === 'card' ? getSkillCardId(skill) : undefined;
+            const hasCard = Boolean(
+              requiredCardId && pilot.ownedOpeningCards.includes(requiredCardId)
+            );
+            const needsCard = Boolean(requiredCardId && !hasCard);
             const isLevelLocked = activeGear.level < reqGearLv;
             const isGreyedOut = !isLearned && (needsCard || isLevelLocked);
             const spCost = getEffectiveSpCost(skill, activeGear, adminConfig);
@@ -1033,6 +1222,14 @@ export function SkillView() {
                             )}`}
                           >
                             {getSkillCategoryLabel(lang, skill.category)}
+                          </span>
+                          <span
+                            data-testid={`skill-tier-badge-${skill.id}`}
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border ${getTierBadgeStyle(
+                              tier
+                            )}`}
+                          >
+                            {t(`skill.tier.${tier}`)}
                           </span>
                           <span className="text-[10px] text-slate-400">
                             {skill.classScope === 'general'
@@ -1093,23 +1290,35 @@ export function SkillView() {
                         </span>
                       )}
                       {needsCard && (
-                        <span className="px-2 py-0.5 rounded bg-purple-500/15 border border-purple-500/40 text-purple-200 inline-flex items-center gap-1">
+                        <span className="px-2 py-0.5 rounded bg-pink-500/15 border border-pink-500/40 text-pink-200 inline-flex items-center gap-1">
                           <KeyRound className="w-3 h-3" />
-                          <span>{t('skill.needOpeningCard')}</span>
+                          <span>
+                            {t('skill.needSpecificCard', {
+                              name: getSkillName(skill, lang),
+                            })}
+                          </span>
                         </span>
                       )}
-                      {!isLearned && hasCard && (
-                        <span className="px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 inline-flex items-center gap-1">
+                      {hasCard && (
+                        <button
+                          type="button"
+                          onClick={() => setCardDialogSkillId(skill.id)}
+                          className="px-2 py-0.5 rounded bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 inline-flex items-center gap-1 cursor-pointer transition-colors"
+                        >
                           <Check className="w-3 h-3" />
                           <span>{t('skill.cardOwned')}</span>
-                        </span>
+                        </button>
                       )}
                     </div>
                   )}
                 </div>
 
                 <div className="pt-2.5 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2">
-                  {needsCard ? (
+                  {isMax ? (
+                    <span className="h-8 px-2.5 inline-flex items-center rounded border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 font-semibold text-xs">
+                      {t('skill.maxLevel', { max: skillMaxLevel })}
+                    </span>
+                  ) : needsCard ? (
                     <button
                       type="button"
                       onClick={openWarPointShop}
@@ -1118,20 +1327,29 @@ export function SkillView() {
                       <KeyRound className="w-3.5 h-3.5" />
                       <span>{t('skill.getCardInWpShop')}</span>
                     </button>
-                  ) : isMax ? (
-                    <span className="h-8 px-2.5 inline-flex items-center rounded border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 font-semibold text-xs">
-                      {t('skill.maxLevel', { max: skillMaxLevel })}
-                    </span>
                   ) : (
                     <button
                       type="button"
                       disabled={!learnVal.ok}
                       onClick={() => handleLearnOrUpgrade(skill)}
-                      className="h-8 px-3 inline-flex items-center gap-1.5 rounded bg-amber-500 hover:bg-amber-400 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-slate-950 font-semibold text-xs transition-colors cursor-pointer"
+                      className={`h-8 px-3 inline-flex items-center gap-1.5 rounded font-semibold text-xs transition-colors cursor-pointer disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed ${
+                        tier === 'wp'
+                          ? 'bg-purple-500 hover:bg-purple-400 text-white'
+                          : 'bg-amber-500 hover:bg-amber-400 text-slate-950'
+                      }`}
                     >
                       <ArrowUpCircle className="w-3.5 h-3.5" />
                       <span>
-                        {isLearned
+                        {tier === 'wp'
+                          ? isLearned
+                            ? t('skill.upgradeWpBtn', {
+                                next: nextLv,
+                                cost: wpCost.toLocaleString(),
+                              })
+                            : t('skill.learnWpBtn', {
+                                cost: wpCost.toLocaleString(),
+                              })
+                          : isLearned
                           ? t('skill.upgradeBtn', {
                               next: nextLv,
                               cost: cost.toLocaleString(),
@@ -1218,6 +1436,11 @@ export function SkillView() {
               skillMaxLevel
             );
             const cost = getSkillLearnOrUpgradeCost(skill, nextLv);
+            const tier = getSkillTier(skill, activeGear.classId, adminConfig);
+            const wpCost =
+              tier === 'wp'
+                ? getSkillWpLearnOrUpgradeCost(skill, nextLv, adminConfig)
+                : 0;
             const learnVal = validateLearnOrUpgradeSkill(
               pilot,
               activeGear.classId,
@@ -1232,10 +1455,12 @@ export function SkillView() {
               skill.id,
               adminConfig
             );
-            const needsCard =
-              !isLearned &&
-              Boolean(skill.openingCardId) &&
-              !pilot.ownedOpeningCards.includes(skill.openingCardId!);
+            const requiredCardId =
+              tier === 'card' ? getSkillCardId(skill) : undefined;
+            const hasCard = Boolean(
+              requiredCardId && pilot.ownedOpeningCards.includes(requiredCardId)
+            );
+            const needsCard = Boolean(requiredCardId && !hasCard);
             const isLevelLocked = activeGear.level < reqGearLv;
             const spCost = getEffectiveSpCost(skill, activeGear, adminConfig);
             const summary = formatSkillRealSummary(
@@ -1248,6 +1473,29 @@ export function SkillView() {
 
             return (
               <div className="space-y-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span
+                    className={`px-2 py-0.5 rounded text-xs font-semibold border ${getTierBadgeStyle(
+                      tier
+                    )}`}
+                  >
+                    {t(`skill.tier.${tier}`)}
+                  </span>
+                  {hasCard && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMobileSkillId(null);
+                        setCardDialogSkillId(skill.id);
+                      }}
+                      className="px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-xs inline-flex items-center gap-1 cursor-pointer"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      <span>{t('skill.cardOwned')}</span>
+                    </button>
+                  )}
+                </div>
+
                 <p className="text-sm text-slate-200 leading-relaxed">
                   {getSkillDesc(skill, lang)}
                 </p>
@@ -1285,16 +1533,24 @@ export function SkillView() {
                       </span>
                     )}
                     {needsCard && (
-                      <span className="px-2.5 py-1 rounded bg-purple-500/15 border border-purple-500/40 text-purple-200 inline-flex items-center gap-1">
+                      <span className="px-2.5 py-1 rounded bg-pink-500/15 border border-pink-500/40 text-pink-200 inline-flex items-center gap-1">
                         <KeyRound className="w-3.5 h-3.5" />
-                        <span>{t('skill.needOpeningCard')}</span>
+                        <span>
+                          {t('skill.needSpecificCard', {
+                            name: getSkillName(skill, lang),
+                          })}
+                        </span>
                       </span>
                     )}
                   </div>
                 )}
 
                 <div className="flex flex-col gap-2 pt-2 border-t border-slate-800">
-                  {needsCard ? (
+                  {isMax ? (
+                    <div className="text-center py-2 text-sm font-bold text-emerald-400">
+                      {t('skill.maxLevel', { max: skillMaxLevel })}
+                    </div>
+                  ) : needsCard ? (
                     <button
                       type="button"
                       onClick={() => {
@@ -1305,24 +1561,33 @@ export function SkillView() {
                     >
                       {t('skill.getCardInWpShop')}
                     </button>
-                  ) : !isMax ? (
+                  ) : (
                     <button
                       type="button"
                       disabled={!learnVal.ok}
                       onClick={() => handleLearnOrUpgrade(skill)}
-                      className="w-full min-h-[48px] px-4 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-slate-950 font-bold text-sm cursor-pointer"
+                      className={`w-full min-h-[48px] px-4 rounded-lg font-bold text-sm cursor-pointer disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed ${
+                        tier === 'wp'
+                          ? 'bg-purple-500 hover:bg-purple-400 text-white'
+                          : 'bg-amber-500 hover:bg-amber-400 text-slate-950'
+                      }`}
                     >
-                      {isLearned
+                      {tier === 'wp'
+                        ? isLearned
+                          ? t('skill.upgradeWpBtn', {
+                              next: nextLv,
+                              cost: wpCost.toLocaleString(),
+                            })
+                          : t('skill.learnWpBtn', {
+                              cost: wpCost.toLocaleString(),
+                            })
+                        : isLearned
                         ? t('skill.upgradeBtn', {
                             next: nextLv,
                             cost: cost.toLocaleString(),
                           })
                         : t('skill.learnBtn', { cost: cost.toLocaleString() })}
                     </button>
-                  ) : (
-                    <div className="text-center py-2 text-sm font-bold text-emerald-400">
-                      {t('skill.maxLevel', { max: skillMaxLevel })}
-                    </div>
                   )}
 
                   {skill.category !== 'passive' &&
@@ -1385,6 +1650,213 @@ export function SkillView() {
           })()}
         </BottomSheet>
       </div>
+
+      {/* Skill Card Detail Dialog */}
+      <BottomSheet
+        open={Boolean(cardDialogSkill)}
+        onClose={() => setCardDialogSkillId(null)}
+        testId="skill-card-detail-dialog"
+        title={
+          cardDialogSkill
+            ? t('skill.cardDialogTitle', {
+                skill: getSkillName(cardDialogSkill, lang),
+              })
+            : ''
+        }
+        subtitle={
+          cardDialogSkill
+            ? (() => {
+                const targetClassId =
+                  cardDialogSkill.classScope === 'general'
+                    ? activeGear.classId
+                    : cardDialogSkill.classScope;
+                const targetGear = pilot.gears[targetClassId] ?? activeGear;
+                const spCost = getEffectiveSpCost(
+                  cardDialogSkill,
+                  targetGear,
+                  adminConfig
+                );
+                const cdText = cardDialogSkill.oncePerBattle
+                  ? t('skill.oncePerBattle')
+                  : cardDialogSkill.isToggle
+                  ? t('skill.toggleTag')
+                  : cardDialogSkill.cooldown > 0
+                  ? t('skill.cooldown', { turns: cardDialogSkill.cooldown })
+                  : t('skill.noCooldown');
+                return `${getClassName(lang, targetClassId)} · ${getSkillCategoryLabel(
+                  lang,
+                  cardDialogSkill.category
+                )} · ${spCost} SP · ${cdText}`;
+              })()
+            : undefined
+        }
+        footer={
+          cardDialogSkill
+            ? (() => {
+                const skill = cardDialogSkill;
+                const targetClassId =
+                  skill.classScope === 'general'
+                    ? activeGear.classId
+                    : skill.classScope;
+                const currentLv = activeGear.skillLevels[skill.id] ?? 0;
+                const isSameClassOrGeneral =
+                  skill.classScope === 'general' ||
+                  skill.classScope === activeGear.classId;
+                const learnVal = validateLearnOrUpgradeSkill(
+                  pilot,
+                  activeGear.classId,
+                  skill.id,
+                  adminConfig
+                );
+                const tier = getSkillTier(skill, targetClassId, adminConfig);
+                const lv1CreditCost = getSkillLearnOrUpgradeCost(skill, 1);
+                const lv1WpCost =
+                  tier === 'wp'
+                    ? getSkillWpLearnOrUpgradeCost(skill, 1, adminConfig)
+                    : 0;
+                return (
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    {isSameClassOrGeneral && currentLv === 0 ? (
+                      <button
+                        type="button"
+                        data-testid="skill-card-dialog-learn-btn"
+                        disabled={!learnVal.ok}
+                        onClick={() => {
+                          handleLearnOrUpgrade(skill);
+                          setCardDialogSkillId(null);
+                        }}
+                        className="h-9 px-4 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-slate-950 font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer transition-colors"
+                      >
+                        <ArrowUpCircle className="w-3.5 h-3.5" />
+                        <span>
+                          {t('skill.cardDialogLearnBtn')} (
+                          {tier === 'wp'
+                            ? `${lv1WpCost.toLocaleString()} WP`
+                            : `${lv1CreditCost.toLocaleString()} CR`}
+                          )
+                        </span>
+                      </button>
+                    ) : isSameClassOrGeneral && currentLv >= 1 ? (
+                      <span
+                        data-testid="skill-card-dialog-learned-badge"
+                        className="h-9 px-3 rounded-lg border border-emerald-500/40 bg-emerald-500/15 text-emerald-300 font-semibold text-xs inline-flex items-center gap-1"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>
+                          {t('skill.cardDialogAlreadyLearned', {
+                            level: Math.min(skillMaxLevel, currentLv),
+                          })}
+                        </span>
+                      </span>
+                    ) : null}
+
+                    <button
+                      type="button"
+                      data-testid="skill-card-dialog-close-btn"
+                      onClick={() => setCardDialogSkillId(null)}
+                      className="h-9 px-4 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200 font-semibold text-xs cursor-pointer transition-colors"
+                    >
+                      {t('common.close')}
+                    </button>
+                  </div>
+                );
+              })()
+            : undefined
+        }
+      >
+        {cardDialogSkill &&
+          (() => {
+            const skill = cardDialogSkill;
+            const targetClassId =
+              skill.classScope === 'general'
+                ? activeGear.classId
+                : skill.classScope;
+            const targetGear = pilot.gears[targetClassId] ?? activeGear;
+            const tier = getSkillTier(skill, targetClassId, adminConfig);
+            const cardObj = getOpeningCardById(
+              getSkillCardId(skill),
+              adminConfig
+            );
+            const cardPriceWp = cardObj
+              ? getSkillCardPrice(cardObj, adminConfig)
+              : null;
+            const spCost = getEffectiveSpCost(skill, targetGear, adminConfig);
+            const lv1Summary = formatSkillRealSummary(
+              skill,
+              1,
+              lang,
+              adminConfig,
+              spCost
+            );
+            const maxSummary = formatSkillRealSummary(
+              skill,
+              skillMaxLevel,
+              lang,
+              adminConfig,
+              spCost
+            );
+
+            return (
+              <div className="space-y-3.5">
+                <div className="flex items-start gap-3">
+                  <div className="w-11 h-11 rounded-md border border-pink-500/40 bg-pink-500/10 text-pink-300 flex items-center justify-center shrink-0">
+                    <SkillIcon icon={skill.icon} className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0 space-y-1">
+                    <p className="text-xs text-slate-300 leading-relaxed">
+                      {getSkillDesc(skill, lang)}
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                      <span className="text-slate-400">
+                        {t('skill.cardDialogTier')}:
+                      </span>
+                      <span
+                        className={`px-1.5 py-0.5 rounded font-semibold border ${getTierBadgeStyle(
+                          tier
+                        )}`}
+                      >
+                        {t(`skill.tier.${tier}`)}
+                      </span>
+                      {cardPriceWp !== null && (
+                        <>
+                          <span className="text-slate-500">·</span>
+                          <span className="text-slate-400">
+                            {t('skill.cardDialogPrice')}:
+                          </span>
+                          <span className="font-mono-nums font-bold text-purple-300">
+                            {cardPriceWp.toLocaleString()} WP
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5" data-testid="skill-card-dialog-lv1">
+                  <div className="text-xs font-bold text-sky-300">
+                    {t('skill.cardDialogLv1')}
+                  </div>
+                  <SkillSummaryInline
+                    summary={lv1Summary}
+                    mods={adminConfig.iconCatalogMods}
+                    compact
+                  />
+                </div>
+
+                <div className="space-y-1.5" data-testid="skill-card-dialog-max">
+                  <div className="text-xs font-bold text-amber-300">
+                    {t('skill.cardDialogMax', { max: skillMaxLevel })}
+                  </div>
+                  <SkillSummaryInline
+                    summary={maxSummary}
+                    mods={adminConfig.iconCatalogMods}
+                    compact
+                  />
+                </div>
+              </div>
+            );
+          })()}
+      </BottomSheet>
     </div>
   );
 }

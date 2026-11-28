@@ -35,6 +35,7 @@ import { WorldGenAdminBlock } from './admin/WorldGenAdminBlock';
 import { BaseSiegeAdminBlock } from './admin/BaseSiegeAdminBlock';
 import { StarterEventAdminBlock } from './admin/StarterEventAdminBlock';
 import { VoucherAdminBlock } from './admin/VoucherAdminBlock';
+import { SkillTiersAdminBlock } from './admin/SkillTiersAdminBlock';
 import {
   AdminSection,
   AdminSectionsProvider,
@@ -2232,6 +2233,15 @@ export function AdminPanel() {
                       </div>
                     );
                   })()}
+                </AdminSection>
+
+                {/* 4b. Skill Tiers (CARD-1) */}
+                <AdminSection
+                  id="skill-tiers"
+                  title={t('admin.battleSection.skillTiers.title')}
+                  description={t('admin.battleSection.skillTiers.desc')}
+                >
+                  <SkillTiersAdminBlock />
                 </AdminSection>
 
                 {/* 5. Enemy Level (>8 fields) */}

@@ -4,9 +4,16 @@ import type {
   AdminConfig, IconCatalogModRow, MechClassId, OpeningCardDefinition,
   PassiveStatEntry, PassiveStatKey, SkillCategory, SkillClassScope,
   SkillDefinition, SkillEffectKind, SkillEffectSpec, SkillIconKey, SkillModDefinition,
-  SkillRegistryTag, SkillTargetType,
+  SkillRegistryTag, SkillTargetType, SkillTierKind, SkillTiersConfig,
 } from '../types/game';
-import { BALANCE_CONFIG, getEffectiveSkillMaxLevel, sanitizePassiveScaleAfter5, sanitizeRestorePctCap } from './balance';
+import {
+  BALANCE_CONFIG,
+  DEFAULT_SKILL_TIERS_CONFIG,
+  getEffectiveSkillMaxLevel,
+  sanitizePassiveScaleAfter5,
+  sanitizeRestorePctCap,
+  sanitizeSkillCardPriceMult,
+} from './balance';
 import { scaleSkillEffectSpecs, validateSpecSkillRow } from '../engine/skillSpecs';
 
 export const BUILTIN_SKILL_REGISTRY_TAG = 'sys' as const;
@@ -246,21 +253,6 @@ export function getMergedSkills(source?: SkillModsSource): SkillDefinition[] {
   return enabledMods.length === 0 ? SKILLS_LIST : [...SKILLS_LIST, ...enabledMods];
 }
 
-export const OPENING_CARDS_LIST: OpeningCardDefinition[] = SKILLS_LIST.filter(
-  (s) => Boolean(s.openingCardId) && (s.category === 'special' || s.category === 'elite') && s.classScope !== 'general'
-).map((s) => ({
-  id: s.openingCardId!,
-  skillId: s.id,
-  classId: s.classScope as MechClassId,
-  category: s.category as 'special' | 'elite',
-  warPointCost: s.category === 'elite' ? BALANCE_CONFIG.openingCardCosts.elite : BALANCE_CONFIG.openingCardCosts.special,
-}));
-
-export const OPENING_CARDS_BY_ID: Record<string, OpeningCardDefinition> = OPENING_CARDS_LIST.reduce(
-  (acc, card) => { acc[card.id] = card; return acc; },
-  {} as Record<string, OpeningCardDefinition>
-);
-
 export const LEGACY_SKILL_ID_MAP: Record<string, string> = {
   overdrive_barrage: 'str_hotload_shells',
   phantom_volley: 'int_sabot_burst',
@@ -275,13 +267,186 @@ export const CLASS_STARTER_SKILLS: Record<MechClassId, string[]> = {
   support: ['sup_nanite_mend', 'gen_hull_brace'],
 };
 
+const SKILL_CLASSES: readonly MechClassId[] = [
+  'striker',
+  'siege',
+  'interceptor',
+  'support',
+];
+
+export function getSkillCardId(
+  skill: Pick<SkillDefinition, 'id' | 'openingCardId'>
+): string {
+  return skill.openingCardId || `card_${skill.id}`;
+}
+
+export function getClassKindCatalogSkills(
+  classId: MechClassId,
+  kind: 'active' | 'passive'
+): SkillDefinition[] {
+  return SKILLS_LIST.map((skill, catalogIndex) => ({ skill, catalogIndex }))
+    .filter(
+      ({ skill }) =>
+        skill.classScope === classId &&
+        (kind === 'passive'
+          ? skill.category === 'passive'
+          : skill.category !== 'passive')
+    )
+    .sort(
+      (a, b) =>
+        a.skill.unlockLevel - b.skill.unlockLevel ||
+        a.catalogIndex - b.catalogIndex
+    )
+    .map(({ skill }) => skill);
+}
+
+export function sanitizeSkillTiersConfig(raw?: unknown): SkillTiersConfig {
+  const obj =
+    raw && typeof raw === 'object' && !Array.isArray(raw)
+      ? (raw as Record<string, unknown>)
+      : {};
+  const result = {} as SkillTiersConfig;
+  for (const classId of SKILL_CLASSES) {
+    const classObj =
+      obj[classId] && typeof obj[classId] === 'object' && !Array.isArray(obj[classId])
+        ? (obj[classId] as Record<string, unknown>)
+        : {};
+    const defClass = DEFAULT_SKILL_TIERS_CONFIG[classId];
+    const sanitizeKind = (kind: 'active' | 'passive') => {
+      const total = getClassKindCatalogSkills(classId, kind).length;
+      const defKind = defClass[kind];
+      const kindObj =
+        classObj[kind] &&
+        typeof classObj[kind] === 'object' &&
+        !Array.isArray(classObj[kind])
+          ? (classObj[kind] as Record<string, unknown>)
+          : {};
+      const rawCredit = Number(kindObj.creditCount);
+      const rawCard = Number(kindObj.cardCount);
+      const baseCredit = Number.isFinite(rawCredit)
+        ? Math.max(0, Math.floor(rawCredit))
+        : defKind.creditCount;
+      const baseCard = Number.isFinite(rawCard)
+        ? Math.max(0, Math.floor(rawCard))
+        : defKind.cardCount;
+      const creditCount = Math.min(total, baseCredit);
+      const cardCount = Math.min(Math.max(0, total - creditCount), baseCard);
+      return { creditCount, cardCount };
+    };
+    result[classId] = {
+      active: sanitizeKind('active'),
+      passive: sanitizeKind('passive'),
+    };
+  }
+  return result;
+}
+
+function resolveTiersConfig(
+  cfgOrAdmin?: SkillTiersConfig | Pick<AdminConfig, 'skillTiers'> | null
+): SkillTiersConfig {
+  if (!cfgOrAdmin || typeof cfgOrAdmin !== 'object') {
+    return DEFAULT_SKILL_TIERS_CONFIG;
+  }
+  if ('skillTiers' in cfgOrAdmin) {
+    return sanitizeSkillTiersConfig(cfgOrAdmin.skillTiers);
+  }
+  if ('striker' in cfgOrAdmin) {
+    return sanitizeSkillTiersConfig(cfgOrAdmin);
+  }
+  return DEFAULT_SKILL_TIERS_CONFIG;
+}
+
+export function getSkillTier(
+  skill: SkillDefinition,
+  classId: MechClassId,
+  cfgOrAdmin?: SkillTiersConfig | Pick<AdminConfig, 'skillTiers'> | null
+): SkillTierKind {
+  if (skill.registryTag === 'mod' || skill.id.startsWith('mod_')) {
+    return skill.tier ?? 'credit';
+  }
+  if (skill.classScope === 'general' || skill.id.startsWith('gen_')) {
+    return 'credit';
+  }
+  if (CLASS_STARTER_SKILLS[classId]?.includes(skill.id)) {
+    return 'credit';
+  }
+
+  const kind: 'active' | 'passive' =
+    skill.category === 'passive' ? 'passive' : 'active';
+  const sorted = getClassKindCatalogSkills(classId, kind);
+  const idx = sorted.findIndex((s) => s.id === skill.id);
+  if (idx < 0) return 'credit';
+
+  const cfg = resolveTiersConfig(cfgOrAdmin)[classId][kind];
+  if (idx < cfg.creditCount) return 'credit';
+  if (idx >= sorted.length - cfg.cardCount) return 'card';
+  return 'wp';
+}
+
+export function getBaseSkillCardCost(
+  skill: Pick<SkillDefinition, 'category'>
+): number {
+  return skill.category === 'elite'
+    ? BALANCE_CONFIG.openingCardCosts.elite
+    : BALANCE_CONFIG.openingCardCosts.special;
+}
+
+export function getSkillCardPrice(
+  card: Pick<OpeningCardDefinition, 'warPointCost'>,
+  adminCfg?: Pick<AdminConfig, 'skillCardPriceMult'> | number | null
+): number {
+  const mult = sanitizeSkillCardPriceMult(
+    typeof adminCfg === 'number' ? adminCfg : adminCfg?.skillCardPriceMult
+  );
+  return Math.max(1, Math.round(card.warPointCost * mult));
+}
+
+function buildOpeningCardForSkill(s: SkillDefinition): OpeningCardDefinition {
+  return {
+    id: getSkillCardId(s),
+    skillId: s.id,
+    classId: s.classScope as MechClassId,
+    category: s.category as OpeningCardDefinition['category'],
+    warPointCost: getBaseSkillCardCost(s),
+  };
+}
+
+export function getOpeningCardsList(
+  cfgOrAdmin?: SkillTiersConfig | Pick<AdminConfig, 'skillTiers'> | null
+): OpeningCardDefinition[] {
+  return SKILLS_LIST.filter(
+    (s) =>
+      s.classScope !== 'general' &&
+      getSkillTier(s, s.classScope as MechClassId, cfgOrAdmin) === 'card'
+  ).map(buildOpeningCardForSkill);
+}
+
+export const OPENING_CARDS_LIST: OpeningCardDefinition[] =
+  getOpeningCardsList(DEFAULT_SKILL_TIERS_CONFIG);
+
+export const OPENING_CARDS_BY_ID: Record<string, OpeningCardDefinition> =
+  OPENING_CARDS_LIST.reduce((acc, card) => {
+    acc[card.id] = card;
+    return acc;
+  }, {} as Record<string, OpeningCardDefinition>);
+
+const ALL_SKILL_CARDS_BY_ID: Record<string, OpeningCardDefinition> =
+  SKILLS_LIST.filter((s) => s.classScope !== 'general').reduce((acc, s) => {
+    const card = buildOpeningCardForSkill(s);
+    acc[card.id] = card;
+    return acc;
+  }, {} as Record<string, OpeningCardDefinition>);
+
 export function getSkillById(skillId: string, source?: SkillModsSource): SkillDefinition | undefined {
   if (SKILLS_CATALOG[skillId]) return SKILLS_CATALOG[skillId];
   return getEnabledSkillMods(source).find((m) => m.id === skillId);
 }
 
-export function getOpeningCardById(cardId: string): OpeningCardDefinition | undefined {
-  return OPENING_CARDS_BY_ID[cardId];
+export function getOpeningCardById(
+  cardId: string,
+  _cfgOrAdmin?: SkillTiersConfig | Pick<AdminConfig, 'skillTiers'> | null
+): OpeningCardDefinition | undefined {
+  return OPENING_CARDS_BY_ID[cardId] ?? ALL_SKILL_CARDS_BY_ID[cardId];
 }
 
 export interface SkillScaleOptions {

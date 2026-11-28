@@ -229,6 +229,20 @@ export type SkillEffectKind =
 
 export type SkillRegistryTag = 'sys' | 'mod';
 
+export type SkillTierKind = 'credit' | 'wp' | 'card';
+
+export interface SkillTierClassConfig {
+  creditCount: number;
+  cardCount: number;
+}
+
+export interface SkillTierKindConfig {
+  active: SkillTierClassConfig;
+  passive: SkillTierClassConfig;
+}
+
+export type SkillTiersConfig = Record<MechClassId, SkillTierKindConfig>;
+
 export interface SkillDefinition {
   id: string;
   classScope: SkillClassScope;
@@ -254,6 +268,7 @@ export interface SkillDefinition {
   isToggle?: boolean;
   phaseOverride?: 'step2' | 'step3';
   openingCardId?: string;
+  tier?: SkillTierKind;
   registryTag?: SkillRegistryTag;
 }
 
@@ -272,7 +287,7 @@ export interface OpeningCardDefinition {
   id: string;
   skillId: string;
   classId: MechClassId;
-  category: 'special' | 'elite';
+  category: 'special' | 'elite' | 'passive' | 'normal';
   warPointCost: number;
 }
 
@@ -287,14 +302,17 @@ export interface SkillValidationResult {
     | 'missing_card'
     | 'level_too_low'
     | 'insufficient_credits'
+    | 'insufficient_wp'
     | 'is_passive'
     | 'not_learned'
     | 'already_equipped'
     | 'bar_full'
     | 'passive_slots_full';
+  tier?: SkillTierKind;
   requiredGearLevel?: number;
   requiredCardId?: string;
   cost?: number;
+  wpCost?: number;
 }
 
 export interface BattleSkillUsability {
@@ -1811,6 +1829,9 @@ export interface AdminConfig {
   restorePctCap?: number;
   passiveSlots?: PassiveSlotsConfig;
   activeSlots?: ActiveSlotsConfig;
+  skillTiers?: SkillTiersConfig;
+  skillWpCostFactor?: number;
+  skillCardPriceMult?: number;
   skillMods?: SkillModDefinition[];
   vouchers?: VoucherConfig;
   starterEvent?: StarterEventConfig;

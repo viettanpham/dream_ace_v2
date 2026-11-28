@@ -6,6 +6,8 @@ import {
   getSkillPurchaseCost,
   getUnlockedActiveSlots,
   getUnlockedPassiveSlots,
+  sanitizeSkillCardPriceMult,
+  sanitizeSkillWpCostFactor,
   sanitizeSpEconomyConfig,
 } from '../data/balance';
 import {
@@ -13,6 +15,9 @@ import {
   getOpeningCardById,
   getScaledSkillStats,
   getSkillById,
+  getSkillCardId,
+  getSkillCardPrice,
+  getSkillTier,
   type SkillModsSource,
 } from '../data/skills';
 import type {
@@ -135,6 +140,21 @@ export function getSkillLearnOrUpgradeCost(
 }
 
 /**
+ * War Points cost to learn or upgrade a WP-tier skill:
+ * max(1, ceil(creditCost * skillWpCostFactor * skillCardPriceMult))
+ */
+export function getSkillWpLearnOrUpgradeCost(
+  skill: SkillDefinition,
+  targetSkillLevel: number,
+  admin?: Pick<AdminConfig, 'skillWpCostFactor' | 'skillCardPriceMult'> | null
+): number {
+  const creditCost = getSkillLearnOrUpgradeCost(skill, targetSkillLevel);
+  const wpFactor = sanitizeSkillWpCostFactor(admin?.skillWpCostFactor);
+  const cardMult = sanitizeSkillCardPriceMult(admin?.skillCardPriceMult);
+  return Math.max(1, Math.ceil(creditCost * wpFactor * cardMult));
+}
+
+/**
  * Computes active passive bonuses for a Gear from equipped passives (up to unlocked slots).
  * Strictly ignores unequipped passives, locked overflow slots, duplicates, and cross-class skills.
  */
@@ -253,7 +273,14 @@ export function validateLearnOrUpgradeSkill(
   pilot: PilotAccount,
   gearId: MechClassId,
   skillId: string,
-  admin?: Pick<AdminConfig, 'skillMaxLevel' | 'skillMods'> | null
+  admin?: Pick<
+    AdminConfig,
+    | 'skillMaxLevel'
+    | 'skillMods'
+    | 'skillTiers'
+    | 'skillWpCostFactor'
+    | 'skillCardPriceMult'
+  > | null
 ): SkillValidationResult {
   const gear = pilot.gears[gearId];
   if (!gear || !gear.owned) {
@@ -282,18 +309,23 @@ export function validateLearnOrUpgradeSkill(
     nextLv,
     maxSkillLv
   );
+  const tier = getSkillTier(skill, gear.classId, admin);
   const cost = getSkillLearnOrUpgradeCost(skill, nextLv);
+  const wpCost =
+    tier === 'wp' ? getSkillWpLearnOrUpgradeCost(skill, nextLv, admin) : undefined;
+  const requiredCardId = tier === 'card' ? getSkillCardId(skill) : undefined;
 
-  // Special & Elite skills require owning their Opening Card (bought with War Points)
+  // Card-tier skills require owning their Skill Card as a permanent licence for BOTH learn & upgrade
   if (
-    currentLv === 0 &&
-    skill.openingCardId &&
-    !pilot.ownedOpeningCards.includes(skill.openingCardId)
+    tier === 'card' &&
+    requiredCardId &&
+    !pilot.ownedOpeningCards.includes(requiredCardId)
   ) {
     return {
       ok: false,
       reason: 'missing_card',
-      requiredCardId: skill.openingCardId,
+      tier,
+      requiredCardId,
       requiredGearLevel,
       cost,
     };
@@ -303,33 +335,68 @@ export function validateLearnOrUpgradeSkill(
     return {
       ok: false,
       reason: 'level_too_low',
+      tier,
+      ...(requiredCardId ? { requiredCardId } : {}),
       requiredGearLevel,
       cost,
+      ...(wpCost !== undefined ? { wpCost } : {}),
     };
+  }
+
+  if (tier === 'wp') {
+    if ((pilot.warPoints ?? 0) < (wpCost ?? 0)) {
+      return {
+        ok: false,
+        reason: 'insufficient_wp',
+        tier,
+        requiredGearLevel,
+        cost,
+        wpCost,
+      };
+    }
+    return { ok: true, reason: 'ok', tier, requiredGearLevel, cost, wpCost };
   }
 
   if (pilot.credits < cost) {
     return {
       ok: false,
       reason: 'insufficient_credits',
+      tier,
+      ...(requiredCardId ? { requiredCardId } : {}),
       requiredGearLevel,
       cost,
     };
   }
 
-  return { ok: true, reason: 'ok', requiredGearLevel, cost };
+  return {
+    ok: true,
+    reason: 'ok',
+    tier,
+    ...(requiredCardId ? { requiredCardId } : {}),
+    requiredGearLevel,
+    cost,
+  };
 }
 
 /**
- * Pure engine action: Learn or upgrade a skill on a specific Gear using Credits.
- * Newly learned active skills auto-slot into the Gear's bar if there is room (< 6).
+ * Pure engine action: Learn or upgrade a skill on a specific Gear using Credits or War Points.
+ * Newly learned active skills auto-slot into the Gear's bar if there is room.
  * Newly learned passive skills auto-slot into equippedPassives if there is an open passive slot.
  */
 export function learnOrUpgradeSkillOnGear(
   pilot: PilotAccount,
   gearId: MechClassId,
   skillId: string,
-  admin?: Pick<AdminConfig, 'skillMaxLevel' | 'passiveSlots' | 'activeSlots' | 'skillMods'> | null
+  admin?: Pick<
+    AdminConfig,
+    | 'skillMaxLevel'
+    | 'passiveSlots'
+    | 'activeSlots'
+    | 'skillMods'
+    | 'skillTiers'
+    | 'skillWpCostFactor'
+    | 'skillCardPriceMult'
+  > | null
 ): { pilot: PilotAccount; validation: SkillValidationResult; newLevel: number } {
   const validation = validateLearnOrUpgradeSkill(pilot, gearId, skillId, admin);
   const gear = pilot.gears[gearId];
@@ -341,7 +408,9 @@ export function learnOrUpgradeSkillOnGear(
 
   const skill = getSkillById(skillId, admin)!;
   const nextLv = currentLv + 1;
-  const cost = validation.cost ?? 0;
+  const isWpTier = validation.tier === 'wp';
+  const creditCost = isWpTier ? 0 : validation.cost ?? 0;
+  const wpCost = isWpTier ? validation.wpCost ?? 0 : 0;
 
   const unlockedActiveSlots = getUnlockedActiveSlots(
     gear.level,
@@ -389,7 +458,8 @@ export function learnOrUpgradeSkillOnGear(
   return {
     pilot: {
       ...pilot,
-      credits: pilot.credits - cost,
+      credits: pilot.credits - creditCost,
+      warPoints: (pilot.warPoints ?? 0) - wpCost,
       gears: {
         ...pilot.gears,
         [gearId]: nextGear,
@@ -580,40 +650,43 @@ export function unequipPassiveFromGear(
  */
 export function buyOpeningCard(
   pilot: PilotAccount,
-  cardId: string
+  cardId: string,
+  admin?: Pick<AdminConfig, 'skillTiers' | 'skillCardPriceMult'> | null
 ): {
   pilot: PilotAccount;
   ok: boolean;
   reason: 'ok' | 'invalid_card' | 'already_owned' | 'insufficient_wp';
   cost: number;
 } {
-  const card = getOpeningCardById(cardId);
+  const card = getOpeningCardById(cardId, admin);
   if (!card) {
     return { pilot, ok: false, reason: 'invalid_card', cost: 0 };
   }
 
+  const wpPrice = getSkillCardPrice(card, admin);
+
   if (pilot.ownedOpeningCards.includes(card.id)) {
-    return { pilot, ok: false, reason: 'already_owned', cost: card.warPointCost };
+    return { pilot, ok: false, reason: 'already_owned', cost: wpPrice };
   }
 
-  if (pilot.warPoints < card.warPointCost) {
+  if (pilot.warPoints < wpPrice) {
     return {
       pilot,
       ok: false,
       reason: 'insufficient_wp',
-      cost: card.warPointCost,
+      cost: wpPrice,
     };
   }
 
   return {
     pilot: {
       ...pilot,
-      warPoints: pilot.warPoints - card.warPointCost,
+      warPoints: pilot.warPoints - wpPrice,
       ownedOpeningCards: [...pilot.ownedOpeningCards, card.id],
     },
     ok: true,
     reason: 'ok',
-    cost: card.warPointCost,
+    cost: wpPrice,
   };
 }
 

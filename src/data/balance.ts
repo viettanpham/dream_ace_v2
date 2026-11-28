@@ -11,6 +11,7 @@ import type {
   RepairFeeTierConfig,
   SectorDifficulty,
   SkillCategory,
+  SkillTiersConfig,
   SpEconomyConfig,
 } from '../types/game';
 
@@ -913,6 +914,76 @@ export function sanitizeBattlePenaltyConfig(raw: unknown): BattlePenaltyConfig {
       DEFAULT_BATTLE_PENALTY_CONFIG.repairRetreat
     ),
   };
+}
+
+export const DEFAULT_SKILL_WP_COST_FACTOR = 0.001;
+export const MIN_SKILL_WP_COST_FACTOR = 0.0001;
+export const MAX_SKILL_WP_COST_FACTOR = 1;
+
+export const DEFAULT_SKILL_CARD_PRICE_MULT = 1;
+export const MIN_SKILL_CARD_PRICE_MULT = 0.1;
+export const MAX_SKILL_CARD_PRICE_MULT = 20;
+
+export const DEFAULT_SKILL_TIERS_CONFIG: SkillTiersConfig = {
+  striker: {
+    active: { creditCount: 2, cardCount: 2 },
+    passive: { creditCount: 1, cardCount: 2 },
+  },
+  siege: {
+    active: { creditCount: 2, cardCount: 2 },
+    passive: { creditCount: 1, cardCount: 2 },
+  },
+  interceptor: {
+    active: { creditCount: 2, cardCount: 2 },
+    passive: { creditCount: 1, cardCount: 2 },
+  },
+  support: {
+    active: { creditCount: 2, cardCount: 3 },
+    passive: { creditCount: 1, cardCount: 3 },
+  },
+};
+
+export function cloneSkillTiersConfig(
+  cfg: SkillTiersConfig = DEFAULT_SKILL_TIERS_CONFIG
+): SkillTiersConfig {
+  return {
+    striker: {
+      active: { ...cfg.striker.active },
+      passive: { ...cfg.striker.passive },
+    },
+    siege: {
+      active: { ...cfg.siege.active },
+      passive: { ...cfg.siege.passive },
+    },
+    interceptor: {
+      active: { ...cfg.interceptor.active },
+      passive: { ...cfg.interceptor.passive },
+    },
+    support: {
+      active: { ...cfg.support.active },
+      passive: { ...cfg.support.passive },
+    },
+  };
+}
+
+export function sanitizeSkillWpCostFactor(raw: unknown): number {
+  const num = Number(raw);
+  if (!Number.isFinite(num)) return DEFAULT_SKILL_WP_COST_FACTOR;
+  const clamped = Math.max(
+    MIN_SKILL_WP_COST_FACTOR,
+    Math.min(MAX_SKILL_WP_COST_FACTOR, num)
+  );
+  return Number(clamped.toFixed(6));
+}
+
+export function sanitizeSkillCardPriceMult(raw: unknown): number {
+  const num = Number(raw);
+  if (!Number.isFinite(num)) return DEFAULT_SKILL_CARD_PRICE_MULT;
+  const clamped = Math.max(
+    MIN_SKILL_CARD_PRICE_MULT,
+    Math.min(MAX_SKILL_CARD_PRICE_MULT, num)
+  );
+  return Number(clamped.toFixed(4));
 }
 
 

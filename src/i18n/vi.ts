@@ -226,6 +226,21 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'skill.upgradedFeedback': 'Đã nâng {skill} lên Lv.{level} cho {gear}!',
   'skill.equippedFeedback': 'Đã lắp {skill} vào thanh kỹ năng của {gear}.',
   'skill.unequippedFeedback': 'Đã tháo {skill} khỏi thanh kỹ năng của {gear}.',
+  'skill.tier.credit': 'Credit',
+  'skill.tier.wp': 'WP',
+  'skill.tier.card': 'Thẻ',
+  'skill.learnWpBtn': 'Học Lv.1 ({cost} WP)',
+  'skill.upgradeWpBtn': 'Nâng Lv.{next} ({cost} WP)',
+  'skill.needSpecificCard': 'Cần thẻ {name}',
+  'skill.ownedCardsTitle': 'Thẻ kỹ năng đã sở hữu ({count})',
+  'skill.ownedCardsHint': 'Nhấn vào thẻ để xem thông số Lv.1 / tối đa và học kỹ năng.',
+  'skill.cardDialogTitle': 'Thẻ kỹ năng: {skill}',
+  'skill.cardDialogTier': 'Bậc',
+  'skill.cardDialogPrice': 'Giá thẻ',
+  'skill.cardDialogLv1': 'Thông số Lv.1',
+  'skill.cardDialogMax': 'Thông số Lv.{max}',
+  'skill.cardDialogLearnBtn': 'Học',
+  'skill.cardDialogAlreadyLearned': 'Đã học (Lv.{level})',
 
   // Status Effects (22)
   'status.burn': 'Thiêu đốt',
@@ -2334,6 +2349,24 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'admin.battleSection.passiveSlots.title': 'Ô kỹ năng nội tại',
   'admin.battleSection.passiveSlots.desc':
     'Số ô nội tại mở sẵn, chu kỳ cấp mở thêm và giới hạn tối đa mỗi Gear',
+  'admin.battleSection.skillTiers.title': 'Cấp bậc kỹ năng',
+  'admin.battleSection.skillTiers.desc':
+    'Số kỹ năng Credit / Thẻ theo hệ và loại, hệ số quy đổi WP và nhân giá thẻ',
+  'admin.skillTiers.active': 'Chủ động',
+  'admin.skillTiers.passive': 'Bị động',
+  'admin.skillTiers.creditCount': 'Số Credit',
+  'admin.skillTiers.cardCount': 'Số Thẻ',
+  'admin.skillTiers.wpDerived': 'WP: {count}',
+  'admin.skillTiers.strikerPassiveLive': 'Striker passive: {items}',
+  'admin.skillTiers.wpFactorLabel': 'Hệ số chi phí WP (skillWpCostFactor)',
+  'admin.skillTiers.wpFactorDesc':
+    'Tỉ lệ quy đổi từ chi phí Credit sang WP cho kỹ năng bậc WP (0.0001–1)',
+  'admin.skillTiers.wpFactorExample': 'Nâng kỹ năng 5000 Credits = {wp} WP',
+  'admin.skillTiers.cardPriceMultLabel': 'Hệ số giá thẻ & WP (skillCardPriceMult)',
+  'admin.skillTiers.cardPriceMultDesc':
+    'Nhân giá WP của mọi thẻ kỹ năng trong shop và chi phí học bậc WP (0.1–20)',
+  'admin.skillTiers.cardPriceExample': 'Thẻ Special 1000 WP -> {wp} WP',
+  'admin.skillTiers.resetBtn': 'Khôi phục mặc định',
   'admin.battleSection.enemyLevel.title': 'Cấp độ kẻ địch',
   'admin.battleSection.enemyLevel.desc':
     'Chỉnh tỉ lệ địch vượt cấp, trần vượt cấp và khoảng cấp theo từng loại trận',

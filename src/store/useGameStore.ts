@@ -13,7 +13,9 @@ import {
   sanitizePassiveScaleAfter5,
   sanitizePassiveSlotsConfig,
   sanitizeRestorePctCap,
+  sanitizeSkillCardPriceMult,
   sanitizeSkillMaxLevel,
+  sanitizeSkillWpCostFactor,
   sanitizeSpEconomyConfig,
   sanitizeStealthConfig,
   setRuntimeMaxLevel,
@@ -41,7 +43,12 @@ import {
   getVoucherPriceWp,
   sanitizeVoucherShopStockWp,
 } from '../data/vouchers';
-import { getSkillById, OPENING_CARDS_LIST, sanitizeSkillMods } from '../data/skills';
+import {
+  getOpeningCardsList,
+  getSkillById,
+  sanitizeSkillMods,
+  sanitizeSkillTiersConfig,
+} from '../data/skills';
 import {
   calculateBattleRewards,
   chooseAiDecision,
@@ -2196,7 +2203,7 @@ export const useGameStore = create<GameStoreState>()(
 
       buyOpeningCardAction: (cardId) => {
         const state = get();
-        const res = buyOpeningCard(state.pilot, cardId);
+        const res = buyOpeningCard(state.pilot, cardId, state.adminConfig);
         if (res.ok) {
           soundFx.playVictory();
           set({ pilot: res.pilot, hasSaveData: true });
@@ -5993,7 +6000,9 @@ export const useGameStore = create<GameStoreState>()(
         set((state) => ({
           pilot: {
             ...state.pilot,
-            ownedOpeningCards: OPENING_CARDS_LIST.map((c) => c.id),
+            ownedOpeningCards: getOpeningCardsList(state.adminConfig).map(
+              (c) => c.id
+            ),
           },
           hasSaveData: true,
         }));
@@ -6613,6 +6622,21 @@ export const useGameStore = create<GameStoreState>()(
                 ? patch.activeSlots
                 : state.adminConfig.activeSlots
             ),
+            skillTiers: sanitizeSkillTiersConfig(
+              patch.skillTiers !== undefined
+                ? patch.skillTiers
+                : state.adminConfig.skillTiers
+            ),
+            skillWpCostFactor: sanitizeSkillWpCostFactor(
+              patch.skillWpCostFactor !== undefined
+                ? patch.skillWpCostFactor
+                : state.adminConfig.skillWpCostFactor
+            ),
+            skillCardPriceMult: sanitizeSkillCardPriceMult(
+              patch.skillCardPriceMult !== undefined
+                ? patch.skillCardPriceMult
+                : state.adminConfig.skillCardPriceMult
+            ),
             skillMods: sanitizeSkillMods(
               patch.skillMods !== undefined
                 ? patch.skillMods
@@ -7077,6 +7101,13 @@ export const useGameStore = create<GameStoreState>()(
               restorePctCap: sanitizeRestorePctCap(rawAdmin.restorePctCap),
               passiveSlots: sanitizePassiveSlotsConfig(rawAdmin.passiveSlots),
               activeSlots: sanitizeActiveSlotsConfig(rawAdmin.activeSlots),
+              skillTiers: sanitizeSkillTiersConfig(rawAdmin.skillTiers),
+              skillWpCostFactor: sanitizeSkillWpCostFactor(
+                rawAdmin.skillWpCostFactor
+              ),
+              skillCardPriceMult: sanitizeSkillCardPriceMult(
+                rawAdmin.skillCardPriceMult
+              ),
               starterEvent: sanitizeStarterEventConfig(
                 rawAdmin.starterEvent,
                 rawAdmin.vouchers as AdminConfig['vouchers']

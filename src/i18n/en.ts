@@ -224,6 +224,21 @@ export const EN_TRANSLATIONS = {
   'skill.upgradedFeedback': 'Upgraded {skill} to Lv.{level} on {gear}!',
   'skill.equippedFeedback': 'Slotted {skill} into {gear} Skill Bar.',
   'skill.unequippedFeedback': 'Removed {skill} from {gear} Skill Bar.',
+  'skill.tier.credit': 'Credit',
+  'skill.tier.wp': 'WP',
+  'skill.tier.card': 'Card',
+  'skill.learnWpBtn': 'Learn Lv.1 ({cost} WP)',
+  'skill.upgradeWpBtn': 'Upgrade Lv.{next} ({cost} WP)',
+  'skill.needSpecificCard': 'Needs {name} card',
+  'skill.ownedCardsTitle': 'Owned Skill Cards ({count})',
+  'skill.ownedCardsHint': 'Click a card to inspect Lv.1 / max stats and learn the skill.',
+  'skill.cardDialogTitle': 'Skill Card: {skill}',
+  'skill.cardDialogTier': 'Tier',
+  'skill.cardDialogPrice': 'Card Price',
+  'skill.cardDialogLv1': 'Lv.1 Stats',
+  'skill.cardDialogMax': 'Lv.{max} Stats',
+  'skill.cardDialogLearnBtn': 'Learn',
+  'skill.cardDialogAlreadyLearned': 'Learned (Lv.{level})',
 
   // Status Effects (22)
   'status.burn': 'Burn',
@@ -2331,6 +2346,24 @@ export const EN_TRANSLATIONS = {
   'admin.battleSection.passiveSlots.title': 'Passive Skill Slots',
   'admin.battleSection.passiveSlots.desc':
     'Starting passive slots, unlock cadence by level, and max cap per Gear',
+  'admin.battleSection.skillTiers.title': 'Skill Tiers',
+  'admin.battleSection.skillTiers.desc':
+    'Credit / Card counts by class & kind, WP conversion factor, and card price multiplier',
+  'admin.skillTiers.active': 'Active',
+  'admin.skillTiers.passive': 'Passive',
+  'admin.skillTiers.creditCount': 'Credit count',
+  'admin.skillTiers.cardCount': 'Card count',
+  'admin.skillTiers.wpDerived': 'WP: {count}',
+  'admin.skillTiers.strikerPassiveLive': 'Striker passive: {items}',
+  'admin.skillTiers.wpFactorLabel': 'WP Cost Factor (skillWpCostFactor)',
+  'admin.skillTiers.wpFactorDesc':
+    'Conversion ratio from Credit cost to WP for WP-tier skills (0.0001–1)',
+  'admin.skillTiers.wpFactorExample': '5000 Credits upgrade = {wp} WP',
+  'admin.skillTiers.cardPriceMultLabel': 'Card & WP Price Mult (skillCardPriceMult)',
+  'admin.skillTiers.cardPriceMultDesc':
+    'Multiplies WP prices of all shop skill cards and WP-tier skill learn costs (0.1–20)',
+  'admin.skillTiers.cardPriceExample': 'Special Card 1000 WP -> {wp} WP',
+  'admin.skillTiers.resetBtn': 'Reset to Defaults',
   'admin.battleSection.enemyLevel.title': 'Enemy Level',
   'admin.battleSection.enemyLevel.desc':
     'Peak roll chance, max level cap offset, and min/max/peak per battle kind',

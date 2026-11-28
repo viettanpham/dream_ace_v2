@@ -6,6 +6,7 @@ import {
   cloneEnrageConfig,
   cloneFluxTransferConfig,
   clonePassiveSlotsConfig,
+  cloneSkillTiersConfig,
   cloneSpEconomyConfig,
   cloneStealthConfig,
   DEFAULT_ACTIVE_SLOTS_CONFIG,
@@ -16,7 +17,10 @@ import {
   DEFAULT_PASSIVE_SCALE_AFTER_5,
   DEFAULT_PASSIVE_SLOTS_CONFIG,
   DEFAULT_RESTORE_PCT_CAP,
+  DEFAULT_SKILL_CARD_PRICE_MULT,
   DEFAULT_SKILL_MAX_LEVEL,
+  DEFAULT_SKILL_TIERS_CONFIG,
+  DEFAULT_SKILL_WP_COST_FACTOR,
   DEFAULT_SP_ECONOMY_CONFIG,
   DEFAULT_STEALTH_CONFIG,
   getUnlockedPassiveSlots,
@@ -29,7 +33,9 @@ import {
   sanitizePassiveScaleAfter5,
   sanitizePassiveSlotsConfig,
   sanitizeRestorePctCap,
+  sanitizeSkillCardPriceMult,
   sanitizeSkillMaxLevel,
+  sanitizeSkillWpCostFactor,
   sanitizeSpEconomyConfig,
   sanitizeStealthConfig,
 } from '../data/balance';
@@ -101,6 +107,7 @@ import {
   getSkillById,
   LEGACY_SKILL_ID_MAP,
   sanitizeSkillMods,
+  sanitizeSkillTiersConfig,
   SKILLS_LIST,
 } from '../data/skills';
 import { SUPPLY_TEMPLATES } from '../data/consumables';
@@ -519,6 +526,9 @@ export function createDefaultAdminConfig(): AdminConfig {
     restorePctCap: DEFAULT_RESTORE_PCT_CAP,
     passiveSlots: clonePassiveSlotsConfig(DEFAULT_PASSIVE_SLOTS_CONFIG),
     activeSlots: cloneActiveSlotsConfig(DEFAULT_ACTIVE_SLOTS_CONFIG),
+    skillTiers: cloneSkillTiersConfig(DEFAULT_SKILL_TIERS_CONFIG),
+    skillWpCostFactor: DEFAULT_SKILL_WP_COST_FACTOR,
+    skillCardPriceMult: DEFAULT_SKILL_CARD_PRICE_MULT,
     supplyRewards: cloneSupplyRewardsConfig(DEFAULT_SUPPLY_REWARDS_CONFIG),
     crateShop: cloneCrateShopConfig(DEFAULT_CRATE_SHOP_CONFIG),
     starterEvent: cloneStarterEventConfig(DEFAULT_STARTER_EVENT_CONFIG),
@@ -1051,6 +1061,9 @@ export function migrateSaveData(
     restorePctCap: sanitizeRestorePctCap(rawAdmin.restorePctCap),
     passiveSlots: sanitizePassiveSlotsConfig(rawAdmin.passiveSlots),
     activeSlots: sanitizeActiveSlotsConfig(rawAdmin.activeSlots),
+    skillTiers: sanitizeSkillTiersConfig(rawAdmin.skillTiers),
+    skillWpCostFactor: sanitizeSkillWpCostFactor(rawAdmin.skillWpCostFactor),
+    skillCardPriceMult: sanitizeSkillCardPriceMult(rawAdmin.skillCardPriceMult),
     battleRewards: sanitizeBattleRewardsConfig(rawAdmin.battleRewards),
     battlePenalty: sanitizeBattlePenaltyConfig(rawAdmin.battlePenalty),
     vouchers: sanitizeVoucherConfig(rawAdmin.vouchers),
@@ -1235,7 +1248,8 @@ export function migrateSaveData(
       ? Array.from(
           new Set(
             rawPilot.ownedOpeningCards.filter(
-              (id) => typeof id === 'string' && Boolean(getOpeningCardById(id))
+              (id) =>
+                typeof id === 'string' && Boolean(getOpeningCardById(id, adminConfig))
             )
           )
         )
