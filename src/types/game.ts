@@ -552,6 +552,23 @@ export interface SupplyShopRefreshState {
   used: number;
 }
 
+export interface CrateShopSideConfig {
+  chancePct: number;
+  maxSlots: number;
+  maxPerSlot: number;
+  price: number;
+}
+
+export interface CrateShopConfig {
+  wp: CrateShopSideConfig;
+  credit: CrateShopSideConfig;
+}
+
+export interface CrateShopListing {
+  slotId: string;
+  remaining: number;
+}
+
 export type VoucherKind = 'credit' | 'exp';
 
 export type VoucherWeightMode = 'perType' | 'tierDecay';
@@ -1798,6 +1815,7 @@ export interface AdminConfig {
   vouchers?: VoucherConfig;
   starterEvent?: StarterEventConfig;
   supplyRewards?: SupplyRewardsConfig;
+  crateShop?: CrateShopConfig;
   baseSiege?: BaseSiegeConfig;
   showRawI18nKeys: boolean;
 }

@@ -8,10 +8,17 @@ import type {
 } from '../types/game';
 import { BottomSheet } from './BottomSheet';
 import { CatalogIcon } from './CatalogIcon';
+import { ConsumableIcon } from './GameIcons';
 import { formatSupplyEffectSummary, getSupplyName } from './SupplyLoadoutBar';
 
 export interface SupplyTradeConfirmVoucher {
   def: VoucherDef;
+  name: string;
+  desc: string;
+}
+
+export interface SupplyTradeConfirmCrate {
+  slotId: string;
   name: string;
   desc: string;
 }
@@ -21,6 +28,7 @@ export interface SupplyTradeConfirmProps {
   currency?: 'CR' | 'WP';
   template?: SupplyTemplate | null;
   voucher?: SupplyTradeConfirmVoucher | null;
+  crate?: SupplyTradeConfirmCrate | null;
   qty: number;
   unitPrice: number;
   credits: number;
@@ -34,6 +42,7 @@ export function SupplyTradeConfirm({
   currency = 'CR',
   template = null,
   voucher = null,
+  crate = null,
   qty,
   unitPrice,
   credits,
@@ -42,7 +51,7 @@ export function SupplyTradeConfirm({
   onCancel,
 }: SupplyTradeConfirmProps) {
   const { t } = useI18n();
-  if (!template && !voucher) return null;
+  if (!template && !voucher && !crate) return null;
 
   const isBuy = mode === 'buy';
   const isWp = isBuy && currency === 'WP';
@@ -98,16 +107,18 @@ export function SupplyTradeConfirm({
 
   return (
     <BottomSheet
-      open={Boolean(template || voucher)}
+      open={Boolean(template || voucher || crate)}
       onClose={onCancel}
       size="default"
       testId="supply-confirm-dialog"
       title={
-        voucher
-          ? t('shop.voucherConfirmBuyTitle')
-          : isBuy
-            ? t('shop.supplyConfirmBuyTitle')
-            : t('shop.supplyConfirmSellTitle')
+        crate
+          ? t('shop.crateConfirmBuyTitle')
+          : voucher
+            ? t('shop.voucherConfirmBuyTitle')
+            : isBuy
+              ? t('shop.supplyConfirmBuyTitle')
+              : t('shop.supplyConfirmSellTitle')
       }
       footer={footer}
     >
@@ -153,6 +164,20 @@ export function SupplyTradeConfirm({
                 </span>
               </div>
               <p className="text-xs text-slate-300">{voucher.desc}</p>
+            </div>
+          </div>
+        ) : crate ? (
+          <div className="flex items-start gap-3 rounded-lg border border-slate-800 bg-[#080C15] p-3 min-w-0">
+            <div className="shrink-0 w-10 h-10 rounded border border-amber-500/40 bg-[#0B111C] flex items-center justify-center">
+              <ConsumableIcon kind="supply_crate" className="w-5 h-5" />
+            </div>
+            <div className="min-w-0 flex-1 space-y-1">
+              <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                <span className="text-sm font-semibold text-slate-100 truncate">
+                  {crate.name}
+                </span>
+              </div>
+              <p className="text-xs text-slate-300">{crate.desc}</p>
             </div>
           </div>
         ) : null}

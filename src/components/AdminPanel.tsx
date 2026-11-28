@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { SupplyEconomyAdminBlock } from './admin/SupplyEconomyAdminBlock';
 import { SupplyRewardsAdminBlock } from './admin/SupplyRewardsAdminBlock';
+import { CrateShopAdminBlock } from './admin/CrateShopAdminBlock';
 import { SupplyGiveAdminBlock } from './admin/SupplyGiveAdminBlock';
 import { NpcSupplyAdminBlock } from './admin/NpcSupplyAdminBlock';
 import { EnemyLevelAdminBlock } from './admin/EnemyLevelAdminBlock';
@@ -3078,7 +3079,19 @@ export function AdminPanel() {
                   />
                 </AdminSection>
 
-                {/* 11c. Give Supplies (test) */}
+                {/* 11c. Supply Crates (Shop) */}
+                <AdminSection
+                  id="crate-shop"
+                  title={t('admin.battleSection.crateShop.title')}
+                  description={t('admin.battleSection.crateShop.desc')}
+                >
+                  <CrateShopAdminBlock
+                    adminConfig={adminConfig}
+                    adminUpdateConfig={adminUpdateConfig}
+                  />
+                </AdminSection>
+
+                {/* 11d. Give Supplies (test) */}
                 <AdminSection
                   id="supply-give-test"
                   title={t('admin.battleSection.supplyGive.title')}

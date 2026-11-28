@@ -2536,6 +2536,15 @@ export const EN_TRANSLATIONS = {
   'shop.voucherConfirmBuyTitle': 'Confirm Voucher Purchase',
   'shop.voucherBuyNotice': 'Purchased {qty}× {name} (-{cost} WP).',
   'shop.voucherBuyFailed': 'Could not purchase voucher.',
+  'shop.crateShopDesc': 'Opens for random battle supplies',
+  'shop.crateShopGroup': 'Supply Crates',
+  'shop.crateBuyBtn': 'Buy',
+  'shop.crateConfirmBuyTitle': 'Confirm Supply Crate Purchase',
+  'shop.crateFullCap': 'Crate stack full ({cap}/{cap})',
+  'shop.crateBuyNotice': 'Purchased {qty}× {name} (-{cost} {currency}).',
+  'shop.crateBuyPartialCapNotice':
+    'Purchased {qty}× {name} (capped at {cap}, -{cost} {currency}).',
+  'shop.crateBuyFailed': 'Could not purchase supply crate.',
 
   // Admin CP — Vouchers (VOUCHER-a)
   'admin.voucher.sectionTitle': 'Voucher',
@@ -2709,6 +2718,31 @@ export const EN_TRANSLATIONS = {
   'admin.supplyGive.confirm': 'Granted {name} x{qty}',
   'admin.supplyGive.confirmOverflow': ' (bag full, lost {lost})',
   'admin.supplyGive.failed': 'No eligible supply available to grant.',
+
+  // Admin CP — Supply Crates (Shop) (SUP-GEN-b)
+  'admin.battleSection.crateShop.title': 'Supply Crates (Shop)',
+  'admin.battleSection.crateShop.desc':
+    'Spawn chance, max slots, qty per slot, and prices for Supply Crates in WP & Credit shops',
+  'admin.crateShop.reset': 'Reset Defaults',
+  'admin.crateShop.wpGroup': 'WP Shop (War Points)',
+  'admin.crateShop.creditGroup': 'Credit Shop',
+  'admin.crateShop.chancePct': 'Per-slot chance % (0–100)',
+  'admin.crateShop.maxSlots': 'Max slots (0–6)',
+  'admin.crateShop.maxPerSlot': 'Max per slot (1–99)',
+  'admin.crateShop.priceWp': 'Price per crate (WP, 1–1,000,000)',
+  'admin.crateShop.priceCredit': 'Price per crate (CR, 1–100,000,000)',
+  'admin.crateShop.exChance':
+    'Chance {pct}%: avg {avg} slots per restock out of max {slots} slots, 1–{perSlot} crates each',
+  'admin.crateShop.exSlots':
+    'Rolls {slots} slots independently per restock (avg ~{avgCrates} crates/restock)',
+  'admin.crateShop.exPerSlot':
+    'Each hit slot stocks random 1–{max} crates (avg {avg}/slot)',
+  'admin.crateShop.exPriceWp': 'Price {price} WP',
+  'admin.crateShop.exPriceCredit': 'Price {price} credit',
+  'admin.crateShop.valueHeading':
+    'Expected value of 1 Supply Crate under current crate loot config:',
+  'admin.crateShop.valueLine':
+    'Lv.{level}: Expected value ≈ {value} credit (sell value {sellValue}; WP: {wpPrice} WP; buy with credit: {creditPrice})',
 
   // BASE-SIEGE-a
   'summary.siegeCaptured': 'Base captured!',

@@ -9,6 +9,9 @@ import {
 import type {
   AdminConfig,
   ConsumableKind,
+  CrateShopConfig,
+  CrateShopListing,
+  CrateShopSideConfig,
   ItemLevelsConfig,
   ItemRarity,
   ItemTemplate,
@@ -941,4 +944,183 @@ export function rollVoucherShopStockWp(
       remaining: rollIntInclusive(1, maxStock, rng),
     };
   });
+}
+
+export const CRATE_SHOP_MIN_CHANCE = 0;
+export const CRATE_SHOP_MAX_CHANCE = 100;
+export const CRATE_SHOP_MIN_SLOTS = 0;
+export const CRATE_SHOP_MAX_SLOTS = 6;
+export const CRATE_SHOP_MIN_PER_SLOT = 1;
+export const CRATE_SHOP_MAX_PER_SLOT = 99;
+export const CRATE_SHOP_MIN_PRICE = 1;
+export const CRATE_SHOP_WP_MAX_PRICE = 1_000_000;
+export const CRATE_SHOP_CREDIT_MAX_PRICE = 100_000_000;
+
+export const DEFAULT_CRATE_SHOP_CONFIG: CrateShopConfig = {
+  wp: {
+    chancePct: 10,
+    maxSlots: 2,
+    maxPerSlot: 10,
+    price: 100,
+  },
+  credit: {
+    chancePct: 5,
+    maxSlots: 3,
+    maxPerSlot: 5,
+    price: 100_000,
+  },
+};
+
+export function cloneCrateShopConfig(
+  cfg: CrateShopConfig = DEFAULT_CRATE_SHOP_CONFIG
+): CrateShopConfig {
+  return {
+    wp: { ...cfg.wp },
+    credit: { ...cfg.credit },
+  };
+}
+
+function clampCrateShopInt(
+  raw: unknown,
+  min: number,
+  max: number,
+  fallback: number
+): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return fallback;
+  return Math.max(min, Math.min(max, Math.round(raw)));
+}
+
+function sanitizeCrateShopSide(
+  raw: unknown,
+  def: CrateShopSideConfig,
+  maxPrice: number
+): CrateShopSideConfig {
+  const r = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  return {
+    chancePct: clampCrateShopInt(
+      r.chancePct,
+      CRATE_SHOP_MIN_CHANCE,
+      CRATE_SHOP_MAX_CHANCE,
+      def.chancePct
+    ),
+    maxSlots: clampCrateShopInt(
+      r.maxSlots,
+      CRATE_SHOP_MIN_SLOTS,
+      CRATE_SHOP_MAX_SLOTS,
+      def.maxSlots
+    ),
+    maxPerSlot: clampCrateShopInt(
+      r.maxPerSlot,
+      CRATE_SHOP_MIN_PER_SLOT,
+      CRATE_SHOP_MAX_PER_SLOT,
+      def.maxPerSlot
+    ),
+    price: clampCrateShopInt(
+      r.price,
+      CRATE_SHOP_MIN_PRICE,
+      maxPrice,
+      def.price
+    ),
+  };
+}
+
+export function sanitizeCrateShopConfig(raw: unknown): CrateShopConfig {
+  const r = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  return {
+    wp: sanitizeCrateShopSide(
+      r.wp,
+      DEFAULT_CRATE_SHOP_CONFIG.wp,
+      CRATE_SHOP_WP_MAX_PRICE
+    ),
+    credit: sanitizeCrateShopSide(
+      r.credit,
+      DEFAULT_CRATE_SHOP_CONFIG.credit,
+      CRATE_SHOP_CREDIT_MAX_PRICE
+    ),
+  };
+}
+
+export function sanitizeCrateShopStock(rawStock: unknown): CrateShopListing[] {
+  if (!Array.isArray(rawStock)) return [];
+  const seenSlots = new Set<string>();
+  const clean: CrateShopListing[] = [];
+
+  for (const entry of rawStock) {
+    if (!entry || typeof entry !== 'object') continue;
+    const rawSlotId = (entry as { slotId?: unknown }).slotId;
+    const slotId = typeof rawSlotId === 'string' ? rawSlotId.trim() : '';
+    if (!slotId || seenSlots.has(slotId)) continue;
+    seenSlots.add(slotId);
+    const rawRem = (entry as { remaining?: unknown }).remaining;
+    const remaining =
+      typeof rawRem === 'number' && Number.isFinite(rawRem)
+        ? Math.max(0, Math.min(SUPPLY_STACK_CAP, Math.round(rawRem)))
+        : 0;
+    clean.push({ slotId, remaining });
+  }
+
+  return clean;
+}
+
+function resolveCrateShopConfig(
+  cfgOrAdmin?: CrateShopConfig | Pick<AdminConfig, 'crateShop'> | null
+): CrateShopConfig {
+  if (!cfgOrAdmin) return cloneCrateShopConfig(DEFAULT_CRATE_SHOP_CONFIG);
+  if ('wp' in cfgOrAdmin || 'credit' in cfgOrAdmin) {
+    return sanitizeCrateShopConfig(cfgOrAdmin);
+  }
+  return sanitizeCrateShopConfig(cfgOrAdmin.crateShop);
+}
+
+export function rollCrateShopStockSide(
+  sideCfg: CrateShopSideConfig,
+  prefix: string,
+  rng: () => number = Math.random
+): CrateShopListing[] {
+  const maxSlots = clampCrateShopInt(
+    sideCfg.maxSlots,
+    CRATE_SHOP_MIN_SLOTS,
+    CRATE_SHOP_MAX_SLOTS,
+    0
+  );
+  const chancePct = clampCrateShopInt(
+    sideCfg.chancePct,
+    CRATE_SHOP_MIN_CHANCE,
+    CRATE_SHOP_MAX_CHANCE,
+    0
+  );
+  const maxPerSlot = clampCrateShopInt(
+    sideCfg.maxPerSlot,
+    CRATE_SHOP_MIN_PER_SLOT,
+    CRATE_SHOP_MAX_PER_SLOT,
+    1
+  );
+  if (maxSlots <= 0 || chancePct <= 0) return [];
+
+  const result: CrateShopListing[] = [];
+  for (let i = 0; i < maxSlots; i++) {
+    const hit = chancePct >= 100 || rng() * 100 < chancePct;
+    if (!hit) continue;
+    result.push({
+      slotId: `${prefix}-${i}`,
+      remaining: rollIntInclusive(1, maxPerSlot, rng),
+    });
+  }
+  return result;
+}
+
+export function rollCrateShopStockWp(
+  cfgOrAdmin?: CrateShopConfig | Pick<AdminConfig, 'crateShop'> | null,
+  rng: () => number = Math.random
+): CrateShopListing[] {
+  const cfg = resolveCrateShopConfig(cfgOrAdmin);
+  return rollCrateShopStockSide(cfg.wp, 'crate-wp', rng);
+}
+
+export function rollCrateShopStockCredit(
+  cfgOrAdmin?: CrateShopConfig | Pick<AdminConfig, 'crateShop'> | null,
+  rng: () => number = Math.random
+): CrateShopListing[] {
+  const cfg = resolveCrateShopConfig(cfgOrAdmin);
+  return rollCrateShopStockSide(cfg.credit, 'crate-credit', rng);
 }

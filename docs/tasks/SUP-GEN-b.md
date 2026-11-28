@@ -1,0 +1,23 @@
+TASK SUP-GEN-b — Hòm vật tư in the shops: WP shop + Credit shop listings, Admin config, expected-value check. Model: Hydrogen. If this prompt looks cut off, STOP and tell me the last words you can see.
+
+STEP A: save this prompt verbatim to docs/tasks/SUP-GEN-b.md, checklist docs/tasks/SUP-GEN-b.progress.md (tick items), final docs/tasks/SUP-GEN-b.report.md and print it. On retry continue from the first unticked item.
+
+RULES: do not touch battleVfx.ts / BattleVfxOverlay.tsx; keep every existing feature; NO save version bump (new fields optional + sanitizers); new strings in vi.ts AND en.ts; Admin block inside an AdminSection (title + one-line description, collapsed by default) with a LIVE EXAMPLE under every number field; use the same confirm-purchase dialog the other shop purchases use (SHOP-CONFIRM).
+
+TOKEN SAVING: read docs/CODEMAP.md first, grep by symbol, line ranges only for files over 300 lines, one item at a time, do not enable Firebase.
+
+STEP 0 (read-only, max 10 lines): report where the Credit supply stock (generateSupplyShopStock shop.ts:651, SupplyShopListing game.ts:540) and the WP supply stock (generateSupplyShopStockWp shop.ts:776, SupplyShopWpListing :545, voucherShopStockWp pattern from VOUCHER-a) are rolled, stored and RE-ROLLED (which store actions / moments), how buySupply (useGameStore ~3333) and the WP buy action work, the shop UI (SupplyShopPanel) rows + confirm dialog, the SupplyTemplate price field(s) and sell ratio, how a supply_crate is added to consumables (supplies.ts ~335, stack cap 99). Then do the items.
+
+ITEM 1 — Config: adminConfig.crateShop (optional + sanitizer, defaults): wp { chancePct 10, maxSlots 2, maxPerSlot 10, price 100 } and credit { chancePct 5, maxSlots 3, maxPerSlot 5, price 100000 } (chancePct 0-100; maxSlots 0-6; maxPerSlot 1-99; price WP 1-1.000.000 / credit 1-100.000.000). Meaning: every time that shop's supply stock is (re)rolled, each of its maxSlots rolls independently with chancePct; every slot that hits becomes one "Hòm vật tư" row with a random quantity 1..maxPerSlot. Stock new optional fields: crateShopStockWp / crateShopStockCredit: Array<{ slotId, remaining }> stored and re-rolled at the SAME moments as the existing supply stock of that shop (sanitized in the loader; missing = no crates).
+
+ITEM 2 — Shop UI + buy: in each shop (WP and Credit) show each crate slot as a row at the top of the supply list: crate icon (the same one the Kho đồ uses), name "Hòm vật tư", one-line "Mở ra vật tư ngẫu nhiên", price, remaining, qty stepper, Buy button with the confirm dialog. Store actions buyCrateWp(slotId, qty) and buyCrateCredit(slotId, qty): check funds, clamp to remaining, spend, add supply_crate to consumables (stack cap 99; if the cap would be exceeded buy only what fits and say so), lower remaining; reasons: not_found / no_funds / sold_out / full. Opening a crate stays as in SUP-GEN-a (no change).
+
+ITEM 3 — Admin + value check: Admin block "Hòm vật tư (cửa hàng)" with the 8 fields above and a live example each ("Tỉ lệ 10%: mỗi lần làm mới có trung bình 0,2 hòm trong tối đa 2 ô, mỗi ô 1-10 hòm", "Giá 100 WP"). Add a pure function estimateCrateValue(adminConfig, maxGearLevel) in src/engine/supplyRewards.ts = expected credit value of ONE crate (the average of rollSupplyCrateContents over its types / quantity config and tier range, priced at the supply templates' credit shop price) and show it in the block: "Giá trị kỳ vọng 1 hòm ≈ X credit (giá bán Y; mua bằng credit: giá 100.000)" at gear level 1 / 20 / 50. Do NOT change any price or odds; this is information so the owner can tune.
+
+HARD LIMITS: existing supply listings, voucher listings, refresh limits and prices unchanged; old saves load with no crate rows; no layout change outside the new rows and the Admin block; no horizontal overflow at 360px; nothing at x<8.
+
+TESTS (max 5, small): sanitizer defaults + clamps; stock roll with a fixed rng (chance 100 = maxSlots rows, chance 0 = none, qty within 1..maxPerSlot); buyCrateWp / buyCrateCredit happy path + no_funds + stack cap 99; old save without crate stock; estimateCrateValue returns a positive number and rises with a higher qtyMax. Do not refactor existing tests.
+
+CHECKS: only the related test files with --reporter=dot, then tsc --noEmit; print at most 15 lines of output; on failure re-run only the failing file. No full vitest, no production build.
+
+REPORT (<= 12 lines): items done, files changed, the re-roll moments used, estimateCrateValue at gear level 1 / 20 / 50 next to the two prices, test result in one line, what was NOT checked (real browser). End with "CHƯA chạy trình duyệt thật".

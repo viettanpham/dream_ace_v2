@@ -13,6 +13,7 @@ import {
   getSupplyStockCount,
   SUPPLY_STACK_CAP,
 } from './supplies';
+import { computeSupplyPrice } from './itemPrice';
 
 export const SUPPLY_REWARDS_MIN_TIER = 1;
 export const SUPPLY_REWARDS_MAX_TIER = 5;
@@ -400,4 +401,40 @@ export function grantSupplyReward(
     state.pilot = applied.pilot;
   }
   return applied.result;
+}
+
+/**
+ * Expected credit shop value of opening ONE supply crate at maxGearLevel,
+ * averaging rollSupplyCrateContents across its types, qty, and eligible tier range.
+ */
+export function estimateCrateValue(
+  adminConfig?: Pick<AdminConfig, 'supplyRewards' | 'supplyEconomy'> | null,
+  maxGearLevel: number = 1,
+  templates: readonly SupplyTemplate[] = SUPPLY_TEMPLATES
+): number {
+  const cfg = sanitizeSupplyRewardsConfig(adminConfig?.supplyRewards);
+  const eligible = getEligibleSupplyTemplates(
+    maxGearLevel,
+    cfg.minTier,
+    cfg.maxTier,
+    templates
+  );
+  if (eligible.length === 0) return 0;
+
+  let priceSum = 0;
+  for (const tpl of eligible) {
+    priceSum += computeSupplyPrice(tpl, adminConfig);
+  }
+  const avgUnitPrice = priceSum / eligible.length;
+
+  const { typesMin, typesMax, qtyMin, qtyMax } = cfg.crate;
+  let typeSum = 0;
+  const typeSpan = Math.max(1, typesMax - typesMin + 1);
+  for (let t = typesMin; t <= typesMax; t++) {
+    typeSum += Math.min(eligible.length, t);
+  }
+  const avgTypes = typeSum / typeSpan;
+  const avgQtyPerType = (qtyMin + qtyMax) / 2;
+
+  return Math.round(avgTypes * avgQtyPerType * avgUnitPrice);
 }

@@ -128,6 +128,8 @@ import type {
   BattleSpeed,
   BattleViewMode,
   ConsumableItem,
+  CrateShopConfig,
+  CrateShopListing,
   GearUnit,
   InventoryFilterState,
   ItemInstance,
@@ -212,6 +214,8 @@ import {
   DEFAULT_SUPPLY_WP_MAX_COPIES,
   DEFAULT_SUPPLY_WP_MIN_TIER,
   DEFAULT_SUPPLY_WP_PRICE_DIVISOR,
+  cloneCrateShopConfig,
+  DEFAULT_CRATE_SHOP_CONFIG,
   generateCategorizedShopStock,
   generateSupplyShopStock,
   generateSupplyShopStockWp,
@@ -219,7 +223,11 @@ import {
   getMaxGearLevel,
   hasOperationalShipyard,
   migrateLegacySupplyShopAdminFields,
+  rollCrateShopStockCredit,
+  rollCrateShopStockWp,
   rollVoucherShopStockWp,
+  sanitizeCrateShopConfig,
+  sanitizeCrateShopStock,
   sanitizeSupplyShopConfig,
   sanitizeSupplyShopExtraConfig,
   sanitizeSupplyShopRefresh,
@@ -401,6 +409,8 @@ export interface PersistedCampaignState {
   supplyShopStock?: SupplyShopListing[];
   supplyShopStockWp?: SupplyShopWpListing[];
   voucherShopStockWp?: import('../types/game').VoucherShopListing[];
+  crateShopStockWp?: CrateShopListing[];
+  crateShopStockCredit?: CrateShopListing[];
   supplyShopRefresh?: SupplyShopRefreshState;
   wpMarketOffers: WpMarketOffer[];
   battlesUntilRestock: number;
@@ -510,6 +520,7 @@ export function createDefaultAdminConfig(): AdminConfig {
     passiveSlots: clonePassiveSlotsConfig(DEFAULT_PASSIVE_SLOTS_CONFIG),
     activeSlots: cloneActiveSlotsConfig(DEFAULT_ACTIVE_SLOTS_CONFIG),
     supplyRewards: cloneSupplyRewardsConfig(DEFAULT_SUPPLY_REWARDS_CONFIG),
+    crateShop: cloneCrateShopConfig(DEFAULT_CRATE_SHOP_CONFIG),
     starterEvent: cloneStarterEventConfig(DEFAULT_STARTER_EVENT_CONFIG),
     baseSiege: cloneBaseSiegeConfig(DEFAULT_BASE_SIEGE_CONFIG),
     skillMods: [],
@@ -524,7 +535,8 @@ export function createFreshCampaignState(
   rng: () => number = Math.random,
   starterConfig?: StarterSetConfig,
   starterEventConfig?: AdminConfig['starterEvent'],
-  voucherConfig?: AdminConfig['vouchers']
+  voucherConfig?: AdminConfig['vouchers'],
+  crateShopConfig?: CrateShopConfig | null
 ): PersistedCampaignState {
   const adminConfig = createDefaultAdminConfig();
   if (starterConfig) {
@@ -538,6 +550,9 @@ export function createFreshCampaignState(
       starterEventConfig,
       adminConfig.vouchers
     );
+  }
+  if (crateShopConfig) {
+    adminConfig.crateShop = sanitizeCrateShopConfig(crateShopConfig);
   }
   const basePilot: PilotAccount = {
     ...createDefaultPilotAccount(name, starterClassId, []),
@@ -581,6 +596,8 @@ export function createFreshCampaignState(
     supplyShopStock: freshSupplyShopStock,
     supplyShopStockWp: freshSupplyShopStockWp,
     voucherShopStockWp: rollVoucherShopStockWp(adminConfig.vouchers, rng),
+    crateShopStockWp: rollCrateShopStockWp(adminConfig.crateShop, rng),
+    crateShopStockCredit: rollCrateShopStockCredit(adminConfig.crateShop, rng),
     supplyShopRefresh: { used: 0 },
     wpMarketOffers: generateWpMarketOffers(
       { shipyardBonus: hasOperationalShipyard(pilot) },
@@ -1042,6 +1059,7 @@ export function migrateSaveData(
       sanitizeVoucherConfig(rawAdmin.vouchers)
     ),
     supplyRewards: sanitizeSupplyRewardsConfig(rawAdmin.supplyRewards),
+    crateShop: sanitizeCrateShopConfig(rawAdmin.crateShop),
     baseSiege: sanitizeBaseSiegeConfig(rawAdmin.baseSiege),
     skillMods: sanitizeSkillMods(
       rawAdmin.skillMods,
@@ -1576,6 +1594,13 @@ export function migrateSaveData(
           ? sanitizedVoucherShopStockWp
           : rollVoucherShopStockWp(adminConfig.vouchers, rng);
 
+    const migratedCrateShopStockWp = Array.isArray(raw.crateShopStockWp)
+      ? sanitizeCrateShopStock(raw.crateShopStockWp)
+      : [];
+    const migratedCrateShopStockCredit = Array.isArray(raw.crateShopStockCredit)
+      ? sanitizeCrateShopStock(raw.crateShopStockCredit)
+      : [];
+
     const v14State: PersistedCampaignState = {
       pilot: finalMigratedPilot,
       shopStock:
@@ -1589,6 +1614,8 @@ export function migrateSaveData(
       supplyShopStock: migratedSupplyShopStock,
       supplyShopStockWp: migratedSupplyShopStockWp,
       voucherShopStockWp: migratedVoucherShopStockWp,
+      crateShopStockWp: migratedCrateShopStockWp,
+      crateShopStockCredit: migratedCrateShopStockCredit,
       supplyShopRefresh: sanitizeSupplyShopRefresh(raw.supplyShopRefresh),
       wpMarketOffers:
         rawWpOffers.length > 0
@@ -1798,6 +1825,8 @@ export function migrateSaveData(
     supplyShopStock: legacySupplyShopStock,
     supplyShopStockWp: legacySupplyShopStockWp,
     voucherShopStockWp: rollVoucherShopStockWp(adminConfig.vouchers, rng),
+    crateShopStockWp: [],
+    crateShopStockCredit: [],
     supplyShopRefresh: sanitizeSupplyShopRefresh(raw.supplyShopRefresh),
     wpMarketOffers: generateWpMarketOffers(
       { shipyardBonus: hasOperationalShipyard(finalLegacyPilot) },

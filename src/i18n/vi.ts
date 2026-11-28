@@ -2538,6 +2538,15 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'shop.voucherConfirmBuyTitle': 'Xác nhận mua Voucher',
   'shop.voucherBuyNotice': 'Đã mua {qty}× {name} (-{cost} WP).',
   'shop.voucherBuyFailed': 'Không thể mua voucher.',
+  'shop.crateShopDesc': 'Mở ra vật tư ngẫu nhiên',
+  'shop.crateShopGroup': 'Hòm vật tư',
+  'shop.crateBuyBtn': 'Mua',
+  'shop.crateConfirmBuyTitle': 'Xác nhận mua Hòm vật tư',
+  'shop.crateFullCap': 'Kho hòm đã đầy ({cap}/{cap})',
+  'shop.crateBuyNotice': 'Đã mua {qty}× {name} (-{cost} {currency}).',
+  'shop.crateBuyPartialCapNotice':
+    'Đã mua {qty}× {name} (đầy tối đa {cap}, -{cost} {currency}).',
+  'shop.crateBuyFailed': 'Không thể mua hòm vật tư.',
 
   // Admin CP — Voucher (VOUCHER-a)
   'admin.voucher.sectionTitle': 'Voucher',
@@ -2711,6 +2720,31 @@ export const VI_TRANSLATIONS: Record<TranslationKey, string> = {
   'admin.supplyGive.confirm': 'Đã tặng {name} x{qty}',
   'admin.supplyGive.confirmOverflow': ' (kho đầy, mất {lost})',
   'admin.supplyGive.failed': 'Không có vật tư hợp lệ để tặng.',
+
+  // Admin CP — Hòm vật tư (cửa hàng) (SUP-GEN-b)
+  'admin.battleSection.crateShop.title': 'Hòm vật tư (cửa hàng)',
+  'admin.battleSection.crateShop.desc':
+    'Tỉ lệ xuất hiện, số ô tối đa, số lượng mỗi ô và giá Hòm vật tư trong cửa hàng WP & Credit',
+  'admin.crateShop.reset': 'Khôi phục mặc định',
+  'admin.crateShop.wpGroup': 'Cửa hàng WP (Chiến điểm)',
+  'admin.crateShop.creditGroup': 'Cửa hàng Credit',
+  'admin.crateShop.chancePct': 'Tỉ lệ % mỗi ô (0–100)',
+  'admin.crateShop.maxSlots': 'Số ô tối đa (0–6)',
+  'admin.crateShop.maxPerSlot': 'SL tối đa mỗi ô (1–99)',
+  'admin.crateShop.priceWp': 'Giá 1 hòm (WP, 1–1.000.000)',
+  'admin.crateShop.priceCredit': 'Giá 1 hòm (Credit, 1–100.000.000)',
+  'admin.crateShop.exChance':
+    'Tỉ lệ {pct}%: mỗi lần làm mới có trung bình {avg} ô trong tối đa {slots} ô, mỗi ô 1–{perSlot} hòm',
+  'admin.crateShop.exSlots':
+    'Quay độc lập {slots} ô mỗi lần làm mới (TB ~{avgCrates} hòm/lần làm mới)',
+  'admin.crateShop.exPerSlot':
+    'Mỗi ô trúng có ngẫu nhiên 1–{max} hòm (TB {avg} hòm/ô)',
+  'admin.crateShop.exPriceWp': 'Giá {price} WP',
+  'admin.crateShop.exPriceCredit': 'Giá {price} credit',
+  'admin.crateShop.valueHeading':
+    'Giá trị kỳ vọng 1 Hòm vật tư theo cấu hình rơi đồ hiện tại:',
+  'admin.crateShop.valueLine':
+    'Lv.{level}: Giá trị kỳ vọng 1 hòm ≈ {value} credit (giá bán {sellValue}; WP: {wpPrice} WP; mua bằng credit: giá {creditPrice})',
 
   // BASE-SIEGE-a
   'summary.siegeCaptured': 'Đã chiếm căn cứ!',
