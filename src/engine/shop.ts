@@ -16,6 +16,7 @@ import {
 } from '../data/shopConfig';
 import type {
   AdminConfig,
+  BlackMarketMedalOffer,
   ConsumableKind,
   CrateShopConfig,
   CrateShopListing,
@@ -23,6 +24,7 @@ import type {
   ItemLevelsConfig,
   ItemRarity,
   ItemTemplate,
+  MedalsConfig,
   ModuleDropConfig,
   PaperDollSlot,
   PilotAccount,
@@ -37,6 +39,12 @@ import type {
   VoucherShopListing,
   WpMarketOffer,
 } from '../types/game';
+import {
+  getMedalId,
+  getMedalWpValue,
+  parseMedalId,
+  resolveMedalsConfig,
+} from './medals';
 import {
   getAllVouchers,
   getVoucherMaxStock,
@@ -1190,3 +1198,89 @@ export function rollCrateShopStockCredit(
   const cfg = resolveCrateShopConfig(cfgOrAdmin);
   return rollCrateShopStockSide(cfg.credit, 'crate-credit', rng);
 }
+
+let blackMarketSeq = 1;
+
+export function rollBlackMarketMedalOffer(
+  cfgOrAdmin?: MedalsConfig | AdminConfig | null,
+  rng: () => number = Math.random
+): BlackMarketMedalOffer | null {
+  const cfg = resolveMedalsConfig(cfgOrAdmin);
+  const ratePct = Math.max(0, Math.min(10, cfg.blackMarketRatePct));
+  if (ratePct <= 0 || rng() * 100 >= ratePct) {
+    return null;
+  }
+
+  let totalWeight = 0;
+  for (let i = 0; i < 5; i++) {
+    totalWeight += Math.max(0, cfg.blackMarketWeights[i] ?? 0);
+  }
+  if (totalWeight <= 0) return null;
+
+  let roll = rng() * totalWeight;
+  let chosenTier: 1 | 2 | 3 | 4 | 5 = 1;
+  for (let i = 0; i < 5; i++) {
+    const w = Math.max(0, cfg.blackMarketWeights[i] ?? 0);
+    if (w <= 0) continue;
+    roll -= w;
+    if (roll <= 0) {
+      chosenTier = (i + 1) as 1 | 2 | 3 | 4 | 5;
+      break;
+    }
+  }
+
+  const wpValue = getMedalWpValue(chosenTier, cfg);
+  const creditPrice = Math.max(
+    1,
+    Math.round(wpValue * cfg.blackMarketCreditPerWp)
+  );
+  blackMarketSeq += 1;
+  return {
+    id: `bm_medal_${Date.now().toString(36)}_${blackMarketSeq}_${Math.floor(
+      rng() * 1e5
+    ).toString(36)}`,
+    kind: 'medal',
+    medalId: getMedalId(chosenTier),
+    tier: chosenTier,
+    wpValue,
+    creditPrice,
+    soldOut: false,
+  };
+}
+
+export function sanitizeBlackMarketMedalOffer(
+  raw: unknown
+): BlackMarketMedalOffer | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const obj = raw as Record<string, unknown>;
+  if (obj.kind !== 'medal') return null;
+  const parsed = parseMedalId(obj.medalId);
+  const tierRaw = typeof obj.tier === 'number' ? obj.tier : parsed?.tier;
+  const tier =
+    tierRaw === 1 || tierRaw === 2 || tierRaw === 3 || tierRaw === 4 || tierRaw === 5
+      ? tierRaw
+      : parsed?.tier ?? null;
+  if (!tier) return null;
+  const wpValue =
+    typeof obj.wpValue === 'number' && Number.isFinite(obj.wpValue)
+      ? Math.max(1, Math.round(obj.wpValue))
+      : getMedalWpValue(tier);
+  const creditPrice =
+    typeof obj.creditPrice === 'number' && Number.isFinite(obj.creditPrice)
+      ? Math.max(1, Math.round(obj.creditPrice))
+      : wpValue * 1500;
+  const id =
+    typeof obj.id === 'string' && obj.id.trim().length > 0
+      ? obj.id.trim()
+      : `bm_medal_${tier}`;
+  return {
+    id,
+    kind: 'medal',
+    medalId: getMedalId(tier),
+    tier,
+    wpValue,
+    creditPrice,
+    soldOut: Boolean(obj.soldOut),
+  };
+}
+

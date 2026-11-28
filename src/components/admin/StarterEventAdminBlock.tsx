@@ -11,10 +11,6 @@ import {
 import { getSupplyTemplateById, SUPPLY_TEMPLATES } from '../../data/consumables';
 import { getAllVouchers } from '../../data/vouchers';
 import {
-  CARD_CREDIT_MAX,
-  CARD_CREDIT_MIN,
-  CARD_EXP_MAX,
-  CARD_EXP_MIN,
   clampCardValue,
   cloneStarterEventConfig,
   DEFAULT_STARTER_EVENT_CONFIG,
@@ -27,6 +23,18 @@ import {
   STARTER_EVENT_MAX_QTY,
   summarizeStarterEvent,
 } from '../../engine/starterEvent';
+import {
+  type CardTierNumber,
+  getCardTier,
+  sanitizeCardTiersConfig,
+} from '../../engine/cardTiers';
+import {
+  getMedalId,
+  getMedalName,
+  getMedalWpValue,
+  parseMedalId,
+  sanitizeMedalsConfig,
+} from '../../engine/medals';
 import {
   getBuffCardKindLabel,
   getBuffCardName,
@@ -109,6 +117,15 @@ export function StarterEventAdminBlock({
   );
   const grantedIds = sanitizeStarterEventGranted(pilot.starterEventGranted);
 
+  const cardTiersCfg = useMemo(
+    () => sanitizeCardTiersConfig(adminConfig.cardTiers),
+    [adminConfig.cardTiers]
+  );
+  const medalsCfg = useMemo(
+    () => sanitizeMedalsConfig(adminConfig.medals),
+    [adminConfig.medals]
+  );
+
   const commitConfig = (next: StarterEventConfig) => {
     adminUpdateConfig({
       starterEvent: sanitizeStarterEventConfig(next, adminConfig.vouchers),
@@ -126,9 +143,16 @@ export function StarterEventAdminBlock({
     let nextValue = cur.value;
     let nextRefId: string | undefined = undefined;
     if (nextType === 'card_credit') {
-      nextValue = clampCardValue('credit', cur.value);
+      nextValue = cardTiersCfg.credit.values.includes(cur.value)
+        ? cur.value
+        : cardTiersCfg.credit.values[0];
     } else if (nextType === 'card_exp') {
-      nextValue = clampCardValue('exp', cur.value);
+      nextValue = cardTiersCfg.exp.values.includes(cur.value)
+        ? cur.value
+        : cardTiersCfg.exp.values[0];
+    } else if (nextType === 'medal') {
+      nextRefId = 'medal_t1';
+      nextValue = 1;
     } else if (nextType === 'voucher_credit') {
       const exact = creditVouchers.find((v) => v.value === cur.value);
       nextValue =
@@ -168,6 +192,16 @@ export function StarterEventAdminBlock({
       next.entries[idx] = {
         ...cur,
         value: clampCardValue('exp', raw),
+      };
+    } else if (cur.type === 'medal') {
+      const tier = Math.max(
+        1,
+        Math.min(5, Math.round(raw || 1))
+      ) as CardTierNumber;
+      next.entries[idx] = {
+        ...cur,
+        refId: getMedalId(tier),
+        value: tier,
       };
     } else if (cur.type === 'voucher_credit' || cur.type === 'voucher_exp') {
       const list = cur.type === 'voucher_credit' ? creditVouchers : expVouchers;
@@ -255,6 +289,20 @@ export function StarterEventAdminBlock({
       return t('admin.starterEvent.rowItemExample', {
         name,
         qty: entry.qty,
+      });
+    }
+    if (entry.type === 'medal') {
+      const parsed = parseMedalId(entry.refId);
+      const tier = (
+        parsed?.tier ?? Math.max(1, Math.min(5, Math.round(entry.value || 1)))
+      ) as CardTierNumber;
+      const wp = getMedalWpValue(tier, medalsCfg);
+      const name = getMedalName(tier, lang);
+      return t('admin.starterEvent.rowExample', {
+        name,
+        qty: entry.qty,
+        total: fmtLocale(wp * entry.qty, lang),
+        unit: 'WP',
       });
     }
     const totalStr = fmtLocale(entry.value * entry.qty, lang);
@@ -417,13 +465,28 @@ export function StarterEventAdminBlock({
                   onClick={() =>
                     appendEntry({
                       type: 'card_exp',
-                      value: 5000,
+                      value: cardTiersCfg.exp.values[2] ?? 5000,
                       qty: 1,
                     })
                   }
                   className="h-8 px-2 text-left rounded border border-slate-700 bg-slate-900 hover:border-amber-400 text-slate-100 cursor-pointer"
                 >
                   {t('admin.starterEvent.typeCardExp')}
+                </button>
+                <button
+                  type="button"
+                  data-testid="admin-starter-add-medal"
+                  onClick={() =>
+                    appendEntry({
+                      type: 'medal',
+                      refId: 'medal_t1',
+                      value: 1,
+                      qty: 1,
+                    })
+                  }
+                  className="h-8 px-2 text-left rounded border border-slate-700 bg-slate-900 hover:border-violet-400 text-slate-100 cursor-pointer"
+                >
+                  {t('admin.starterEvent.typeMedal')}
                 </button>
               </div>
             </div>
@@ -573,18 +636,45 @@ export function StarterEventAdminBlock({
           {cfg.entries.map((entry, idx) => {
             const isCard =
               entry.type === 'card_credit' || entry.type === 'card_exp';
+            const isMedal = entry.type === 'medal';
             const isVoucher =
               entry.type === 'voucher_credit' || entry.type === 'voucher_exp';
             const isBuffCard = entry.type === 'buff_card';
-            const isSupply = entry.type === 'supply';
             const isZeroQty = entry.qty <= 0;
             const voucherOptions =
               entry.type === 'voucher_credit' ? creditVouchers : expVouchers;
-            const minCard =
-              entry.type === 'card_credit' ? CARD_CREDIT_MIN : CARD_EXP_MIN;
-            const maxCard =
-              entry.type === 'card_credit' ? CARD_CREDIT_MAX : CARD_EXP_MAX;
             const rowExample = formatEntryLiveLabel(entry);
+
+            const cardTierValues =
+              entry.type === 'card_credit'
+                ? cardTiersCfg.credit.values
+                : cardTiersCfg.exp.values;
+            const isCardExactTier = isCard && cardTierValues.includes(entry.value);
+            const cardTier = isCard
+              ? getCardTier(
+                  entry.type === 'card_credit' ? 'credit' : 'exp',
+                  entry.value,
+                  cardTiersCfg
+                )
+              : 1;
+            const cardLiveExample =
+              entry.type === 'card_exp'
+                ? t('admin.starterEvent.cardExpLiveEx', {
+                    tier: cardTier,
+                    value: fmtLocale(entry.value, lang),
+                    lv: cardTiersCfg.exp.maxLevels[cardTier - 1] ?? 1,
+                  })
+                : entry.type === 'card_credit'
+                  ? t('admin.starterEvent.cardCreditLiveEx', {
+                      tier: cardTier,
+                      value: fmtLocale(entry.value, lang),
+                    })
+                  : '';
+
+            const medalTier = (
+              parseMedalId(entry.refId)?.tier ??
+              Math.max(1, Math.min(5, Math.round(entry.value || 1)))
+            ) as CardTierNumber;
 
             return (
               <div
@@ -617,6 +707,9 @@ export function StarterEventAdminBlock({
                       <option value="card_exp">
                         {t('admin.starterEvent.typeCardExp')}
                       </option>
+                      <option value="medal">
+                        {t('admin.starterEvent.typeMedal')}
+                      </option>
                       <option value="voucher_credit">
                         {t('admin.starterEvent.typeVoucherCredit')}
                       </option>
@@ -635,32 +728,84 @@ export function StarterEventAdminBlock({
                   {/* Value / Target Picker */}
                   <label className="sm:col-span-4 space-y-1 block min-w-0">
                     <span className="text-[11px] text-slate-400 block">
-                      {isBuffCard || isSupply
+                      {isBuffCard || entry.type === 'supply'
                         ? t('admin.starterEvent.pickItem')
-                        : t('admin.starterEvent.valueLabel')}
+                        : isCard || isMedal
+                          ? t('admin.starterEvent.pickTier')
+                          : t('admin.starterEvent.valueLabel')}
                     </span>
                     {isCard ? (
                       <>
-                        <input
-                          type="number"
+                        <select
                           data-testid={`admin-starter-event-value-${idx}`}
-                          min={minCard}
-                          max={maxCard}
-                          step={100}
                           value={entry.value}
                           onChange={(e) =>
-                            handleEntryValueChange(
-                              idx,
-                              Number(e.target.value) || minCard
-                            )
+                            handleEntryValueChange(idx, Number(e.target.value))
                           }
                           className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums text-slate-100"
-                        />
+                        >
+                          {!isCardExactTier && (
+                            <option value={entry.value}>
+                              {t('admin.starterEvent.customValueOption', {
+                                value: fmtLocale(entry.value, lang),
+                              })}
+                            </option>
+                          )}
+                          {cardTierValues.map((val, tIdx) => (
+                            <option key={tIdx + 1} value={val}>
+                              {entry.type === 'card_credit'
+                                ? t('admin.starterEvent.tierCreditOpt', {
+                                    tier: tIdx + 1,
+                                    value: fmtLocale(val, lang),
+                                  })
+                                : t('admin.starterEvent.tierExpOpt', {
+                                    tier: tIdx + 1,
+                                    value: fmtLocale(val, lang),
+                                    lv: cardTiersCfg.exp.maxLevels[tIdx] ?? 1,
+                                  })}
+                            </option>
+                          ))}
+                        </select>
                         <span
                           data-testid={`admin-starter-event-value-ex-${idx}`}
                           className="text-[11px] text-slate-400 block leading-snug break-words"
                         >
-                          {rowExample} ({t('admin.starterEvent.cardValueHint')})
+                          {cardLiveExample}
+                        </span>
+                      </>
+                    ) : isMedal ? (
+                      <>
+                        <select
+                          data-testid={`admin-starter-event-value-${idx}`}
+                          value={medalTier}
+                          onChange={(e) =>
+                            handleEntryValueChange(idx, Number(e.target.value))
+                          }
+                          className="w-full h-9 px-2 rounded border border-slate-700 bg-slate-900 text-xs font-mono-nums text-slate-100"
+                        >
+                          {([1, 2, 3, 4, 5] as CardTierNumber[]).map((tNum) => (
+                            <option key={tNum} value={tNum}>
+                              {t('admin.starterEvent.tierMedalOpt', {
+                                tier: tNum,
+                                wp: fmtLocale(
+                                  getMedalWpValue(tNum, medalsCfg),
+                                  lang
+                                ),
+                              })}
+                            </option>
+                          ))}
+                        </select>
+                        <span
+                          data-testid={`admin-starter-event-value-ex-${idx}`}
+                          className="text-[11px] text-slate-400 block leading-snug break-words"
+                        >
+                          {t('admin.starterEvent.medalLiveEx', {
+                            name: getMedalName(medalTier, lang),
+                            wp: fmtLocale(
+                              getMedalWpValue(medalTier, medalsCfg),
+                              lang
+                            ),
+                          })}
                         </span>
                       </>
                     ) : isVoucher ? (

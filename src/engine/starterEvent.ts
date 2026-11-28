@@ -20,6 +20,19 @@ import type {
 } from '../types/game';
 import { getExpForNextLevel } from './stats';
 import { addSupplyToConsumables } from './supplies';
+import {
+  getMedalId,
+  grantMedalsToMap,
+  parseMedalId,
+  sanitizePilotMedals,
+} from './medals';
+import type { CardTierNumber } from './cardTiers';
+export {
+  DEFAULT_CARD_TIERS_CONFIG,
+  getCardTier,
+  sanitizeCardTiersConfig,
+  type CardTierNumber,
+} from './cardTiers';
 
 export type CardKind = 'credit' | 'exp';
 
@@ -146,6 +159,7 @@ function isStarterEventEntryType(raw: unknown): raw is StarterEventEntryType {
   return (
     raw === 'card_credit' ||
     raw === 'card_exp' ||
+    raw === 'medal' ||
     raw === 'voucher_credit' ||
     raw === 'voucher_exp' ||
     raw === 'buff_card' ||
@@ -212,6 +226,22 @@ export function sanitizeStarterEventConfig(
         type: 'supply',
         refId: tpl.id,
         value: tpl.tier,
+        qty,
+      });
+      continue;
+    }
+
+    if (rec.type === 'medal') {
+      const parsed = parseMedalId(rec.refId);
+      const rawVal =
+        typeof rec.value === 'number' ? rec.value : Number(rec.value);
+      const rawTier = parsed?.tier ?? Math.round(rawVal);
+      if (!Number.isFinite(rawTier)) continue;
+      const tier = Math.max(1, Math.min(5, Math.round(rawTier))) as CardTierNumber;
+      entries.push({
+        type: 'medal',
+        refId: getMedalId(tier),
+        value: tier,
         qty,
       });
       continue;
@@ -287,6 +317,7 @@ export function grantStarterEventPack(
   const nextCards = sanitizeOwnedCards(pilot.cards);
   const nextVouchers: Record<string, number> = { ...(pilot.vouchers ?? {}) };
   const nextBuffCards = sanitizePilotBuffCards(pilot.buffCards);
+  let nextMedals = sanitizePilotMedals(pilot.medals);
   let nextConsumables: ConsumableItem[] = Array.isArray(pilot.consumables)
     ? [...pilot.consumables]
     : [];
@@ -303,6 +334,14 @@ export function grantStarterEventPack(
         (nextCards[cardId] ?? 0) + entry.qty
       );
       granted.push({ ...entry });
+    } else if (entry.type === 'medal') {
+      const parsed = parseMedalId(entry.refId);
+      const tier = (
+        parsed?.tier ?? Math.max(1, Math.min(5, Math.round(entry.value || 1)))
+      ) as CardTierNumber;
+      const medalId = getMedalId(tier);
+      nextMedals = grantMedalsToMap(nextMedals, { [medalId]: entry.qty });
+      granted.push({ ...entry, refId: medalId, value: tier });
     } else if (entry.type === 'buff_card') {
       const parsed = parseBuffCardId(entry.refId);
       if (!parsed) continue;
@@ -345,6 +384,7 @@ export function grantStarterEventPack(
       cards: nextCards,
       vouchers: nextVouchers,
       ...(Object.keys(nextBuffCards).length > 0 ? { buffCards: nextBuffCards } : {}),
+      ...(Object.keys(nextMedals).length > 0 ? { medals: nextMedals } : {}),
       consumables: nextConsumables,
       starterEventGranted: nextGranted,
     },
@@ -359,6 +399,7 @@ export interface StarterEventSummary {
   voucherExp: number;
   buffCardsCount: number;
   suppliesCount: number;
+  medalsCount?: number;
 }
 
 export function summarizeStarterEvent(
@@ -372,6 +413,7 @@ export function summarizeStarterEvent(
   let voucherExp = 0;
   let buffCardsCount = 0;
   let suppliesCount = 0;
+  let medalsCount = 0;
 
   for (const entry of cleanCfg.entries) {
     if (entry.qty <= 0) continue;
@@ -382,6 +424,7 @@ export function summarizeStarterEvent(
     else if (entry.type === 'voucher_exp') voucherExp += total;
     else if (entry.type === 'buff_card') buffCardsCount += entry.qty;
     else if (entry.type === 'supply') suppliesCount += entry.qty;
+    else if (entry.type === 'medal') medalsCount += entry.qty;
   }
 
   return {
@@ -391,6 +434,7 @@ export function summarizeStarterEvent(
     voucherExp,
     buffCardsCount,
     suppliesCount,
+    ...(medalsCount > 0 ? { medalsCount } : {}),
   };
 }
 

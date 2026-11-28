@@ -69,6 +69,7 @@ import {
   getHireWingmanCost,
   getTotalMonthlyIncome,
   isBaseServicesAvailable,
+  type MonthAdvanceSummary,
 } from '../engine/mapWorld';
 import {
   getClassName,
@@ -430,6 +431,15 @@ export function MapView() {
     text: string;
     ok: boolean;
   } | null>(null);
+  const [monthReport, setMonthReport] = useState<MonthAdvanceSummary | null>(null);
+
+  const handleAdvanceMonth = () => {
+    soundFx.playClick();
+    const summary = advanceMonth();
+    if (adminConfig.showMonthReport ?? true) {
+      setMonthReport(summary);
+    }
+  };
 
   useEffect(() => {
     setRepairFeedback(null);
@@ -1797,10 +1807,7 @@ export function MapView() {
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={() => {
-                soundFx.playClick();
-                advanceMonth();
-              }}
+              onClick={handleAdvanceMonth}
               className="flex-1 sm:flex-none min-h-[44px] px-3.5 inline-flex items-center justify-center gap-1.5 rounded-lg border border-sky-500/50 bg-sky-500/15 hover:bg-sky-500/25 text-sky-200 font-semibold text-xs sm:text-sm transition-colors cursor-pointer whitespace-nowrap"
             >
               <FastForward className="w-4 h-4" />
@@ -2716,10 +2723,7 @@ export function MapView() {
           <button
             type="button"
             data-testid="map-phone-advance-btn"
-            onClick={() => {
-              soundFx.playClick();
-              advanceMonth();
-            }}
+            onClick={handleAdvanceMonth}
             className="flex-1 min-h-[44px] h-[44px] px-2.5 inline-flex items-center justify-center gap-1.5 rounded-lg border border-sky-500/50 bg-sky-500/15 active:bg-sky-500/25 text-sky-200 font-semibold text-xs transition-colors cursor-pointer whitespace-nowrap"
           >
             <FastForward className="w-4 h-4 shrink-0" />
@@ -2797,6 +2801,128 @@ export function MapView() {
           {renderBriefingBody()}
         </BottomSheet>
       </div>
+
+      {/* Monthly Report Modal */}
+      {monthReport && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          data-testid="map-month-report-modal"
+          className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4"
+        >
+          <div className="w-full max-w-md rounded-xl border border-sky-500/40 bg-[#0B111C] p-5 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
+              <div className="flex items-center gap-2 text-sky-300">
+                <Calendar className="w-4 h-4 shrink-0" />
+                <h2 className="font-display text-lg font-bold text-slate-100">
+                  {t('map.monthReport.title', { month: monthReport.newMonth })}
+                </h2>
+              </div>
+            </div>
+
+            <div className="space-y-2.5 text-xs">
+              <div className="rounded-lg border border-slate-800 bg-[#080C15] p-3 flex items-center justify-between gap-2">
+                <span className="text-slate-300 font-medium">
+                  {t('map.monthReport.sectorIncome')}
+                </span>
+                <span className="font-mono-nums font-bold text-emerald-300">
+                  +{monthReport.creditsEarned.toLocaleString()} CR · +
+                  {monthReport.warPointsEarned.toLocaleString()} WP
+                </span>
+              </div>
+
+              <div className="rounded-lg border border-slate-800 bg-[#080C15] p-3 space-y-1">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-slate-300 font-medium">
+                    {t('map.monthReport.capitalSalary')}
+                  </span>
+                  <span className="font-mono-nums font-bold text-amber-300">
+                    +{monthReport.salaryWp.toLocaleString()} WP
+                  </span>
+                </div>
+                <div className="text-[11px] font-mono-nums text-slate-400">
+                  {t('map.monthReport.salaryFormula', {
+                    coef: monthReport.salaryCoef.toFixed(1),
+                    captured: monthReport.capturedSubBases,
+                    total: monthReport.totalSubBases,
+                  })}
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-slate-800 bg-[#080C15] p-3 space-y-1.5">
+                <div className="text-slate-300 font-medium">
+                  {t('map.monthReport.medals')}
+                </div>
+                <div className="grid grid-cols-5 gap-1.5 font-mono-nums text-center">
+                  {(['t1', 't2', 't3', 't4', 't5'] as const).map((k, idx) => (
+                    <div
+                      key={k}
+                      className={`rounded border px-1.5 py-1 ${
+                        monthReport.medals[k] > 0
+                          ? 'border-amber-500/40 bg-amber-500/10 text-amber-200 font-bold'
+                          : 'border-slate-800 bg-slate-900/60 text-slate-500'
+                      }`}
+                    >
+                      <div className="text-[10px]">T{idx + 1}</div>
+                      <div>{monthReport.medals[k]}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-slate-800 bg-[#080C15] p-3 space-y-1.5">
+                <div className="flex items-start justify-between gap-2">
+                  <span className="text-slate-300 font-medium shrink-0">
+                    {t('map.monthReport.basesLost')}
+                  </span>
+                  <span
+                    className={`text-right font-semibold ${
+                      monthReport.lostSectorIds.length > 0
+                        ? 'text-red-300'
+                        : 'text-slate-500'
+                    }`}
+                  >
+                    {monthReport.lostSectorIds.length > 0
+                      ? monthReport.lostSectorIds
+                          .map((id) => getSectorName(lang, id))
+                          .join(', ')
+                      : t('map.monthReport.none')}
+                  </span>
+                </div>
+                <div className="flex items-start justify-between gap-2 border-t border-slate-800/70 pt-1.5">
+                  <span className="text-slate-300 font-medium shrink-0">
+                    {t('map.monthReport.basesRepaired')}
+                  </span>
+                  <span
+                    className={`text-right font-semibold ${
+                      monthReport.repairedSectorIds.length > 0
+                        ? 'text-emerald-300'
+                        : 'text-slate-500'
+                    }`}
+                  >
+                    {monthReport.repairedSectorIds.length > 0
+                      ? monthReport.repairedSectorIds
+                          .map((id) => getSectorName(lang, id))
+                          .join(', ')
+                      : t('map.monthReport.none')}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-1">
+              <button
+                type="button"
+                data-testid="map-month-report-close"
+                onClick={() => setMonthReport(null)}
+                className="h-9 px-4 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold cursor-pointer"
+              >
+                {t('map.monthReport.close')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

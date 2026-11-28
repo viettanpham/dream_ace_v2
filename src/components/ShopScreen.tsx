@@ -37,6 +37,7 @@ import {
   validateEquipOnGear,
 } from '../engine/equipment';
 import { hasOperationalShipyard } from '../engine/shop';
+import { getMedalLore, getMedalName, MEDAL_ICON_ID } from '../engine/medals';
 import {
   formatEquipValidationReason,
   formatItemTraitsList,
@@ -136,11 +137,13 @@ export function ShopScreen() {
   const adminConfig = useGameStore((s) => s.adminConfig);
   const adminBoxCapacity = adminConfig.boxCapacity;
   const shopStock = useGameStore((s) => s.shopStock);
+  const blackMarketOffer = useGameStore((s) => s.blackMarketOffer);
   const wpMarketOffers = useGameStore((s) => s.wpMarketOffers);
   const battlesUntilRestock = useGameStore((s) => s.battlesUntilRestock);
   const shopSubTab = useGameStore((s) => s.shopSubTab);
   const setShopSubTab = useGameStore((s) => s.setShopSubTab);
   const buyShopItem = useGameStore((s) => s.buyShopItem);
+  const buyBlackMarketOffer = useGameStore((s) => s.buyBlackMarketOffer);
   const refreshShopStock = useGameStore((s) => s.refreshShopStock);
   const buyWpMarketOffer = useGameStore((s) => s.buyWpMarketOffer);
   const refreshWpMarket = useGameStore((s) => s.refreshWpMarket);
@@ -272,6 +275,21 @@ export function ShopScreen() {
         })
       );
       setMobileSheet(null);
+    }
+  };
+
+  const handleBuyBlackMarket = () => {
+    if (!blackMarketOffer || blackMarketOffer.soldOut) return;
+    if (pilot.credits < blackMarketOffer.creditPrice) return;
+    const res = buyBlackMarketOffer();
+    if (res.ok) {
+      setNoticeAction('none');
+      setNoticeText(
+        t('shop.blackMarketBoughtMsg', {
+          name: getMedalName(blackMarketOffer.tier, lang),
+          price: blackMarketOffer.creditPrice.toLocaleString(),
+        })
+      );
     }
   };
 
@@ -1245,6 +1263,80 @@ export function ShopScreen() {
         {/* BUY RANDOMIZED STOCK */}
         {shopSubTab === 'buy' && (
           <>
+            {blackMarketOffer && slotFilter === 'all' && classFilter === 'all' && (
+              <div
+                data-testid="shop-black-market-offer"
+                className={`rounded-lg border p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#150F1E]/95 ${
+                  blackMarketOffer.soldOut
+                    ? 'border-slate-800 opacity-60'
+                    : 'border-rose-500/60'
+                }`}
+              >
+                <div className="flex items-start gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-md border border-rose-500/50 bg-rose-500/15 flex items-center justify-center shrink-0">
+                    <CatalogIcon
+                      row={
+                        getCatalogRow(
+                          MEDAL_ICON_ID,
+                          adminConfig.iconCatalogMods
+                        ) ?? null
+                      }
+                      size="sm"
+                      showBadges={false}
+                      showArrowBadge={false}
+                    />
+                  </div>
+                  <div className="min-w-0 space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        data-testid="shop-black-market-badge"
+                        className="px-2 py-0.5 rounded border border-rose-500/70 bg-rose-500/20 text-[10px] font-bold uppercase tracking-wider text-rose-200"
+                      >
+                        {t('shop.blackMarketBadge')}
+                      </span>
+                      <h2 className="font-display text-lg font-bold text-amber-200 leading-tight truncate">
+                        {getMedalName(blackMarketOffer.tier, lang)}
+                      </h2>
+                      <span className="font-mono-nums text-xs font-semibold text-purple-300">
+                        {t('shop.blackMarketWpValue', {
+                          wp: blackMarketOffer.wpValue.toLocaleString(),
+                        })}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-300">
+                      {getMedalLore(lang)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
+                  <div className="font-mono-nums text-base font-bold text-amber-300">
+                    {blackMarketOffer.creditPrice.toLocaleString()}{' '}
+                    <span className="text-xs font-normal text-slate-400">
+                      CR
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    data-testid="shop-black-market-buy-btn"
+                    disabled={
+                      blackMarketOffer.soldOut ||
+                      pilot.credits < blackMarketOffer.creditPrice
+                    }
+                    onClick={handleBuyBlackMarket}
+                    className="h-10 px-4 rounded bg-rose-600 hover:bg-rose-500 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-white font-semibold text-xs transition-colors cursor-pointer whitespace-nowrap"
+                  >
+                    {blackMarketOffer.soldOut
+                      ? t('shop.soldOut')
+                      : pilot.credits >= blackMarketOffer.creditPrice
+                      ? t('shop.blackMarketBuyBtn', {
+                          price: blackMarketOffer.creditPrice.toLocaleString(),
+                        })
+                      : t('shop.insufficientCr')}
+                  </button>
+                </div>
+              </div>
+            )}
             {filteredStock.length === 0 ? (
               <div className="rounded-lg border border-slate-800 bg-[#0D131D]/90 p-10 text-center text-sm text-slate-400">
                 {t('shop.noMatch')}

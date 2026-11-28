@@ -1,0 +1,11 @@
+# TASK CARD-TIERS-1 Report
+- **Items done**: STEP A, ITEM 0a, 0b, 1–9, TESTS, and `docs/CODEMAP.md` all complete (`CURRENT_SAVE_VERSION` unchanged).
+- **New files**: `src/engine/cardTiers.ts`, `src/engine/medals.ts`, `src/engine/monthlyEconomy.ts`, `src/components/admin/CardTiersMedalsAdminBlock.tsx`, `src/engine/__tests__/cardTiers1.test.ts`.
+- **Modified files**: `src/types/game.ts`, `src/engine/{combat,starterEvent,mapWorld,shop,migration}.ts`, `src/store/useGameStore.ts`, `src/components/{WarehouseView,ShopScreen,MapView,AdminPanel,admin/StarterEventAdminBlock}.tsx`, `src/i18n/{vi,en}.ts`, `src/engine/__tests__/{suppliesCs1,supplyRebalanceCsBal}.test.ts`.
+- **ITEM 0a asserts changed**: `suppliesCs1.test.ts` #1 template count `16->36` + new family cooldowns/limits & #2 `priceOverride` handling (`sp_kit`/new buffs); `supplyRebalanceCsBal.test.ts` #3 count `15->36`.
+- **Medal icon choice**: `RW04` (`military_tech`, `"Điểm cống hiến quốc gia"`) from `src/data/iconCatalog.json`.
+- **NPC-money finding**: `src/engine/npcSupply.ts` has zero dependency on Credits, WP, or item/supply prices.
+- **Simulated month (seeded)**: 20% (1/5 sub-bases): salary `1,320 WP` (`coef 1.2`), medals `{t1:1, t2:0, t3:1, t4:0, t5:0}`; 60% (3/5): salary `2,080 WP` (`coef 1.6`), medals `{t1:20, t2:2, t3:0, t4:0, t5:0}`.
+- **Checks**: `npx tsc --noEmit` passed; 7 related suites (`38` tests, incl. `cardTiers1.test.ts` `7/7`) passed via `--reporter=dot`.
+- **Old failing asserts (not fixed)**: `shopAndIcons.test.tsx:359` expects `8` slot SVGs (`9` w/ module); `starterEvent.test.tsx:156` expects immediate `"Dùng hết"` on `card_exp_10000` (now opens EXP waste confirm dialog).
+- **Browser check**: NOT checked in a real browser.

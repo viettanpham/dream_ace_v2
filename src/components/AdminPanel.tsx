@@ -37,6 +37,7 @@ import { StarterEventAdminBlock } from './admin/StarterEventAdminBlock';
 import { VoucherAdminBlock } from './admin/VoucherAdminBlock';
 import { SkillTiersAdminBlock } from './admin/SkillTiersAdminBlock';
 import { BuffCardsAdminBlock } from './admin/BuffCardsAdminBlock';
+import { CardTiersMedalsAdminBlock } from './admin/CardTiersMedalsAdminBlock';
 import {
   AdminSection,
   AdminSectionsProvider,
@@ -2252,6 +2253,15 @@ export function AdminPanel() {
                   description={t('admin.buffCards.sectionDesc')}
                 >
                   <BuffCardsAdminBlock onFlash={flash} />
+                </AdminSection>
+
+                {/* 4d. Card Tiers & Medals (CARD-TIERS-1) */}
+                <AdminSection
+                  id="card-tiers-medals"
+                  title={t('admin.cardTiersMedals.title')}
+                  description={t('admin.cardTiersMedals.sectionDesc')}
+                >
+                  <CardTiersMedalsAdminBlock onFlash={flash} />
                 </AdminSection>
 
                 {/* 5. Enemy Level (>8 fields) */}

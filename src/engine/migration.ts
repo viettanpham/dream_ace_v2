@@ -141,6 +141,7 @@ import type {
   BattleSize,
   BattleSpeed,
   BattleViewMode,
+  BlackMarketMedalOffer,
   ConsumableItem,
   CrateShopConfig,
   CrateShopListing,
@@ -237,9 +238,11 @@ import {
   getMaxGearLevel,
   hasOperationalShipyard,
   migrateLegacySupplyShopAdminFields,
+  rollBlackMarketMedalOffer,
   rollCrateShopStockCredit,
   rollCrateShopStockWp,
   rollVoucherShopStockWp,
+  sanitizeBlackMarketMedalOffer,
   sanitizeCrateShopConfig,
   sanitizeCrateShopStock,
   sanitizeSupplyShopConfig,
@@ -268,6 +271,22 @@ import {
   sanitizeStarterEventConfig,
   sanitizeStarterEventGranted,
 } from './starterEvent';
+import {
+  cloneCardTiersConfig,
+  DEFAULT_CARD_TIERS_CONFIG,
+  sanitizeCardTiersConfig,
+} from './cardTiers';
+import {
+  cloneMedalsConfig,
+  DEFAULT_MEDALS_CONFIG,
+  sanitizeMedalsConfig,
+  sanitizePilotMedals,
+} from './medals';
+import {
+  cloneMonthlyEconomyConfig,
+  DEFAULT_MONTHLY_ECONOMY_CONFIG,
+  sanitizeMonthlyEconomyConfig,
+} from './monthlyEconomy';
 import {
   cloneSupplyEconomyConfig,
   DEFAULT_SUPPLY_ECONOMY_CONFIG,
@@ -425,6 +444,7 @@ export interface PersistedCampaignState {
   voucherShopStockWp?: import('../types/game').VoucherShopListing[];
   crateShopStockWp?: CrateShopListing[];
   crateShopStockCredit?: CrateShopListing[];
+  blackMarketOffer?: BlackMarketMedalOffer | null;
   supplyShopRefresh?: SupplyShopRefreshState;
   wpMarketOffers: WpMarketOffer[];
   battlesUntilRestock: number;
@@ -541,6 +561,10 @@ export function createDefaultAdminConfig(): AdminConfig {
     starterEvent: cloneStarterEventConfig(DEFAULT_STARTER_EVENT_CONFIG),
     baseSiege: cloneBaseSiegeConfig(DEFAULT_BASE_SIEGE_CONFIG),
     buffCards: cloneBuffCardsConfig(DEFAULT_BUFF_CARDS_CONFIG),
+    cardTiers: cloneCardTiersConfig(DEFAULT_CARD_TIERS_CONFIG),
+    medals: cloneMedalsConfig(DEFAULT_MEDALS_CONFIG),
+    monthlyEconomy: cloneMonthlyEconomyConfig(DEFAULT_MONTHLY_ECONOMY_CONFIG),
+    showMonthReport: true,
     skillMods: [],
     mapPack: null,
     showRawI18nKeys: false,
@@ -615,6 +639,7 @@ export function createFreshCampaignState(
     voucherShopStockWp: rollVoucherShopStockWp(adminConfig.vouchers, rng),
     crateShopStockWp: rollCrateShopStockWp(adminConfig.crateShop, rng),
     crateShopStockCredit: rollCrateShopStockCredit(adminConfig.crateShop, rng),
+    blackMarketOffer: rollBlackMarketMedalOffer(adminConfig, rng),
     supplyShopRefresh: { used: 0 },
     wpMarketOffers: generateWpMarketOffers(
       { shipyardBonus: hasOperationalShipyard(pilot), adminConfig },
@@ -1082,6 +1107,13 @@ export function migrateSaveData(
     crateShop: sanitizeCrateShopConfig(rawAdmin.crateShop),
     baseSiege: sanitizeBaseSiegeConfig(rawAdmin.baseSiege),
     buffCards: sanitizeBuffCardsConfig(rawAdmin.buffCards),
+    cardTiers: sanitizeCardTiersConfig(rawAdmin.cardTiers),
+    medals: sanitizeMedalsConfig(rawAdmin.medals),
+    monthlyEconomy: sanitizeMonthlyEconomyConfig(rawAdmin.monthlyEconomy),
+    showMonthReport:
+      typeof rawAdmin.showMonthReport === 'boolean'
+        ? rawAdmin.showMonthReport
+        : true,
     skillMods: sanitizeSkillMods(
       rawAdmin.skillMods,
       Array.isArray(rawAdmin.iconCatalogMods) ? rawAdmin.iconCatalogMods : []
@@ -1523,6 +1555,7 @@ export function migrateSaveData(
       rawPilot.starterEventGranted
     );
     const sanitizedBuffCards = sanitizePilotBuffCards(rawPilot.buffCards);
+    const sanitizedMedals = sanitizePilotMedals(rawPilot.medals);
     const sanitizedActiveBuffs = sanitizePilotActiveBuffs(
       rawPilot.activeBuffs,
       rawPilot.activeExpBoostBattles
@@ -1551,6 +1584,9 @@ export function migrateSaveData(
       ...(Object.keys(sanitizedCards).length > 0 ? { cards: sanitizedCards } : {}),
       ...(Object.keys(sanitizedBuffCards).length > 0
         ? { buffCards: sanitizedBuffCards }
+        : {}),
+      ...(Object.keys(sanitizedMedals).length > 0
+        ? { medals: sanitizedMedals }
         : {}),
       ...(Object.keys(sanitizedActiveBuffs).length > 0
         ? { activeBuffs: sanitizedActiveBuffs }
@@ -1629,6 +1665,9 @@ export function migrateSaveData(
     const migratedCrateShopStockCredit = Array.isArray(raw.crateShopStockCredit)
       ? sanitizeCrateShopStock(raw.crateShopStockCredit)
       : [];
+    const migratedBlackMarketOffer = sanitizeBlackMarketMedalOffer(
+      raw.blackMarketOffer
+    );
 
     const v14State: PersistedCampaignState = {
       pilot: finalMigratedPilot,
@@ -1645,6 +1684,7 @@ export function migrateSaveData(
       voucherShopStockWp: migratedVoucherShopStockWp,
       crateShopStockWp: migratedCrateShopStockWp,
       crateShopStockCredit: migratedCrateShopStockCredit,
+      blackMarketOffer: migratedBlackMarketOffer,
       supplyShopRefresh: sanitizeSupplyShopRefresh(raw.supplyShopRefresh),
       wpMarketOffers:
         rawWpOffers.length > 0
@@ -1855,6 +1895,7 @@ export function migrateSaveData(
     voucherShopStockWp: rollVoucherShopStockWp(adminConfig.vouchers, rng),
     crateShopStockWp: [],
     crateShopStockCredit: [],
+    blackMarketOffer: null,
     supplyShopRefresh: sanitizeSupplyShopRefresh(raw.supplyShopRefresh),
     wpMarketOffers: generateWpMarketOffers(
       { shipyardBonus: hasOperationalShipyard(finalLegacyPilot), adminConfig },

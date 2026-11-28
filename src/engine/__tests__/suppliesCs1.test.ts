@@ -87,17 +87,26 @@ function makeDummyUnit(overrides: Partial<CombatUnit> = {}): CombatUnit {
 }
 
 describe('TASK CS1 — Battle Supply Data, Price Formula, Save v11 & Pure Rules', () => {
-  it('1) loads 16 valid sys supply templates (hp/shield/sp x T1-T5 + utility) and drops bad rows with console.warn', () => {
-    expect(SUPPLY_TEMPLATES).toHaveLength(16);
+  it('1) loads 36 valid sys supply templates (hp/shield/sp/buff/utility) and drops bad rows with console.warn', () => {
+    expect(SUPPLY_TEMPLATES).toHaveLength(36);
     const catalogIds = new Set(
       (rawIconCatalog as Array<{ id: string }>).map((row) => row.id)
     );
     for (const tpl of SUPPLY_TEMPLATES) {
       expect(tpl.registryTag).toBe('sys');
-      expect(tpl.cooldownTurns).toBe(
-        tpl.family === 'utility' ? 4 : tpl.family === 'sp_kit' ? 3 : 2
-      );
-      expect(tpl.perBattleLimit).toBe(tpl.family === 'utility' ? 2 : 5);
+      const expectedCd = tpl.id === 'sup_scan_t1' ? 4 : tpl.family === 'sp_kit' ? 3 : 2;
+      const expectedLimit =
+        tpl.id === 'sup_scan_t1'
+          ? 2
+          : tpl.id.startsWith('sup_cooldown_')
+            ? 3
+            : tpl.id.startsWith('sup_flare_')
+              ? 1
+              : tpl.id.startsWith('sup_haste_')
+                ? 3
+                : 5;
+      expect(tpl.cooldownTurns).toBe(expectedCd);
+      expect(tpl.perBattleLimit).toBe(expectedLimit);
       expect(catalogIds.has(tpl.iconId)).toBe(true);
     }
 
@@ -151,7 +160,7 @@ describe('TASK CS1 — Battle Supply Data, Price Formula, Save v11 & Pure Rules'
     warnSpy.mockRestore();
   });
 
-  it('2) computes all 16 supply prices strictly from formula and lets priceOverride win', () => {
+  it('2) computes all 36 supply prices from formula and lets priceOverride win', () => {
     expect(PRICE_FORMULA.consumableBase).toEqual({
       hp_kit: 30,
       shield_kit: 30,
@@ -178,6 +187,7 @@ describe('TASK CS1 — Battle Supply Data, Price Formula, Save v11 & Pure Rules'
       sup_sp_t5: 320,
       sup_scan_t1: 50,
     };
+    const tierPriceByTier: Record<number, number> = { 1: 60, 2: 100, 3: 160, 4: 240, 5: 360 };
 
     for (const tpl of SUPPLY_TEMPLATES) {
       const eff = tpl.effects[0];
@@ -197,8 +207,9 @@ describe('TASK CS1 — Battle Supply Data, Price Formula, Save v11 & Pure Rules'
                 (PRICE_FORMULA.tierFactor[tpl.tier - 1] ?? 1)
             )
           );
-      expect(computeSupplyPrice(tpl)).toBe(formulaPrice);
-      expect(computeSupplyPrice(tpl)).toBe(expected[tpl.id]);
+      const expectedPrice = tpl.priceOverride ?? formulaPrice;
+      expect(computeSupplyPrice(tpl)).toBe(expectedPrice);
+      expect(computeSupplyPrice(tpl)).toBe(expected[tpl.id] ?? tierPriceByTier[tpl.tier]);
     }
 
     expect(

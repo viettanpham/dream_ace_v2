@@ -221,23 +221,40 @@ export function getEffectiveUnitDefense(
 export function getEffectiveUnitDodge(unit: CombatUnit): number {
   // Siege Mode locks EVA to 0!
   if (hasStatus(unit, 'siege_mode')) return 0;
-  let dodge = unit.derived.dodgeChance;
+  let baseRaw = unit.derived.dodgeChance;
   const evaUp = getStatus(unit, 'eva_up');
   if (evaUp) {
-    dodge += Math.round((evaUp.magnitude ?? 0.25) * 40);
+    baseRaw += Math.round((evaUp.magnitude ?? 0.25) * 40);
   }
-  const regMod = getStatusStatModifier(unit, 'dodge');
-  if (regMod.pct !== 0 || regMod.flat !== 0) {
-    dodge += Math.round(regMod.pct * 100) + regMod.flat;
-  }
-  const hasFlareDodge = unit.statuses.some(
+  const flareStatuses = unit.statuses.filter(
     (s) =>
       s.type === 'registry_effect' &&
       s.registryId === 'ENG_flare_dodge' &&
       s.turnsRemaining > 0
   );
-  const maxDodgeCap = hasFlareDodge ? 45 : 75;
-  return Math.min(maxDodgeCap, Math.max(0, dodge));
+  const nonFlareUnit =
+    flareStatuses.length > 0
+      ? {
+          ...unit,
+          statuses: unit.statuses.filter(
+            (s) => !(s.type === 'registry_effect' && s.registryId === 'ENG_flare_dodge')
+          ),
+        }
+      : unit;
+  const regMod = getStatusStatModifier(nonFlareUnit, 'dodge');
+  if (regMod.pct !== 0 || regMod.flat !== 0) {
+    baseRaw += Math.round(regMod.pct * 100) + regMod.flat;
+  }
+  const baseDodgeWithoutFlare = Math.min(75, Math.max(0, baseRaw));
+  if (flareStatuses.length === 0) {
+    return baseDodgeWithoutFlare;
+  }
+  const flareMod = getStatusStatModifier({ statuses: flareStatuses }, 'dodge');
+  const flarePoints = Math.round(flareMod.pct * 100) + flareMod.flat;
+  return Math.min(
+    baseDodgeWithoutFlare + flarePoints,
+    Math.max(45, baseDodgeWithoutFlare)
+  );
 }
 
 function getEffectiveAttackDamageMult(

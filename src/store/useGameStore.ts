@@ -175,6 +175,13 @@ import {
 } from '../engine/pirates';
 import { sanitizeEnemyLevelConfig } from '../engine/enemyLevel';
 import { sanitizeModuleDropConfig } from '../engine/moduleDrop';
+import { applyExpCardBatchToGear } from '../engine/cardTiers';
+import {
+  getMedalWpValue,
+  grantMedalsToMap,
+  parseMedalId,
+  sanitizePilotMedals,
+} from '../engine/medals';
 import {
   addSupplyToConsumables,
   applyBattleSupplyUse,
@@ -225,12 +232,14 @@ import {
   generateSupplyShopStock,
   generateSupplyShopStockWp,
   generateWpMarketOffers,
+  rollBlackMarketMedalOffer,
   rollCrateShopStockCredit,
   rollCrateShopStockWp,
   rollVoucherShopStockWp,
   getMaxGearLevel,
   getSupplyWpPrice,
   hasOperationalShipyard,
+  sanitizeBlackMarketMedalOffer,
   sanitizeCrateShopConfig,
   sanitizeCrateShopStock,
   sanitizeSupplyShopConfig,
@@ -307,6 +316,7 @@ import type {
   BaseFaction,
   BaseTab,
   BattleEvent,
+  BlackMarketMedalOffer,
   BattleKind,
   BattleRoundSnapshot,
   BattleSpeed,
@@ -465,6 +475,7 @@ function buildSaveSnapshotFromState(state: GameStoreState): SaveSnapshotPayload 
     voucherShopStockWp: state.voucherShopStockWp,
     crateShopStockWp: state.crateShopStockWp,
     crateShopStockCredit: state.crateShopStockCredit,
+    blackMarketOffer: state.blackMarketOffer,
     supplyShopRefresh: state.supplyShopRefresh,
     wpMarketOffers: state.wpMarketOffers,
     battlesUntilRestock: state.battlesUntilRestock,
@@ -493,6 +504,7 @@ interface GameStoreState {
   voucherShopStockWp: VoucherShopListing[];
   crateShopStockWp: CrateShopListing[];
   crateShopStockCredit: CrateShopListing[];
+  blackMarketOffer: BlackMarketMedalOffer | null;
   supplyShopRefresh: SupplyShopRefreshState;
   wpMarketOffers: WpMarketOffer[];
   battlesUntilRestock: number;
@@ -727,10 +739,25 @@ interface GameStoreState {
     kind?: 'credit' | 'exp';
     credit?: number;
     exp?: number;
+    appliedExp?: number;
+    wastedExp?: number;
+    cardsUsed?: number;
     gearId?: MechClassId;
     previousLevel?: number;
     newLevel?: number;
     levelsGained?: number;
+  };
+  redeemMedal: (
+    medalId: string,
+    qty?: number
+  ) => {
+    ok: boolean;
+    reason?: 'busy' | 'not_found' | 'invalid_qty';
+    medalId?: string;
+    tier?: number;
+    qtyUsed?: number;
+    wpGained?: number;
+    newWarPoints?: number;
   };
   refreshSupplyShop: () => {
     ok: boolean;
@@ -739,6 +766,12 @@ interface GameStoreState {
     battlesLeft?: number;
   };
   refreshShopStock: () => { ok: boolean; cost: number };
+  buyBlackMarketOffer: () => {
+    ok: boolean;
+    reason?: 'not_found' | 'sold_out' | 'insufficient_credits';
+    creditCost?: number;
+    medalId?: string;
+  };
   buyWpMarketOffer: (offerId: string) => {
     ok: boolean;
     reason?: 'not_found' | 'sold_out' | 'insufficient_wp';
@@ -1315,6 +1348,9 @@ function finalizeBattleOutcome(
   const refreshedCrateShopStockCredit = shouldRestock
     ? rollCrateShopStockCredit(state.adminConfig)
     : (state.crateShopStockCredit ?? []);
+  const refreshedBlackMarketOffer = shouldRestock
+    ? rollBlackMarketMedalOffer(state.adminConfig)
+    : (state.blackMarketOffer ?? null);
   const refreshedSupplyShopRefresh: SupplyShopRefreshState = shouldRestock
     ? { used: 0 }
     : sanitizeSupplyShopRefresh(state.supplyShopRefresh);
@@ -1511,6 +1547,7 @@ function finalizeBattleOutcome(
     voucherShopStockWp: refreshedVoucherShopStockWp,
     crateShopStockWp: refreshedCrateShopStockWp,
     crateShopStockCredit: refreshedCrateShopStockCredit,
+    blackMarketOffer: refreshedBlackMarketOffer,
     supplyShopRefresh: refreshedSupplyShopRefresh,
     wpMarketOffers: refreshedWpOffers,
     battlesUntilRestock: shouldRestock
@@ -1798,6 +1835,7 @@ export const useGameStore = create<GameStoreState>()(
       voucherShopStockWp: initialFresh.voucherShopStockWp ?? [],
       crateShopStockWp: initialFresh.crateShopStockWp ?? [],
       crateShopStockCredit: initialFresh.crateShopStockCredit ?? [],
+      blackMarketOffer: initialFresh.blackMarketOffer ?? null,
       supplyShopRefresh: initialFresh.supplyShopRefresh ?? { used: 0 },
       battleSpeed: initialDeviceSpeed ?? initialFresh.battleSpeed,
       screen: 'TITLE',
@@ -1889,6 +1927,7 @@ export const useGameStore = create<GameStoreState>()(
           const startVoucherStockWp = rollVoucherShopStockWp(state.adminConfig);
           const startCrateStockWp = rollCrateShopStockWp(state.adminConfig);
           const startCrateStockCredit = rollCrateShopStockCredit(state.adminConfig);
+          const startBlackMarketOffer = rollBlackMarketMedalOffer(state.adminConfig);
           set({
             ...fresh,
             supplyShopStock: startSupplyStock,
@@ -1896,6 +1935,7 @@ export const useGameStore = create<GameStoreState>()(
             voucherShopStockWp: startVoucherStockWp,
             crateShopStockWp: startCrateStockWp,
             crateShopStockCredit: startCrateStockCredit,
+            blackMarketOffer: startBlackMarketOffer,
             supplyShopRefresh: { used: 0 },
             language: state.language,
             muted: state.muted,
@@ -1935,6 +1975,7 @@ export const useGameStore = create<GameStoreState>()(
           voucherShopStockWp: fresh.voucherShopStockWp ?? [],
           crateShopStockWp: fresh.crateShopStockWp ?? [],
           crateShopStockCredit: fresh.crateShopStockCredit ?? [],
+          blackMarketOffer: fresh.blackMarketOffer ?? null,
           supplyShopRefresh: fresh.supplyShopRefresh ?? { used: 0 },
           language: state.language,
           muted: state.muted,
@@ -2796,7 +2837,9 @@ export const useGameStore = create<GameStoreState>()(
         const rawSummary = advanceCampaignMonth(
           state.pilot,
           npcSupplyCfg.sector.regenPerMonth,
-          state.adminConfig.baseSiege
+          state.adminConfig.baseSiege,
+          state.adminConfig.monthlyEconomy,
+          Math.random
         );
         const pilotAfterPirates = ensureIdle(
           spawnOnMonth(
@@ -2844,6 +2887,9 @@ export const useGameStore = create<GameStoreState>()(
         const nextCrateShopStockCredit = SHOP_STOCK_CONFIG.restockOnMonthAdvance
           ? rollCrateShopStockCredit(state.adminConfig)
           : (state.crateShopStockCredit ?? []);
+        const nextBlackMarketOffer = SHOP_STOCK_CONFIG.restockOnMonthAdvance
+          ? rollBlackMarketMedalOffer(state.adminConfig)
+          : (state.blackMarketOffer ?? null);
         const nextSupplyShopRefresh: SupplyShopRefreshState =
           SHOP_STOCK_CONFIG.restockOnMonthAdvance
             ? { used: 0 }
@@ -2862,6 +2908,7 @@ export const useGameStore = create<GameStoreState>()(
           voucherShopStockWp: nextVoucherShopStockWp,
           crateShopStockWp: nextCrateShopStockWp,
           crateShopStockCredit: nextCrateShopStockCredit,
+          blackMarketOffer: nextBlackMarketOffer,
           supplyShopRefresh: nextSupplyShopRefresh,
           wpMarketOffers: nextWpOffers,
           battlesUntilRestock: SHOP_STOCK_CONFIG.restockEveryNBattles,
@@ -3882,15 +3929,15 @@ export const useGameStore = create<GameStoreState>()(
           return { ok: false, reason: 'invalid_qty' };
         }
         const useQty = Math.min(ownedQty, reqQty);
-        const remaining = ownedQty - useQty;
-        const nextCards = { ...currentCards };
-        if (remaining > 0) {
-          nextCards[def.id] = remaining;
-        } else {
-          delete nextCards[def.id];
-        }
 
         if (def.kind === 'credit') {
+          const remaining = ownedQty - useQty;
+          const nextCards = { ...currentCards };
+          if (remaining > 0) {
+            nextCards[def.id] = remaining;
+          } else {
+            delete nextCards[def.id];
+          }
           const creditGain = useQty * def.value;
           soundFx.playConfirm();
           set({
@@ -3905,6 +3952,7 @@ export const useGameStore = create<GameStoreState>()(
             ok: true,
             kind: 'credit',
             credit: creditGain,
+            cardsUsed: useQty,
           };
         }
 
@@ -3918,6 +3966,11 @@ export const useGameStore = create<GameStoreState>()(
           return {
             ok: false,
             reason: 'max_level',
+            kind: 'exp',
+            exp: 0,
+            appliedExp: 0,
+            wastedExp: 0,
+            cardsUsed: 0,
             gearId: activeGearId,
             previousLevel: activeGear.level,
             newLevel: activeGear.level,
@@ -3925,8 +3978,37 @@ export const useGameStore = create<GameStoreState>()(
           };
         }
 
-        const expGain = useQty * def.value;
-        const levelRes = applyExpToGear(activeGear, expGain);
+        const levelRes = applyExpCardBatchToGear(
+          activeGear,
+          def.value,
+          useQty,
+          state.adminConfig
+        );
+        const cardsUsed = levelRes.cardsUsed;
+        if (cardsUsed <= 0) {
+          return {
+            ok: false,
+            reason: 'max_level',
+            kind: 'exp',
+            exp: 0,
+            appliedExp: 0,
+            wastedExp: 0,
+            cardsUsed: 0,
+            gearId: activeGearId,
+            previousLevel: activeGear.level,
+            newLevel: activeGear.level,
+            levelsGained: 0,
+          };
+        }
+
+        const remaining = ownedQty - cardsUsed;
+        const nextCards = { ...currentCards };
+        if (remaining > 0) {
+          nextCards[def.id] = remaining;
+        } else {
+          delete nextCards[def.id];
+        }
+
         soundFx.playConfirm();
         set({
           pilot: {
@@ -3942,11 +4024,62 @@ export const useGameStore = create<GameStoreState>()(
         return {
           ok: true,
           kind: 'exp',
-          exp: expGain,
+          exp: levelRes.appliedExp,
+          appliedExp: levelRes.appliedExp,
+          wastedExp: levelRes.wastedExp,
+          cardsUsed,
           gearId: activeGearId,
           previousLevel: levelRes.previousLevel,
           newLevel: levelRes.newLevel,
-          levelsGained: levelRes.newLevel - levelRes.previousLevel,
+          levelsGained: levelRes.levelsGained,
+        };
+      },
+
+      redeemMedal: (medalId, qty = 1) => {
+        const state = get();
+        if (isBattleActive(state) || state.autoRepeatSession?.active) {
+          return { ok: false, reason: 'busy' };
+        }
+        const parsed = parseMedalId(medalId);
+        if (!parsed) {
+          return { ok: false, reason: 'not_found' };
+        }
+        const currentMedals = sanitizePilotMedals(state.pilot.medals);
+        const ownedQty = currentMedals[parsed.id] ?? 0;
+        if (ownedQty <= 0) {
+          return { ok: false, reason: 'not_found' };
+        }
+        const reqQty = Math.floor(Number(qty));
+        if (!Number.isFinite(reqQty) || reqQty <= 0) {
+          return { ok: false, reason: 'invalid_qty' };
+        }
+        const useQty = Math.min(ownedQty, reqQty);
+        const remaining = ownedQty - useQty;
+        const nextMedals = { ...currentMedals };
+        if (remaining > 0) {
+          nextMedals[parsed.id] = remaining;
+        } else {
+          delete nextMedals[parsed.id];
+        }
+        const wpPerMedal = getMedalWpValue(parsed.tier, state.adminConfig);
+        const wpGained = useQty * wpPerMedal;
+        const newWarPoints = state.pilot.warPoints + wpGained;
+        soundFx.playConfirm();
+        set({
+          pilot: {
+            ...state.pilot,
+            warPoints: newWarPoints,
+            medals: nextMedals,
+          },
+          hasSaveData: true,
+        });
+        return {
+          ok: true,
+          medalId: parsed.id,
+          tier: parsed.tier,
+          qtyUsed: useQty,
+          wpGained,
+          newWarPoints,
         };
       },
 
@@ -4024,10 +4157,39 @@ export const useGameStore = create<GameStoreState>()(
             activeGear.level,
             buildShopOptionsFromState(state.pilot, state.adminConfig)
           ),
+          blackMarketOffer: rollBlackMarketMedalOffer(state.adminConfig),
           battlesUntilRestock: SHOP_STOCK_CONFIG.restockEveryNBattles,
           hasSaveData: true,
         });
         return { ok: true, cost };
+      },
+
+      buyBlackMarketOffer: () => {
+        const state = get();
+        const offer = state.blackMarketOffer;
+        if (!offer) return { ok: false, reason: 'not_found' };
+        if (offer.soldOut) return { ok: false, reason: 'sold_out' };
+        if (state.pilot.credits < offer.creditPrice) {
+          return { ok: false, reason: 'insufficient_credits' };
+        }
+        const nextMedals = grantMedalsToMap(state.pilot.medals, {
+          [offer.medalId]: 1,
+        });
+        soundFx.playConfirm();
+        set({
+          pilot: {
+            ...state.pilot,
+            credits: state.pilot.credits - offer.creditPrice,
+            medals: nextMedals,
+          },
+          blackMarketOffer: { ...offer, soldOut: true },
+          hasSaveData: true,
+        });
+        return {
+          ok: true,
+          creditCost: offer.creditPrice,
+          medalId: offer.medalId,
+        };
       },
 
       buyWpMarketOffer: (offerId) => {
@@ -6013,6 +6175,7 @@ export const useGameStore = create<GameStoreState>()(
           voucherShopStockWp: nextVoucherStockWp,
           crateShopStockWp: nextCrateWpStock,
           crateShopStockCredit: nextCrateCreditStock,
+          blackMarketOffer: rollBlackMarketMedalOffer(state.adminConfig),
           supplyShopRefresh: { used: 0 },
           wpMarketOffers: generateWpMarketOffers({
             shipyardBonus: hasOperationalShipyard(state.pilot),
@@ -6493,6 +6656,7 @@ export const useGameStore = create<GameStoreState>()(
           voucherShopStockWp: fresh.voucherShopStockWp ?? [],
           crateShopStockWp: fresh.crateShopStockWp ?? [],
           crateShopStockCredit: fresh.crateShopStockCredit ?? [],
+          blackMarketOffer: rollBlackMarketMedalOffer(nextAdminConfig),
           supplyShopRefresh: fresh.supplyShopRefresh ?? { used: 0 },
           wpMarketOffers: fresh.wpMarketOffers,
           battlesUntilRestock: fresh.battlesUntilRestock,
@@ -6911,6 +7075,7 @@ export const useGameStore = create<GameStoreState>()(
             voucherShopStockWp: state.voucherShopStockWp,
             crateShopStockWp: state.crateShopStockWp,
             crateShopStockCredit: state.crateShopStockCredit,
+            blackMarketOffer: state.blackMarketOffer,
             supplyShopRefresh: state.supplyShopRefresh,
             wpMarketOffers: state.wpMarketOffers,
             battlesUntilRestock: state.battlesUntilRestock,
@@ -7110,6 +7275,7 @@ export const useGameStore = create<GameStoreState>()(
         voucherShopStockWp: state.voucherShopStockWp,
         crateShopStockWp: state.crateShopStockWp,
         crateShopStockCredit: state.crateShopStockCredit,
+        blackMarketOffer: state.blackMarketOffer,
         supplyShopRefresh: state.supplyShopRefresh,
         wpMarketOffers: state.wpMarketOffers,
         battlesUntilRestock: state.battlesUntilRestock,
@@ -7375,6 +7541,9 @@ export const useGameStore = create<GameStoreState>()(
           state.crateShopStockCredit = Array.isArray(state.crateShopStockCredit)
             ? sanitizeCrateShopStock(state.crateShopStockCredit)
             : [];
+          state.blackMarketOffer = sanitizeBlackMarketMedalOffer(
+            state.blackMarketOffer
+          );
           state.supplyShopRefresh = sanitizeSupplyShopRefresh(
             state.supplyShopRefresh
           );

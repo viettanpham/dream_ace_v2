@@ -88,8 +88,8 @@ describe('TASK CS-BAL — Supply rebalance (flat effects, T5, pricing, admin)', 
     expect(computeSupplyPrice(spT3, { maxUsesPerBattle: 5, spPriceMult: 3 })).toBe(210);
   });
 
-  it('3) catalog has 15 templates, T5 unlockLevel 40, and exact rebalanced values', () => {
-    expect(SUPPLY_TEMPLATES).toHaveLength(15);
+  it('3) catalog has 36 templates, T5 unlockLevel 40, and exact rebalanced values', () => {
+    expect(SUPPLY_TEMPLATES).toHaveLength(36);
 
     const byFamily = {
       hp_kit: [300, 500, 800, 1200, 1800],

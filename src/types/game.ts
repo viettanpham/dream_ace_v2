@@ -1120,6 +1120,7 @@ export interface PilotAccount {
   vouchers?: Record<string, number>;
   cards?: Record<string, number>;
   buffCards?: Record<string, number>;
+  medals?: Partial<Record<MedalId, number>>;
   activeBuffs?: Partial<Record<BuffCardKind, ActiveBuffEntry>>;
   starterEventGranted?: string[];
 }
@@ -1882,12 +1883,73 @@ export interface AdminConfig {
   crateShop?: CrateShopConfig;
   baseSiege?: BaseSiegeConfig;
   buffCards?: BuffCardsConfig;
+  cardTiers?: CardTiersConfig;
+  medals?: MedalsConfig;
+  monthlyEconomy?: MonthlyEconomyConfig;
+  showMonthReport?: boolean;
   showRawI18nKeys: boolean;
+}
+
+export interface MonthlyEconomyConfig {
+  salaryBaseWp: number;
+  salaryPerBaseWp: number;
+  coefBase: number;
+  coefStepPct: number;
+  coefEveryPct: number;
+  homeMedalMin: number;
+  homeMedalMax: number;
+  subBaseMedalMin: number;
+  subBaseMedalBaseMax: number;
+  subBaseMedalStepPerDecile: number;
+  tier3Pct: number;
+  tier3Count: number;
+  tier4Pct: number;
+  tier4Count: number;
+  tier5Pct: number;
+  tier5Count: number;
+}
+
+export type TierTuple5 = [number, number, number, number, number];
+
+export type MedalId =
+  | 'medal_t1'
+  | 'medal_t2'
+  | 'medal_t3'
+  | 'medal_t4'
+  | 'medal_t5';
+
+export interface MedalsConfig {
+  wp: TierTuple5;
+  blackMarketRatePct: number;
+  blackMarketWeights: TierTuple5;
+  blackMarketCreditPerWp: number;
+}
+
+export interface BlackMarketMedalOffer {
+  id: string;
+  kind: 'medal';
+  medalId: MedalId;
+  tier: 1 | 2 | 3 | 4 | 5;
+  wpValue: number;
+  creditPrice: number;
+  soldOut: boolean;
+}
+
+export interface CardTiersConfig {
+  exp: {
+    values: TierTuple5;
+    maxLevels: TierTuple5;
+  };
+  credit: {
+    values: TierTuple5;
+  };
+  previewWastePct: number;
 }
 
 export type StarterEventEntryType =
   | 'card_credit'
   | 'card_exp'
+  | 'medal'
   | 'voucher_credit'
   | 'voucher_exp'
   | 'buff_card'

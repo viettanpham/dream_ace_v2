@@ -22,9 +22,25 @@ import {
   sanitizePilotBuffCards,
 } from '../data/buffCards';
 import { STAT_KEYS } from '../data/classes';
+import { getMaxLevel } from '../data/balance';
 import { ITEM_SLOTS, RARITY_META } from '../data/items';
 import { getCatalogRow } from '../data/iconCatalog';
 import { getAllVouchers } from '../data/vouchers';
+import {
+  applyExpCardBatchToGear,
+  applySingleExpCardToGear,
+  type CardTierNumber,
+  getCardTier,
+  sanitizeCardTiersConfig,
+} from '../engine/cardTiers';
+import {
+  getMedalName,
+  getMedalWpValue,
+  MEDAL_ICON_ID,
+  MEDAL_IDS,
+  parseMedalId,
+  sanitizePilotMedals,
+} from '../engine/medals';
 import { getEffectiveItemStats, getItemEquippedByGear } from '../engine/equipment';
 import {
   getBoxCapacity,
@@ -277,6 +293,7 @@ export function WarehouseView() {
   );
   const redeemCard = useGameStore((s) => s.redeemCard);
   const useBuffCard = useGameStore((s) => s.useBuffCard);
+  const redeemMedal = useGameStore((s) => s.redeemMedal);
   const [autoVoucherEnabled, setAutoVoucherEnabled] = useAutoVoucherPref();
 
   const [mobilePanel, setMobilePanel] = useState<WarehouseContainer>('box');
@@ -287,11 +304,21 @@ export function WarehouseView() {
   const [cardResultIsError, setCardResultIsError] = useState(false);
   const [buffResultText, setBuffResultText] = useState<string | null>(null);
   const [buffResultIsError, setBuffResultIsError] = useState(false);
+  const [medalResultText, setMedalResultText] = useState<string | null>(null);
+  const [medalResultIsError, setMedalResultIsError] = useState(false);
   const [pendingBuffReplace, setPendingBuffReplace] = useState<{
     cardId: string;
     kind: BuffCardKind;
     previousTier: number;
     nextTier: number;
+  } | null>(null);
+  const [pendingCardWasteConfirm, setPendingCardWasteConfirm] = useState<{
+    cardId: string;
+    qty: number;
+    appliedExp: number;
+    totalCardExp: number;
+    wastedExp: number;
+    levelsGained: number;
   } | null>(null);
   const [selectionContainer, setSelectionContainer] =
     useState<WarehouseContainer | null>(null);
@@ -362,6 +389,7 @@ export function WarehouseView() {
         return {
           def,
           name: getCardName(def.id, lang),
+          tier: getCardTier(def.kind, def.value, adminConfig),
           qty,
         };
       })
@@ -372,7 +400,7 @@ export function WarehouseView() {
         }
         return a.def.value - b.def.value;
       });
-  }, [pilot.cards, lang]);
+  }, [pilot.cards, lang, adminConfig]);
 
   const totalOwnedCards = useMemo(
     () => ownedCardRows.reduce((s, r) => s + r.qty, 0),
@@ -401,6 +429,27 @@ export function WarehouseView() {
   const totalOwnedBuffCards = useMemo(
     () => ownedBuffCardRows.reduce((s, r) => s + r.qty, 0),
     [ownedBuffCardRows]
+  );
+
+  const ownedMedalRows = useMemo(() => {
+    const clean = sanitizePilotMedals(pilot.medals);
+    return MEDAL_IDS.map((id) => {
+      const qty = clean[id] ?? 0;
+      const parsed = parseMedalId(id);
+      if (!parsed || qty <= 0) return null;
+      return {
+        id,
+        tier: parsed.tier,
+        name: getMedalName(parsed.tier, lang),
+        wp: getMedalWpValue(parsed.tier, adminConfig),
+        qty,
+      };
+    }).filter((r): r is NonNullable<typeof r> => r !== null);
+  }, [pilot.medals, lang, adminConfig]);
+
+  const totalOwnedMedals = useMemo(
+    () => ownedMedalRows.reduce((s, r) => s + r.qty, 0),
+    [ownedMedalRows]
   );
 
   const activeBuffRows = useMemo(() => {
@@ -462,9 +511,31 @@ export function WarehouseView() {
     );
   };
 
+  const handleRedeemMedal = (medalId: string, qty: number) => {
+    const res = redeemMedal(medalId, qty);
+    const numberLocale = lang === 'vi' ? 'vi-VN' : 'en-US';
+    if (!res.ok) {
+      setMedalResultIsError(true);
+      if (res.reason === 'busy') {
+        setMedalResultText(t('warehouse.medalBusy'));
+      }
+      return;
+    }
+    setMedalResultIsError(false);
+    const tier = ((res.tier ?? 1) as CardTierNumber);
+    setMedalResultText(
+      t('warehouse.medalUsedMsg', {
+        wp: (res.wpGained ?? 0).toLocaleString(numberLocale),
+        qty: res.qtyUsed ?? 1,
+        name: getMedalName(tier, lang),
+      })
+    );
+  };
+
   const activeGearForCards = pilot.gears[pilot.activeGearId];
 
   const handleRedeemCard = (cardId: string, qty: number) => {
+    setPendingCardWasteConfirm(null);
     const res = redeemCard(cardId, qty);
     const numberLocale = lang === 'vi' ? 'vi-VN' : 'en-US';
     if (!res.ok) {
@@ -495,24 +566,109 @@ export function WarehouseView() {
       );
     } else if (res.kind === 'exp') {
       const gearName = getClassName(lang, res.gearId ?? pilot.activeGearId);
-      const valStr = (res.exp ?? 0).toLocaleString(numberLocale);
+      const applied = res.appliedExp ?? res.exp ?? 0;
+      const wasted = res.wastedExp ?? 0;
+      const valStr = applied.toLocaleString(numberLocale);
+      const wastedStr = wasted.toLocaleString(numberLocale);
       if ((res.levelsGained ?? 0) > 0) {
         setCardResultText(
-          t('warehouse.cardUsedExpLevelUp', {
-            value: valStr,
-            gear: gearName,
-            level: res.newLevel ?? activeGearForCards.level,
-          })
+          wasted > 0
+            ? t('warehouse.cardUsedExpLevelUpWasted', {
+                value: valStr,
+                gear: gearName,
+                level: res.newLevel ?? activeGearForCards.level,
+                wasted: wastedStr,
+              })
+            : t('warehouse.cardUsedExpLevelUp', {
+                value: valStr,
+                gear: gearName,
+                level: res.newLevel ?? activeGearForCards.level,
+              })
         );
       } else {
         setCardResultText(
-          t('warehouse.cardUsedExp', {
-            value: valStr,
-            gear: gearName,
-          })
+          wasted > 0
+            ? t('warehouse.cardUsedExpWasted', {
+                value: valStr,
+                gear: gearName,
+                wasted: wastedStr,
+              })
+            : t('warehouse.cardUsedExp', {
+                value: valStr,
+                gear: gearName,
+              })
         );
       }
     }
+  };
+
+  const handleRequestRedeemCard = (
+    cardId: string,
+    qty: number,
+    isUseAll = false
+  ) => {
+    const def = getCardDef(cardId);
+    if (
+      !def ||
+      def.kind === 'credit' ||
+      transferLocked ||
+      !activeGearForCards ||
+      !activeGearForCards.owned ||
+      activeGearForCards.level >= getMaxLevel()
+    ) {
+      handleRedeemCard(cardId, qty);
+      return;
+    }
+
+    if (!isUseAll) {
+      const preview = applySingleExpCardToGear(
+        activeGearForCards,
+        def.value,
+        adminConfig
+      );
+      const previewWastePct = sanitizeCardTiersConfig(
+        adminConfig?.cardTiers
+      ).previewWastePct;
+      if (
+        preview.cardExp > 0 &&
+        preview.wastedExp / preview.cardExp >= previewWastePct / 100
+      ) {
+        setPendingCardWasteConfirm({
+          cardId: def.id,
+          qty: 1,
+          appliedExp: preview.appliedExp,
+          totalCardExp: preview.cardExp,
+          wastedExp: preview.wastedExp,
+          levelsGained: preview.levelsGained,
+        });
+        return;
+      }
+      handleRedeemCard(def.id, 1);
+      return;
+    }
+
+    const batchPreview = applyExpCardBatchToGear(
+      activeGearForCards,
+      def.value,
+      qty,
+      adminConfig
+    );
+    if (batchPreview.cardsUsed <= 0) {
+      handleRedeemCard(def.id, qty);
+      return;
+    }
+    if (batchPreview.wastedExp > 0) {
+      setPendingCardWasteConfirm({
+        cardId: def.id,
+        qty: batchPreview.cardsUsed,
+        appliedExp: batchPreview.appliedExp,
+        totalCardExp: batchPreview.cardExp,
+        wastedExp: batchPreview.wastedExp,
+        levelsGained: batchPreview.levelsGained,
+      });
+      return;
+    }
+    handleRedeemCard(def.id, batchPreview.cardsUsed);
   };
 
   const handleBulkMoveUnused = () => {
@@ -920,8 +1076,8 @@ export function WarehouseView() {
           </section>
         </div>
 
-        {/* Cards ("Thẻ") + Buff Cards ("Thẻ buff") + Vouchers next to each other on desktop, stacked on mobile */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 min-w-0 items-start">
+        {/* Cards ("Thẻ") + Vouchers + Buff Cards ("Thẻ buff") + Medals ("Huân chương") */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 min-w-0 items-start">
           {/* Cards Section ("Thẻ") */}
           <section
             data-testid="warehouse-card-section"
@@ -954,13 +1110,23 @@ export function WarehouseView() {
               </p>
             ) : (
               <div className="space-y-2 min-w-0">
-                {ownedCardRows.map(({ def, name, qty }) => (
+                {ownedCardRows.map(({ def, name, tier, qty }) => (
                   <div
                     key={def.id}
                     data-testid={`warehouse-card-row-${def.id}`}
                     className="rounded border border-slate-800 bg-slate-950/70 px-2.5 py-2 flex flex-wrap items-center justify-between gap-2 text-xs min-w-0"
                   >
                     <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <span
+                        data-testid={`warehouse-card-tier-${def.id}`}
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-bold border shrink-0 ${
+                          def.kind === 'credit'
+                            ? 'border-amber-500/40 bg-amber-500/15 text-amber-300'
+                            : 'border-cyan-500/40 bg-cyan-500/15 text-cyan-300'
+                        }`}
+                      >
+                        T{tier}
+                      </span>
                       <span className="font-medium text-slate-100 truncate">
                         {name}
                       </span>
@@ -975,7 +1141,7 @@ export function WarehouseView() {
                       <button
                         type="button"
                         data-testid={`warehouse-card-use1-${def.id}`}
-                        onClick={() => handleRedeemCard(def.id, 1)}
+                        onClick={() => handleRequestRedeemCard(def.id, 1, false)}
                         className="min-h-[34px] px-2.5 rounded border border-amber-500/50 bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 font-semibold text-xs cursor-pointer"
                       >
                         {t('warehouse.cardUseOne')}
@@ -983,7 +1149,7 @@ export function WarehouseView() {
                       <button
                         type="button"
                         data-testid={`warehouse-card-useall-${def.id}`}
-                        onClick={() => handleRedeemCard(def.id, qty)}
+                        onClick={() => handleRequestRedeemCard(def.id, qty, true)}
                         className="min-h-[34px] px-2.5 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs cursor-pointer"
                       >
                         {t('warehouse.cardUseAll')}
@@ -1198,6 +1364,110 @@ export function WarehouseView() {
               </div>
             )}
           </section>
+
+          {/* Medals Section ("Huân chương") */}
+          <section
+            data-testid="warehouse-medal-section"
+            className="rounded-lg border border-violet-500/30 bg-[#0B111C]/90 p-3 space-y-2.5 min-w-0"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2 pb-1.5 border-b border-slate-800/80">
+              <h3 className="text-xs md:text-sm font-bold text-slate-100 inline-flex items-center gap-1.5">
+                <CatalogIcon
+                  row={
+                    getCatalogRow(MEDAL_ICON_ID, adminConfig.iconCatalogMods) ??
+                    null
+                  }
+                  size="sm"
+                  showBadges={false}
+                  showArrowBadge={false}
+                />
+                <span>
+                  {t('warehouse.medalSectionTitle', { count: totalOwnedMedals })}
+                </span>
+              </h3>
+              <span className="text-[11px] text-slate-400 italic">
+                {t('warehouse.medalLore')}
+              </span>
+            </div>
+
+            {ownedMedalRows.length === 0 ? (
+              <p
+                data-testid="warehouse-medal-empty"
+                className="text-xs text-slate-500 py-1"
+              >
+                {t('warehouse.medalEmpty')}
+              </p>
+            ) : (
+              <div className="space-y-2 min-w-0">
+                {ownedMedalRows.map(({ id, tier, name, wp, qty }) => (
+                  <div
+                    key={id}
+                    data-testid={`warehouse-medal-row-${id}`}
+                    className="rounded border border-slate-800 bg-slate-950/70 px-2.5 py-2 flex flex-wrap items-center justify-between gap-2 text-xs min-w-0"
+                  >
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <CatalogIcon
+                        row={
+                          getCatalogRow(
+                            MEDAL_ICON_ID,
+                            adminConfig.iconCatalogMods
+                          ) ?? null
+                        }
+                        size="sm"
+                        showBadges={false}
+                        showArrowBadge={false}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="font-medium text-slate-100 truncate">
+                          {name}
+                        </div>
+                        <div className="text-[11px] text-slate-400">
+                          T{tier} · +{wp.toLocaleString(lang === 'vi' ? 'vi-VN' : 'en-US')} WP ·{' '}
+                          <span
+                            data-testid={`warehouse-medal-qty-${id}`}
+                            className="font-mono-nums font-bold text-violet-300"
+                          >
+                            ×{qty}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        data-testid={`warehouse-medal-use1-${id}`}
+                        onClick={() => handleRedeemMedal(id, 1)}
+                        className="min-h-[34px] px-2.5 rounded border border-violet-500/50 bg-violet-500/15 hover:bg-violet-500/25 text-violet-200 font-semibold text-xs cursor-pointer"
+                      >
+                        {t('warehouse.medalUseOne')}
+                      </button>
+                      <button
+                        type="button"
+                        data-testid={`warehouse-medal-useall-${id}`}
+                        onClick={() => handleRedeemMedal(id, qty)}
+                        className="min-h-[34px] px-2.5 rounded bg-violet-500 hover:bg-violet-400 text-slate-950 font-bold text-xs cursor-pointer"
+                      >
+                        {t('warehouse.medalUseAll')}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {medalResultText && (
+              <div
+                data-testid="warehouse-medal-result"
+                className={`text-xs font-medium px-2.5 py-1.5 rounded border break-words ${
+                  medalResultIsError
+                    ? 'border-rose-500/40 bg-rose-950/30 text-rose-200'
+                    : 'border-emerald-500/40 bg-emerald-950/30 text-emerald-200'
+                }`}
+              >
+                {medalResultText}
+              </div>
+            )}
+          </section>
         </div>
       </div>
 
@@ -1382,6 +1652,66 @@ export function WarehouseView() {
               ),
             })}
           </p>
+        )}
+      </BottomSheet>
+
+      {/* EXP Card Waste Confirm Dialog */}
+      <BottomSheet
+        open={pendingCardWasteConfirm !== null}
+        onClose={() => setPendingCardWasteConfirm(null)}
+        title={t('warehouse.cardWasteConfirmTitle')}
+        footer={
+          pendingCardWasteConfirm ? (
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                data-testid="warehouse-card-waste-cancel-btn"
+                onClick={() => setPendingCardWasteConfirm(null)}
+                className="min-h-[40px] px-3.5 rounded border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200 text-xs font-semibold cursor-pointer"
+              >
+                {t('warehouse.cardWasteCancelBtn')}
+              </button>
+              <button
+                type="button"
+                data-testid="warehouse-card-waste-confirm-btn"
+                onClick={() =>
+                  handleRedeemCard(
+                    pendingCardWasteConfirm.cardId,
+                    pendingCardWasteConfirm.qty
+                  )
+                }
+                className="min-h-[40px] px-3.5 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold cursor-pointer"
+              >
+                {t('warehouse.cardWasteUseBtn')}
+              </button>
+            </div>
+          ) : undefined
+        }
+      >
+        {pendingCardWasteConfirm && (
+          <div
+            data-testid="warehouse-card-waste-confirm-body"
+            className="space-y-1.5 text-sm text-slate-200 leading-relaxed"
+          >
+            <p>
+              {t('warehouse.cardWasteConfirmBody', {
+                applied: pendingCardWasteConfirm.appliedExp.toLocaleString(
+                  lang === 'vi' ? 'vi-VN' : 'en-US'
+                ),
+                card: pendingCardWasteConfirm.totalCardExp.toLocaleString(
+                  lang === 'vi' ? 'vi-VN' : 'en-US'
+                ),
+              })}
+            </p>
+            {pendingCardWasteConfirm.qty > 1 && (
+              <p className="text-xs text-amber-300 font-mono-nums">
+                {t('warehouse.cardWasteBatchNote', {
+                  cards: pendingCardWasteConfirm.qty,
+                  levels: pendingCardWasteConfirm.levelsGained,
+                })}
+              </p>
+            )}
+          </div>
         )}
       </BottomSheet>
     </div>

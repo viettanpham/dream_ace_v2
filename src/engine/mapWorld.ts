@@ -18,12 +18,19 @@ import {
   neighbours,
 } from './frontline';
 import { sanitizeSectorSupply } from './npcSupply';
+import { grantMedalsToMap } from './medals';
+import {
+  computeMonthlyEconomyRoll,
+  medalCountsToPilotMap,
+  type MonthlyMedalCounts,
+} from './monthlyEconomy';
 import type {
   BaseRuntimeState,
   BaseSiegeConfig,
   BattleKind,
   BonusMissionState,
   MechClassId,
+  MonthlyEconomyConfig,
   PilotAccount,
   SectorDefinition,
 } from '../types/game';
@@ -160,9 +167,15 @@ export interface MonthAdvanceSummary {
   newMonth: number;
   creditsEarned: number;
   warPointsEarned: number;
+  salaryWp: number;
+  salaryCoef: number;
+  capturedSubBases: number;
+  totalSubBases: number;
+  medals: MonthlyMedalCounts;
   repairedSectorIds: string[];
   raidedSectorIds: string[];
   flippedSectorIds: string[];
+  lostSectorIds: string[];
   raidResults: RaidStrikeResult[];
 }
 
@@ -173,11 +186,14 @@ export interface MonthAdvanceSummary {
  * - Regenerates base siege Shield/HP after idleMonths without an assault.
  * - Ticks Under Attack countdowns (unanswered raids damage siege pools & can flip bases).
  * - Schedules a fresh frontier raid warning on a connected Allied base if none is under attack.
+ * - Computes monthly capital salary & medal drops from post-raid held bases.
  */
 export function advanceCampaignMonth(
   pilot: PilotAccount,
   regenPerMonth = 10,
-  baseSiegeCfg?: Partial<BaseSiegeConfig> | null
+  baseSiegeCfg?: Partial<BaseSiegeConfig> | null,
+  monthlyEconomyCfg?: Partial<MonthlyEconomyConfig> | null,
+  rng: () => number = Math.random
 ): MonthAdvanceSummary {
   const siegeCfg = sanitizeBaseSiegeConfig(baseSiegeCfg);
   const income = getTotalMonthlyIncome(pilot);
@@ -354,22 +370,54 @@ export function advanceCampaignMonth(
       ? pilot.capturedSectorIds.filter((id) => !flippedSet.has(id))
       : pilot.capturedSectorIds;
 
+  // Post-raid/flip monthly salary + medals using bases player holds at this point.
+  const allNodes = getMapNodes();
+  const homeNodes = allNodes.filter((s) => s.initialFaction === 'allied');
+  const subBaseNodes = allNodes.filter((s) => s.initialFaction !== 'allied');
+  const hasCapital =
+    homeNodes.length > 0
+      ? homeNodes.some((s) => nextBaseStates[s.id]?.faction === 'allied')
+      : true;
+  const capturedSubBases = subBaseNodes.filter(
+    (s) => nextBaseStates[s.id]?.faction === 'allied'
+  ).length;
+  const totalSubBases = subBaseNodes.length;
+
+  const monthlyRoll = computeMonthlyEconomyRoll({
+    capturedSubBases,
+    totalSubBases,
+    hasCapital,
+    economyCfg: monthlyEconomyCfg,
+    rng,
+  });
+  const nextMedals = grantMedalsToMap(
+    pilot.medals,
+    medalCountsToPilotMap(monthlyRoll.medals)
+  );
+
   return {
     pilot: {
       ...pilotBase,
       campaignMonth: nextMonth,
       credits: pilot.credits + income.credits,
-      warPoints: pilot.warPoints + income.warPoints,
+      warPoints: pilot.warPoints + income.warPoints + monthlyRoll.salaryWp,
       capturedSectorIds: nextCapturedSectorIds,
       baseStates: nextBaseStates,
+      ...(Object.keys(nextMedals).length > 0 ? { medals: nextMedals } : {}),
       ...(nextSectorSupply ? { sectorSupply: nextSectorSupply } : {}),
     },
     newMonth: nextMonth,
     creditsEarned: income.credits,
     warPointsEarned: income.warPoints,
+    salaryWp: monthlyRoll.salaryWp,
+    salaryCoef: monthlyRoll.salaryCoef,
+    capturedSubBases: monthlyRoll.capturedSubBases,
+    totalSubBases: monthlyRoll.totalSubBases,
+    medals: monthlyRoll.medals,
     repairedSectorIds,
     raidedSectorIds,
     flippedSectorIds,
+    lostSectorIds: [...flippedSectorIds],
     raidResults,
   };
 }
